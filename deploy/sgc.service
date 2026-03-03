@@ -1,0 +1,20 @@
+[Unit]
+Description=SGC - Gestao de Contratos
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+User=sead
+Group=sead
+WorkingDirectory=/home/sead/sgc_novo
+Environment="PATH=/home/sead/sgc_novo/.venv/bin:/usr/bin"
+EnvironmentFile=/home/sead/sgc_novo/.env
+ExecStart=/home/sead/sgc_novo/.venv/bin/gunicorn -c gunicorn.conf.py wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/sead/sgc_novo/logs/gunicorn.log
+StandardError=append:/home/sead/sgc_novo/logs/gunicorn.log
+
+[Install]
+WantedBy=multi-user.target

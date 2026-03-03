@@ -53,3 +53,10 @@ placeholder
 consulta-pessoa-sga-gestor.txt
 consultaProcedimento.json
 listagem de documentos.json
+
+# Deploy local (nao vai pro servidor)
+deploy-prod.bat
+
+# Gunicorn runtime
+sgc.pid
+nohup.out
