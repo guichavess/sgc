@@ -373,7 +373,7 @@ class DiariasCotacao(db.Model):
     """Cotações de agências de viagem (viagens nacionais)."""
     __tablename__ = 'diarias_cotacoes'
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     itinerario_id = db.Column(db.Integer, nullable=False, index=True)
     contrato_codigo = db.Column(db.String(20), nullable=True, index=True)
     valor = db.Column(db.Numeric(10, 2), nullable=False)
