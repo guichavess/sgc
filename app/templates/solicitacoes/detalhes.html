@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-end mb-3">
+    <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+</div>
+
+<div id="timeline-container" class="card shadow-sm mb-4">
+    <div class="card-body p-0">
+        {# --- BLOCO DE IDENTIFICAÇÃO COM CONTRASTE --- #}
+        <div class="bg-light p-3 border-bottom">
+            <h4 class="fw-bold text-dark mb-1">
+                Processo: {{ solicitacao.protocolo_gerado_sei }} | Competência: {{ solicitacao.competencia }}
+            </h4>
+            <h5 class="text-muted mb-2">
+                {{ solicitacao.contrato.nomeContratado }}
+            </h5>
+            <p class="text-secondary mb-0 small">
+                <strong>SIAFE: {{ solicitacao.codigo_contrato }}</strong> | Objeto: {{ solicitacao.contrato.objeto }}
+                {% if solicitacao.tipo_pagamento %}
+                    | <span class="badge {{ 'bg-danger' if solicitacao.tipo_pagamento.nome == 'DEA: Indenizatório' else 'bg-info' }} text-white">{{ solicitacao.tipo_pagamento.nome }}</span>
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="p-3">
+            {# --- STATUS E TEMPO À ESQUERDA --- #}
+            <div class="mb-4">
+                <h6 class="text-uppercase text-muted fw-bold mb-1 small ls-1">
+                    Fluxo do Processo (Automático via SEI) | 
+                    <span class="badge bg-white text-secondary border fw-normal">Status: {{ solicitacao.etapa.nome }}</span>
+                </h6>
+                {% if solicitacao.tempo_total %}
+                <div class="text-muted small">
+                    tempo total do processo: <strong>{{ solicitacao.tempo_total }}</strong>
+                </div>
+                {% endif %}
+            </div>
+
+            {% include 'solicitacoes/partials/timeline_content.html' %}
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-light fw-bold text-muted small text-uppercase">
+                Dados Detalhados
+            </div>
+            <div class="card-body">
+                {# === SITUAÇÃO FINANCEIRA === #}
+                <h6 class="text-muted text-uppercase small fw-bold mb-3"><i class="bi bi-coin me-1"></i> Situação Financeira</h6>
+                <div class="bg-light p-3 rounded border mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted">Status Empenho:</span>
+                        {% if solicitacao.status_empenho %}
+                            <span class="badge bg-{{ solicitacao.status_empenho.cor_badge }} fs-6">{{ solicitacao.status_empenho.nome }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Não Solicitado</span>
+                        {% endif %}
+                    </div>
+
+                    {% if ultimo_empenho %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-muted">Valor Solicitado:</span>
+                            <span class="fw-bold text-dark fs-5">
+                                R$ {{ "{:,.2f}".format(ultimo_empenho.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                            </span>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {# === DADOS DE EXECUÇÃO COM SETAS E DATAS === #}
+                <h6 class="text-muted text-uppercase small fw-bold mb-3"><i class="bi bi-bank me-1"></i> Dados de Execução</h6>
+                <div class="d-flex align-items-center justify-content-between mb-4">
+                    
+                    {# BOX NL #}
+                    <a href="{{ mov_nl.link_acesso if mov_nl else '#' }}" 
+                    target="{{ '_blank' if mov_nl else '_self' }}"
+                    class="flex-fill border rounded p-2 text-center text-decoration-none transition-hover {{ 'bg-light' if mov_nl else 'bg-white' }}"
+                    style="{{ 'cursor: pointer;' if mov_nl else 'cursor: default; pointer-events: none;' }}">
+                        <small class="d-block text-muted">Liquidação</small>
+                        {# ALTERADO AQUI: De solicitacao.num_nl para mov_nl.numero #}
+                        <strong class="text-primary d-block">{{ mov_nl.numero if mov_nl else '-' }}</strong>
+                        <small class="text-muted" style="font-size: 0.7rem;">
+                            {{ mov_nl.data if mov_nl else 'Aguardando' }}
+                        </small>
+                    </a>
+
+                    <div class="px-2 text-muted"><i class="bi bi-arrow-right fs-4"></i></div>
+
+                    {# BOX PD #}
+                    <a href="{{ mov_pd.link_acesso if mov_pd else '#' }}" 
+                    target="{{ '_blank' if mov_pd else '_self' }}"
+                    class="flex-fill border rounded p-2 text-center text-decoration-none transition-hover {{ 'bg-light' if mov_pd else 'bg-white' }}"
+                    style="{{ 'cursor: pointer;' if mov_pd else 'cursor: default; pointer-events: none;' }}">
+                        <small class="d-block text-muted">Programação</small>
+                        {# ALTERADO AQUI: De solicitacao.num_pd para mov_pd.numero #}
+                        <strong class="text-warning text-dark d-block">{{ mov_pd.numero if mov_pd else '-' }}</strong>
+                        <small class="text-muted" style="font-size: 0.7rem;">
+                            {{ mov_pd.data if mov_pd else 'Aguardando' }}
+                        </small>
+                    </a>
+
+                    <div class="px-2 text-muted"><i class="bi bi-arrow-right fs-4"></i></div>
+
+                    {# BOX OB #}
+                    <a href="{{ mov_ob.link_acesso if mov_ob else '#' }}" 
+                    target="{{ '_blank' if mov_ob else '_self' }}"
+                    class="flex-fill border rounded p-2 text-center text-decoration-none transition-hover {{ 'bg-success-subtle border-success' if mov_ob else 'bg-white' }}"
+                    style="{{ 'cursor: pointer;' if mov_ob else 'cursor: default; pointer-events: none;' }}">
+                        <small class="d-block {{ 'text-success' if mov_ob else 'text-muted' }}">Ordem Bancária</small>
+                        {# ALTERADO AQUI: De solicitacao.num_ob para mov_ob.numero #}
+                        <strong class="{{ 'text-success' if mov_ob else 'text-dark' }} d-block">{{ mov_ob.numero if mov_ob else '-' }}</strong>
+                        <small class="{{ 'text-success' if mov_ob else 'text-muted' }}" style="font-size: 0.7rem;">
+                            {{ mov_ob.data if mov_ob else 'Aguardando' }}
+                        </small>
+                    </a>
+                </div>
+
+                <div class="d-grid">
+                    <a href="{{ solicitacao.link_processo_sei }}" target="_blank" class="btn btn-primary">
+                        <i class="bi bi-box-arrow-up-right me-2"></i> Acessar Processo no SEI
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    .transition-hover {
+        transition: all 0.2s ease-in-out;
+    }
+    .transition-hover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
+        filter: brightness(0.95);
+    }
+    /* Estilo para os links da timeline */
+    .step-info a:hover strong {
+        text-decoration: underline;
+        color: #0d6efd !important;
+    }
+</style>
+{% endblock %}

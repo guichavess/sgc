@@ -1,0 +1,160 @@
+/* ==========================================================================
+   NOTIFICACOES - Estilos do sistema de notificacoes
+   ========================================================================== */
+
+/* ---------- Sino (Bell) ---------- */
+#notificacao-bell-trigger {
+    transition: var(--transition-normal);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+#notificacao-bell-trigger:hover {
+    color: #fff !important;
+    transform: scale(1.1);
+}
+
+#notificacao-badge {
+    font-size: 0.6rem;
+    min-width: 16px;
+    padding: 2px 5px;
+}
+
+/* ---------- Dropdown ---------- */
+#notificacao-dropdown {
+    border-radius: var(--border-radius-lg, 12px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+
+.notificacao-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    cursor: pointer;
+    transition: background var(--transition-fast, 0.15s ease);
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+
+.notificacao-item:hover {
+    background: rgba(0, 0, 0, 0.03);
+    color: inherit;
+    text-decoration: none;
+}
+
+.notificacao-item.nao-lida {
+    background: rgba(52, 57, 144, 0.04);
+    border-left: 3px solid var(--color-primary, #343990);
+}
+
+.notificacao-item.nao-lida:hover {
+    background: rgba(52, 57, 144, 0.08);
+}
+
+.notificacao-item:last-child {
+    border-bottom: none;
+}
+
+.notificacao-item .titulo {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+    line-height: 1.3;
+}
+
+.notificacao-item .mensagem {
+    font-size: 0.78rem;
+    color: #666;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.notificacao-item .tempo {
+    font-size: 0.7rem;
+    color: #999;
+    margin-top: 2px;
+}
+
+/* Indicador de nivel no item */
+.notificacao-item .nivel-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.nivel-indicator.silenciosa { background: #999; }
+.nivel-indicator.lembrete { background: var(--color-info, #3498db); }
+.nivel-indicator.alerta { background: var(--color-warning, #ffc107); }
+.nivel-indicator.critica { background: var(--color-danger, #e74c3c); }
+
+/* ---------- Toasts ---------- */
+.toast-notificacao {
+    border-radius: var(--border-radius-md, 8px);
+    border: none;
+    box-shadow: var(--shadow-lg, 0 8px 25px rgba(0, 0, 0, 0.15));
+    min-width: 320px;
+    max-width: 420px;
+}
+
+.toast-notificacao.lembrete {
+    border-left: 4px solid var(--color-info, #3498db);
+}
+
+.toast-notificacao.alerta {
+    border-left: 4px solid var(--color-warning, #ffc107);
+    background: #fff8e1;
+}
+
+/* ---------- Overlay Critico ---------- */
+#critical-overlay {
+    animation: fadeInOverlay 0.4s ease-out;
+}
+
+#critical-overlay .card {
+    animation: slideInModal 0.5s ease-out;
+    border-width: 2px;
+}
+
+@keyframes fadeInOverlay {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideInModal {
+    from { opacity: 0; transform: translateY(-30px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ---------- Modal Contato ---------- */
+#modalContato .modal-content {
+    border-radius: var(--border-radius-lg, 12px);
+    overflow: hidden;
+}
+
+#modalContato .form-control:focus {
+    border-color: var(--color-primary, #343990);
+    box-shadow: 0 0 0 0.2rem rgba(52, 57, 144, 0.15);
+}
+
+/* ---------- Pagina de Notificacoes ---------- */
+.notificacao-list-item {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    transition: background var(--transition-fast, 0.15s ease);
+}
+
+.notificacao-list-item:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.notificacao-list-item.nao-lida {
+    background: rgba(52, 57, 144, 0.03);
+    border-left: 3px solid var(--color-primary, #343990);
+}
+
+/* ---------- Tab Title Blink (via JS) ---------- */
+/* Sem CSS necessario - implementado via document.title */

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SGC - Financeiro{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/x-icon">
+
+    {# CDN - Bibliotecas externas #}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+
+    {# CSS Principal #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+
+    {# CSS específico da página #}
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+    {# Navbar do módulo Financeiro #}
+    {% include 'financeiro/navbar_financeiro.html' %}
+
+    <div class="container pb-5">
+        {# Mensagens Flash #}
+        {% include 'components/flash_messages.html' %}
+
+        {# Conteúdo da página #}
+        {% block content %}{% endblock %}
+    </div>
+
+    {# Notificacoes: Toasts, Overlay Critico, Modal Contato #}
+    {% include 'components/notification_toasts.html' %}
+    {% include 'components/notification_critical_overlay.html' %}
+    {% include 'components/contact_collection_modal.html' %}
+
+    {# Scripts Bootstrap #}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    {# Script Principal (Vite em dev ou build em prod) #}
+    {% if vite_dev_mode %}
+        <script type="module" src="{{ vite_asset('main') }}"></script>
+    {% endif %}
+
+    {# Notificacoes: Polling, dropdown, tab title #}
+    {% include 'components/notification_scripts.html' %}
+
+    {# Scripts específicos da página #}
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

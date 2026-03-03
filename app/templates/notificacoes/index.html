@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Notificacoes - SGC{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0">
+        <i class="bi bi-bell me-2"></i>Notificacoes
+    </h4>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary btn-sm" onclick="marcarTodasLidasPagina()">
+            <i class="bi bi-check-all me-1"></i> Marcar todas como lidas
+        </button>
+    </div>
+</div>
+
+{# Filtros #}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body py-3">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">Modulo</label>
+                <select name="modulo" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="solicitacoes" {{ 'selected' if filtro_modulo == 'solicitacoes' }}>Pagamentos</option>
+                    <option value="financeiro" {{ 'selected' if filtro_modulo == 'financeiro' }}>Financeiro</option>
+                    <option value="prestacoes_contratos" {{ 'selected' if filtro_modulo == 'prestacoes_contratos' }}>Contratos</option>
+                    <option value="diarias" {{ 'selected' if filtro_modulo == 'diarias' }}>Diarias</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold">Nivel</label>
+                <select name="nivel" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="silenciosa" {{ 'selected' if filtro_nivel == 'silenciosa' }}>Silenciosa</option>
+                    <option value="lembrete" {{ 'selected' if filtro_nivel == 'lembrete' }}>Lembrete</option>
+                    <option value="alerta" {{ 'selected' if filtro_nivel == 'alerta' }}>Alerta</option>
+                    <option value="critica" {{ 'selected' if filtro_nivel == 'critica' }}>Critica</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check mt-4">
+                    <input type="checkbox" class="form-check-input" name="nao_lidas" value="1"
+                           id="filtro-nao-lidas" {{ 'checked' if filtro_nao_lidas }}>
+                    <label class="form-check-label small" for="filtro-nao-lidas">Apenas nao lidas</label>
+                </div>
+            </div>
+            <div class="col-md-3 text-end">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-funnel me-1"></i> Filtrar
+                </button>
+                <a href="{{ url_for('notificacoes.listar') }}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# Lista de notificacoes #}
+<div class="card border-0 shadow-sm">
+    {% if notificacoes %}
+    <div class="list-group list-group-flush">
+        {% for n in notificacoes %}
+        <div class="notificacao-list-item d-flex align-items-start gap-3 {{ 'nao-lida' if not n.lida }}"
+             data-id="{{ n.id }}">
+            <span class="nivel-indicator {{ n.nivel }} mt-2"></span>
+            <div class="flex-grow-1">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1 fw-semibold {{ 'text-body' if n.lida else '' }}" style="font-size: 0.9rem;">
+                            {{ n.titulo }}
+                        </h6>
+                        <p class="mb-1 text-muted small">{{ n.mensagem }}</p>
+                        <div class="d-flex gap-2 align-items-center">
+                            <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">
+                                {{ n.ref_modulo or n.tipo.modulo }}
+                            </span>
+                            <small class="text-muted">{{ n.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                            <small class="text-muted">({{ n.tempo_relativo }})</small>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-1">
+                        {% if n.ref_url %}
+                        <a href="{{ n.ref_url }}" class="btn btn-outline-primary btn-sm py-0 px-2"
+                           title="Ir para">
+                            <i class="bi bi-arrow-right"></i>
+                        </a>
+                        {% endif %}
+                        {% if not n.lida %}
+                        <button class="btn btn-outline-secondary btn-sm py-0 px-2"
+                                title="Marcar como lida"
+                                onclick="marcarLidaPagina({{ n.id }}, this)">
+                            <i class="bi bi-check"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-bell-slash fs-1 d-block mb-3 opacity-50"></i>
+        <p>Nenhuma notificacao encontrada.</p>
+    </div>
+    {% endif %}
+</div>
+
+{# Paginacao #}
+{% if paginacao.pages > 1 %}
+<nav class="mt-4">
+    <ul class="pagination pagination-sm justify-content-center">
+        {% if paginacao.has_prev %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ paginacao.prev_num }}&modulo={{ filtro_modulo }}&nivel={{ filtro_nivel }}&nao_lidas={{ '1' if filtro_nao_lidas else '' }}">Anterior</a>
+        </li>
+        {% endif %}
+        {% for p in paginacao.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if p %}
+            <li class="page-item {{ 'active' if p == paginacao.page }}">
+                <a class="page-link" href="?page={{ p }}&modulo={{ filtro_modulo }}&nivel={{ filtro_nivel }}&nao_lidas={{ '1' if filtro_nao_lidas else '' }}">{{ p }}</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endfor %}
+        {% if paginacao.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ paginacao.next_num }}&modulo={{ filtro_modulo }}&nivel={{ filtro_nivel }}&nao_lidas={{ '1' if filtro_nao_lidas else '' }}">Proximo</a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function marcarLidaPagina(id, btn) {
+    try {
+        const resp = await fetch('/notificacoes/api/marcar-lida', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: id})
+        });
+        const data = await resp.json();
+        if (data.sucesso) {
+            const item = btn.closest('.notificacao-list-item');
+            item.classList.remove('nao-lida');
+            btn.remove();
+        }
+    } catch (e) {
+        console.error('Erro ao marcar como lida:', e);
+    }
+}
+
+async function marcarTodasLidasPagina() {
+    try {
+        const resp = await fetch('/notificacoes/api/marcar-todas-lidas', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const data = await resp.json();
+        if (data.sucesso) {
+            location.reload();
+        }
+    } catch (e) {
+        console.error('Erro:', e);
+    }
+}
+</script>
+{% endblock %}

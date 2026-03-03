@@ -1,0 +1,36 @@
+/**
+ * Componente: Cards
+ */
+
+.card,
+.card-custom {
+    border: none;
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-card);
+    background-color: var(--color-white);
+    transition: transform var(--transition-normal);
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+/* Cabeçalho do card */
+.card-header {
+    background-color: var(--color-gray-100);
+    border-bottom: 1px solid var(--color-gray-300);
+    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0 !important;
+    padding: var(--spacing-md) var(--spacing-lg);
+}
+
+/* Corpo do card */
+.card-body {
+    padding: var(--spacing-lg);
+}
+
+/* Card com gradiente (login) */
+.login-header-gradient {
+    background: linear-gradient(135deg, #007121, var(--color-primary));
+    border-bottom: none;
+    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+}

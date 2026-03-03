@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SGC - Selecione o Módulo</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/x-icon">
+
+    {# CDN - Bibliotecas externas #}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+
+    {# CSS #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+
+    <style>
+        .hub-navbar {
+            background-color: #343990;
+        }
+
+        .hub-container {
+            min-height: calc(100vh - 200px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .hub-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #343990;
+            margin-bottom: 0.5rem;
+        }
+
+        .hub-subtitle {
+            font-size: 1rem;
+            color: #6c757d;
+            margin-bottom: 2.5rem;
+        }
+
+        .module-card {
+            border: none;
+            border-radius: 16px;
+            padding: 2.5rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background: #ffffff;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            height: 100%;
+        }
+
+        .module-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .module-card:active {
+            transform: translateY(-4px);
+        }
+
+        .module-icon {
+            width: 90px;
+            height: 90px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            font-size: 2.5rem;
+            color: white;
+        }
+
+        .module-icon-pagamentos {
+            background: linear-gradient(135deg, #343990, #4e56b5);
+        }
+
+        .module-icon-prestacoes {
+            background: linear-gradient(135deg, #0D7A35, #15a049);
+        }
+
+        .module-icon-financeiro {
+            background: linear-gradient(135deg, #B8860B, #DAA520);
+        }
+
+        .module-name {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .module-description {
+            font-size: 0.9rem;
+            color: #6c757d;
+            line-height: 1.5;
+            margin-bottom: 0;
+        }
+
+        .module-card-pagamentos:hover .module-icon {
+            box-shadow: 0 8px 20px rgba(52, 57, 144, 0.4);
+        }
+
+        .module-card-prestacoes:hover .module-icon {
+            box-shadow: 0 8px 20px rgba(13, 122, 53, 0.4);
+        }
+
+        .module-card-financeiro:hover .module-icon {
+            box-shadow: 0 8px 20px rgba(184, 134, 11, 0.4);
+        }
+
+        .module-icon-usuarios {
+            background: linear-gradient(135deg, #6f42c1, #8b5cf6);
+        }
+
+        .module-card-usuarios:hover .module-icon {
+            box-shadow: 0 8px 20px rgba(111, 66, 193, 0.4);
+        }
+
+        .module-icon-dashboards {
+            background: linear-gradient(135deg, #1B998B, #2DC4B2);
+        }
+
+        .module-card-dashboards:hover .module-icon {
+            box-shadow: 0 8px 20px rgba(27, 153, 139, 0.4);
+        }
+
+        .module-icon-diarias {
+            background: linear-gradient(135deg, #E07A24, #F5A623);
+        }
+
+        .module-card-diarias:hover .module-icon {
+            box-shadow: 0 8px 20px rgba(224, 122, 36, 0.4);
+        }
+
+        .user-greeting {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .user-greeting .greeting-text {
+            font-size: 1.1rem;
+            color: #495057;
+        }
+
+        .user-greeting .greeting-name {
+            font-weight: 700;
+            color: #343990;
+        }
+    </style>
+</head>
+<body>
+
+    {# Navbar limpa - apenas marca e botão de sair #}
+    <nav class="navbar navbar-expand-lg navbar-dark hub-navbar mb-4 py-3 shadow-sm">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('hub') }}">
+                <img src="{{ url_for('static', filename='img/logo-sead-branca.png') }}" alt="SEAD Piauí" style="height: 38px;" class="me-3">
+                <span class="fw-bold">SGC</span>
+                <span class="mx-2 opacity-50">|</span>
+                <small class="opacity-75 fw-light fs-6">Gestão de Contratos</small>
+            </a>
+
+            {% if session.get('usuario_nome') %}
+                {% set nome_completo = session.get('usuario_nome', '') %}
+                {% set partes_nome = nome_completo.split() %}
+                {% set nome_curto = (partes_nome[:2]|join(' ')) if partes_nome|length >= 2 else nome_completo %}
+
+                <ul class="navbar-nav ms-auto align-items-center gap-3">
+                    <li class="nav-item d-none d-lg-block">
+                        <span class="text-light opacity-75 small">
+                            Olá, <strong class="text-white">{{ nome_curto }}</strong>
+                        </span>
+                    </li>
+
+                    {% include 'components/notification_bell.html' %}
+
+                    <li class="nav-item">
+                        <a class="btn btn-danger btn-sm px-3 fw-bold rounded-pill d-inline-flex align-items-center" href="{{ url_for('auth.logout') }}">
+                            <i class="bi bi-box-arrow-right me-1"></i> Sair
+                        </a>
+                    </li>
+                </ul>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        {# Mensagens Flash #}
+        {% include 'components/flash_messages.html' %}
+
+        <div class="hub-container">
+
+            {# Saudação #}
+            {% set nome_completo = session.get('usuario_nome', '') %}
+            {% set partes_nome = nome_completo.split() %}
+            {% set nome_curto = (partes_nome[:2]|join(' ')) if partes_nome|length >= 2 else nome_completo %}
+
+            <div class="user-greeting">
+                <p class="greeting-text">
+                    <i class="bi bi-person-circle me-1"></i>
+                    Olá, <span class="greeting-name">{{ nome_curto }}</span>
+                </p>
+            </div>
+
+            {# Título #}
+            <h1 class="hub-title">Selecione o Módulo</h1>
+            <p class="hub-subtitle">Escolha o sistema que deseja acessar</p>
+
+            {# Cards dos Módulos #}
+            <div class="row g-4 justify-content-center" style="max-width: 1000px; width: 100%;">
+
+                {# Módulo Pagamentos #}
+                {% if current_user.tem_permissao('solicitacoes', 'visualizar') %}
+                <div class="col-md-4">
+                    <a href="{{ url_for('solicitacoes.dashboard') }}" class="module-card module-card-pagamentos">
+                        <div class="module-icon module-icon-pagamentos">
+                            <i class="bi bi-cash-stack"></i>
+                        </div>
+                        <h3 class="module-name">Solicitação de Pagamentos</h3>
+                        <p class="module-description">
+                            Gestão de solicitações de pagamento e acompanhamento de processos
+                        </p>
+                    </a>
+                </div>
+                {% endif %}
+
+                {# Módulo Financeiro #}
+                {% if current_user.tem_permissao('financeiro', 'visualizar') %}
+                <div class="col-md-4">
+                    <a href="{{ url_for('financeiro.dashboard') }}" class="module-card module-card-financeiro">
+                        <div class="module-icon module-icon-financeiro">
+                            <i class="bi bi-bank"></i>
+                        </div>
+                        <h3 class="module-name">Financeiro / Orçamentário</h3>
+                        <p class="module-description">
+                            Saldos de empenho, inserção de NEs e controle financeiro dos contratos
+                        </p>
+                    </a>
+                </div>
+                {% endif %}
+
+                {# Módulo Execuções de Contratos #}
+                {% if current_user.tem_permissao('prestacoes_contratos', 'visualizar') %}
+                <div class="col-md-4">
+                    <a href="{{ url_for('prestacoes_contratos.dashboard') }}" class="module-card module-card-prestacoes">
+                        <div class="module-icon module-icon-prestacoes">
+                            <i class="bi bi-clipboard-check"></i>
+                        </div>
+                        <h3 class="module-name">Execuções de Contratos</h3>
+                        <p class="module-description">
+                            Registro de execuções, categorias e itens vinculados a contratos
+                        </p>
+                    </a>
+                </div>
+                {% endif %}
+
+                {# Módulo Diárias #}
+                {% if current_user.tem_permissao('diarias', 'visualizar') %}
+                <div class="col-md-4">
+                    <a href="{{ url_for('diarias.dashboard') }}" class="module-card module-card-diarias">
+                        <div class="module-icon module-icon-diarias">
+                            <i class="bi bi-airplane-engines"></i>
+                        </div>
+                        <h3 class="module-name">Diárias</h3>
+                        <p class="module-description">
+                            Solicitação e aprovação de diárias e viagens
+                        </p>
+                    </a>
+                </div>
+                {% endif %}
+
+                {# Módulo Usuários (visível apenas para administradores) #}
+                {% if current_user.is_admin %}
+                <div class="col-md-4">
+                    <a href="{{ url_for('usuarios.dashboard') }}" class="module-card module-card-usuarios">
+                        <div class="module-icon module-icon-usuarios">
+                            <i class="bi bi-people-fill"></i>
+                        </div>
+                        <h3 class="module-name">Usuários</h3>
+                        <p class="module-description">
+                            Gerenciamento de usuários, perfis e controle de acesso
+                        </p>
+                    </a>
+                </div>
+                {% endif %}
+
+                {# Módulo Dashboards (visível apenas para administradores) #}
+                {% if current_user.is_admin %}
+                <div class="col-md-4">
+                    <a href="{{ url_for('dashboards.spa_shell') }}" class="module-card module-card-dashboards">
+                        <div class="module-icon module-icon-dashboards">
+                            <i class="bi bi-speedometer2"></i>
+                        </div>
+                        <h3 class="module-name">Dashboards</h3>
+                        <p class="module-description">
+                            Visao consolidada com graficos e indicadores de desempenho
+                        </p>
+                    </a>
+                </div>
+                {% endif %}
+
+            </div>
+
+            {# Aviso para usuários sem nenhuma permissão definida #}
+            {% if not current_user.is_admin
+                and not current_user.tem_permissao('solicitacoes', 'visualizar')
+                and not current_user.tem_permissao('financeiro', 'visualizar')
+                and not current_user.tem_permissao('prestacoes_contratos', 'visualizar')
+                and not current_user.tem_permissao('diarias', 'visualizar') %}
+            <div class="mt-4" style="max-width: 600px; width: 100%;">
+                <div class="card border-0 shadow-sm text-center p-5">
+                    <div class="mb-3">
+                        <i class="bi bi-hourglass-split fs-1" style="color: #343990;"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-2">Aguardando liberação de acesso</h5>
+                    <p class="text-muted mb-3">
+                        Seu cadastro foi realizado com sucesso, mas ainda não foram definidos quais módulos você poderá acessar.
+                    </p>
+                    <p class="text-muted small mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Um administrador do sistema precisa configurar seu nível de acesso. Entre em contato com a equipe responsável caso necessário.
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+
+            {# Botão Sair #}
+            <div class="mt-4">
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-4">
+                    <i class="bi bi-box-arrow-right me-1"></i> Sair
+                </a>
+            </div>
+
+        </div>
+    </div>
+
+    {# Notificacoes: Toasts, Overlay Critico, Modal Contato #}
+    {% include 'components/notification_toasts.html' %}
+    {% include 'components/notification_critical_overlay.html' %}
+    {% include 'components/contact_collection_modal.html' %}
+
+    {# Scripts Bootstrap #}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    {# Notificacoes: Polling, dropdown, tab title #}
+    {% include 'components/notification_scripts.html' %}
+</body>
+</html>

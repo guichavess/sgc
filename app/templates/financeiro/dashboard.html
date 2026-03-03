@@ -1,0 +1,176 @@
+{% extends "financeiro/base_financeiro.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Painel Financeiro</h3>
+        <p class="text-muted mb-0">Visão geral de empenhos, saldos e valores solicitados por contrato.</p>
+    </div>
+    <div>
+        {% if current_user.tem_permissao('financeiro', 'criar') %}
+        <a href="{{ url_for('financeiro.pendencias_ne') }}" class="btn btn-primary btn-sm rounded-pill px-3">
+            <i class="bi bi-pencil-square me-1"></i> Inserir NEs
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+{# Cards de Resumo #}
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="text-muted small mb-1">Total Empenhado</div>
+                <div class="fs-5 fw-bold text-primary">
+                    R$ {{ "{:,.2f}".format(totais.empenhado).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="text-muted small mb-1">Total Solicitado</div>
+                <div class="fs-5 fw-bold text-info">
+                    R$ {{ "{:,.2f}".format(totais.solicitado).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="text-muted small mb-1">Saldo Disponível</div>
+                <div class="fs-5 fw-bold text-success">
+                    R$ {{ "{:,.2f}".format(totais.saldo).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="text-muted small mb-1">NEs Pendentes</div>
+                <div class="fs-5 fw-bold {{ 'text-danger' if totais.pendentes_ne > 0 else 'text-success' }}">
+                    {{ totais.pendentes_ne }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Tabela de Contratos #}
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-bottom py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Resumo por Contrato</h5>
+            <span class="badge bg-secondary">{{ pagination.total }} contratos</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Contrato</th>
+                        <th>Contratado</th>
+                        <th class="text-end">Empenhado</th>
+                        <th class="text-end">Solicitado</th>
+                        <th class="text-end">Saldo</th>
+                        <th class="text-center">Solicitações</th>
+                        <th class="text-center">NEs Pendentes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in resumo_contratos %}
+                    <tr>
+                        <td class="ps-4">
+                            <div class="fw-bold text-dark">{{ c.numero_original or c.codigo }}</div>
+                            <div class="small text-muted">Cód: {{ c.codigo }}</div>
+                        </td>
+                        <td>
+                            <span class="text-truncate d-inline-block" style="max-width: 250px;" title="{{ c.contratado }}">
+                                {{ c.contratado }}
+                            </span>
+                        </td>
+                        <td class="text-end">
+                            <span class="fw-bold text-primary">
+                                R$ {{ "{:,.2f}".format(c.total_empenhado).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                            </span>
+                        </td>
+                        <td class="text-end">
+                            R$ {{ "{:,.2f}".format(c.total_solicitado).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                        </td>
+                        <td class="text-end">
+                            <span class="fw-bold {{ 'text-success' if c.saldo_disponivel > 0 else 'text-danger' }}">
+                                R$ {{ "{:,.2f}".format(c.saldo_disponivel).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-light text-dark border">{{ c.qtd_solicitacoes }}</span>
+                        </td>
+                        <td class="text-center">
+                            {% if c.qtd_pendentes_ne > 0 %}
+                                <span class="badge bg-warning text-dark">{{ c.qtd_pendentes_ne }}</span>
+                            {% else %}
+                                <span class="badge bg-success">0</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            Nenhum contrato com solicitações de empenho encontrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# Paginação #}
+    {% if pagination.pages > 1 %}
+    <div class="card-footer bg-white border-top py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                Mostrando <strong>{{ resumo_contratos|length }}</strong> de <strong>{{ pagination.total }}</strong> contratos
+            </div>
+
+            <nav aria-label="Navegação de páginas">
+                <ul class="pagination pagination-sm mb-0">
+                    {# Botão Anterior #}
+                    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                        <a class="page-link"
+                           href="{{ url_for('financeiro.dashboard', page=pagination.prev_num, ano=ano) if pagination.has_prev else '#' }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+
+                    {# Números das Páginas #}
+                    {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if page_num %}
+                            <li class="page-item {{ 'active' if page_num == pagination.page }}">
+                                <a class="page-link" href="{{ url_for('financeiro.dashboard', page=page_num, ano=ano) }}">
+                                    {{ page_num }}
+                                </a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {# Botão Próximo #}
+                    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                        <a class="page-link"
+                           href="{{ url_for('financeiro.dashboard', page=pagination.next_num, ano=ano) if pagination.has_next else '#' }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

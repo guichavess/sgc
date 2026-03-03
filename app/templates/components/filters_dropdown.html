@@ -1,0 +1,51 @@
+{# Componente: Dropdown de Filtros com Checkbox #}
+{#
+    Uso:
+    {% from 'components/filters_dropdown.html' import render_filter_dropdown %}
+    {{ render_filter_dropdown(
+        id='dropdownCompetencia',
+        label='Competência',
+        label_id='labelCompetencia',
+        badge_id='badgeCompetencia',
+        icon='bi-calendar-event',
+        items=todas_competencias,
+        input_name='filtro_competencia',
+        selected_values=request.args.getlist('filtro_competencia'),
+        onchange_fn='atualizarLabelCompetencia',
+        clear_fn='limparSelecaoCompetencia'
+    ) }}
+#}
+
+{% macro render_filter_dropdown(id, label, label_id, badge_id, icon, items, input_name, selected_values=[], onchange_fn='', clear_fn='', class_prefix='filtro-check') %}
+<div class="dropdown w-100">
+    <button class="btn btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center dropdown-toggle px-2"
+            type="button" id="{{ id }}" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+        <span class="text-truncate">
+            <i class="{{ icon }} me-1"></i>
+            <span id="{{ label_id }}">{{ label }}</span>
+        </span>
+        <span class="badge bg-primary ms-1" id="{{ badge_id }}" style="display: none;">0</span>
+    </button>
+    <div class="dropdown-menu p-3 w-100 shadow-lg border-0" aria-labelledby="{{ id }}" style="min-width: 200px;">
+        <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+            <small class="text-muted fw-bold">Selecione:</small>
+            {% if clear_fn %}
+            <a href="#" class="text-decoration-none small" onclick="{{ clear_fn }}(this); return false;">Limpar</a>
+            {% endif %}
+        </div>
+        <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
+            {% for item in items %}
+            <div class="form-check item-filtro py-1">
+                <input class="form-check-input {{ class_prefix }}" type="checkbox" name="{{ input_name }}"
+                    value="{{ item }}" id="{{ input_name }}_{{ loop.index }}"
+                    {% if item in selected_values %}checked{% endif %}
+                    {% if onchange_fn %}onchange="{{ onchange_fn }}()"{% endif %}>
+                <label class="form-check-label small" for="{{ input_name }}_{{ loop.index }}" style="cursor: pointer;">
+                    {{ item }}
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endmacro %}

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SGC - Dashboards</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/x-icon">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    {% for css_url in vite_css('dashboards/main') %}
+        <link rel="stylesheet" href="{{ css_url }}">
+    {% endfor %}
+</head>
+<body>
+    <div id="dashboards-root"
+         data-usuario-nome="{{ usuario_nome }}"
+         data-hub-url="{{ hub_url }}"
+         data-logout-url="{{ logout_url }}"
+         data-logo-url="{{ logo_url }}"
+    ></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    {% if vite_dev_mode %}
+        <script type="module" src="http://localhost:5173/static/dist/@vite/client"></script>
+        <script type="module" src="{{ vite_asset('dashboards/main') }}"></script>
+    {% else %}
+        <script type="module" src="{{ vite_asset('dashboards/main') }}"></script>
+    {% endif %}
+</body>
+</html>

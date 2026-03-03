@@ -1,0 +1,641 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-11 col-xl-10">
+
+        <div class="d-flex align-items-center mb-4">
+            <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary me-3 shadow-sm rounded-circle" style="width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center;">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <div>
+                <h4 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-layers me-2"></i>Criação em Lote
+                </h4>
+                <small class="text-muted">Crie múltiplas solicitações de pagamento de uma vez.</small>
+            </div>
+        </div>
+
+        <!-- CARD PRINCIPAL -->
+        <div class="card shadow-sm mb-4" id="card-formulario">
+            <div class="card-body p-4">
+
+                <!-- Step 1, 2, 3: Campos comuns -->
+                <div class="row g-4 mb-4">
+                    <div class="col-md-4">
+                        <label for="competencia" class="step-label">
+                            <span class="step-badge">1</span> Competência
+                        </label>
+                        <input type="text" class="form-control form-control-lg" id="competencia"
+                               placeholder="MM/AAAA" required>
+                        <div class="form-text">Mês/Ano de referência (igual para todos).</div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="id_tipo_pagamento" class="step-label">
+                            <span class="step-badge">2</span> Tipo de Pagamento
+                        </label>
+                        <select class="form-select form-select-lg" id="id_tipo_pagamento" required>
+                            <option value="" selected disabled>Selecione o tipo...</option>
+                            {% for tipo in tipos_pagamento %}
+                                <option value="{{ tipo.id }}">{{ tipo.nome }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Classificação do pagamento (igual para todos).</div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="unidade_procedimento" class="step-label">
+                            <span class="step-badge">3</span> Unidade Geradora
+                        </label>
+                        <select class="form-select form-select-lg" id="unidade_procedimento" required>
+                            <option value="" selected disabled>Selecione a unidade...</option>
+                            {% for unidade in unidades %}
+                                <option value="{{ unidade.id }}">{{ unidade.sigla }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Unidade no SEI (igual para todos).</div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Step 4: Buscar e Selecionar Contratos -->
+                <div class="mb-4">
+                    <label class="step-label">
+                        <span class="step-badge">4</span> Buscar e Selecionar Contratos
+                    </label>
+                    <div class="d-flex gap-2">
+                        <div class="input-group input-group-lg flex-grow-1">
+                            <input type="text" class="form-control bg-light" id="termo_busca"
+                                   placeholder="Digite código, nº contrato ou nome da empresa...">
+                            <button class="btn btn-primary px-4" type="button" id="btn-buscar">
+                                <i class="bi bi-search me-2"></i> Pesquisar
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-lg btn-outline-success" id="btn-selecionar-todos" onclick="carregarTodosContratos()">
+                            <i class="bi bi-check2-all me-1"></i> Selecionar Todos
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabela de resultados (contratos) -->
+                <div id="container-resultados" class="mb-4 d-none">
+                    <div class="card border">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <span class="fw-bold text-uppercase small text-muted" id="label-resultados">Resultados da busca:</span>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('check-todos').click();">
+                                    <i class="bi bi-check2-all me-1"></i> Marcar/Desmarcar Visíveis
+                                </button>
+                            </div>
+                        </div>
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-custom table-hover align-middle mb-0">
+                                <thead style="position: sticky; top: 0; z-index: 10;">
+                                    <tr>
+                                        <th scope="col" style="width: 50px;" class="text-center">
+                                            <input type="checkbox" class="form-check-input" id="check-todos" onclick="toggleSelecionarTodos()" style="transform: scale(1.2);">
+                                        </th>
+                                        <th scope="col">Código</th>
+                                        <th scope="col">Nº Contrato</th>
+                                        <th scope="col">Empresa / Objeto</th>
+                                        <th scope="col">Proc. Origem</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-corpo" class="bg-white"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="msg-nenhum-resultado" class="alert alert-warning d-flex align-items-center mt-3 d-none">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <div>Nenhum contrato encontrado com esses dados. Tente outro termo.</div>
+                    </div>
+                </div>
+
+                <!-- Contratos selecionados (resumo) -->
+                <div id="container-selecionados" class="mb-4 d-none">
+                    <div class="alert alert-info d-flex align-items-center justify-content-between py-2">
+                        <div>
+                            <i class="bi bi-check2-circle me-2"></i>
+                            <strong id="contador-selecionados">0</strong> contrato(s) selecionado(s)
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="limparSelecao()">
+                            <i class="bi bi-x-circle me-1"></i> Limpar Seleção
+                        </button>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <!-- Step 5: Senha SEI -->
+                <div class="mb-4">
+                    <label for="senhaSei" class="step-label">
+                        <span class="step-badge">5</span> Senha do SEI (Assinatura)
+                    </label>
+                    <div class="row">
+                        <div class="col-md-5">
+                            <input type="password" class="form-control form-control-lg" id="senhaSei"
+                                   placeholder="Sua senha do SEI" required>
+                            <div class="form-text">Os documentos serão criados e assinados automaticamente.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botão de criar -->
+                <div class="d-flex justify-content-end pt-3 border-top mt-4">
+                    <button type="button" class="btn btn-success btn-lg px-5 shadow fw-bold" id="btn-criar-lote" disabled onclick="iniciarCriacaoLote()">
+                        <i class="bi bi-rocket-takeoff me-2"></i> Criar e Assinar em Lote
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD PROGRESSO (hidden inicialmente) -->
+        <div id="card-progresso" class="card shadow-sm mb-4 d-none">
+            <div class="card-header bg-dark text-white d-flex align-items-center">
+                <i class="bi bi-terminal me-2"></i>
+                <strong>Progresso</strong>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-3" style="height: 24px;">
+                    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                         role="progressbar" style="width: 0%">0%</div>
+                </div>
+                <div id="log-container" class="bg-light border rounded p-3" style="max-height: 350px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
+                </div>
+                <div id="msg-resultado-final" class="mt-3 d-none"></div>
+            </div>
+        </div>
+
+        <!-- CARD RELATÓRIO (hidden inicialmente) -->
+        <div id="card-relatorio" class="card shadow-sm mb-4 d-none">
+            <div class="card-header bg-white d-flex align-items-center justify-content-between">
+                <div>
+                    <i class="bi bi-file-earmark-text me-2"></i>
+                    <strong>Relatório de Processos Criados</strong>
+                </div>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="baixarPDF()">
+                    <i class="bi bi-file-pdf me-2"></i> Baixar PDF
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <!-- Conteúdo que será convertido em PDF -->
+                <div id="conteudo-relatorio">
+                    <div class="p-4 pb-2">
+                        <h5 class="fw-bold text-center mb-1">SGC — Processos Criados em Lote</h5>
+                        <p class="text-center text-muted small mb-3" id="relatorio-subtitulo"></p>
+                    </div>
+                    <table class="table table-bordered table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-center" style="width: 40px;">#</th>
+                                <th>Contratado</th>
+                                <th style="width: 250px;">Processo SEI</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-relatorio"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+// ===================================================================
+// ESTADO GLOBAL
+// ===================================================================
+let contratosSelecionados = {};
+let processosCriados = [];  // Acumula dados para o relatório PDF
+
+function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+}
+
+// ===================================================================
+// INICIALIZAÇÃO
+// ===================================================================
+$(document).ready(function() {
+    $('#competencia').mask('00/0000');
+    $('#btn-buscar').click(realizarBusca);
+    $('#termo_busca').keypress(function(e) { if(e.which == 13) realizarBusca(); });
+});
+
+// ===================================================================
+// BUSCA DE CONTRATOS
+// ===================================================================
+function realizarBusca() {
+    let termo = $('#termo_busca').val();
+    if (termo.length < 3) { alert("Digite pelo menos 3 caracteres."); return; }
+
+    let btn = $('#btn-buscar');
+    let originalText = btn.html();
+    btn.html('<span class="spinner-border spinner-border-sm"></span> Buscando...').prop('disabled', true);
+
+    $.ajax({
+        url: "{{ url_for('solicitacoes.api_buscar_contratos') }}",
+        data: { q: termo },
+        success: function(response) {
+            popularTabela(response.results, false);
+            $('#label-resultados').text('Resultados da busca:');
+        },
+        error: function() { alert("Erro na busca."); },
+        complete: function() { btn.html(originalText).prop('disabled', false); }
+    });
+}
+
+function carregarTodosContratos() {
+    let btn = $('#btn-selecionar-todos');
+    let originalText = btn.html();
+    btn.html('<span class="spinner-border spinner-border-sm"></span> Carregando...').prop('disabled', true);
+
+    $.ajax({
+        url: "{{ url_for('solicitacoes.api_buscar_contratos') }}",
+        data: { todos: '1' },
+        success: function(response) {
+            popularTabela(response.results, true);
+            $('#label-resultados').text(`Todos os contratos (${response.results.length}):`);
+        },
+        error: function() { alert("Erro ao carregar contratos."); },
+        complete: function() { btn.html(originalText).prop('disabled', false); }
+    });
+}
+
+function popularTabela(contratos, selecionarTodos) {
+    $('#container-resultados').removeClass('d-none');
+    $('#msg-nenhum-resultado').addClass('d-none');
+
+    if (contratos.length === 0) {
+        $('#msg-nenhum-resultado').removeClass('d-none');
+        $('#container-resultados .card').addClass('d-none');
+        return;
+    }
+
+    $('#container-resultados .card').removeClass('d-none');
+    $('#tabela-corpo').empty();
+
+    contratos.forEach(function(c) {
+        let cod = escapeHtml(c.codigo);
+        let numOrig = escapeHtml(c.numeroOriginal) || '-';
+        let nome = escapeHtml(c.nomeContratado);
+        let obj = escapeHtml(c.objeto);
+        let proc = escapeHtml(c.numProcesso) || '-';
+
+        let checked = selecionarTodos || contratosSelecionados[c.codigo] ? 'checked' : '';
+
+        if (selecionarTodos) {
+            contratosSelecionados[c.codigo] = true;
+        }
+
+        let row = `
+            <tr style="cursor: pointer;" class="${checked ? 'table-primary' : ''}"
+                onclick="toggleContrato('${cod}', this)" data-codigo="${cod}">
+                <td class="text-center" onclick="event.stopPropagation();">
+                    <input class="form-check-input check-contrato" type="checkbox"
+                           value="${cod}" id="check_${cod}" ${checked}
+                           onchange="toggleContrato('${cod}', this.closest('tr'))"
+                           style="transform: scale(1.2); cursor: pointer;">
+                </td>
+                <td class="fw-bold text-secondary">${cod}</td>
+                <td><span class="badge bg-light text-dark border">${numOrig}</span></td>
+                <td>
+                    <div class="fw-bold text-dark">${nome}</div>
+                    <small class="text-muted d-block text-truncate" style="max-width: 300px;">${obj}</small>
+                </td>
+                <td class="small font-monospace">${proc}</td>
+            </tr>
+        `;
+        $('#tabela-corpo').append(row);
+    });
+
+    atualizarCheckTodos();
+    atualizarContador();
+}
+
+// ===================================================================
+// SELEÇÃO DE CONTRATOS
+// ===================================================================
+function toggleContrato(codigo, row) {
+    let checkbox = document.getElementById('check_' + codigo);
+
+    if (event && event.target !== checkbox) {
+        checkbox.checked = !checkbox.checked;
+    }
+
+    if (checkbox.checked) {
+        contratosSelecionados[codigo] = true;
+        $(row).addClass('table-primary');
+    } else {
+        delete contratosSelecionados[codigo];
+        $(row).removeClass('table-primary');
+    }
+
+    atualizarContador();
+    atualizarCheckTodos();
+}
+
+function toggleSelecionarTodos() {
+    let checkboxes = document.querySelectorAll('.check-contrato');
+    let checkTodos = document.getElementById('check-todos');
+    let todosChecked = checkTodos.checked;
+
+    checkboxes.forEach(function(cb) {
+        let codigo = cb.value;
+        let row = cb.closest('tr');
+
+        if (todosChecked) {
+            cb.checked = true;
+            contratosSelecionados[codigo] = true;
+            $(row).addClass('table-primary');
+        } else {
+            cb.checked = false;
+            delete contratosSelecionados[codigo];
+            $(row).removeClass('table-primary');
+        }
+    });
+
+    atualizarContador();
+}
+
+function atualizarCheckTodos() {
+    let checkboxes = document.querySelectorAll('.check-contrato');
+    let checkTodos = document.getElementById('check-todos');
+    if (checkboxes.length === 0) return;
+
+    let todosChecked = Array.from(checkboxes).every(cb => cb.checked);
+    checkTodos.checked = todosChecked;
+}
+
+function limparSelecao() {
+    contratosSelecionados = {};
+    document.querySelectorAll('.check-contrato').forEach(function(cb) {
+        cb.checked = false;
+        $(cb.closest('tr')).removeClass('table-primary');
+    });
+    document.getElementById('check-todos').checked = false;
+    atualizarContador();
+}
+
+function atualizarContador() {
+    let total = Object.keys(contratosSelecionados).length;
+    document.getElementById('contador-selecionados').textContent = total;
+
+    if (total > 0) {
+        document.getElementById('container-selecionados').classList.remove('d-none');
+        document.getElementById('btn-criar-lote').disabled = false;
+    } else {
+        document.getElementById('container-selecionados').classList.add('d-none');
+        document.getElementById('btn-criar-lote').disabled = true;
+    }
+}
+
+// ===================================================================
+// CRIAÇÃO + ASSINATURA EM LOTE (SSE UNIFICADO)
+// ===================================================================
+function iniciarCriacaoLote() {
+    let competencia = document.getElementById('competencia').value.trim();
+    let tipo = document.getElementById('id_tipo_pagamento').value;
+    let unidade = document.getElementById('unidade_procedimento').value;
+    let senha = document.getElementById('senhaSei').value.trim();
+    let codigos = Object.keys(contratosSelecionados);
+
+    // Validações
+    if (!competencia) { alert('Informe a competência.'); return; }
+    if (!tipo) { alert('Selecione o tipo de pagamento.'); return; }
+    if (!unidade) { alert('Selecione a unidade geradora.'); return; }
+    if (codigos.length === 0) { alert('Selecione pelo menos um contrato.'); return; }
+    if (!senha) { alert('Informe sua senha do SEI para assinatura.'); document.getElementById('senhaSei').focus(); return; }
+
+    // Confirmação
+    if (!confirm(`Criar e assinar ${codigos.length} processo(s) no SEI?\n\nCompetência: ${competencia}\nContratos: ${codigos.length}`)) {
+        return;
+    }
+
+    // Desabilita form
+    document.getElementById('btn-criar-lote').disabled = true;
+    document.getElementById('btn-criar-lote').innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando...';
+    document.getElementById('btn-buscar').disabled = true;
+    document.getElementById('btn-selecionar-todos').disabled = true;
+    document.getElementById('senhaSei').disabled = true;
+
+    // Limpa dados de execução anterior
+    processosCriados = [];
+    document.getElementById('card-relatorio').classList.add('d-none');
+    document.getElementById('tabela-relatorio').innerHTML = '';
+
+    // Mostra card de progresso
+    let cardProgresso = document.getElementById('card-progresso');
+    cardProgresso.classList.remove('d-none');
+    cardProgresso.scrollIntoView({ behavior: 'smooth' });
+
+    let logContainer = document.getElementById('log-container');
+    logContainer.innerHTML = '';
+
+    // Payload unificado: criação + assinatura
+    let payload = {
+        contratos: codigos,
+        competencia: competencia,
+        id_tipo_pagamento: parseInt(tipo),
+        unidade_id: unidade,
+        senha: senha
+    };
+
+    fetch("{{ url_for('solicitacoes.api_criar_lote') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(response => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function processStream() {
+            return reader.read().then(({ done, value }) => {
+                if (done) return;
+
+                buffer += decoder.decode(value, { stream: true });
+                let lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                lines.forEach(line => {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            let data = JSON.parse(line.substring(6));
+                            processarEvento(data);
+                        } catch(e) {}
+                    }
+                });
+
+                return processStream();
+            });
+        }
+
+        return processStream();
+    }).catch(error => {
+        adicionarLog(logContainer, '❌ Erro de comunicação com o servidor.', 'text-danger');
+        reabilitarFormulario();
+    });
+}
+
+function processarEvento(data) {
+    let logContainer = document.getElementById('log-container');
+    let progressBar = document.getElementById('progress-bar');
+
+    // Atualiza barra de progresso
+    if (data.progresso !== undefined) {
+        progressBar.style.width = data.progresso + '%';
+        progressBar.textContent = data.progresso + '%';
+    }
+
+    // Adiciona log
+    if (data.msg) {
+        let cssClass = data.sucesso === true ? 'text-success' : (data.sucesso === false ? 'text-danger' : 'text-muted');
+        adicionarLog(logContainer, data.msg, cssClass);
+    }
+
+    // Acumula dados para relatório (somente processos criados com sucesso)
+    if (data.contrato && data.protocolo && data.sucesso !== false) {
+        processosCriados.push({
+            contratado: data.contratado || data.contrato,
+            protocolo: data.protocolo,
+            link_sei: data.link_sei || ''
+        });
+    }
+
+    // Concluído
+    if (data.concluido) {
+        progressBar.classList.remove('progress-bar-animated');
+
+        let msgDiv = document.getElementById('msg-resultado-final');
+
+        if (data.total_erros === 0) {
+            progressBar.classList.remove('bg-primary');
+            progressBar.classList.add('bg-success');
+
+            msgDiv.className = 'mt-3 alert alert-success d-flex align-items-center justify-content-between';
+            msgDiv.innerHTML = `
+                <div><i class="bi bi-check-circle me-2"></i><strong>${data.msg}</strong></div>
+                <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-success">
+                    <i class="bi bi-arrow-right me-1"></i> Ir para o Dashboard
+                </a>`;
+        } else if (data.total_criados > 0) {
+            progressBar.classList.remove('bg-primary');
+            progressBar.classList.add('bg-warning');
+
+            msgDiv.className = 'mt-3 alert alert-warning d-flex align-items-center justify-content-between';
+            msgDiv.innerHTML = `
+                <div><i class="bi bi-exclamation-triangle me-2"></i><strong>${data.msg}</strong></div>
+                <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-warning">
+                    <i class="bi bi-arrow-right me-1"></i> Ir para o Dashboard
+                </a>`;
+        } else {
+            progressBar.classList.remove('bg-primary');
+            progressBar.classList.add('bg-danger');
+
+            msgDiv.className = 'mt-3 alert alert-danger';
+            msgDiv.innerHTML = `<i class="bi bi-x-circle me-2"></i><strong>${data.msg}</strong>`;
+            reabilitarFormulario();
+        }
+
+        msgDiv.classList.remove('d-none');
+
+        // Popula e exibe o relatório se houver processos criados
+        if (processosCriados.length > 0) {
+            montarRelatorio();
+        }
+    }
+}
+
+function reabilitarFormulario() {
+    document.getElementById('btn-criar-lote').disabled = false;
+    document.getElementById('btn-criar-lote').innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i> Criar e Assinar em Lote';
+    document.getElementById('btn-buscar').disabled = false;
+    document.getElementById('btn-selecionar-todos').disabled = false;
+    document.getElementById('senhaSei').disabled = false;
+}
+
+// ===================================================================
+// RELATÓRIO PDF
+// ===================================================================
+function montarRelatorio() {
+    let tbody = document.getElementById('tabela-relatorio');
+    tbody.innerHTML = '';
+
+    let competencia = document.getElementById('competencia').value.trim();
+    let subtitulo = document.getElementById('relatorio-subtitulo');
+    let dataHora = new Date().toLocaleString('pt-BR');
+    subtitulo.textContent = `Competência: ${competencia} — Gerado em ${dataHora}`;
+
+    processosCriados.forEach(function(proc, idx) {
+        let tr = document.createElement('tr');
+        let linkHtml = proc.link_sei
+            ? `<a href="${escapeHtml(proc.link_sei)}" target="_blank" class="text-primary text-decoration-none">${escapeHtml(proc.protocolo)} <i class="bi bi-box-arrow-up-right small"></i></a>`
+            : escapeHtml(proc.protocolo);
+
+        tr.innerHTML = `
+            <td class="text-center text-muted">${idx + 1}</td>
+            <td class="fw-semibold">${escapeHtml(proc.contratado)}</td>
+            <td class="font-monospace">${linkHtml}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    let cardRelatorio = document.getElementById('card-relatorio');
+    cardRelatorio.classList.remove('d-none');
+    cardRelatorio.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function baixarPDF() {
+    if (typeof html2pdf === 'undefined') {
+        alert('Biblioteca de PDF não carregada. Tente recarregar a página.');
+        return;
+    }
+
+    let btn = document.querySelector('#card-relatorio .btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gerando PDF...';
+
+    try {
+        let elemento = document.getElementById('conteudo-relatorio');
+
+        let competencia = document.getElementById('competencia').value.trim().replace('/', '-');
+        let filename = `SGC_Processos_Lote_${competencia}_${new Date().toISOString().slice(0,10)}.pdf`;
+
+        let opt = {
+            margin:       [10, 10, 10, 10],
+            filename:     filename,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+
+        await html2pdf().set(opt).from(elemento).save();
+    } catch (error) {
+        console.error('Erro ao gerar PDF:', error);
+        alert('Erro ao gerar o PDF.');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-file-pdf me-2"></i> Baixar PDF';
+    }
+}
+
+// ===================================================================
+// UTILIDADES
+// ===================================================================
+function adicionarLog(container, msg, cssClass) {
+    let p = document.createElement('div');
+    p.className = cssClass || '';
+    p.textContent = msg;
+    container.appendChild(p);
+    container.scrollTop = container.scrollHeight;
+}
+</script>
+{% endblock %}

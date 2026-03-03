@@ -1,0 +1,79 @@
+{% extends 'prestacoes_contratos/base_prestacoes.html' %}
+
+{% block title %}Associar Categoria ao Contrato{% endblock %}
+
+{% block content %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Associar Categoria ao Contrato</h2>
+        <a href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo) }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Voltar
+        </a>
+    </div>
+
+    {# Dados do Contrato #}
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header bg-primary text-white fw-semibold">
+            <i class="bi bi-file-earmark-text me-1"></i>Dados do Contrato
+        </div>
+        <div class="card-body" style="border-left: 4px solid #0d6efd;">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="mb-1"><strong>Código:</strong> {{ contrato.codigo }}</div>
+                </div>
+                <div class="col-md-5">
+                    <div class="mb-1"><strong>Objeto:</strong> {{ contrato.objeto or '—' }}</div>
+                </div>
+                <div class="col-md-2">
+                    <div class="mb-1"><strong>Valor:</strong> <span class="text-success fw-semibold">{{ contrato.valor_formatado }}</span></div>
+                </div>
+                <div class="col-md-2">
+                    <div class="mb-1">
+                        <strong>Situação:</strong>
+                        {% if contrato.situacao == 'EM_VIGOR' %}
+                            <span class="badge bg-success">Em vigor</span>
+                        {% elif contrato.situacao == 'ENCERRADO' %}
+                            <span class="badge bg-danger">{{ contrato.situacao }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ contrato.situacao }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Formulário de Associação - Apenas Categoria #}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <form action="{{ url_for('prestacoes_contratos.categorias_associar_store', codigo_contrato=contrato.codigo) }}" method="post">
+
+                {# Categoria #}
+                <div class="mb-4">
+                    <label for="categoria_id" class="form-label fw-semibold">
+                        <i class="bi bi-tag me-1"></i>Selecione uma Categoria
+                    </label>
+                    <select class="form-select" id="categoria_id" name="categoria_id" required>
+                        <option value="">-- Selecione uma categoria --</option>
+                        {% for categoria in categorias %}
+                            <option value="{{ categoria.id }}"
+                                    {{ 'selected' if contrato.categoria_contrato_id == categoria.id }}>
+                                {{ categoria.descricao }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo) }}" class="btn btn-secondary">
+                        <i class="bi bi-x-lg me-1"></i>Cancelar
+                    </a>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-lg me-1"></i>Associar Categoria
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

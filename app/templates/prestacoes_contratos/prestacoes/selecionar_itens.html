@@ -1,0 +1,340 @@
+{% extends 'prestacoes_contratos/base_prestacoes.html' %}
+
+{% block title %}Selecionar Itens - Execução{% endblock %}
+
+{% block content %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Adicionar Execução</h2>
+        <a href="{{ url_for('prestacoes_contratos.contrato_execucoes', codigo=contrato.codigo) }}"
+           class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Voltar
+        </a>
+    </div>
+
+    {# Dados do Contrato #}
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header bg-primary text-white fw-semibold">
+            <i class="bi bi-file-earmark-text me-1"></i>Dados do Contrato
+        </div>
+        <div class="card-body" style="border-left: 4px solid #0d6efd;">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="mb-1"><strong>Código:</strong> {{ contrato.codigo }}</div>
+                    <div><strong>Objeto:</strong> {{ contrato.objeto or '—' }}</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="mb-1"><strong>Valor:</strong> <span class="text-success fw-semibold">{{ contrato.valor_formatado }}</span></div>
+                    <div>
+                        <strong>Situação:</strong>
+                        {% if contrato.situacao == 'EM_VIGOR' %}
+                            <span class="badge bg-success">Em vigor</span>
+                        {% elif contrato.situacao == 'ENCERRADO' %}
+                            <span class="badge bg-danger">{{ contrato.situacao }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ contrato.situacao }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="mb-1"><strong>Contratado:</strong> {{ contrato.nomeContratado or '—' }}</div>
+                    <div>
+                        <strong>Tipo:</strong>
+                        <span class="badge bg-dark">{{ contrato.tipo_contrato_display }}</span>
+                        {% if contrato.esta_tipificado %}
+                        <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Aviso de itens ocultados por não pertencerem à tipificação #}
+    {% if itens_ocultados %}
+    <div class="alert alert-info d-flex align-items-start gap-2 mb-4">
+        <i class="bi bi-funnel fs-5 text-info"></i>
+        <div>
+            <strong>Filtro de tipificação ativo.</strong><br>
+            <span class="text-muted">
+                {{ itens_ocultados }} item(ns) vinculado(s) foram ocultados por não pertencerem
+                à tipificação configurada neste contrato
+                ({{ contrato.tipo_contrato_display }}).
+            </span>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Selecionar Itens Vinculados #}
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white fw-semibold">
+            <i class="bi bi-box-seam me-1"></i>Selecione os Itens Vinculados para Registrar Execuções
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('prestacoes_contratos.execucoes_iniciar', codigo=contrato.codigo) }}" method="post">
+
+                {# Toggle para contratos MISTO #}
+                {% if contrato.tipo_contrato_label == 'MISTO' %}
+                <div class="btn-group mb-3 w-100" role="group" aria-label="Tipo de item">
+                    <button type="button" class="btn btn-outline-success active" id="btnToggleServicos"
+                            onclick="toggleTipoItens('servicos')">
+                        <i class="bi bi-diagram-3 me-1"></i> Serviços
+                        <span class="badge bg-success ms-1">{{ itens_servicos|length }}</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-info" id="btnToggleMateriais"
+                            onclick="toggleTipoItens('materiais')">
+                        <i class="bi bi-box-seam me-1"></i> Materiais
+                        <span class="badge bg-info text-dark ms-1">{{ itens_materiais|length }}</span>
+                    </button>
+                </div>
+                {% endif %}
+
+                {# Campo de Pesquisa #}
+                <div class="mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" class="form-control" id="pesquisaItem"
+                               placeholder="Pesquisar itens por descrição..."
+                               autocomplete="off">
+                    </div>
+                </div>
+
+                {# Ações rápidas #}
+                <div class="d-flex gap-2 mb-3">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnSelecionarTodos">
+                        <i class="bi bi-check-all me-1"></i>Selecionar Todos
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDesmarcarTodos">
+                        <i class="bi bi-x-lg me-1"></i>Desmarcar Todos
+                    </button>
+                    <span class="badge bg-primary align-self-center ms-auto" id="contadorSelecionados">
+                        0 selecionados
+                    </span>
+                </div>
+
+                {# ===== Lista de Serviços Vinculados ===== #}
+                {% if itens_servicos %}
+                <div id="secaoServicos">
+                    {% if contrato.tipo_contrato_label != 'MISTO' %}
+                    <h6 class="fw-bold mb-2">
+                        <i class="bi bi-diagram-3 me-1 text-success"></i> Serviços Vinculados
+                        <span class="badge bg-success">{{ itens_servicos|length }}</span>
+                    </h6>
+                    {% endif %}
+                    <div class="border rounded" style="max-height: 400px; overflow-y: auto;" id="listaServicos">
+                        {% for srv in itens_servicos %}
+                        <div class="item-checkbox item-servico d-flex align-items-center px-3 py-2 border-bottom"
+                             data-descricao="{{ srv.descricao|lower }}"
+                             data-tipo="S">
+                            <div class="form-check flex-grow-1 mb-0">
+                                <input class="form-check-input item-check" type="checkbox"
+                                       name="itens" value="S:{{ srv.item_id }}" id="srv_{{ srv.vinculacao_id }}"
+                                       {{ 'disabled' if not srv.catserv_servico_id }}>
+                                <label class="form-check-label w-100"
+                                       for="srv_{{ srv.vinculacao_id }}">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <span>
+                                            <span class="badge bg-success me-2">S</span>
+                                            <strong>{{ srv.descricao }}</strong>
+                                        </span>
+                                    </div>
+                                    {% if srv.associacao %}
+                                    <small class="text-success ms-4 d-block mt-1">
+                                        <i class="bi bi-link-45deg me-1"></i>{{ srv.associacao }}
+                                    </small>
+                                    {% else %}
+                                    <small class="text-warning fst-italic ms-4 d-block mt-1">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>Pendente de associação CATSERV (indisponível para execução)
+                                    </small>
+                                    {% endif %}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {# ===== Lista de Materiais Vinculados ===== #}
+                {% if itens_materiais %}
+                <div id="secaoMateriais" class="{{ 'd-none' if contrato.tipo_contrato_label == 'MISTO' }}">
+                    {% if contrato.tipo_contrato_label != 'MISTO' %}
+                    <h6 class="fw-bold mb-2 {{ 'mt-4' if itens_servicos }}">
+                        <i class="bi bi-box-seam me-1 text-info"></i> Materiais Vinculados
+                        <span class="badge bg-info text-dark">{{ itens_materiais|length }}</span>
+                    </h6>
+                    {% endif %}
+                    <div class="border rounded" style="max-height: 400px; overflow-y: auto;" id="listaMateriais">
+                        {% for mat in itens_materiais %}
+                        <div class="item-checkbox item-material d-flex align-items-center px-3 py-2 border-bottom"
+                             data-descricao="{{ mat.descricao|lower }}"
+                             data-tipo="M">
+                            <div class="form-check flex-grow-1 mb-0">
+                                <input class="form-check-input item-check" type="checkbox"
+                                       name="itens" value="M:{{ mat.item_id }}" id="mat_{{ mat.vinculacao_id }}"
+                                       {{ 'disabled' if not mat.catmat_item_id }}>
+                                <label class="form-check-label w-100"
+                                       for="mat_{{ mat.vinculacao_id }}">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <span>
+                                            <span class="badge bg-info text-dark me-2">M</span>
+                                            <strong>{{ mat.descricao }}</strong>
+                                        </span>
+                                    </div>
+                                    {% if mat.associacao %}
+                                    <small class="text-success ms-4 d-block mt-1">
+                                        <i class="bi bi-link-45deg me-1"></i>{{ mat.associacao }}
+                                    </small>
+                                    {% else %}
+                                    <small class="text-warning fst-italic ms-4 d-block mt-1">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>Pendente de associação CATMAT (indisponível para execução)
+                                    </small>
+                                    {% endif %}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {# Nenhum item vinculado #}
+                {% if not itens_servicos and not itens_materiais %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                    <p class="mb-2">Nenhum item vinculado a este contrato.</p>
+                    <a href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='itens') }}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-link-45deg me-1"></i>Vincular Itens
+                    </a>
+                </div>
+                {% endif %}
+
+                {# Mensagem quando pesquisa não encontra resultado #}
+                <div class="text-center text-muted py-3 d-none" id="semResultados">
+                    <i class="bi bi-search fs-4 d-block mb-1"></i>
+                    Nenhum item encontrado para a pesquisa.
+                </div>
+
+                {% if itens_servicos or itens_materiais %}
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="{{ url_for('prestacoes_contratos.contrato_execucoes', codigo=contrato.codigo) }}"
+                       class="btn btn-secondary">
+                        <i class="bi bi-x-lg me-1"></i>Cancelar
+                    </a>
+                    <button type="submit" class="btn btn-primary" id="btnContinuar">
+                        <i class="bi bi-arrow-right me-1"></i>Continuar e Registrar Execuções
+                    </button>
+                </div>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const pesquisaInput = document.getElementById('pesquisaItem');
+    const itensCheckbox = document.querySelectorAll('.item-checkbox');
+    const checks = document.querySelectorAll('.item-check');
+    const contador = document.getElementById('contadorSelecionados');
+    const semResultados = document.getElementById('semResultados');
+    const btnSelecionarTodos = document.getElementById('btnSelecionarTodos');
+    const btnDesmarcarTodos = document.getElementById('btnDesmarcarTodos');
+
+    // Pesquisa em tempo real
+    if (pesquisaInput) {
+        pesquisaInput.addEventListener('input', function() {
+            const termo = this.value.toLowerCase().trim();
+            let visiveis = 0;
+
+            itensCheckbox.forEach(function(item) {
+                // Pula itens de seção oculta (para MISTO)
+                const secao = item.closest('[id^="secao"]');
+                if (secao && secao.classList.contains('d-none')) return;
+
+                const descricao = item.dataset.descricao || '';
+                const match = descricao.includes(termo);
+
+                item.style.display = match ? '' : 'none';
+                if (match) visiveis++;
+            });
+
+            // Mostra mensagem se nenhum resultado
+            if (visiveis === 0 && termo !== '') {
+                semResultados.classList.remove('d-none');
+            } else {
+                semResultados.classList.add('d-none');
+            }
+        });
+    }
+
+    // Atualizar contador
+    function atualizarContador() {
+        const selecionados = document.querySelectorAll('.item-check:checked').length;
+        contador.textContent = selecionados + ' selecionado' + (selecionados !== 1 ? 's' : '');
+    }
+
+    checks.forEach(function(check) {
+        check.addEventListener('change', atualizarContador);
+    });
+
+    // Selecionar todos (apenas os visíveis na seção ativa, pula desabilitados)
+    if (btnSelecionarTodos) {
+        btnSelecionarTodos.addEventListener('click', function() {
+            itensCheckbox.forEach(function(item) {
+                const secao = item.closest('[id^="secao"]');
+                if (secao && secao.classList.contains('d-none')) return;
+                if (item.style.display !== 'none') {
+                    const check = item.querySelector('.item-check');
+                    if (!check.disabled) check.checked = true;
+                }
+            });
+            atualizarContador();
+        });
+    }
+
+    // Desmarcar todos
+    if (btnDesmarcarTodos) {
+        btnDesmarcarTodos.addEventListener('click', function() {
+            checks.forEach(function(check) {
+                check.checked = false;
+            });
+            atualizarContador();
+        });
+    }
+});
+
+// Toggle entre Serviços e Materiais (MISTO)
+function toggleTipoItens(tipo) {
+    const secaoServicos = document.getElementById('secaoServicos');
+    const secaoMateriais = document.getElementById('secaoMateriais');
+    const btnServicos = document.getElementById('btnToggleServicos');
+    const btnMateriais = document.getElementById('btnToggleMateriais');
+
+    if (!secaoServicos && !secaoMateriais) return;
+
+    if (tipo === 'servicos') {
+        if (secaoServicos) secaoServicos.classList.remove('d-none');
+        if (secaoMateriais) secaoMateriais.classList.add('d-none');
+        if (btnServicos) btnServicos.classList.add('active');
+        if (btnMateriais) btnMateriais.classList.remove('active');
+    } else {
+        if (secaoServicos) secaoServicos.classList.add('d-none');
+        if (secaoMateriais) secaoMateriais.classList.remove('d-none');
+        if (btnServicos) btnServicos.classList.remove('active');
+        if (btnMateriais) btnMateriais.classList.add('active');
+    }
+
+    // Limpa pesquisa ao trocar
+    const pesquisaInput = document.getElementById('pesquisaItem');
+    if (pesquisaInput) {
+        pesquisaInput.value = '';
+        pesquisaInput.dispatchEvent(new Event('input'));
+    }
+}
+</script>
+{% endblock %}

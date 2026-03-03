@@ -1,0 +1,445 @@
+{% extends 'prestacoes_contratos/base_prestacoes.html' %}
+
+{% block title %}Lista de Contratos{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<style>
+    /* Container arredondado */
+    .table-rounded {
+        border-radius: 0.5rem;
+        overflow: hidden;
+    }
+    /* Cabeçalho azul */
+    .table-contratos thead th {
+        background-color: #343990;
+        color: #fff;
+        font-weight: 600;
+        border: none;
+    }
+    /* Coluna nome do contratado - permitir quebra de linha */
+    .table-contratos .col-contratado {
+        max-width: 250px;
+        word-wrap: break-word;
+        white-space: normal;
+    }
+    /* Badges de natureza */
+    .badge-natureza {
+        font-size: 0.75em;
+        letter-spacing: 0.5px;
+        font-family: 'Segoe UI', monospace;
+        cursor: default;
+    }
+    /* Coluna classificadores */
+    .table-contratos .col-classificadores {
+        max-width: 280px;
+        word-wrap: break-word;
+        white-space: normal;
+    }
+    /* Tom Select - ajuste de altura para alinhar com form-control */
+    .ts-wrapper.single .ts-control {
+        padding: 0.375rem 0.75rem;
+        min-height: calc(1.5em + 0.75rem + 2px);
+        font-size: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mt-4">
+    {# Header com total #}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Lista de Contratos</h2>
+        <div class="d-flex align-items-center gap-2">
+            {% if pagination.total > 0 %}
+            <span class="badge bg-primary fs-6 px-3 py-2">Total: {{ pagination.total }} contratos</span>
+            {% endif %}
+            <a href="{{ url_for('prestacoes_contratos.api_relatorio_contratos') }}"
+               class="btn btn-success btn-sm shadow-sm">
+                <i class="bi bi-file-earmark-excel me-1"></i> Exportar Excel
+            </a>
+        </div>
+    </div>
+
+    {# ===== FILTROS ===== #}
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-body p-3">
+            <form method="GET" action="{{ url_for('prestacoes_contratos.dashboard') }}" id="formFiltros">
+                <div class="row g-2 align-items-end">
+
+                    {# Código do contrato #}
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">Código do contrato</label>
+                        <input type="text" name="codigo" class="form-control"
+                               placeholder="Código"
+                               value="{{ filtro_codigo }}">
+                    </div>
+
+                    {# Nome do contratado #}
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">Nome do contratado</label>
+                        <input type="text" name="contratado" class="form-control"
+                               placeholder="Nome do contratado"
+                               value="{{ filtro_contratado }}">
+                    </div>
+
+                    {# Situação #}
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">Situação</label>
+                        <select name="situacao" class="form-select">
+                            <option value="">Todos</option>
+                            {% for sit in todas_situacoes %}
+                                <option value="{{ sit }}" {{ 'selected' if filtro_situacao == sit }}>
+                                    {{ sit }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    {# Natureza #}
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">Natureza</label>
+                        <select name="natureza" id="selectNatureza" class="form-select">
+                            <option value="">Todos</option>
+                            {% for nd in todas_naturezas %}
+                                <option value="{{ nd.codigo }}" {{ 'selected' if filtro_natureza == nd.codigo }}>
+                                    {{ nd.codigo }} - {{ nd.titulo }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    {# Tipo do Contrato #}
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">Tipo do contrato</label>
+                        <select name="tipo_contrato" class="form-select">
+                            <option value="">Todos</option>
+                            <option value="MATERIAL" {{ 'selected' if filtro_tipo_contrato == 'MATERIAL' }}>Material</option>
+                            <option value="SERVICO" {{ 'selected' if filtro_tipo_contrato == 'SERVICO' }}>Serviço</option>
+                            <option value="MISTO" {{ 'selected' if filtro_tipo_contrato == 'MISTO' }}>Serviço / Material</option>
+                        </select>
+                    </div>
+
+                    {# Tipo de Execução #}
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">Tipo de execução</label>
+                        <select name="tipo_execucao" class="form-select">
+                            <option value="">Todos</option>
+                            {% for te in todos_tipos_execucao %}
+                                <option value="{{ te.id }}" {{ 'selected' if filtro_tipo_execucao == te.id }}>
+                                    {{ te.descricao }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                </div>
+
+                <div class="row g-2 align-items-end mt-1">
+
+                    {# Centro de Custo #}
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold text-muted mb-1">Centro de custo</label>
+                        <select name="centro_custo" class="form-select">
+                            <option value="">Todos</option>
+                            {% for cc in todos_centros_custo %}
+                                <option value="{{ cc.id }}" {{ 'selected' if filtro_centro_custo == cc.id }}>
+                                    {{ cc.descricao }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    {# PDM (CATMAT) #}
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold text-muted mb-1">PDM (Material)</label>
+                        <select name="pdm" class="form-select">
+                            <option value="">Todos</option>
+                            {% for pdm in todos_pdms %}
+                                <option value="{{ pdm.id }}" {{ 'selected' if filtro_pdm == pdm.id }}>
+                                    {{ pdm.codigo }} - {{ pdm.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    {# Tipo de despesa (Tipo Patrimonial) — filtra pelo Natureza #}
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold text-muted mb-1">Tipo de despesa</label>
+                        <select name="tipo_patrimonial" id="selectTipoPatrimonial" class="form-select">
+                            <option value="">Todos</option>
+                            {% for tp in todos_tipos_patrimoniais %}
+                                <option value="{{ tp.codigo }}" {{ 'selected' if filtro_tipo_patrimonial == tp.codigo }}>
+                                    {{ tp.codigo }} - {{ tp.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    {# Sub item — filtra pelo Natureza + Tipo de despesa #}
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold text-muted mb-1">Sub item</label>
+                        <select name="subitem_despesa" id="selectSubItem" class="form-select">
+                            <option value="">Todos</option>
+                            {% for si in todos_subitens %}
+                                <option value="{{ si.codigo }}" {{ 'selected' if filtro_subitem == si.codigo }}>
+                                    {{ si.codigo }} - {{ si.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                </div>
+
+                {# Botões #}
+                <div class="row g-2 mt-2">
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-primary fw-bold shadow-sm px-4">
+                            <i class="bi bi-funnel me-1"></i> Filtrar
+                        </button>
+                    </div>
+                    {% if tem_filtro %}
+                    <div class="col-auto">
+                        <a href="{{ url_for('prestacoes_contratos.dashboard') }}" class="btn btn-outline-danger px-3">
+                            <i class="bi bi-x-lg me-1"></i> Limpar
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# ===== TABELA ===== #}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive table-rounded">
+                <table class="table table-striped table-hover table-contratos mb-0">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Numero original</th>
+                            <th>Nome do contratado</th>
+                            <th>Objeto</th>
+                            <th class="text-center">Natureza</th>
+                            <th>Tipo de despesa</th>
+                            <th class="text-center">Tipo Execução / Centro de Custo</th>
+                            <th>Valor</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if contratos %}
+                            {% for contrato in contratos %}
+                            <tr>
+                                <td><strong>{{ contrato.codigo }}</strong></td>
+                                <td>{{ contrato.numeroOriginal }}</td>
+                                <td class="col-contratado">{{ contrato.nomeContratado }}</td>
+                                <td>{{ contrato.objeto }}</td>
+                                <td class="text-center">
+                                    {% if contrato.naturezas %}
+                                        {% for nat in contrato.naturezas %}
+                                            <span class="badge rounded-pill bg-dark bg-opacity-75 badge-natureza me-1"
+                                                  title="{{ nat.codigo }} - {{ nat.titulo }}">
+                                                {{ nat.codigo }}
+                                            </span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if contrato.tipos_patrimoniais %}
+                                        {% for tp in contrato.tipos_patrimoniais %}
+                                        <div class="{{ 'mb-1' if not loop.last }}">
+                                            <span class="small">{{ tp.codigo }} - {{ tp.nome }}</span>
+                                        </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center text-nowrap">
+                                    {% if contrato.tipo_execucao %}
+                                        {% if contrato.tipo_execucao == 'CONTINUADO' %}
+                                            <span class="badge bg-info">{{ contrato.tipo_execucao }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ contrato.tipo_execucao }}</span>
+                                        {% endif %}
+                                    {% endif %}
+                                    {% if contrato.centro_de_custo %}
+                                        <span class="badge bg-warning text-dark">{{ contrato.centro_de_custo }}</span>
+                                    {% endif %}
+                                    {% if not contrato.tipo_execucao and not contrato.centro_de_custo %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-success fw-semibold text-nowrap text-end">{{ contrato.valor_formatado }}</td>
+                                <td class="text-nowrap text-center">
+                                    <div class="d-flex flex-column gap-1">
+                                        <a href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo) }}"
+                                           class="btn btn-primary btn-sm" title="Gerenciar">
+                                            <i class="bi bi-gear me-1"></i>Gerenciar
+                                        </a>
+                                        <a href="{{ url_for('prestacoes_contratos.contrato_execucoes', codigo=contrato.codigo) }}"
+                                           class="btn btn-outline-success btn-sm" title="Execuções">
+                                            <i class="bi bi-play-circle me-1"></i>Execuções
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="text-center text-muted py-4">
+                                    <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                    Nenhum contrato encontrado
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {# ===== PAGINAÇÃO ===== #}
+        {% if pagination.pages > 1 %}
+        <div class="card-footer bg-white border-top py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="text-muted small">
+                    Mostrando <strong>{{ contratos|length }}</strong> de <strong>{{ pagination.total }}</strong> contratos
+                </div>
+
+                <nav aria-label="Navegação de páginas">
+                    <ul class="pagination pagination-sm mb-0">
+                        {# Botão Anterior #}
+                        <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                            <a class="page-link"
+                               href="{{ url_for('prestacoes_contratos.dashboard', **dict(request.args, page=pagination.prev_num)) if pagination.has_prev else '#' }}">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+
+                        {# Números das Páginas #}
+                        {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if page_num %}
+                                <li class="page-item {{ 'active' if page_num == pagination.page }}">
+                                    <a class="page-link"
+                                       href="{{ url_for('prestacoes_contratos.dashboard', **dict(request.args, page=page_num)) }}">
+                                        {{ page_num }}
+                                    </a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {# Botão Próximo #}
+                        <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                            <a class="page-link"
+                               href="{{ url_for('prestacoes_contratos.dashboard', **dict(request.args, page=pagination.next_num)) if pagination.has_next else '#' }}">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selNatureza = document.getElementById('selectNatureza');
+    const selTipoPatr = document.getElementById('selectTipoPatrimonial');
+    const selSubItem  = document.getElementById('selectSubItem');
+
+    if (!selNatureza || !selTipoPatr || !selSubItem) return;
+
+    /* Configuração padrão do Tom Select */
+    const tomConfig = {
+        allowEmptyOption: true,
+        sortField: { field: 'text', direction: 'asc' },
+        placeholder: 'Pesquisar...',
+        controlInput: '<input placeholder="Pesquisar...">'
+    };
+
+    /* Inicializar Tom Select nos 3 selects de classificadores */
+    const tsNatureza = new TomSelect(selNatureza, {
+        ...tomConfig,
+        onChange: function(value) {
+            loadTipoPatrimonial(value, '');
+            loadSubItem(value, '', '');
+        }
+    });
+
+    const tsTipoPatr = new TomSelect(selTipoPatr, {
+        ...tomConfig,
+        onChange: function(value) {
+            const nat = tsNatureza.getValue();
+            loadSubItem(nat, value, '');
+        }
+    });
+
+    const tsSubItem = new TomSelect(selSubItem, tomConfig);
+
+    /* Valores preservados do servidor (para manter seleção após page load) */
+    const savedTipoPatr = '{{ filtro_tipo_patrimonial|default("", true) }}';
+    const savedSubItem  = '{{ filtro_subitem|default("", true) }}';
+
+    /* URLs da API */
+    const urlTipoPatr = '{{ url_for("prestacoes_contratos.api_filtro_tipos_patrimoniais") }}';
+    const urlSubItem  = '{{ url_for("prestacoes_contratos.api_filtro_subitens") }}';
+
+    function repopulateTomSelect(tsInstance, data, savedValue) {
+        tsInstance.clear(true);
+        tsInstance.clearOptions();
+        tsInstance.addOption({ value: '', text: 'Todos' });
+        data.forEach(function(item) {
+            tsInstance.addOption({ value: item.codigo, text: item.codigo + ' - ' + item.nome });
+        });
+        tsInstance.refreshOptions(false);
+        if (savedValue) {
+            tsInstance.setValue(savedValue, true);
+        }
+    }
+
+    function loadTipoPatrimonial(natureza, restoreValue) {
+        const params = new URLSearchParams();
+        if (natureza) params.set('natureza', natureza);
+
+        fetch(urlTipoPatr + '?' + params.toString())
+            .then(r => r.json())
+            .then(function(resp) {
+                if (resp.success) {
+                    repopulateTomSelect(tsTipoPatr, resp.data, restoreValue);
+                }
+            });
+    }
+
+    function loadSubItem(natureza, tipoPatr, restoreValue) {
+        const params = new URLSearchParams();
+        if (natureza) params.set('natureza', natureza);
+        if (tipoPatr) params.set('tipo_patrimonial', tipoPatr);
+
+        fetch(urlSubItem + '?' + params.toString())
+            .then(r => r.json())
+            .then(function(resp) {
+                if (resp.success) {
+                    repopulateTomSelect(tsSubItem, resp.data, restoreValue);
+                }
+            });
+    }
+
+    /* Carregamento inicial: se há natureza selecionada, carregar filtrados */
+    if (tsNatureza.getValue()) {
+        loadTipoPatrimonial(tsNatureza.getValue(), savedTipoPatr);
+        loadSubItem(tsNatureza.getValue(), savedTipoPatr, savedSubItem);
+    }
+});
+</script>
+{% endblock %}

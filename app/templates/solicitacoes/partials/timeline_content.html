@@ -1,0 +1,156 @@
+<div class="timeline-horizontal-wrapper mb-4">
+    <div class="timeline-flex-container">
+        
+        {% for item in timeline_data %}
+            
+            {# ================================================================= #}
+            {# BLOCO 1: ATESTO E FISCALIZAÇÃO (Agrupamento 12, 13 e 14)         #}
+            {# ================================================================= #}
+            {% if item.etapa.id == 12 %}
+                <div class="timeline-item">
+                    <div class="timeline-connector">
+                        <div class="connector-fill {{ 'active' if (item.concluida or item.atual) }}"></div>
+                        {% if item.tempo_decorrido %}
+                            <div class="duration-pill"><i class="fas fa-history"></i> {{ item.tempo_decorrido }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="timeline-date-block">
+                        {% if item.data %}
+                            <span class="date-day">{{ item.data.strftime('%d/%m') }}</span>
+                        {% endif %}
+                    </div>
+
+                    {# Z-INDEX 5 garante que o círculo fique por cima de qualquer linha saindo ou chegando #}
+                    <div class="step-circle {{ 'completed' if item.concluida }} {{ 'current' if item.atual }}" style="position: relative; z-index: 5;">
+                        <i class="fas fa-file-signature fs-6"></i>
+                    </div>
+
+                    <div class="step-info">
+                        <span class="step-title {{ 'active-text' if item.atual }}">
+                            Atesto e Fiscalização
+                        </span>
+                        
+                        {% if item.subetapas %}
+                            <div class="mt-2 text-start small border-top pt-1" style="font-size: 0.75rem; min-width: 150px;">
+                                {% for sub in item.subetapas %}
+                                    <div class="text-nowrap mb-1">
+                                        <i class="fas fa-check-circle {{ 'text-success' if item.concluida or (item.atual and loop.index < item.subetapas|length) else 'text-muted' }}"></i>
+                                        <span class="text-muted">{{ sub.data.strftime('%d/%m') if sub.data else '--' }}:</span>
+                                        <strong>{{ sub.nome }}</strong>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+            {# ================================================================= #}
+            {# BLOCO 2: FINANCEIRO (CORRIGIDO: Usa ordem lógica, não IDs)        #}
+            {# ================================================================= #}
+            {% elif item.etapa.id in [5, 6] %}
+                {% if item.etapa.id == 5 %}
+                    <div class="timeline-item">
+                        <div class="timeline-connector">
+                            {# CORREÇÃO: Usa flags calculadas no Python baseadas na ordem #}
+                            <div class="connector-fill {{ 'active' if (item.concluida or item.atual) }}"></div>
+                            {% if item.tempo_decorrido %}
+                                <div class="duration-pill"><i class="fas fa-history"></i> {{ item.tempo_decorrido }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="timeline-date-block">
+                            {% if item.data %}
+                                <span class="date-day">{{ item.data.strftime('%d/%m') }}</span>
+                            {% endif %}
+                        </div>
+
+                        {# CORREÇÃO: 'completed' se já passou (item.concluida), 'current' se é a atual (item.atual) #}
+                        <div class="step-circle {{ 'completed' if item.concluida else ('current' if item.atual else '') }}" style="position: relative; z-index: 5;">
+                            <i class="fas fa-search-dollar fs-6"></i>
+                        </div>
+
+                        <div class="step-info">
+                            {# CORREÇÃO: Texto ativo se for atual ou concluída #}
+                            <span class="step-title {{ 'active-text' if (item.concluida or item.atual) }}">
+                                Financeiro
+                            </span>
+                            
+                            {# CORREÇÃO: Exibe os links apenas se chegou na fase financeira #}
+                            {% if item.concluida or item.atual %}
+                                <div class="mt-2 text-start small border-top pt-1">
+                                    {% if solicitacao.num_nl %}
+                                    <a href="{{ mov_nl.link_acesso if mov_nl else '#' }}" target="_blank" class="text-decoration-none d-block mb-1">
+                                        <div class="text-nowrap" title="Nota de Liquidação">
+                                            <i class="fas fa-file-invoice-dollar text-primary me-1"></i> <strong>NL:</strong> {{ mov_nl.numero if mov_nl else '-' }}
+                                        </div>
+                                    </a>
+                                    {% endif %}
+                                    {% if solicitacao.num_pd %}
+                                    <a href="{{ mov_pd.link_acesso if mov_pd else '#' }}" target="_blank" class="text-decoration-none d-block mb-1">
+                                        <div class="text-nowrap" title="Programação de Desembolso">
+                                            <i class="fas fa-calendar-check text-warning me-1"></i> <strong>PD:</strong> {{ mov_pd.numero if mov_pd else '-' }}
+                                        </div>
+                                    </a>
+                                    {% endif %}
+                                    {% if solicitacao.num_ob %}
+                                    <a href="{{ mov_ob.link_acesso if mov_ob else '#' }}" target="_blank" class="text-decoration-none d-block">
+                                        <div class="text-nowrap text-success fw-bold" title="Ordem Bancária">
+                                            <i class="fas fa-money-check-alt me-1"></i> <strong>OB:</strong> {{ mov_ob.numero if mov_ob else '-' }}
+                                        </div>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+
+            {# ================================================================= #}
+            {# BLOCO 3: PADRÃO (COM ÍCONES PERSONALIZADOS)                     #}
+            {# ================================================================= #}
+            {% else %}
+                <div class="timeline-item">
+                    {% if not loop.first %}
+                    <div class="timeline-connector">
+                        <div class="connector-fill {{ 'active' if (item.concluida or item.atual) }}"></div>
+                        {% if item.tempo_decorrido %}
+                            <div class="duration-pill"><i class="fas fa-history"></i> {{ item.tempo_decorrido }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <div class="timeline-date-block">
+                        {% if item.data %}
+                            <span class="date-day">{{ item.data.strftime('%d/%m') }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="step-circle {{ 'completed' if item.concluida }} {{ 'current' if item.atual }}" style="position: relative; z-index: 5;">
+                        {% if item.atual %}
+                            <i class="fas fa-map-marker-alt fs-5 pin-pulse"></i>
+                        {% else %}
+                            {# MAPEAMENTO DE ÍCONES POR ID DE ETAPA #}
+                            {% set icones = {
+                                1: 'fas fa-file-alt',
+                                2: 'fas fa-user-check',
+                                3: 'fas fa-clipboard-list',
+                                4: 'fas fa-envelope-open-text',
+                                7: 'fas fa-handshake',
+                                8: 'fas fa-archive'
+                            } %}
+                            
+                            {# Tenta pegar o ícone do mapa, se não existir, usa um ícone de círculo padrão #}
+                            <i class="{{ icones.get(item.etapa.id, 'fas fa-circle') }} fs-6"></i>
+                        {% endif %}
+                    </div>
+
+                    <div class="step-info">
+                        <span class="step-title {{ 'active-text' if item.atual }}">{{ item.etapa.nome }}</span>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+
+    </div>
+</div>

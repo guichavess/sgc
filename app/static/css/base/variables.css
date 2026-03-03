@@ -1,0 +1,97 @@
+/**
+ * Variáveis CSS - Sistema de Design
+ * Define cores, tipografia e valores reutilizáveis
+ */
+
+:root {
+    /* ==========================================================================
+       CORES PRIMÁRIAS
+       ========================================================================== */
+    --color-primary: #343990;
+    --color-primary-dark: #282c6e;
+    --color-primary-light: #4a4fb3;
+    --color-primary-rgb: 52, 57, 144;
+
+    /* Cores de Status */
+    --color-success: #2ecc71;
+    --color-success-dark: #1cc88a;
+    --color-warning: #ffc107;
+    --color-danger: #e74c3c;
+    --color-info: #3498db;
+
+    /* ==========================================================================
+       CORES NEUTRAS
+       ========================================================================== */
+    --color-white: #ffffff;
+    --color-black: #212529;
+    --color-gray-100: #f8f9fa;
+    --color-gray-200: #f4f6f9;
+    --color-gray-300: #e9ecef;
+    --color-gray-400: #dee2e6;
+    --color-gray-500: #adb5bd;
+    --color-gray-600: #6c757d;
+    --color-gray-700: #495057;
+    --color-gray-800: #343a40;
+
+    /* ==========================================================================
+       TIPOGRAFIA
+       ========================================================================== */
+    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-size-xs: 0.65rem;
+    --font-size-sm: 0.75rem;
+    --font-size-base: 0.875rem;
+    --font-size-md: 1rem;
+    --font-size-lg: 1.25rem;
+    --font-size-xl: 1.5rem;
+    --font-weight-light: 300;
+    --font-weight-normal: 400;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    /* ==========================================================================
+       ESPAÇAMENTOS
+       ========================================================================== */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-xxl: 3rem;
+
+    /* ==========================================================================
+       BORDAS E RAIOS
+       ========================================================================== */
+    --border-radius-sm: 4px;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+    --border-radius-xl: 20px;
+    --border-radius-circle: 50%;
+
+    /* ==========================================================================
+       SOMBRAS
+       ========================================================================== */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+    --shadow-card: 0 4px 6px rgba(0, 0, 0, 0.05);
+    --shadow-navbar: 0 2px 10px rgba(0, 0, 0, 0.1);
+
+    /* ==========================================================================
+       TRANSIÇÕES
+       ========================================================================== */
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.3s ease;
+    --transition-slow: 0.5s ease;
+    --transition-elastic: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+    /* ==========================================================================
+       Z-INDEX
+       ========================================================================== */
+    --z-index-dropdown: 1000;
+    --z-index-sticky: 1020;
+    --z-index-fixed: 1030;
+    --z-index-modal-backdrop: 1040;
+    --z-index-modal: 1050;
+    --z-index-popover: 1060;
+    --z-index-tooltip: 1070;
+}

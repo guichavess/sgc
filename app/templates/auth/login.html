@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="col-md-5 col-lg-4">
+        <div class="card shadow-lg border-0">
+            <div class="card-header login-header-gradient text-white text-center py-4">
+                <img src="{{ url_for('static', filename='img/logo-piaui-branca.png') }}" alt="Logo Piauí" style="height: 85px;" class="mb-2">
+                <h4 class="mb-0 fw-bold">Acesso SGC</h4>
+                <small class="opacity-75">Utilize suas credenciais do SEI</small>
+            </div>
+            
+            <div class="card-body p-4 pt-5">
+                <form method="POST" action="{{ url_for('auth.login') }}">
+                    <div class="mb-4">
+                        <label for="usuario" class="form-label text-muted fw-bold text-uppercase small">Usuário SEI</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="bi bi-person text-primary"></i></span>
+                            <input type="text" class="form-control ps-1 bg-light" id="usuario" name="usuario" placeholder="ex: joao.silva" required autofocus>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="senha" class="form-label text-muted fw-bold text-uppercase small">Senha</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="bi bi-key text-primary"></i></span>
+                            <input type="password" class="form-control ps-1 bg-light" id="senha" name="senha" placeholder="••••••••" required>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg fw-bold shadow-sm">
+                            ENTRAR NO SISTEMA
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer text-center py-3 bg-white border-0 text-muted small">
+                SEAD &copy; 2025 - Governo do Estado
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

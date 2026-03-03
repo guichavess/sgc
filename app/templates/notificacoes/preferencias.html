@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}SGC - Preferencias de Notificacao{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h4 class="fw-bold mb-1" style="color: #343990;">
+            <i class="bi bi-bell-fill me-2"></i>Preferencias de Notificacao
+        </h4>
+        <p class="text-muted mb-0 small">Configure como e quando deseja receber notificacoes</p>
+    </div>
+    <a href="{{ url_for('notificacoes.listar') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+</div>
+
+{# Dados de contato #}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-bottom py-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-person-lines-fill me-2 text-primary"></i>Dados de Contato</h6>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">Email</label>
+                <p class="mb-0">{{ usuario.email or 'Nao informado' }}</p>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">Telefone</label>
+                <p class="mb-0">{{ usuario.telefone or 'Nao informado' }}</p>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">CPF</label>
+                <p class="mb-0">{{ usuario.cpf or 'Nao informado' }}</p>
+            </div>
+        </div>
+        {# Toggles globais de email/Telegram - em standby, descomentar quando ativar
+        <hr>
+        <div class="d-flex align-items-center gap-3">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="pref-global-email"
+                       {{ 'checked' if usuario.notificacoes_email else '' }}
+                       onchange="salvarPreferenciaGlobal('email', this.checked)">
+                <label class="form-check-label small" for="pref-global-email">
+                    <i class="bi bi-envelope me-1"></i>Receber por email
+                </label>
+            </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="pref-global-telegram"
+                       {{ 'checked' if usuario.notificacoes_telegram else '' }}
+                       onchange="salvarPreferenciaGlobal('telegram', this.checked)">
+                <label class="form-check-label small" for="pref-global-telegram">
+                    <i class="bi bi-telegram me-1"></i>Receber por Telegram
+                </label>
+            </div>
+        </div>
+        #}
+    </div>
+</div>
+
+{# Preferencias por tipo #}
+{% set modulo_labels = {
+    'solicitacoes': 'Solicitacoes de Pagamento',
+    'financeiro': 'Financeiro',
+    'prestacoes_contratos': 'Execucoes de Contratos',
+    'diarias': 'Diarias',
+} %}
+{% set modulo_icons = {
+    'solicitacoes': 'bi-cash-stack',
+    'financeiro': 'bi-bank',
+    'prestacoes_contratos': 'bi-clipboard-check',
+    'diarias': 'bi-airplane-engines',
+} %}
+{% set nivel_badges = {
+    'silenciosa': '<span class="badge bg-secondary">Silenciosa</span>',
+    'lembrete': '<span class="badge bg-info">Lembrete</span>',
+    'alerta': '<span class="badge bg-warning text-dark">Alerta</span>',
+    'critica': '<span class="badge bg-danger">Critica</span>',
+} %}
+
+{% for modulo, items in modulos.items() %}
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white border-bottom py-3">
+        <h6 class="fw-bold mb-0">
+            <i class="bi {{ modulo_icons.get(modulo, 'bi-bell') }} me-2 text-primary"></i>
+            {{ modulo_labels.get(modulo, modulo|capitalize) }}
+        </h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Tipo</th>
+                        <th class="text-center" style="width: 90px;">Nivel</th>
+                        <th class="text-center" style="width: 80px;">In-App</th>
+                        <th class="text-center" style="width: 80px;">Silenciar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td class="ps-3">
+                            <div class="fw-medium small">{{ item.tipo.nome }}</div>
+                            {% if item.tipo.descricao %}
+                            <div class="text-muted" style="font-size: 0.75rem;">{{ item.tipo.descricao }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">{{ nivel_badges.get(item.tipo.nivel, item.tipo.nivel)|safe }}</td>
+                        <td class="text-center">
+                            <div class="form-check form-switch d-flex justify-content-center">
+                                <input class="form-check-input" type="checkbox"
+                                       id="pref-{{ item.tipo.id }}-app"
+                                       {{ 'checked' if item.canal_in_app else '' }}
+                                       onchange="salvarPreferenciaTipo({{ item.tipo.id }}, 'canal_in_app', this.checked)">
+                            </div>
+                        </td>
+                        {# Colunas Email e Telegram - em standby, descomentar quando ativar
+                        <td class="text-center">
+                            <div class="form-check form-switch d-flex justify-content-center">
+                                <input class="form-check-input" type="checkbox"
+                                       id="pref-{{ item.tipo.id }}-email"
+                                       {{ 'checked' if item.canal_email else '' }}
+                                       onchange="salvarPreferenciaTipo({{ item.tipo.id }}, 'canal_email', this.checked)">
+                            </div>
+                        </td>
+                        <td class="text-center">
+                            <div class="form-check form-switch d-flex justify-content-center">
+                                <input class="form-check-input" type="checkbox"
+                                       id="pref-{{ item.tipo.id }}-telegram"
+                                       {{ 'checked' if item.canal_telegram else '' }}
+                                       onchange="salvarPreferenciaTipo({{ item.tipo.id }}, 'canal_telegram', this.checked)">
+                            </div>
+                        </td>
+                        #}
+                        <td class="text-center">
+                            <div class="form-check form-switch d-flex justify-content-center">
+                                <input class="form-check-input" type="checkbox"
+                                       id="pref-{{ item.tipo.id }}-silenciar"
+                                       {{ 'checked' if item.silenciado else '' }}
+                                       onchange="salvarPreferenciaTipo({{ item.tipo.id }}, 'silenciado', this.checked)">
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<div id="toast-preferencias" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080;">
+    <div class="toast align-items-center text-bg-success border-0" role="alert" id="toast-salvo">
+        <div class="d-flex">
+            <div class="toast-body"><i class="bi bi-check-circle me-1"></i> Preferencia salva</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function salvarPreferenciaTipo(tipoId, campo, valor) {
+    try {
+        const body = {tipo_id: tipoId};
+        body[campo] = valor;
+
+        const resp = await fetch('/notificacoes/api/preferencias', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        const data = await resp.json();
+        if (data.sucesso) {
+            const toast = new bootstrap.Toast(document.getElementById('toast-salvo'));
+            toast.show();
+        }
+    } catch (e) {
+        console.error('Erro ao salvar preferencia:', e);
+    }
+}
+
+async function salvarPreferenciaGlobal(canal, valor) {
+    try {
+        const body = {};
+        if (canal === 'email') body.notificacoes_email = valor;
+        if (canal === 'telegram') body.notificacoes_telegram = valor;
+
+        const resp = await fetch('/notificacoes/api/salvar-contato', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        const data = await resp.json();
+        if (data.sucesso) {
+            const toast = new bootstrap.Toast(document.getElementById('toast-salvo'));
+            toast.show();
+        }
+    } catch (e) {
+        console.error('Erro ao salvar preferencia global:', e);
+    }
+}
+</script>
+{% endblock %}

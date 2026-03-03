@@ -1,0 +1,58 @@
+/**
+ * SGC - Sistema de Gestão de Pagamentos
+ * Arquivo principal de estilos
+ *
+ * Este arquivo importa todos os módulos CSS organizados
+ */
+
+/* ==========================================================================
+   BASE - Variáveis e configurações globais
+   ========================================================================== */
+@import 'base/variables.css';
+@import 'base/reset.css';
+
+/* ==========================================================================
+   COMPONENTES - Elementos reutilizáveis
+   ========================================================================== */
+@import 'components/navbar.css';
+@import 'components/cards.css';
+@import 'components/tables.css';
+@import 'components/buttons.css';
+@import 'components/forms.css';
+@import 'components/badges.css';
+@import 'components/timeline.css';
+@import 'components/help-stepper.css';
+@import 'components/dashboards.css';
+@import 'components/notifications.css';
+
+/* ==========================================================================
+   UTILITÁRIOS
+   ========================================================================== */
+@import 'utils/scrollbar.css';
+@import 'utils/print.css';
+
+/* ==========================================================================
+   CLASSES UTILITÁRIAS (Bootstrap overrides)
+   ========================================================================== */
+
+/* Cores customizadas */
+.bg-custom-blue {
+    background-color: var(--color-primary) !important;
+}
+
+.text-custom-blue {
+    color: var(--color-primary) !important;
+}
+
+/* Override do Bootstrap Primary */
+.bg-primary {
+    background-color: var(--color-primary) !important;
+}
+
+.text-primary {
+    color: var(--color-primary) !important;
+}
+
+.border-primary {
+    border-color: var(--color-primary) !important;
+}

@@ -1,0 +1,95 @@
+/**
+ * Estilos de Impressão
+ */
+
+@media print {
+    /* 1. Esconde elementos de navegação */
+    nav,
+    header,
+    footer,
+    .sidebar,
+    .navbar,
+    .btn,
+    .no-print,
+    .nav-tabs,
+    #sidebar-wrapper {
+        display: none !important;
+    }
+
+    /* 2. Ajuste de layout para impressão */
+    body,
+    .container-fluid,
+    .content {
+        background-color: white !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    /* 3. Ajustes de containers e abas */
+    .tab-content {
+        border: none !important;
+        padding: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    /* 4. Força exibição de cores */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+
+    /* 5. Tratamento de tabelas */
+    table {
+        width: 100% !important;
+        page-break-inside: auto;
+    }
+
+    tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+
+    thead {
+        display: table-header-group;
+    }
+
+    tfoot {
+        display: table-footer-group;
+    }
+
+    /* 6. Timeline ajustes */
+    .overflow-auto,
+    .custom-scrollbar {
+        overflow: visible !important;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+    }
+
+    /* 7. Cards */
+    .card {
+        break-inside: avoid;
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+        margin-bottom: 20px !important;
+    }
+
+    /* 8. Abas - imprime apenas ativa */
+    .tab-pane {
+        display: none !important;
+    }
+
+    .tab-pane.active {
+        display: block !important;
+        opacity: 1 !important;
+    }
+
+    /* 9. Remove sublinhados de links */
+    a {
+        text-decoration: none !important;
+        color: black !important;
+    }
+}

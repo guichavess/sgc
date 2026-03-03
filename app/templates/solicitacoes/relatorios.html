@@ -1,0 +1,594 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+        <div>
+            <h3 class="fw-bold text-dark mb-0"><i class="fas fa-chart-line me-2"></i>Relatórios Gerenciais</h3>
+            <p class="text-muted mb-0">Análise de performance do fluxo de pagamentos.</p>
+        </div>
+        <div>
+            <a href="#" onclick="abrirImpressaoCompleta(event)" class="btn btn-outline-danger fw-bold shadow-sm no-print">
+                <i class="fas fa-print me-2"></i>Imprimir Todos (PDF)
+            </a>
+        </div>
+    </div>
+
+    <div class="card bg-light border-0 mb-4 shadow-sm no-print" style="overflow: visible; position: relative; z-index: 10;">
+        <div class="card-body py-3" style="overflow: visible;">
+            <form method="GET" action="{{ url_for('solicitacoes.relatorios') }}" id="formFiltrosGlobal">
+                <input type="hidden" name="aba_ativa" value="{{ request.args.get('aba_ativa', 'geral') }}">
+
+                <!-- Linha 1: Período + Contratado -->
+                <div class="row g-2 align-items-end mb-2">
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold text-muted mb-1">Período de Criação</label>
+                        <div class="input-group input-group-sm">
+                            <input type="date" name="data_inicio" class="form-control" value="{{ request.args.get('data_inicio', '') }}">
+                            <span class="input-group-text bg-white text-muted">até</span>
+                            <input type="date" name="data_fim" class="form-control" value="{{ request.args.get('data_fim', '') }}">
+                        </div>
+                    </div>
+
+                    <div class="col-md-7">
+                        <label class="form-label small fw-bold text-muted mb-1">Contratado</label>
+                        <input type="text"
+                               name="contratado"
+                               class="form-control form-control-sm"
+                               placeholder="Digite parte do nome..."
+                               value="{{ request.args.get('contratado', '') }}">
+                    </div>
+                </div>
+
+                <!-- Linha 2: Competência + Tipo Pgto + Botões -->
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold text-muted mb-1">Competência</label>
+                        <select name="competencia" class="form-select form-select-sm">
+                            <option value="">Todas</option>
+                            {% for comp in todas_competencias %}
+                                <option value="{{ comp }}" {% if request.args.get('competencia') == comp %}selected{% endif %}>{{ comp }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-3" style="position: relative;">
+                        <label class="form-label small fw-bold text-muted mb-1">Tipo de Pagamento</label>
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary btn-sm w-100 text-start d-flex align-items-center dropdown-toggle"
+                                    type="button" id="dropdownTipoRel" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                                <i class="bi bi-tag me-1"></i>
+                                <span id="labelTipoRel">Todos</span>
+                                <span class="badge bg-primary ms-1" id="badgeTipoRel" style="display: none;">0</span>
+                            </button>
+                            <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
+                                <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                                    <small class="text-muted fw-bold">Tipo de Pagamento:</small>
+                                    <a href="#" class="text-decoration-none small" onclick="limparSelecaoTipoRel(this); return false;">Limpar</a>
+                                </div>
+                                {% for tipo in todos_tipos %}
+                                <div class="form-check item-filtro py-1">
+                                    <input class="form-check-input filtro-check-tipo-rel" type="checkbox" name="filtro_tipo"
+                                        value="{{ tipo.id }}" id="tipo_rel_{{ loop.index }}"
+                                        {% if tipo.id in filtro_tipos %}checked{% endif %}
+                                        onchange="atualizarLabelTipoRel()">
+                                    <label class="form-check-label small" for="tipo_rel_{{ loop.index }}" style="cursor: pointer;">{{ tipo.nome }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-auto d-flex gap-2 align-self-end">
+                        <button type="submit" class="btn btn-primary btn-sm fw-bold px-3">
+                            <i class="fas fa-filter me-1"></i>Filtrar
+                        </button>
+                        {% if request.args.get('data_inicio') or request.args.get('contratado') or request.args.get('competencia') or request.args.getlist('filtro_tipo') %}
+                        <a href="{{ url_for('solicitacoes.relatorios') }}" class="btn btn-outline-danger btn-sm" title="Limpar Filtros">
+                            <i class="fas fa-times"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="d-none d-print-block mb-4 p-3 border rounded bg-light">
+        <h6 class="fw-bold mb-2">Filtros Aplicados:</h6>
+        <div class="d-flex gap-3 flex-wrap small">
+            <div><strong>Período:</strong> {{ request.args.get('data_inicio')|default('Início', true) }} até {{ request.args.get('data_fim')|default('Hoje', true) }}</div>
+            <div><strong>Contratado:</strong> {{ request.args.get('contratado') or 'Todos' }}</div>
+            <div><strong>Competência:</strong> {{ request.args.get('competencia') or 'Todas' }}</div>
+            <div><strong>Tipo Pgto:</strong> {{ request.args.getlist('filtro_tipo')|join(', ') or 'Todos' }}</div>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-4 no-print" id="relatoriosTab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold" id="geral-tab" data-bs-toggle="tab" data-bs-target="#geral" type="button" 
+                    onclick="setAbaAtiva('geral')">
+                <i class="fas fa-chart-pie me-2"></i>Visão Geral
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold" id="metricas-tab" data-bs-toggle="tab" data-bs-target="#metricas" type="button" 
+                    onclick="setAbaAtiva('metricas')">
+                <i class="fas fa-stopwatch me-2"></i>Métricas de Tempo
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="relatoriosTabContent">
+        
+        <div class="tab-pane fade show active" id="geral" role="tabpanel">
+            
+            <div class="row g-3 mb-4">
+                {% for item in resumo %}
+                <div class="col-md-3 col-sm-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body d-flex align-items-center border-start border-5" style="border-color: {{ item.cor }} !important;">
+                            <div class="flex-grow-1">
+                                <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.75rem; font-weight: bold;">
+                                    {{ item.nome }}
+                                    {% if item.eh_grupo %}
+                                        <i class="fas fa-layer-group ms-1 text-muted" style="font-size: 0.7rem;" title="Agrupamento de Etapas"></i>
+                                    {% endif %}
+                                </h6>
+                                <div class="h3 mb-0 fw-bold text-dark">{{ item.qtd }}</div>
+                            </div>
+                            <div class="text-end">
+                                {% if item.eh_grupo %}
+                                    <i class="fas fa-layer-group fa-2x" style="color: {{ item.cor }}; opacity: 0.3;"></i>
+                                {% else %}
+                                    <i class="fas fa-folder-open fa-2x" style="color: {{ item.cor }}; opacity: 0.3;"></i>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="col-12">
+                    <div class="alert alert-light text-center text-muted">Nenhum processo encontrado nos filtros atuais.</div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="m-0 fw-bold text-primary">
+                        <i class="fas fa-list me-2"></i>Detalhamento de Processos de Pagamento
+                    </h5>
+                    <span class="badge bg-white text-primary border border-primary">
+                        Total: {{ pagination.total }} processos
+                    </span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <tbody>
+                                {% set ns = namespace(last_etapa=None) %}
+                                
+                                {% for sol in detalhes %}
+                                    
+                                    {% if ns.last_etapa != sol.etapa.nome %}
+                                        
+                                        <tr class="bg-white border-0">
+                                            <td colspan="5" class="p-0 pt-4 pb-2"> <div class="d-flex align-items-stretch shadow-sm rounded overflow-hidden" style="border: 1px solid #dee2e6;">
+                                                    <div style="width: 8px; background-color: {{ sol.etapa.cor_hex }};"></div>
+                                                    
+                                                    <div class="ps-3 py-2 d-flex align-items-center justify-content-between w-100 bg-light pe-3">
+                                                        <div>
+                                                            <h5 class="mb-0 fw-bold text-uppercase" style="color: {{ sol.etapa.cor_hex }}; letter-spacing: 0.5px; font-size: 1.1rem;">
+                                                                {{ sol.etapa.nome }}
+                                                            </h5>
+                                                            <small class="text-muted" style="font-size: 0.7rem;">
+                                                                Grupo de processos
+                                                            </small>
+                                                        </div>
+                                                        <div>
+                                                            <span class="badge bg-white border shadow-sm px-2 py-1" style="color: {{ sol.etapa.cor_hex }}; font-size: 0.8rem;">
+                                                                <i class="fas fa-file-alt me-1"></i>{{ contagem_etapa.get(sol.etapa.nome, 0) }} processo{{ 's' if contagem_etapa.get(sol.etapa.nome, 0) != 1 else '' }}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+
+                                        <tr class="table-light text-muted small border-bottom">
+                                            <th class="ps-4 py-2 fw-bold text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">Protocolo / ID</th>
+                                            <th class="py-2 fw-bold text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">Contrato / Especificação</th>
+                                            <th class="text-center py-2 fw-bold text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">Natureza Despesa</th>
+                                            <th class="text-center py-2 fw-bold text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">Tempo Total</th>
+                                            <th class="text-end pe-4 py-2 fw-bold text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">Ações</th>
+                                        </tr>
+
+                                        {% set ns.last_etapa = sol.etapa.nome %}
+                                    {% endif %}
+
+                                    <tr>
+                                        <td class="ps-4">
+                                            <div class="fw-bold text-dark">{{ sol.protocolo_gerado_sei or "S/ Protocolo" }}</div>
+                                            <div class="d-flex align-items-center gap-1 mt-1">
+                                                <span class="small text-muted">ID: {{ sol.id }}</span>
+                                                {% if sol.tipo_pagamento %}
+                                                    <span class="badge border fw-normal {{ 'border-danger text-danger' if sol.tipo_pagamento.nome == 'DEA: Indenizatório' else 'text-muted' }}" style="font-size: 0.6rem; padding: 2px 5px; background-color: {{ '#fff5f5' if sol.tipo_pagamento.nome == 'DEA: Indenizatório' else '#f8f9fa' }};">{{ sol.tipo_pagamento.nome }}</span>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="fw-bold text-dark">{{ sol.contrato.nomeContratado }}</div>
+                                            <div class="small text-muted mb-1">{{ sol.descricao or sol.especificacao }}</div>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-secondary text-white font-monospace">{{ sol.natureza_despesa }}</span>
+                                        </td>
+                                        <td class="text-center">
+                                            {% set tempo = sol.tempo_decorrido_visual %}
+                                            {% if sol.tempo_total %}
+                                                <span class="text-success fw-bold"><i class="fas fa-check me-1"></i> {{ tempo }}</span>
+                                            {% else %}
+                                                <span class="text-primary"><i class="fas fa-clock me-1"></i> {{ tempo }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            <a href="{{ url_for('solicitacoes.detalhes_solicitacao', id_solicitacao=sol.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                                        </td>
+                                    </tr>
+                                {% else %}
+                                    <tr class="bg-light">
+                                        <td colspan="5" class="text-center py-5">
+                                            <div class="text-muted">
+                                                <i class="fas fa-inbox fa-3x mb-3 opacity-25"></i>
+                                                <p class="mb-0">Nenhum processo encontrado nesta página.</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {% if pagination.pages > 1 %}
+                <div class="card-footer bg-white py-3">
+                    <nav aria-label="Navegação de páginas">
+                        <ul class="pagination justify-content-center mb-0">
+                            <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                                <a class="page-link border-0 text-dark" 
+                                href="{{ url_for('solicitacoes.relatorios', **dict(request.args, page_estoque=pagination.prev_num, aba_ativa='geral')) if pagination.has_prev else '#' }}">
+                                    <i class="fas fa-chevron-left"></i>
+                                </a>
+                            </li>
+                            
+                            {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                                {% if page_num %}
+                                    {% if page_num == pagination.page %}
+                                        <li class="page-item active"><span class="page-link bg-primary border-primary">{{ page_num }}</span></li>
+                                    {% else %}
+                                        <li class="page-item">
+                                            <a class="page-link text-dark border-0" 
+                                            href="{{ url_for('solicitacoes.relatorios', **dict(request.args, page_estoque=page_num, aba_ativa='geral')) }}">
+                                                {{ page_num }}
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                {% else %}
+                                    <li class="page-item disabled"><span class="page-link border-0">...</span></li>
+                                {% endif %}
+                            {% endfor %}
+
+                            <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                                <a class="page-link border-0 text-dark" 
+                                href="{{ url_for('solicitacoes.relatorios', **dict(request.args, page_estoque=pagination.next_num, aba_ativa='geral')) if pagination.has_next else '#' }}">
+                                    <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+                {% endif %}
+            </div>
+        </div> <div class="tab-pane fade" id="metricas" role="tabpanel">
+            
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body py-4"> 
+                    <h5 class="fw-bold text-center mb-4 text-secondary" style="font-size: 1rem;">
+                        Fluxo Médio
+                        {% if request.args.get('contratado') %}<span class="badge bg-primary ms-2">{{ request.args.get('contratado') }}</span>{% endif %}
+                    </h5>
+                    
+                    <div class="d-flex align-items-center justify-content-center px-1">
+                        {% for item in timeline_medias %}
+                            <div class="d-flex flex-column align-items-center position-relative" style="z-index: 2;">
+                                
+                                <span class="text-muted fw-bold text-uppercase mb-1" style="font-size: 0.6rem; letter-spacing: 0.5px;">
+                                    Fase {{ loop.index }}
+                                </span>
+
+                                <div class="rounded-circle d-flex align-items-center justify-content-center shadow-sm mb-1 position-relative" 
+                                     style="width: 35px; height: 35px; background-color: {{ item.cor }}; color: white; border: 3px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.1) !important;">
+                                    {% if item.eh_grupo %}
+                                        <i class="fas fa-layer-group" style="font-size: 12px;"></i>
+                                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-dark border border-light p-0 px-1" style="font-size: 0.5rem;">Grp</span>
+                                    {% else %}
+                                        <i class="fas fa-circle" style="font-size: 8px;"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="text-center">
+                                    <span class="fw-bold text-dark d-block text-wrap" style="font-size: 0.65rem; width: 70px; line-height: 1.1;">
+                                        {{ item.nome }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {% if not loop.last %}
+                                <div class="flex-grow-1 d-flex flex-column align-items-center justify-content-center mx-1 position-relative" style="min-width: 40px; height: 40px;">
+                                    <div class="w-100 position-absolute" style="height: 2px; background-color: #dee2e6; top: 35%; transform: translateY(-50%); z-index: 0;"></div>
+                                    <div class="position-absolute" style="right: 0; top: 35%; transform: translateY(-50%) translateX(2px); color: #dee2e6; z-index: 0; font-size: 0.8rem;">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </div>
+                                    {% set prox_item = timeline_medias[loop.index] %}
+                                    <div class="badge bg-white text-primary border shadow-sm px-1 py-0 position-relative mb-1" style="z-index: 1; top: -8px;">
+                                        {% if prox_item.media_entrada != '--' %}
+                                            <span class="fw-bold" style="font-size: 0.7rem;">{{ prox_item.media_entrada }}</span>
+                                        {% else %}
+                                            <span class="text-muted fw-light" style="font-size: 0.6rem;">--</span>
+                                        {% endif %}
+                                    </div>
+                                    {% if prox_item.qtd_base > 0 %}
+                                        <div class="text-muted fst-italic position-relative" style="top: -5px; font-size: 0.55rem;">
+                                            {{ prox_item.qtd_base }} un.
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="m-0 fw-bold text-primary"><i class="fas fa-table me-2"></i>Matriz de Tempos por Fase</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 table-sm table-bordered">
+                            <thead class="bg-light text-center">
+                                <tr>
+                                    <th rowspan="2" class="align-middle ps-3 text-start" style="width: 100px;">Protocolo</th>
+                                    <th rowspan="2" class="align-middle text-start" style="min-width: 200px;">Contratado / Competência</th>
+                                    
+                                    {% for etapa in colunas_etapas %}
+                                    <th class="py-2 small text-muted text-uppercase" style="min-width: 80px; font-size: 0.7rem;">
+                                        Fase {{ loop.index }}
+                                    </th>
+                                    {% endfor %}
+                                </tr>
+                                
+                                </thead>
+                            <tbody>
+                                {% for item in matriz_tempos %}
+                                <tr>
+                                    <td class="ps-3 fw-bold text-nowrap">
+                                        <a href="{{ url_for('solicitacoes.detalhes_solicitacao', id_solicitacao=item.solicitacao.id) }}" class="text-decoration-none text-dark">
+                                            {{ item.solicitacao.protocolo_gerado_sei or item.solicitacao.id }}
+                                        </a>
+                                    </td>
+
+                                    <td>
+                                        <div class="d-flex flex-column justify-content-center" style="line-height: 1.2;">
+                                            <span class="fw-bold text-dark" style="font-size: 0.85rem;">
+                                                {{ item.solicitacao.contrato.nomeContratado }}
+                                            </span>
+                                            <div class="d-flex align-items-center gap-1 mt-1">
+                                                <span class="text-muted" style="font-size: 0.75rem;">
+                                                    <i class="far fa-calendar-alt me-1"></i>{{ item.solicitacao.competencia }}
+                                                </span>
+                                                {% if item.solicitacao.tipo_pagamento %}
+                                                    <span class="badge border fw-normal {{ 'border-danger text-danger' if item.solicitacao.tipo_pagamento.nome == 'DEA: Indenizatório' else 'text-muted' }}" style="font-size: 0.55rem; padding: 1px 4px; background-color: {{ '#fff5f5' if item.solicitacao.tipo_pagamento.nome == 'DEA: Indenizatório' else '#f8f9fa' }};">{{ item.solicitacao.tipo_pagamento.nome }}</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    {% for etapa in colunas_etapas %}
+                                        <td class="text-center">
+                                            {% set tempo = item.tempos.get(etapa.id) %}
+                                            {% if tempo %}
+                                                <span class="badge bg-light text-primary border border-primary-subtle" style="font-weight: 600; font-size: 0.75rem;">
+                                                    {{ tempo }}
+                                                </span>
+                                            {% else %}
+                                                <span class="text-muted opacity-25" style="font-size: 0.6rem;">-</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endfor %}
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="{{ colunas_etapas|length + 2 }}" class="text-center py-4 text-muted">
+                                        Nenhum registro encontrado para os filtros selecionados.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                {% if pagination_matriz.pages > 1 %}
+                <div class="card-footer bg-white py-3">
+                    <nav aria-label="Navegação de páginas">
+                        <ul class="pagination justify-content-center mb-0">
+                            <li class="page-item {% if not pagination_matriz.has_prev %}disabled{% endif %}">
+                                <a class="page-link border-0 text-dark" 
+                                href="{{ url_for('solicitacoes.relatorios', **dict(request.args, page_matriz=pagination_matriz.prev_num, aba_ativa='metricas')) if pagination_matriz.has_prev else '#' }}">
+                                    <i class="fas fa-chevron-left"></i>
+                                </a>
+                            </li>
+
+                            {% for page_num in pagination_matriz.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                                {% if page_num %}
+                                    {% if page_num == pagination_matriz.page %}
+                                        <li class="page-item active"><span class="page-link bg-primary border-primary">{{ page_num }}</span></li>
+                                    {% else %}
+                                        <li class="page-item">
+                                            <a class="page-link text-dark border-0" 
+                                            href="{{ url_for('solicitacoes.relatorios', **dict(request.args, page_matriz=page_num, aba_ativa='metricas')) }}">
+                                                {{ page_num }}
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                {% else %}
+                                    <li class="page-item disabled"><span class="page-link border-0">...</span></li>
+                                {% endif %}
+                            {% endfor %}
+
+                            <li class="page-item {% if not pagination_matriz.has_next %}disabled{% endif %}">
+                                <a class="page-link border-0 text-dark" 
+                                href="{{ url_for('solicitacoes.relatorios', **dict(request.args, page_matriz=pagination_matriz.next_num, aba_ativa='metricas')) if pagination_matriz.has_next else '#' }}">
+                                    <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+                {% endif %}
+            </div>
+
+        </div> </div> </div> <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<script>
+    async function gerarPDF() {
+        // ... (Mesmo script anterior)
+        const btn = document.getElementById('btnExportarPdf');
+        const conteudoOriginal = btn.innerHTML;
+        try {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Preparando PDF...';
+            const elemento = document.querySelector('.tab-pane.active');
+            if (!elemento) throw new Error("Nenhuma aba ativa encontrada.");
+
+            const elementosComScroll = elemento.querySelectorAll('.overflow-auto, .custom-scrollbar, .table-responsive');
+            const estilosOriginais = [];
+
+            elementosComScroll.forEach(el => {
+                estilosOriginais.push({
+                    element: el,
+                    maxHeight: el.style.maxHeight,
+                    overflow: el.style.overflow,
+                    whiteSpace: el.style.whiteSpace 
+                });
+                el.style.maxHeight = 'none';
+                el.style.overflow = 'visible';
+                el.style.whiteSpace = 'normal'; 
+            });
+
+            const opt = {
+                margin:       [10, 10, 10, 10], 
+                filename:     'Relatorio_SGC_' + new Date().toISOString().slice(0,10) + '.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true, scrollY: 0, windowWidth: document.documentElement.offsetWidth },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' },
+                pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+            };
+
+            await html2pdf().set(opt).from(elemento).save();
+
+            estilosOriginais.forEach(item => {
+                item.element.style.maxHeight = item.maxHeight;
+                item.element.style.overflow = item.overflow;
+                item.element.style.whiteSpace = item.whiteSpace;
+            });
+
+        } catch (err) {
+            console.error("Erro ao gerar PDF:", err);
+            alert('Não foi possível gerar o PDF.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = conteudoOriginal;
+        }
+    }
+
+    // --- Filtro Tipo Pagamento ---
+    function atualizarLabelTipoRel() {
+        const checks = document.querySelectorAll('.filtro-check-tipo-rel:checked');
+        const badge = document.getElementById('badgeTipoRel');
+        const label = document.getElementById('labelTipoRel');
+        if (checks.length === 0) {
+            label.textContent = 'Todos';
+            badge.style.display = 'none';
+        } else if (checks.length === 1) {
+            label.textContent = checks[0].nextElementSibling.textContent.trim();
+            badge.style.display = 'none';
+        } else {
+            label.textContent = 'Tipo Pgto';
+            badge.textContent = checks.length;
+            badge.style.display = 'inline';
+        }
+    }
+
+    function limparSelecaoTipoRel(el) {
+        document.querySelectorAll('.filtro-check-tipo-rel').forEach(cb => cb.checked = false);
+        atualizarLabelTipoRel();
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        atualizarLabelTipoRel();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const activeTab = urlParams.get('aba_ativa');
+        if (activeTab === 'metricas') {
+            const tabEl = document.querySelector('#metricas-tab');
+            if(tabEl) {
+                const tabTrigger = new bootstrap.Tab(tabEl);
+                tabTrigger.show();
+            }
+        }
+    });
+
+    window.onbeforeprint = function() {
+        window.originalTitle = document.title;
+        var dataHoje = new Date().toISOString().slice(0,10);
+        document.title = "Relatorio_SGC_" + dataHoje;
+    };
+
+    window.onafterprint = function() {
+        document.title = window.originalTitle;
+    };
+
+    function setAbaAtiva(aba) {
+        document.querySelector('input[name="aba_ativa"]').value = aba;
+    }
+
+    function abrirImpressaoCompleta(e) {
+        e.preventDefault();
+
+        // 1. Pega os parâmetros atuais da URL (filtros de data, contratado, etc)
+        const params = new URLSearchParams(window.location.search);
+
+        // 2. Inclui checkboxes de filtro_tipo que estão marcados
+        params.delete('filtro_tipo');
+        document.querySelectorAll('.filtro-check-tipo-rel:checked').forEach(cb => {
+            params.append('filtro_tipo', cb.value);
+        });
+
+        // 3. Garante que a aba ativa correta seja enviada
+        const abaAtivaEl = document.querySelector('.nav-link.active');
+        let abaAtiva = 'geral';
+        if (abaAtivaEl && abaAtivaEl.id === 'metricas-tab') {
+            abaAtiva = 'metricas';
+        }
+        params.set('aba_ativa', abaAtiva);
+
+        // 4. Monta a URL da nova rota e abre em nova aba
+        const urlImpressao = "{{ url_for('solicitacoes.relatorios_imprimir') }}?" + params.toString();
+        window.open(urlImpressao, '_blank');
+    }
+
+</script>
+{% endblock %}

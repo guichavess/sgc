@@ -1,0 +1,136 @@
+/* ==========================================================================
+   DASHBOARDS - Estilos do modulo de dashboards
+   ========================================================================== */
+
+/* KPI Cards */
+.kpi-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+}
+
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.kpi-card .card-body {
+    padding: 1.25rem 1.5rem;
+}
+
+.kpi-card .kpi-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: white;
+    flex-shrink: 0;
+}
+
+.kpi-card .kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 0.15rem;
+}
+
+.kpi-card .kpi-label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.kpi-card .kpi-border-left {
+    border-left: 4px solid;
+}
+
+/* Chart Cards */
+.chart-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.chart-card .card-body {
+    padding: 1.5rem;
+}
+
+.chart-card .card-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #343a40;
+    margin-bottom: 1rem;
+}
+
+/* Chart placeholder para estados vazios */
+.chart-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 250px;
+    color: #adb5bd;
+    font-size: 0.9rem;
+}
+
+.chart-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 250px;
+}
+
+/* Secao do dashboard */
+.dashboard-section {
+    margin-bottom: 2rem;
+}
+
+.dashboard-section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #343a40;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+/* Tabela de vigencia */
+.vigencia-table .dias-restantes {
+    font-weight: 700;
+}
+
+.vigencia-table .dias-restantes.urgente {
+    color: #dc3545;
+}
+
+.vigencia-table .dias-restantes.atencao {
+    color: #ffc107;
+}
+
+.vigencia-table .dias-restantes.ok {
+    color: #198754;
+}
+
+/* Seletor de ano */
+.ano-selector {
+    min-width: 120px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .kpi-card .kpi-value {
+        font-size: 1.25rem;
+    }
+
+    .kpi-card .kpi-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+}

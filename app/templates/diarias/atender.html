@@ -1,0 +1,351 @@
+{% extends 'diarias/base_diarias.html' %}
+{% block title %}SGC - Analisar Solicitação{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{{ url_for('diarias.administracao') }}" class="btn btn-outline-secondary btn-sm mb-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center py-3" style="background-color: #343990;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-clipboard-check me-2"></i>Analisar: {% if itinerario.sei_id_procedimento %}<a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank" class="text-white text-decoration-none">{{ itinerario.n_processo }} <i class="bi bi-box-arrow-up-right small"></i></a>{% else %}{{ itinerario.n_processo or 'Sem processo' }}{% endif %}
+        </h5>
+        <span class="badge bg-secondary fs-6">{{ itinerario.status.nome }}</span>
+    </div>
+    <div class="card-body">
+        {# Info resumida #}
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <table class="table table-bordered table-sm">
+                    <tr>
+                        <th class="bg-light" style="width:40%">Tipo</th>
+                        <td>
+                            <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else 'bg-warning text-dark' }}">
+                                {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Nº Processo</th>
+                        <td>{% if itinerario.sei_id_procedimento %}<a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank">{{ itinerario.n_processo }} <i class="bi bi-box-arrow-up-right small"></i></a>{% else %}{{ itinerario.n_processo or '-' }}{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Solicitante</th>
+                        <td>{{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Qtd. Diárias</th>
+                        <td>{{ itinerario.qtd_diarias_solicitadas }}</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <table class="table table-bordered table-sm">
+                    <tr>
+                        <th class="bg-light" style="width:40%">Data Viagem</th>
+                        <td>{{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Data Retorno</th>
+                        <td>{{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Destino</th>
+                        <td>{{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Origem</th>
+                        <td>{{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else (itinerario.estado_origem_obj.nome if itinerario.estado_origem_obj else '-') }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        {# Pessoas #}
+        <section class="mb-4">
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header bg-white border-bottom py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-people me-2"></i>Pessoas</h5>
+                        <span class="badge bg-secondary">{{ itens|length }} pessoa(s)</span>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive table-rounded">
+                        <table class="table table-custom table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">Nome</th>
+                                    <th>CPF / Mat.</th>
+                                    <th>Cargo (Folha)</th>
+                                    <th>Setor / Orgao</th>
+                                    <th>Vinculo</th>
+                                    <th>Cargo Diaria</th>
+                                    <th>Assessorando</th>
+                                    <th class="text-end">Valor Diaria</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in itens %}
+                                <tr>
+                                    <td class="ps-4 fw-semibold">{{ item.nome_pessoa or item.cpf_pessoa }}</td>
+                                    <td>
+                                        <small>{{ item.cpf_pessoa }}</small>
+                                        {% if item.matricula_pessoa %}<br><small class="text-muted">Mat: {{ item.matricula_pessoa }}</small>{% endif %}
+                                    </td>
+                                    <td><small>{{ item.cargo_folha or '-' }}</small></td>
+                                    <td>
+                                        {% if item.setor or item.orgao %}
+                                        <small>{{ item.orgao or '' }}{% if item.setor and item.orgao %} / {% endif %}{{ item.setor or '' }}</small>
+                                        {% else %}<span class="text-muted small">-</span>{% endif %}
+                                    </td>
+                                    <td><small>{{ item.vinculo or '-' }}</small></td>
+                                    <td>{{ item.cargo.nome if item.cargo else '-' }}</td>
+                                    <td>
+                                        {% if item.cargo_assessorado %}
+                                        <span class="badge rounded-pill bg-success">{{ item.cargo_assessorado.nome }}</span>
+                                        {% else %}<span class="text-muted small">---</span>{% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(item.valor_cargo).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {# Paradas #}
+        {% if paradas %}
+        <section class="mb-4">
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header bg-white border-bottom py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-geo-alt me-2"></i>Paradas</h5>
+                        <span class="badge bg-secondary">{{ paradas|length }} parada(s)</span>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive table-rounded">
+                        <table class="table table-custom table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">Municipio</th>
+                                    <th>Codigo IBGE</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in paradas %}
+                                <tr>
+                                    <td class="ps-4 fw-semibold">{{ p.municipio.nome if p.municipio else '-' }}</td>
+                                    <td>{{ p.municipio_id }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {# Justificativa #}
+        {% if itinerario.justificativa %}
+        <section class="mb-4">
+            <h5 class="fw-bold"><i class="bi bi-chat-left-text me-2"></i>Justificativa</h5>
+            <div class="p-3 border rounded bg-light">
+                <p class="mb-0">{{ itinerario.justificativa.descricao }}</p>
+            </div>
+        </section>
+        {% endif %}
+
+        {# Seção de Cotações (Nacional) #}
+        {% if itinerario.tipo_itinerario == 2 %}
+        <section class="border rounded p-4 mb-4 bg-light">
+            <h5 class="fw-bold mb-3"><i class="bi bi-currency-dollar me-2"></i>Cotações</h5>
+
+            {# Formulário para adicionar cotação #}
+            <form id="form-cotacao" class="row g-3 mb-4 align-items-end">
+                <input type="hidden" name="itinerario_id" value="{{ itinerario.id }}">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Agência</label>
+                    <select name="contrato_codigo" id="contrato_codigo" class="form-select" required>
+                        <option value="">Selecione</option>
+                        {% for ag in agencias %}
+                        <option value="{{ ag.codigo }}">{{ ag.nomeContratadoResumido or ag.nomeContratado }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Valor (R$)</label>
+                    <input type="number" name="valor" id="cotacao_valor" class="form-control" step="0.01" min="0" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Data/Hora</label>
+                    <input type="datetime-local" name="data_hora" id="cotacao_data" class="form-control" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-plus-circle me-1"></i> Cotar
+                    </button>
+                </div>
+            </form>
+
+            {# Cotacoes existentes #}
+            <div id="cotacoes-lista">
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-body p-0">
+                        <div class="table-responsive table-rounded">
+                            <table class="table table-custom table-hover align-middle mb-0" id="tabela-cotacoes">
+                                <thead>
+                                    <tr>
+                                        <th class="ps-4">Agencia</th>
+                                        <th>Valor</th>
+                                        <th>Data/Hora</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cotacoes-tbody">
+                                    {% for c in cotacoes %}
+                                    <tr>
+                                        <td class="ps-4 fw-semibold">{{ c.nome_agencia or '-' }}</td>
+                                        <td><span class="fw-bold text-success">R$ {{ "%.2f"|format(c.valor) }}</span></td>
+                                        <td>{{ c.data_hora.strftime('%d/%m/%Y %H:%M') if c.data_hora else '-' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        <hr>
+
+        {# Formulário de Aprovação #}
+        <section class="card shadow-sm p-4">
+            <h5 class="fw-bold mb-3 text-primary"><i class="bi bi-check2-square me-2"></i>Aprovação</h5>
+            <form action="{{ url_for('diarias.update_atendimento', id=itinerario.id) }}" method="post" id="form-aprovacao">
+
+                {# Selecionar cotações por pessoa (Nacional) #}
+                {% if itinerario.tipo_itinerario == 2 %}
+                <div class="card border-0 shadow-sm overflow-hidden mb-4">
+                    <div class="card-body p-0">
+                        <div class="table-responsive table-rounded">
+                            <table class="table table-custom align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="ps-4">Pessoa (CPF)</th>
+                                        <th>Cargo</th>
+                                        <th>Cotacao</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in itens %}
+                                    <tr>
+                                        <td class="ps-4 fw-semibold">{{ item.cpf_pessoa }}</td>
+                                        <td>{{ item.cargo.nome if item.cargo else '-' }}</td>
+                                        <td>
+                                            <select name="cotacoes_pessoas[{{ item.id }}]" class="form-select form-select-sm cotacao-pessoa-select" required>
+                                                <option value="" disabled selected>Selecione</option>
+                                                {% for c in cotacoes %}
+                                                <option value="{{ c.id }}">{{ c.nome_agencia }} - R$ {{ "%.2f"|format(c.valor) }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <label for="conclusao" class="form-label fw-semibold">Conclusão <span class="text-danger">*</span></label>
+                    <select name="conclusao" id="conclusao" class="form-select" required>
+                        <option value="" disabled selected>Selecione</option>
+                        <option value="2">Aceitar Itinerário</option>
+                        <option value="3">Rejeitar Itinerário</option>
+                        <option value="4">Cancelar Processo</option>
+                    </select>
+                </div>
+
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="bi bi-check-circle me-2"></i>Finalizar
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ── Formulário de cotação (AJAX) ────────────────────────────────
+    const formCotacao = document.getElementById('form-cotacao');
+    if (formCotacao) {
+        formCotacao.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+
+            if (!data.contrato_codigo || !data.valor || !data.data_hora) {
+                alert('Preencha todos os campos.');
+                return;
+            }
+
+            try {
+                const response = await fetch('{{ url_for("diarias.api_criar_cotacao") }}', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    // Recarrega página para atualizar cotações
+                    location.reload();
+                } else {
+                    alert(result.error || 'Erro ao criar cotação.');
+                }
+            } catch(err) {
+                alert('Erro ao criar cotação.');
+            }
+        });
+    }
+
+    // ── Validação aprovação ─────────────────────────────────────────
+    document.getElementById('form-aprovacao').addEventListener('submit', function(e) {
+        const conclusao = document.getElementById('conclusao').value;
+        if (conclusao === '2') {
+            // Aprovação: validar cotações (nacional)
+            const cotacoesSelects = document.querySelectorAll('.cotacao-pessoa-select');
+            let ok = true;
+            cotacoesSelects.forEach(sel => {
+                if (!sel.value) {
+                    ok = false;
+                    sel.classList.add('is-invalid');
+                } else {
+                    sel.classList.remove('is-invalid');
+                }
+            });
+            if (!ok) {
+                e.preventDefault();
+                alert('Selecione uma cotação para cada pessoa.');
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

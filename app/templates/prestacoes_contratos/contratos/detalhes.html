@@ -1,0 +1,223 @@
+{% extends 'prestacoes_contratos/base_prestacoes.html' %}
+
+{% block title %}Detalhes do Contrato #{{ contrato.codigo }}{% endblock %}
+
+{% block content %}
+<div class="mt-4">
+    {# ===== HEADER ===== #}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Detalhes do Contrato <span class="text-primary">#{{ contrato.codigo }}</span></h2>
+        <a href="{{ url_for('prestacoes_contratos.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+    </div>
+
+    {# Badge Situação #}
+    <div class="mb-4">
+        {% if contrato.situacao == 'ENCERRADO' %}
+            <span class="badge bg-danger fs-6 px-3 py-2">{{ contrato.situacao }}</span>
+        {% elif contrato.situacao == 'EM_VIGOR' %}
+            <span class="badge bg-success fs-6 px-3 py-2">Em Vigor</span>
+        {% else %}
+            <span class="badge bg-secondary fs-6 px-3 py-2">{{ contrato.situacao }}</span>
+        {% endif %}
+    </div>
+
+    {# ===== VALORES E GARANTIAS ===== #}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white fw-semibold">Valores e Garantias</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 text-center">
+                    <div class="text-muted small">Valor</div>
+                    <div class="fs-4 fw-bold text-success">{{ contrato.valor_formatado }}</div>
+                </div>
+                <div class="col-md-4 text-center">
+                    <div class="text-muted small">Valor Total</div>
+                    <div class="fs-4 fw-bold text-success">{{ contrato.valor_total_formatado }}</div>
+                </div>
+                <div class="col-md-4 text-center">
+                    <div class="text-muted small">Garantia</div>
+                    <div class="fs-5 fw-semibold">
+                        {% if contrato.garantia and contrato.garantia != '0' %}
+                            {{ contrato.garantia }}
+                        {% else %}
+                            Não possui garantia
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        {# ===== CONTRATANTE ===== #}
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white fw-semibold">Contratante</div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Nome</span>
+                        <span>{{ contrato.nomeContratante or '—' }}</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Código</span>
+                        <span>{{ contrato.codigoContratante or '—' }}</span>
+                    </div>
+                    <div>
+                        <span class="text-muted small d-block">Tipo</span>
+                        <span>{{ contrato.tipoContratante or '—' }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ===== CONTRATADO ===== #}
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white fw-semibold">Contratado</div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Nome</span>
+                        <span>{{ contrato.nomeContratado or '—' }}</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Código</span>
+                        <span>{{ contrato.codigoContratado or '—' }}</span>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Tipo</span>
+                            <span>{{ contrato.tipoContratado or '—' }}</span>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Dados Bancários</span>
+                            <span>{{ contrato.dados_bancarios or '—' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        {# ===== INFORMAÇÕES DO CONTRATO ===== #}
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white fw-semibold">Informações do Contrato</div>
+                <div class="card-body">
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Número Original</span>
+                            <span>{{ contrato.numeroOriginal or '—' }}</span>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Processo</span>
+                            <span>{{ contrato.numProcesso or '—' }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Natureza</span>
+                            <span>{{ contrato.natureza_display or '—' }}</span>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Modalidade</span>
+                            <span>{{ contrato.nomeModalidadeLicitacao or contrato.modalidade or '—' }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Regime de Execução</span>
+                            <span>{{ contrato.regimeExecucao or '—' }}</span>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Fundamentação Legal</span>
+                            <span>{{ contrato.fundamentacaoLegal or '—' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ===== DATAS IMPORTANTES ===== #}
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white fw-semibold">Datas Importantes</div>
+                <div class="card-body">
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Data de Celebração</span>
+                            <span>{{ contrato.data_celebracao_fmt or '—' }}</span>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Data de Publicação</span>
+                            <span>{{ contrato.data_publicacao_fmt or '—' }}</span>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Início da Vigência</span>
+                            <span>{{ contrato.data_inicio_vigencia_fmt or '—' }}</span>
+                        </div>
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Fim da Vigência</span>
+                            <span class="{{ 'text-danger fw-semibold' if contrato.situacao == 'ENCERRADO' }}">
+                                {{ contrato.data_fim_vigencia_fmt or '—' }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <span class="text-muted small d-block">Fim da Vigência Total</span>
+                            <span>{{ contrato.data_fim_vigencia_total_fmt or '—' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ===== OBJETO E OBJETIVO ===== #}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white fw-semibold">Objeto e Objetivo</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="text-muted small d-block">Objeto</span>
+                    <span>{{ contrato.objeto or '—' }}</span>
+                </div>
+                <div class="col-md-6">
+                    <span class="text-muted small d-block">Objetivo</span>
+                    <span>{{ contrato.objetivo or '—' }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ===== INFORMAÇÕES ADICIONAIS ===== #}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white fw-semibold">Informações Adicionais</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <span class="text-muted small d-block">Status</span>
+                    <span>{{ contrato.status or '—' }}</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted small d-block">Vinculado ao PPA</span>
+                    <span>{{ contrato.vinculoPPA or '—' }}</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted small d-block">Última Atualização</span>
+                    <span>{{ contrato.data_atualizacao.strftime('%d/%m/%Y %H:%M') if contrato.data_atualizacao else '—' }}</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="text-muted small d-block">Modalidade</span>
+                    <span>{{ contrato.modalidade or '—' }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

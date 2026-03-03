@@ -1,0 +1,88 @@
+{# Sub-navegacao da area de Administracao #}
+<style>
+    .subnav-admin {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: var(--color-gray-200, #f4f6f9);
+        border: 1.5px solid var(--color-gray-500, #adb5bd);
+        border-radius: var(--border-radius-xl, 20px);
+        padding: 4px;
+        margin-bottom: 1.5rem;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+    .subnav-admin .subnav-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 18px;
+        border-radius: var(--border-radius-xl, 20px);
+        font-size: 0.835rem;
+        font-weight: 500;
+        color: var(--color-gray-600, #6c757d);
+        text-decoration: none;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+        border: none;
+        position: relative;
+    }
+    .subnav-admin .subnav-item i {
+        font-size: 0.9rem;
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+    }
+    .subnav-admin .subnav-item:hover:not(.active) {
+        color: var(--color-primary, #343990);
+        background: rgba(var(--color-primary-rgb, 52, 57, 144), 0.06);
+    }
+    .subnav-admin .subnav-item:hover:not(.active) i {
+        opacity: 1;
+    }
+    .subnav-admin .subnav-item.active {
+        color: #fff;
+        background: var(--color-primary, #343990);
+        box-shadow: 0 2px 8px rgba(var(--color-primary-rgb, 52, 57, 144), 0.35);
+        font-weight: 600;
+    }
+    .subnav-admin .subnav-item.active i {
+        opacity: 1;
+    }
+    .subnav-admin .subnav-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 10px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+    .subnav-admin .subnav-item:not(.active) .subnav-count {
+        background: var(--color-gray-300, #e9ecef);
+        color: var(--color-gray-600, #6c757d);
+    }
+    .subnav-admin .subnav-item.active .subnav-count {
+        background: rgba(255, 255, 255, 0.25);
+        color: #fff;
+    }
+</style>
+
+<nav class="subnav-admin" aria-label="Sub-navegacao Administracao">
+    <a class="subnav-item {{ 'active' if request.endpoint in ('diarias.administracao', 'diarias.administracao_detalhe') }}"
+       href="{{ url_for('diarias.administracao') }}">
+        <i class="bi bi-list-check"></i>
+        <span>Solicitacoes</span>
+    </a>
+    <a class="subnav-item {{ 'active' if request.endpoint == 'diarias.agencias' }}"
+       href="{{ url_for('diarias.agencias') }}">
+        <i class="bi bi-building"></i>
+        <span>Agencias</span>
+    </a>
+    <a class="subnav-item {{ 'active' if request.endpoint == 'diarias.cargos' }}"
+       href="{{ url_for('diarias.cargos') }}">
+        <i class="bi bi-person-badge"></i>
+        <span>Cargos e Valores</span>
+    </a>
+</nav>

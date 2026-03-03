@@ -1,0 +1,179 @@
+{# Timeline horizontal do modulo de Diarias.
+   Espera variaveis:
+     - timeline_data (lista de dicts do DiariaService.obter_timeline)
+     - itinerario (objeto DiariasItinerario, para o botao de verificar autorizacao)
+   Reutiliza CSS de app/static/css/components/timeline.css via main.css
+#}
+
+{% if timeline_data %}
+<style>
+    /* Override: corrige sobreposicao do conector sobre os circulos
+       quando ha poucos itens (itens mais largos).
+       Remove stacking context do .timeline-item para que z-index dos
+       filhos participe do mesmo contexto global. */
+    .timeline-diarias .timeline-item {
+        z-index: auto;
+    }
+    .timeline-diarias .timeline-connector {
+        z-index: 1;
+    }
+    .timeline-diarias .step-circle {
+        z-index: 3 !important;
+    }
+    .timeline-diarias .timeline-date-block {
+        z-index: 4;
+    }
+    .timeline-diarias .duration-pill {
+        z-index: 2;
+    }
+    /* Com 3 etapas, nao precisa de min-width 750px */
+    .timeline-diarias .timeline-flex-container {
+        min-width: 400px;
+    }
+    /* Botao de verificar autorizacao */
+    .btn-verificar-autorizacao {
+        font-size: 0.7rem;
+        padding: 2px 8px;
+        margin-top: 4px;
+        border-radius: 12px;
+    }
+</style>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body p-3">
+        <div class="timeline-horizontal-wrapper mb-0 timeline-diarias">
+            <div class="timeline-flex-container">
+
+                {% for item in timeline_data %}
+                <div class="timeline-item">
+
+                    {# Conector entre etapas (exceto a primeira) #}
+                    {% if not loop.first %}
+                    <div class="timeline-connector">
+                        <div class="connector-fill {{ 'active' if (item.concluida or item.atual) }}"></div>
+                        {% if item.tempo_decorrido %}
+                        <div class="duration-pill">
+                            <i class="fas fa-history"></i> {{ item.tempo_decorrido }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {# Data acima do circulo #}
+                    <div class="timeline-date-block">
+                        {% if item.data %}
+                        <span class="date-day">{{ item.data.strftime('%d/%m') }}</span>
+                        <span class="date-time">{{ item.data.strftime('%H:%M') }}</span>
+                        {% endif %}
+                    </div>
+
+                    {# Circulo da etapa #}
+                    <div class="step-circle {{ 'completed' if item.concluida }} {{ 'current' if (item.atual and not item.concluida) }}">
+                        {% if item.atual and not item.concluida %}
+                            <i class="fas fa-map-marker-alt fs-5 pin-pulse"></i>
+                        {% else %}
+                            <i class="{{ item.etapa.icone or 'fas fa-circle' }} fs-6"></i>
+                        {% endif %}
+                    </div>
+
+                    {# Titulo da etapa #}
+                    <div class="step-info">
+                        <span class="step-title {{ 'active-text' if item.atual }}">
+                            {{ item.etapa.nome }}
+                        </span>
+
+                        {# Etapa 2 (Autorizada): botao de verificar autorizacao no SEI #}
+                        {% if item.etapa.id == 2 and not item.concluida and itinerario.sei_protocolo %}
+                        <button type="button"
+                                class="btn btn-outline-primary btn-verificar-autorizacao"
+                                id="btn-verificar-autorizacao"
+                                onclick="verificarAutorizacao({{ itinerario.id }})">
+                            <i class="fas fa-sync-alt me-1"></i>Verificar
+                        </button>
+                        <div id="resultado-autorizacao" class="mt-1" style="font-size: 0.7rem;"></div>
+                        {% endif %}
+
+                        {% if item.comentario and item.concluida %}
+                        <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                            {{ item.comentario }}
+                        </small>
+                        {% endif %}
+                    </div>
+
+                </div>
+                {% endfor %}
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function verificarAutorizacao(itinerarioId) {
+    var btn = document.getElementById('btn-verificar-autorizacao');
+    var resultado = document.getElementById('resultado-autorizacao');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verificando...';
+    resultado.innerHTML = '';
+
+    fetch('/diarias/api/verificar-autorizacao/' + itinerarioId)
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.erro) {
+                resultado.innerHTML = '<span class="text-danger">' + data.erro + '</span>';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Verificar';
+                return;
+            }
+
+            var html = '';
+
+            if (data.autorizada && data.documento) {
+                html += '<i class="fas fa-check-circle text-success"></i> ';
+                html += '<span class="text-success fw-semibold">' + data.documento.serie_nome + '</span>';
+                html += '<br><small class="text-muted">Doc: ' + data.documento.documento_formatado + '</small>';
+
+                if (data.documento.assinaturas && data.documento.assinaturas.length > 0) {
+                    for (var i = 0; i < data.documento.assinaturas.length; i++) {
+                        var a = data.documento.assinaturas[i];
+                        html += '<br><i class="fas fa-pen-nib text-primary"></i> ' + a.nome;
+                        if (a.cargo) html += ' <small class="text-muted">(' + a.cargo + ')</small>';
+                    }
+                }
+
+                if (data.avancou_etapa) {
+                    html += '<br><span class="badge bg-success mt-1">Autorizada!</span>';
+                    if (data.envio && data.envio.sucesso) {
+                        html += '<br><i class="fas fa-paper-plane text-info"></i> <small>Encaminhado para DFIN/APOIO</small>';
+                    } else if (data.envio && data.envio.erro) {
+                        html += '<br><i class="fas fa-exclamation-triangle text-warning"></i> <small>Envio: ' + data.envio.erro + '</small>';
+                    }
+                    setTimeout(function() { location.reload(); }, 2000);
+                } else {
+                    html += '<br><span class="badge bg-success mt-1">Ja autorizada</span>';
+                }
+            } else {
+                html += '<i class="fas fa-clock text-warning"></i> ';
+                if (data.erro) {
+                    html += '<span class="text-warning">' + data.erro + '</span>';
+                } else {
+                    html += '<span class="text-warning">Documento de autorizacao ainda nao encontrado</span>';
+                }
+                if (data.documento && data.documento.documento_formatado) {
+                    html += '<br><small class="text-muted">Doc: ' + data.documento.documento_formatado + '</small>';
+                }
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Verificar';
+            }
+
+            resultado.innerHTML = html;
+        })
+        .catch(function(err) {
+            resultado.innerHTML = '<span class="text-danger">Erro: ' + err.message + '</span>';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Verificar';
+        });
+}
+</script>
+{% endif %}

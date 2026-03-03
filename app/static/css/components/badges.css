@@ -1,0 +1,65 @@
+/**
+ * Componente: Badges
+ */
+
+/* Badge de contagem */
+.badge-count {
+    background-color: var(--color-warning);
+    color: var(--color-black);
+    font-weight: var(--font-weight-semibold);
+    border-radius: 6px;
+    padding: 0.5em 0.8em;
+}
+
+/* Badge de data */
+.badge-date {
+    background: var(--color-white);
+    color: var(--color-black);
+    border: 1px solid var(--color-gray-400);
+    border-radius: var(--border-radius-sm);
+    padding: 2px 6px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    box-shadow: var(--shadow-sm);
+}
+
+.badge-date i {
+    color: var(--color-info);
+    margin-right: 3px;
+}
+
+/* Badge de tempo */
+.badge-time {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-gray-600);
+    background: rgba(255, 255, 255, 0.9);
+    padding: 0 4px;
+    border-radius: 3px;
+    margin-top: 2px;
+}
+
+/* Badge atual */
+.badge-current {
+    background-color: var(--color-info);
+    color: white;
+    font-size: var(--font-size-xs);
+    padding: 2px 4px;
+    border-radius: 3px;
+    margin-top: 4px;
+    display: inline-block;
+}
+
+/* Status label */
+.status-label {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: var(--font-size-xs);
+    background-color: #e8f0fe;
+    color: #2e59d9;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}

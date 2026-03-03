@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-9">
+        
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <div class="d-flex align-items-center">
+                <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary me-3 shadow-sm rounded-circle" style="width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center;">
+                    <i class="bi bi-arrow-left"></i>
+                </a>
+                <div>
+                    <h4 class="fw-bold mb-0 text-dark">Nova Solicitação de Pagamento</h4>
+                    <small class="text-muted">Preencha os dados abaixo para gerar o processo no SEI.</small>
+                </div>
+            </div>
+            <a href="{{ url_for('solicitacoes.nova_lote') }}" class="btn btn-outline-primary shadow-sm">
+                <i class="bi bi-layers me-2"></i> Criar em Lote
+            </a>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-body p-4">
+                
+                <div class="mb-4">
+                    <label for="termo_busca" class="step-label">
+                        <span class="step-badge">1</span> Buscar Contrato
+                    </label>
+                    <div class="input-group input-group-lg">
+                        <input type="text" class="form-control bg-light" id="termo_busca" 
+                               placeholder="Digite código, nº contrato ou nome da empresa...">
+                        <button class="btn btn-primary px-4" type="button" id="btn-buscar">
+                            <i class="bi bi-search me-2"></i> Pesquisar
+                        </button>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ url_for('solicitacoes.nova_solicitacao') }}" id="form-solicitacao">
+                    
+                    <div id="container-resultados" class="mb-5 d-none">
+                        <div class="card border">
+                            <div class="card-header bg-light fw-bold text-uppercase small text-muted">
+                                Selecione um contrato abaixo:
+                            </div>
+                            <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                <table class="table table-custom table-hover align-middle mb-0">
+                                    <thead style="position: sticky; top: 0; z-index: 10;">
+                                        <tr>
+                                            <th scope="col" style="width: 60px;" class="text-center"><i class="bi bi-check2-circle"></i></th>
+                                            <th scope="col">Código</th>
+                                            <th scope="col">Nº Contrato</th>
+                                            <th scope="col">Empresa / Objeto</th>
+                                            <th scope="col">Proc. Origem</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabela-corpo" class="bg-white">
+                                        </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div id="msg-nenhum-resultado" class="alert alert-warning d-flex align-items-center mt-3 d-none">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <div>Nenhum contrato encontrado com esses dados. Tente outro termo.</div>
+                        </div>
+                    </div>
+
+                    <input type="hidden" name="contrato_selecionado" id="contrato_selecionado" required>
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-4">
+                            <label for="competencia" class="step-label">
+                                <span class="step-badge">2</span> Competência
+                            </label>
+                            <input type="text" class="form-control form-control-lg" id="competencia" name="competencia"
+                                   placeholder="MM/AAAA" required>
+                            <div class="form-text">Mês/Ano de referência do pagamento.</div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="id_tipo_pagamento" class="step-label">
+                                <span class="step-badge">3</span> Tipo de Pagamento
+                            </label>
+                            <select class="form-select form-select-lg" id="id_tipo_pagamento" name="id_tipo_pagamento" required>
+                                <option value="" selected disabled>Selecione o tipo...</option>
+                                {% for tipo in tipos_pagamento %}
+                                    <option value="{{ tipo.id }}">{{ tipo.nome }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Classificação do pagamento.</div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="unidade_procedimento" class="step-label">
+                                <span class="step-badge">4</span> Unidade Geradora
+                            </label>
+                            <select class="form-select form-select-lg" id="unidade_procedimento" name="unidade_procedimento" required>
+                                <option value="" selected disabled>Selecione a unidade...</option>
+                                {% for unidade in unidades %}
+                                    <option value="{{ unidade.id }}">
+                                        {{ unidade.sigla }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Unidade onde o processo será aberto no SEI.</div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-light border-start border-4 border-info shadow-sm py-3">
+                        <div class="d-flex">
+                            <i class="bi bi-info-circle-fill text-info fs-4 me-3"></i>
+                            <div>
+                                <strong>Informação Automática:</strong> 
+                                O sistema irá conectar-se ao SEI para criar o processo, gerar a capa e iniciar a instrução.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end pt-3 border-top mt-4">
+                        <button type="submit" class="btn btn-success btn-lg px-5 shadow fw-bold" id="btn-confirmar" disabled>
+                            <i class="bi bi-rocket-takeoff me-2"></i> Criar Processo
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+}
+
+$(document).ready(function() {
+    $('#competencia').mask('00/0000');
+    $('#btn-buscar').click(realizarBusca);
+    $('#termo_busca').keypress(function(e) { if(e.which == 13) { realizarBusca(); } });
+
+    function realizarBusca() {
+        let termo = $('#termo_busca').val();
+        if (termo.length < 3) { alert("Digite pelo menos 3 caracteres."); return; }
+
+        let btn = $('#btn-buscar');
+        let originalText = btn.html();
+        btn.html('<span class="spinner-border spinner-border-sm"></span> Buscando...').prop('disabled', true);
+
+        $('#tabela-corpo').empty();
+        $('#container-resultados').removeClass('d-none');
+        $('#msg-nenhum-resultado').addClass('d-none');
+
+        $.ajax({
+            url: "{{ url_for('solicitacoes.api_buscar_contratos') }}",
+            data: { q: termo },
+            success: function(response) {
+                let contratos = response.results;
+                if (contratos.length === 0) {
+                    $('#msg-nenhum-resultado').removeClass('d-none');
+                    $('#container-resultados .card').addClass('d-none');
+                } else {
+                    $('#container-resultados .card').removeClass('d-none');
+                    contratos.forEach(function(c) {
+                        let cod = escapeHtml(c.codigo);
+                        let numOrig = escapeHtml(c.numeroOriginal) || '-';
+                        let nome = escapeHtml(c.nomeContratado);
+                        let obj = escapeHtml(c.objeto);
+                        let proc = escapeHtml(c.numProcesso) || '-';
+
+                        let row = `
+                            <tr style="cursor: pointer;" onclick="document.getElementById('radio_${cod}').click(); selecionarContrato('${cod}')">
+                                <td class="text-center">
+                                    <input class="form-check-input" type="radio" name="selecao_contrato_visual" id="radio_${cod}" value="${cod}" style="transform: scale(1.3); cursor: pointer;">
+                                </td>
+                                <td class="fw-bold text-secondary">${cod}</td>
+                                <td><span class="badge bg-light text-dark border">${numOrig}</span></td>
+                                <td>
+                                    <div class="fw-bold text-dark">${nome}</div>
+                                    <small class="text-muted d-block text-truncate" style="max-width: 250px;">${obj}</small>
+                                </td>
+                                <td class="small font-monospace">${proc}</td>
+                            </tr>
+                        `;
+                        $('#tabela-corpo').append(row);
+                    });
+                }
+            },
+            error: function() { alert("Erro na busca."); },
+            complete: function() { btn.html(originalText).prop('disabled', false); }
+        });
+    }
+});
+function selecionarContrato(codigo) {
+    document.getElementById('contrato_selecionado').value = codigo;
+    document.getElementById('btn-confirmar').disabled = false;
+    $('tr').removeClass('table-primary');
+    $('#radio_' + codigo).closest('tr').addClass('table-primary');
+}
+</script>
+<div class="modal fade" id="modalAssinatura" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content shadow-lg">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="fas fa-file-signature"></i> Assinatura SEI</h5>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-success">
+            Processo e Documento gerados com sucesso!
+        </div>
+        <p class="mb-3">
+            Documento Nº: <strong>{{ doc_protocolo }}</strong><br>
+            Para concluir a operação, insira sua senha do SEI:
+        </p>
+        
+        <form id="formAssinatura" onsubmit="event.preventDefault(); confirmarAssinatura();">
+            <div class="mb-3">
+              <label for="senhaSei" class="form-label fw-bold">Senha de Acesso / Assinatura</label>
+              <input type="password" class="form-control form-control-lg" id="senhaSei" placeholder="Sua senha do SEI" required autofocus>
+              <div id="msgErroAssinatura" class="text-danger mt-2 fw-bold" style="display:none;"></div>
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary">Assinar Manualmente Depois</a>
+        
+        <button type="button" class="btn btn-success btn-lg px-4" id="btnConfirmarAssinatura" onclick="confirmarAssinatura()">
+            <i class="fas fa-pen-nib"></i> Assinar Documento
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Verifica se o backend mandou abrir o modal (variável Jinja2)
+        {% if modal_abrir %}
+            var myModal = new bootstrap.Modal(document.getElementById('modalAssinatura'));
+            myModal.show();
+        {% endif %}
+    });
+
+    function confirmarAssinatura() {
+        const senhaInput = document.getElementById('senhaSei');
+        const senha = senhaInput.value;
+        const btn = document.getElementById('btnConfirmarAssinatura');
+        const erroDiv = document.getElementById('msgErroAssinatura');
+        
+        if(!senha) {
+            erroDiv.innerText = "Por favor, digite sua senha.";
+            erroDiv.style.display = 'block';
+            senhaInput.focus();
+            return;
+        }
+
+        // Interface de carregamento
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Assinando...';
+        erroDiv.style.display = 'none';
+
+        // Chamada AJAX para o Backend
+        fetch("{{ url_for('solicitacoes.assinar_ajax') }}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                senha: senha,
+                protocolo: "{{ doc_protocolo }}", // Variável injetada pelo Jinja2
+                unidade: "{{ unidade_atual }}"     // Variável injetada pelo Jinja2
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.sucesso) {
+                // Sucesso: Redireciona para o Dashboard com mensagem
+                window.location.href = "{{ url_for('solicitacoes.dashboard') }}";
+            } else {
+                // Erro: Mostra mensagem e reabilita botão
+                erroDiv.innerText = "Erro na assinatura: " + (data.erro || "Senha incorreta ou falha no sistema.");
+                erroDiv.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-pen-nib"></i> Assinar Documento';
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            erroDiv.innerText = "Erro de comunicação com o servidor.";
+            erroDiv.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-pen-nib"></i> Assinar Documento';
+        });
+    }
+</script>
+{% endblock %}

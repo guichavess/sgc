@@ -1,0 +1,42 @@
+/**
+ * Componente: Navbar
+ */
+
+.navbar {
+    box-shadow: var(--shadow-navbar);
+    background-color: var(--color-primary) !important;
+}
+
+.navbar-brand {
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.5px;
+}
+
+/* Estilo do submarca */
+.navbar-brand small {
+    font-size: var(--font-size-xs);
+    opacity: 0.8;
+}
+
+/* Links do navbar */
+.navbar-nav .nav-link {
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-weight: var(--font-weight-normal);
+    transition: color var(--transition-fast);
+}
+
+.navbar-nav .nav-link:hover {
+    color: rgba(255, 255, 255, 1) !important;
+}
+
+/* Botão de logout */
+.navbar .btn-logout {
+    background-color: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    transition: all var(--transition-fast);
+}
+
+.navbar .btn-logout:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+}

@@ -1,0 +1,828 @@
+{% extends "base.html" %}
+
+
+{% set ns = namespace(maior_data=none) %}
+{% for sol in solicitacoes %}
+    {% set s = sol.saldo_atual_contrato %}
+    {% if s and s.data %}
+        {% if ns.maior_data is none or s.data > ns.maior_data %}
+            {% set ns.maior_data = s.data %}
+        {% endif %}
+    {% endif %}
+{% endfor %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Minhas Solicitações</h3>
+        <p class="text-muted mb-0">Gerencie e acompanhe seus processos de pagamento.</p>
+    </div>
+    
+    <div class="d-flex flex-column align-items-end">
+        {% if ns.maior_data %}
+            <small class="text-muted fw-bold mb-1" style="font-size: 0.85rem;">
+                <i class="bi bi-clock-history me-1"></i>
+                Atualização Geral: {{ ns.maior_data.strftime('%d/%m/%Y %H:%M:%S') }}
+            </small>
+        {% else %}
+            <small class="text-muted mb-1" style="font-size: 0.85rem;">--</small>
+        {% endif %}
+
+        <div>
+            {% if current_user.is_admin %}
+            <button id="btnSyncUnificado" class="btn btn-primary btn-lg shadow-sm px-4 fw-bold me-2" onclick="iniciarSincronizacaoUnificada()">
+                <i class="bi bi-arrow-repeat me-2"></i> Sincronizar Tudo (SEI + Saldos)
+            </button>
+            {% endif %}
+
+            {% if current_user.tem_permissao('solicitacoes', 'criar') %}
+            <a href="{{ url_for('solicitacoes.vincular_solicitacao') }}" class="btn btn-outline-primary btn-lg shadow-sm px-4 fw-bold me-2">
+                <i class="bi bi-link-45deg me-2"></i> Vincular Processo
+            </a>
+            <a href="{{ url_for('solicitacoes.nova_solicitacao') }}" class="btn btn-success btn-lg shadow-sm px-4 fw-bold">
+                <i class="bi bi-plus-lg me-2"></i> Nova Solicitação
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalSyncSei" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>Sincronização Unificada</h5>
+            </div>
+            <div class="modal-body">
+                <h6 id="tituloFaseSei" class="fw-bold text-primary mb-2">Preparando...</h6>
+                
+                <div class="progress mb-3" style="height: 25px;">
+                    <div id="barraProgressoSei" class="progress-bar progress-bar-striped progress-bar-animated bg-info" 
+                         role="progressbar" style="width: 0%;">0%</div>
+                </div>
+                
+                <p id="msgProgressoSei" class="text-center text-muted small mb-2">Aguardando início...</p>
+                
+                <div id="logDetalhesSei" class="border rounded p-2 bg-light" 
+                     style="height: 150px; overflow-y: auto; font-size: 11px; font-family: monospace;">
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled id="btnFecharModalSei">
+                    Aguarde...
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<div class="card mb-4 border-0 shadow-sm" style="overflow: visible; position: relative; z-index: 10;">
+<div class="card-body p-3" style="overflow: visible;">
+    <form method="GET" action="{{ url_for('solicitacoes.dashboard') }}" id="formFiltros">
+
+        <!-- Linha 1: Busca + Período -->
+        <div class="row g-2 align-items-center mb-2">
+            <div class="col-md">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="fas fa-search"></i></span>
+                    <input type="text" name="q" class="form-control border-start-0 ps-0"
+                        placeholder="Buscar por contratado, protocolo, contrato..."
+                        value="{{ request.args.get('q', '') }}">
+                </div>
+            </div>
+
+            <div class="col-md-auto">
+                <div class="input-group">
+                    <span class="input-group-text bg-white text-muted small px-2">De</span>
+                    <input type="date" name="data_inicio" class="form-control px-2"
+                        value="{{ request.args.get('data_inicio', '') }}" title="Data Inicial">
+                    <span class="input-group-text bg-white text-muted small px-2">Até</span>
+                    <input type="date" name="data_fim" class="form-control px-2"
+                        value="{{ request.args.get('data_fim', '') }}" title="Data Final">
+                </div>
+            </div>
+        </div>
+
+        <!-- Linha 2: Dropdowns (Competência, Etapa, Tipo Pgto) + Botões -->
+        <div class="row g-2 align-items-center">
+
+            <div class="col-auto">
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+                            type="button" id="dropdownCompetencia" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                        <i class="bi bi-calendar-event me-1"></i>
+                        <span id="labelCompetencia">Competência</span>
+                        <span class="badge bg-primary ms-1" id="badgeCompetencia" style="display: none;">0</span>
+                    </button>
+                    <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
+                        <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                            <small class="text-muted fw-bold">Selecione:</small>
+                            <a href="#" class="text-decoration-none small" onclick="limparSelecaoCompetencia(this); return false;">Limpar</a>
+                        </div>
+                        <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
+                            {% for comp in todas_competencias %}
+                            <div class="form-check item-filtro py-1">
+                                <input class="form-check-input filtro-check-competencia" type="checkbox" name="filtro_competencia"
+                                    value="{{ comp }}" id="comp_{{ loop.index }}"
+                                    {% if request.args.getlist('filtro_competencia') and comp in request.args.getlist('filtro_competencia') %}checked{% endif %}
+                                    onchange="atualizarLabelCompetencia()">
+                                <label class="form-check-label small d-flex justify-content-between w-100" for="comp_{{ loop.index }}" style="cursor: pointer;">
+                                    {{ comp }}
+                                    <span class="badge bg-light text-muted border ms-2">{{ contagem_competencias.get(comp, 0) }}</span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-auto">
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+                            type="button" id="dropdownEtapas" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                        <i class="fas fa-tasks me-1"></i>
+                        <span id="labelEtapas">Etapa</span>
+                        <span class="badge bg-primary ms-1" id="badgeEtapas" style="display: none;">0</span>
+                    </button>
+                    <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 250px; z-index: 1060;">
+                        <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                            <small class="text-muted fw-bold">Status desejados:</small>
+                            <a href="#" class="text-decoration-none small" onclick="limparSelecaoEtapa(this); return false;">Limpar</a>
+                        </div>
+                        <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
+                            {% for etapa in todas_etapas %}
+                            <div class="form-check item-filtro py-1">
+                                <input class="form-check-input filtro-check-etapa" type="checkbox" name="filtro_etapa"
+                                    value="{{ etapa.id }}" id="st_{{ loop.index }}"
+                                    {% if etapa.id in filtro_etapas %}checked{% endif %}
+                                    onchange="atualizarLabelEtapa()">
+                                <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="st_{{ loop.index }}" style="cursor: pointer;">
+                                    <span>
+                                        <span class="d-inline-block rounded-circle me-1" style="width: 10px; height: 10px; background-color: {{ etapa.cor_hex }};"></span>
+                                        {{ etapa.nome }}
+                                    </span>
+                                    <span class="badge bg-light text-muted border ms-2">{{ contagem_etapas.get(etapa.id, 0) }}</span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-auto">
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+                            type="button" id="dropdownTipo" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                        <i class="bi bi-tag me-1"></i>
+                        <span id="labelTipo">Tipo de Pagamento</span>
+                        <span class="badge bg-primary ms-1" id="badgeTipo" style="display: none;">0</span>
+                    </button>
+                    <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
+                        <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                            <small class="text-muted fw-bold">Tipo de Pagamento:</small>
+                            <a href="#" class="text-decoration-none small" onclick="limparSelecaoTipo(this); return false;">Limpar</a>
+                        </div>
+                        {% for tipo in todos_tipos %}
+                        <div class="form-check item-filtro py-1">
+                            <input class="form-check-input filtro-check-tipo" type="checkbox" name="filtro_tipo"
+                                value="{{ tipo.id }}" id="tipo_{{ loop.index }}"
+                                {% if tipo.id in filtro_tipos %}checked{% endif %}
+                                onchange="atualizarLabelTipo()">
+                            <label class="form-check-label small d-flex justify-content-between w-100" for="tipo_{{ loop.index }}" style="cursor: pointer;">
+                                {{ tipo.nome }}
+                                <span class="badge bg-light text-muted border ms-2">{{ contagem_tipos.get(tipo.id, 0) }}</span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-auto">
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+                            type="button" id="dropdownStatusEmpenho" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                        <i class="bi bi-cash-coin me-1"></i>
+                        <span id="labelStatusEmpenho">Status Empenho</span>
+                        <span class="badge bg-primary ms-1" id="badgeStatusEmpenho" style="display: none;">0</span>
+                    </button>
+                    <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
+                        <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                            <small class="text-muted fw-bold">Status do Empenho:</small>
+                            <a href="#" class="text-decoration-none small" onclick="limparSelecaoStatusEmpenho(this); return false;">Limpar</a>
+                        </div>
+                        {% for se in todos_status_empenho %}
+                        <div class="form-check item-filtro py-1">
+                            <input class="form-check-input filtro-check-status-empenho" type="checkbox" name="filtro_status_empenho"
+                                value="{{ se.id }}" id="se_{{ loop.index }}"
+                                {% if se.id in filtro_status_empenho %}checked{% endif %}
+                                onchange="atualizarLabelStatusEmpenho()">
+                            <label class="form-check-label small d-flex justify-content-between w-100" for="se_{{ loop.index }}" style="cursor: pointer;">
+                                {{ se.nome }}
+                                <span class="badge bg-light text-muted border ms-2">{{ contagem_status_empenho.get(se.id, 0) }}</span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-auto d-flex gap-2">
+                <button type="submit" class="btn btn-primary fw-bold shadow-sm px-3" title="Filtrar">
+                    <i class="fas fa-filter"></i>
+                </button>
+
+                {% if request.args.get('q') or request.args.getlist('filtro_etapa') or request.args.getlist('filtro_competencia') or request.args.getlist('filtro_tipo') or request.args.getlist('filtro_status_empenho') or request.args.get('data_inicio') or request.args.get('data_fim') %}
+                <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-danger" title="Limpar Filtros">
+                    <i class="fas fa-times"></i>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </form>
+</div>
+</div>
+
+<div class="d-flex align-items-center mb-3">
+    <span class="badge rounded-pill text-white fw-bold px-3 py-2" style="font-size: 0.85rem; background-color: #2B3990;">
+        Total: {{ pagination.total }} {{ 'solicitações' if pagination.total != 1 else 'solicitação' }}
+    </span>
+</div>
+
+<div class="card border-0 shadow-sm overflow-hidden">
+    <div class="card-body p-0">
+        <div class="table-responsive table-rounded">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Cód. Contrato</th>
+                        <th>Contratado</th>
+                        <th>Competência</th>
+                        <th>N° Processo / Tipo Pgto</th>
+                        <th>Status Atual</th>
+                        <th class="text-center">Tempo Total</th>
+                        <th class="text-center">Saldo Empenho</th>
+                        <th style="width: 200px;">Solicitar Empenho</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sol in solicitacoes %}
+                    <tr style="cursor: pointer;" onclick="window.location='{{ url_for('solicitacoes.detalhes_solicitacao', id_solicitacao=sol.id) }}'">
+                        <td class="ps-4">
+                            <span class="badge bg-light text-dark border border-secondary">
+                                {{ sol.codigo_contrato }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="fw-bold text-dark">{{ sol.contrato.nomeContratado }}</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border border-secondary">
+                                {{ sol.competencia|normalizar_comp }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if sol.link_processo_sei %}
+                                <a href="{{ sol.link_processo_sei }}" target="_blank" class="fw-bold text-primary text-decoration-none" onclick="event.stopPropagation()">
+                                    <i class="bi bi-box-arrow-up-right me-1"></i> {{ sol.protocolo_gerado_sei }}
+                                </a>
+                            {% else %}
+                                <span class="text-muted small">Sem protocolo</span>
+                            {% endif %}
+                            <div class="mt-1">
+                                {% if sol.tipo_pagamento %}
+                                    {% if sol.tipo_pagamento.nome == 'DEA: Indenizatório' %}
+                                        <span class="badge bg-danger text-white">{{ sol.tipo_pagamento.nome }}</span>
+                                    {% else %}
+                                        <span class="badge bg-info text-white">{{ sol.tipo_pagamento.nome }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-light text-muted border">Sem tipo</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge rounded-pill" style="background-color: {{ sol.etapa.cor_hex }}; color: white;">
+                                {{ sol.etapa.nome }}
+                            </span>
+                        </td>
+                        
+                        <td class="text-center text-nowrap">
+                            {% set tempo = sol.tempo_decorrido_visual %}
+                            
+                            {% if tempo and tempo != '--' %}
+                                {% if sol.tempo_total %}
+                                    {# Caso Finalizado (PAGO) #}
+                                    <span class="badge rounded-pill border border-success text-success bg-light px-3 py-2" style="font-size: 0.85rem;" title="Tempo Total Finalizado">
+                                        <i class="fas fa-check-circle me-1"></i> {{ tempo }}
+                                    </span>
+                                {% else %}
+                                    {# Caso em Andamento #}
+                                    <span class="badge rounded-pill border border-primary text-primary bg-light px-3 py-2" style="font-size: 0.85rem;" title="Tempo até a fase atual">
+                                        <i class="fas fa-clock me-1"></i> {{ tempo }}
+                                    </span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge rounded-pill bg-light text-muted border px-3 py-2" style="font-size: 0.85rem;">
+                                    --
+                                </span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-center">
+                            {% set saldo_obj = sol.saldo_atual_contrato %}
+                            {% if saldo_obj %}
+                                <div class="fw-bold text-success" >
+                                    R$ {{ "{:,.2f}".format(saldo_obj.saldo)|replace(',', 'X')|replace('.', ',')|replace('X', '.') }}
+                                </div>
+                            {% else %}
+                                <span class="text-muted small">Aguardando atualização</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if sol.status_empenho_id and sol.status_empenho_id != 3 %}
+                                <div class="text-center">
+                                    <div class="fw-bold text-dark small mb-1">
+                                        {% if sol.valor_empenho_solicitado %}
+                                            R$ {{ "{:,.2f}".format(sol.valor_empenho_solicitado)|replace(',', 'X')|replace('.', ',')|replace('X', '.') }}
+                                        {% else %}
+                                            ---
+                                        {% endif %}
+                                    </div>
+                                    <span class="badge bg-{{ sol.status_empenho.cor_badge if sol.status_empenho else 'secondary' }} py-1 px-2" style="font-size: 0.7rem;">
+                                        {{ sol.status_empenho.nome }}
+                                    </span>
+                                </div>
+                            {% else %}
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="text"
+                                        id="input_empenho_{{ sol.id }}"
+                                        class="form-control money-mask"
+                                        placeholder="0,00"
+                                        onclick="event.stopPropagation()"
+                                        onkeydown="if(event.key==='Enter') salvarEmpenho({{ sol.id }})">
+
+                                    <button class="btn btn-outline-success" type="button"
+                                            onclick="event.stopPropagation(); salvarEmpenho({{ sol.id }})"
+                                            title="Confirmar Solicitação">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center py-5 text-muted">Nenhuma solicitação encontrada.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="card-footer bg-white border-top py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                Mostrando <strong>{{ solicitacoes|length }}</strong> de <strong>{{ pagination.total }}</strong> solicitações
+            </div>
+
+            {# Monta query string preservando multi-value params #}
+            {% macro page_url(page_num) %}
+                {%- set params = [] -%}
+                {%- if request.args.get('q') -%}{{ params.append('q=' ~ request.args.get('q')) or '' }}{%- endif -%}
+                {%- if request.args.get('data_inicio') -%}{{ params.append('data_inicio=' ~ request.args.get('data_inicio')) or '' }}{%- endif -%}
+                {%- if request.args.get('data_fim') -%}{{ params.append('data_fim=' ~ request.args.get('data_fim')) or '' }}{%- endif -%}
+                {%- for c in request.args.getlist('filtro_competencia') -%}{{ params.append('filtro_competencia=' ~ c) or '' }}{%- endfor -%}
+                {%- for e in request.args.getlist('filtro_etapa') -%}{{ params.append('filtro_etapa=' ~ e) or '' }}{%- endfor -%}
+                {%- for t in request.args.getlist('filtro_tipo') -%}{{ params.append('filtro_tipo=' ~ t) or '' }}{%- endfor -%}
+                {%- for s in request.args.getlist('filtro_status_empenho') -%}{{ params.append('filtro_status_empenho=' ~ s) or '' }}{%- endfor -%}
+                {{ params.append('page=' ~ page_num) or '' }}
+                {{- url_for('solicitacoes.dashboard') }}?{{ params | join('&') -}}
+            {% endmacro %}
+
+            <nav aria-label="Navegação de páginas">
+                <ul class="pagination pagination-sm mb-0">
+                    {# Botão Anterior #}
+                    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                        <a class="page-link" href="{{ page_url(pagination.prev_num) if pagination.has_prev else '#' }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+
+                    {# Números das Páginas #}
+                    {% for pg in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if pg %}
+                            <li class="page-item {{ 'active' if pg == pagination.page }}">
+                                <a class="page-link" href="{{ page_url(pg) }}">{{ pg }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {# Botão Próximo #}
+                    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                        <a class="page-link" href="{{ page_url(pagination.next_num) if pagination.has_next else '#' }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+
+<style>
+    .cursor-pointer { cursor: pointer; }
+</style>
+
+<div class="modal fade" id="modalProgresso" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-sync-alt fa-spin me-2" id="iconLoading"></i> Atualizando Processos</h5>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-2" id="statusTexto">Iniciando conexão com o SEI...</p>
+                
+                <div class="progress mb-3" style="height: 25px;">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                         role="progressbar" style="width: 0%;">0%</div>
+                </div>
+
+                <div class="card bg-light border">
+                    <div class="card-body p-2" id="logContainer" 
+                         style="height: 150px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; color: #555;">
+                        <div class="text-muted">Aguardando início...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="btnFecharModal" data-bs-dismiss="modal" disabled>
+                    Fechar e Recarregar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #aaa; }
+    
+    .dropdown-toggle::after { margin-left: auto; } /* Joga a setinha para a direita */
+</style>
+<script>
+    /* ==========================================================================
+       1. UTILITÁRIOS GERAIS (MÁSCARAS E EMPENHO)
+       ========================================================================== */
+    
+    // Máscara Monetária (R$ 0,00)
+    document.addEventListener('input', function (e) {
+        if (e.target.classList.contains('money-mask')) {
+            let value = e.target.value.replace(/\D/g, '');
+            value = (value / 100).toFixed(2) + '';
+            value = value.replace(".", ",");
+            value = value.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+            e.target.value = value;
+        }
+    });
+
+    // Função Salvar Empenho (Para os botões da tabela)
+    function salvarEmpenho(idSolicitacao) {
+        const input = document.getElementById(`input_empenho_${idSolicitacao}`);
+        if (!input) return;
+
+        const valor = input.value;
+        
+        if (!valor || valor === '0,00' || valor === '') {
+            alert('Por favor, digite um valor válido.');
+            setTimeout(() => input.focus(), 100); 
+            return;
+        }
+
+        if(!confirm(`Confirma a solicitação de empenho no valor de R$ ${valor}?`)) {
+            return;
+        }
+
+        input.disabled = true; 
+        const btn = input.nextElementSibling; 
+        if(btn) btn.disabled = true;
+
+        fetch('/solicitacoes/api/solicitar-empenho', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id_solicitacao: idSolicitacao, valor: valor })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.sucesso) {
+                const td = input.parentElement.parentElement;
+                td.innerHTML = `<span class="badge bg-warning text-dark w-100 py-2">Empenho Solicitado</span>`;
+            } else {
+                alert('Erro: ' + data.msg);
+                input.disabled = false;
+                if(btn) btn.disabled = false;
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Erro de comunicação.');
+            input.disabled = false;
+            if(btn) btn.disabled = false;
+        });
+    }
+
+    /* ==========================================================================
+       2. SINCRONIZAÇÃO UNIFICADA (3 FASES: Docs -> Etapas -> Saldos)
+       ========================================================================== */
+    
+    function iniciarSincronizacaoUnificada() {
+        // Elementos do Modal
+        var modalEl = document.getElementById('modalSyncSei');
+        var barra = document.getElementById('barraProgressoSei');
+        var msg = document.getElementById('msgProgressoSei');
+        var logDiv = document.getElementById('logDetalhesSei');
+        var btnFechar = document.getElementById('btnFecharModalSei');
+        var titulo = document.getElementById('tituloFaseSei');
+
+        // Validação
+        if (!modalEl) { alert("Erro: Modal 'modalSyncSei' não encontrado no HTML."); return; }
+        
+        var modal = new bootstrap.Modal(modalEl);
+
+        // --- FASE 1: PREPARAÇÃO VISUAL ---
+        titulo.innerText = "Fase 1/3: Baixando Documentos SEI";
+        titulo.className = "fw-bold text-primary mb-2";
+        barra.className = "progress-bar progress-bar-striped progress-bar-animated bg-info";
+        barra.style.width = '0%';
+        barra.innerText = '0%';
+        msg.innerText = "Conectando ao SEI...";
+        logDiv.innerHTML = '<div class="text-primary fw-bold">--- INÍCIO: DOWNLOAD DE DOCUMENTOS ---</div>';
+        
+        btnFechar.setAttribute('disabled', 'true');
+        btnFechar.innerText = 'Processando...';
+        btnFechar.className = 'btn btn-secondary';
+
+        modal.show();
+
+        // --- EXECUÇÃO FASE 1 (EventSource) ---
+        var sourceDocs = new EventSource("{{ url_for('solicitacoes.api_sincronizar_documentos') }}");
+
+        sourceDocs.onmessage = function(event) {
+            var dados = JSON.parse(event.data);
+            
+            // Chama a função auxiliar corrigida
+            atualizarProgresso(barra, msg, dados.progresso, "[Docs] " + dados.msg);
+            logarDetalhe(logDiv, dados.msg);
+
+            if (dados.concluido) {
+                sourceDocs.close();
+                logDiv.innerHTML += '<div class="text-success fw-bold mt-2">--- FIM FASE 1 ---</div>';
+                
+                // Dispara Fase 2 após 1 segundo
+                setTimeout(() => iniciarFase2(barra, msg, logDiv, btnFechar, titulo), 1000);
+            }
+        };
+
+        sourceDocs.onerror = erroGenerico(sourceDocs, msg, barra, btnFechar, logDiv, "Fase 1");
+    }
+
+    // --- FASE 2: ETAPAS ---
+    function iniciarFase2(barra, msg, logDiv, btnFechar, titulo) {
+        // Setup Visual
+        titulo.innerText = "Fase 2/3: Processando Etapas";
+        titulo.className = "fw-bold text-warning mb-2";
+        barra.className = "progress-bar progress-bar-striped progress-bar-animated bg-warning";
+        barra.style.width = '0%';
+        barra.innerText = '0%';
+        msg.innerText = "Analisando histórico...";
+        logDiv.innerHTML += '<div class="text-warning fw-bold mt-3">--- INÍCIO: CÁLCULO DE ETAPAS ---</div>';
+
+        // Execução
+        var sourceEtapas = new EventSource("{{ url_for('solicitacoes.api_atualizar_etapas') }}");
+
+        sourceEtapas.onmessage = function(event) {
+            var dados = JSON.parse(event.data);
+            atualizarProgresso(barra, msg, dados.progresso, "[Etapas] " + dados.msg);
+            
+            if (dados.msg.includes("Movimentado")) {
+                logarDetalhe(logDiv, dados.msg);
+            }
+
+            if (dados.concluido) {
+                sourceEtapas.close();
+                logDiv.innerHTML += '<div class="text-success fw-bold mt-2">--- FIM FASE 2 ---</div>';
+                
+                // Dispara Fase 3
+                setTimeout(() => iniciarFase3(barra, msg, logDiv, btnFechar, titulo), 1000);
+            }
+        };
+
+        sourceEtapas.onerror = erroGenerico(sourceEtapas, msg, barra, btnFechar, logDiv, "Fase 2");
+    }
+
+    // --- FASE 3: SALDOS ---
+    async function iniciarFase3(barra, msg, logDiv, btnFechar, titulo) {
+        // Setup Visual
+        titulo.innerText = "Fase 3/3: Atualizando Saldos SIAFE";
+        titulo.className = "fw-bold text-success mb-2";
+        barra.className = "progress-bar progress-bar-striped progress-bar-animated bg-success";
+        barra.style.width = '0%';
+        barra.innerText = '0%';
+        msg.innerText = "Calculando saldos...";
+        logDiv.innerHTML += '<div class="text-success fw-bold mt-3">--- INÍCIO: ATUALIZAÇÃO DE SALDOS ---</div>';
+
+        try {
+            const response = await fetch('/solicitacoes/api/atualizar-todos-saldos', { method: 'POST' });
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const lines = decoder.decode(value).split('\n\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const dados = JSON.parse(line.replace('data: ', ''));
+                        atualizarProgresso(barra, msg, dados.progresso, "[Saldos] " + dados.msg);
+
+                        if (dados.concluido) {
+                            finalizarTudo(barra, msg, logDiv, btnFechar, titulo);
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.error(err);
+            msg.innerText = "Erro ao atualizar saldos.";
+            barra.classList.add('bg-danger');
+            logDiv.innerHTML += `<div class="text-danger fw-bold">ERRO FASE 3: ${err.message}</div>`;
+            btnFechar.removeAttribute('disabled');
+            btnFechar.innerText = 'Fechar (Erro)';
+        }
+    }
+
+    // --- FINALIZAÇÃO ---
+    function finalizarTudo(barra, msg, logDiv, btnFechar, titulo) {
+        titulo.innerText = "Sincronização Completa!";
+        titulo.className = "fw-bold text-success mb-2";
+        
+        barra.className = "progress-bar bg-success"; // Remove animação
+        barra.style.width = '100%';
+        barra.innerText = '100%';
+        
+        msg.innerText = "Processo finalizado com sucesso.";
+        logDiv.innerHTML += '<div class="text-success fw-bold mt-3 p-2 border border-success rounded bg-white">✅ TUDO ATUALIZADO!</div>';
+        logDiv.scrollTop = logDiv.scrollHeight;
+
+        btnFechar.removeAttribute('disabled');
+        btnFechar.className = 'btn btn-success fw-bold w-100';
+        btnFechar.innerText = 'Concluir e Atualizar Página';
+        btnFechar.onclick = function() { window.location.reload(); };
+    }
+
+    // --- HELPERS (CORRIGIDOS) ---
+    
+    // Função corrigida: 'atualizarProgresso' (sem 'c' antes do t)
+    function atualizarProgresso(barra, msgEl, pct, texto) {
+        barra.style.width = pct + '%';
+        barra.innerText = pct + '%';
+        msgEl.innerText = texto;
+    }
+
+    function logarDetalhe(div, texto) {
+        if(!texto.includes("Baixando...") && !texto.includes("Analisando...") && !texto.includes("Processando")) {
+            div.innerHTML += `<div class="small border-bottom py-1">${texto}</div>`;
+            div.scrollTop = div.scrollHeight;
+        }
+    }
+
+    function erroGenerico(source, msgEl, barra, btn, logDiv, faseNome) {
+        return function(event) {
+            if(source) source.close();
+            console.error(`Erro ${faseNome}:`, event);
+            msgEl.innerText = `Erro na ${faseNome}. Verifique o console.`;
+            barra.className = "progress-bar bg-danger";
+            logDiv.innerHTML += `<div class="text-danger fw-bold mt-2">❌ ERRO CRÍTICO NA ${faseNome.toUpperCase()}</div>`;
+            btn.removeAttribute('disabled');
+            btn.innerText = 'Fechar (Erro)';
+        };
+    }
+
+
+// --- Lógica para o Filtro de Competência ---
+
+    function atualizarLabelCompetencia() {
+        const checkboxes = document.querySelectorAll('.filtro-check-competencia:checked');
+        const count = checkboxes.length;
+        const label = document.getElementById('labelCompetencia');
+        const badge = document.getElementById('badgeCompetencia');
+
+        if (count > 0) {
+            label.innerText = count === 1 ? '1 Selecionada' : `${count} Selecionadas`;
+            badge.innerText = count;
+            badge.style.display = 'inline-block';
+        } else {
+            label.innerText = 'Competência';
+            badge.style.display = 'none';
+        }
+    }
+
+    function limparSelecaoCompetencia(link) {
+        const dropdown = link.closest('.dropdown-menu');
+        const inputs = dropdown.querySelectorAll('input[type="checkbox"]');
+        inputs.forEach(input => input.checked = false);
+        atualizarLabelCompetencia();
+    }
+
+    // --- Lógica para o Filtro de Tipo de Pagamento ---
+
+    function atualizarLabelTipo() {
+        const checkboxes = document.querySelectorAll('.filtro-check-tipo:checked');
+        const count = checkboxes.length;
+        const label = document.getElementById('labelTipo');
+        const badge = document.getElementById('badgeTipo');
+
+        if (count > 0) {
+            label.innerText = count === 1 ? '1 Selecionado' : `${count} Selecionados`;
+            badge.innerText = count;
+            badge.style.display = 'inline-block';
+        } else {
+            label.innerText = 'Tipo de Pagamento';
+            badge.style.display = 'none';
+        }
+    }
+
+    function limparSelecaoTipo(link) {
+        const dropdown = link.closest('.dropdown-menu');
+        const inputs = dropdown.querySelectorAll('input[type="checkbox"]');
+        inputs.forEach(input => input.checked = false);
+        atualizarLabelTipo();
+    }
+
+    // --- Lógica para o Filtro de Etapa ---
+
+    function atualizarLabelEtapa() {
+        const checkboxes = document.querySelectorAll('.filtro-check-etapa:checked');
+        const count = checkboxes.length;
+        const label = document.getElementById('labelEtapas');
+        const badge = document.getElementById('badgeEtapas');
+
+        if (count > 0) {
+            label.innerText = count === 1 ? '1 Selecionada' : `${count} Selecionadas`;
+            badge.innerText = count;
+            badge.style.display = 'inline-block';
+        } else {
+            label.innerText = 'Etapa';
+            badge.style.display = 'none';
+        }
+    }
+
+    function limparSelecaoEtapa(link) {
+        const dropdown = link.closest('.dropdown-menu');
+        const inputs = dropdown.querySelectorAll('input[type="checkbox"]');
+        inputs.forEach(input => input.checked = false);
+        atualizarLabelEtapa();
+    }
+
+    // --- Lógica para o Filtro de Status Empenho ---
+
+    function atualizarLabelStatusEmpenho() {
+        const checkboxes = document.querySelectorAll('.filtro-check-status-empenho:checked');
+        const count = checkboxes.length;
+        const label = document.getElementById('labelStatusEmpenho');
+        const badge = document.getElementById('badgeStatusEmpenho');
+
+        if (count > 0) {
+            label.innerText = count === 1 ? '1 Selecionado' : `${count} Selecionados`;
+            badge.innerText = count;
+            badge.style.display = 'inline-block';
+        } else {
+            label.innerText = 'Status Empenho';
+            badge.style.display = 'none';
+        }
+    }
+
+    function limparSelecaoStatusEmpenho(link) {
+        const dropdown = link.closest('.dropdown-menu');
+        const inputs = dropdown.querySelectorAll('input[type="checkbox"]');
+        inputs.forEach(input => input.checked = false);
+        atualizarLabelStatusEmpenho();
+    }
+
+    // Inicializa os labels ao carregar a página
+    document.addEventListener("DOMContentLoaded", function() {
+        atualizarLabelCompetencia();
+        atualizarLabelEtapa();
+        atualizarLabelTipo();
+        atualizarLabelStatusEmpenho();
+    });
+</script>
+{% endblock %}

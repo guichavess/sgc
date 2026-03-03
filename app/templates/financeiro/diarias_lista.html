@@ -1,0 +1,166 @@
+{% extends "financeiro/base_financeiro.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Diárias - Notas de Reserva</h3>
+        <p class="text-muted mb-0">Gerencie as Notas de Reserva das solicitações de diárias despachadas para o financeiro.</p>
+    </div>
+</div>
+
+{# Filtros #}
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-body p-3">
+        <form method="GET" action="{{ url_for('financeiro.diarias_lista') }}">
+            <div class="row g-2 align-items-center">
+
+                <div class="col-md-5">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fas fa-search"></i></span>
+                        <input type="text" name="q" class="form-control border-start-0 ps-0"
+                               placeholder="Buscar por processo SEI ou solicitante..."
+                               value="{{ request.args.get('q', '') }}">
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <select name="status_nr" class="form-select">
+                        <option value="">Todos os status</option>
+                        <option value="pendente" {{ 'selected' if filtro_status == 'pendente' }}>Pendente de NR</option>
+                        <option value="inserida" {{ 'selected' if filtro_status == 'inserida' }}>NR Inserida</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary w-100 fw-bold shadow-sm">
+                        <i class="fas fa-filter"></i> Filtrar
+                    </button>
+                    {% if request.args.get('q') or request.args.get('status_nr') %}
+                    <a href="{{ url_for('financeiro.diarias_lista') }}" class="btn btn-outline-danger" title="Limpar Filtros">
+                        <i class="fas fa-times"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# Tabela #}
+<div class="card border-0 shadow-sm overflow-visible">
+    <div class="card-body p-0">
+        <div class="table-responsive table-rounded">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">ID</th>
+                        <th>Tipo Solicitação</th>
+                        <th>Processo SEI</th>
+                        <th>Pessoas</th>
+                        <th>Data Viagem</th>
+                        <th>Valor Total</th>
+                        <th>Status NR</th>
+                        <th class="text-center">Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for it in itinerarios %}
+                    <tr>
+                        <td class="ps-4 fw-bold text-secondary">#{{ it.id }}</td>
+
+                        <td>
+                            {% if it.tipo_solicitacao %}
+                                {% if it.tipo_solicitacao.id == 1 %}
+                                    <span class="badge bg-info text-dark">Diárias</span>
+                                {% elif it.tipo_solicitacao.id == 2 %}
+                                    <span class="badge bg-primary">Diárias + Passagens</span>
+                                {% elif it.tipo_solicitacao.id == 3 %}
+                                    <span class="badge bg-secondary">Passagens</span>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            {% if it.sei_protocolo %}
+                                <span class="fw-bold text-dark">{{ it.sei_protocolo }}</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <span class="badge bg-light text-dark border">
+                                {{ pessoas_count.get(it.id, 0) }} pessoa{{ 's' if pessoas_count.get(it.id, 0) != 1 }}
+                            </span>
+                        </td>
+
+                        <td>
+                            <div class="text-dark">{{ it.data_viagem.strftime('%d/%m/%Y') if it.data_viagem else '-' }}</div>
+                            <div class="small text-muted">{{ it.data_retorno.strftime('%d/%m/%Y') if it.data_retorno else '' }}</div>
+                        </td>
+
+                        <td>
+                            <div class="text-dark fw-bold">{{ it.valor_total_formatado }}</div>
+                        </td>
+
+                        <td>
+                            {% if it.nota_reserva %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-check-circle me-1"></i>
+                                    NR{{ it.nota_reserva }}
+                                </span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="fas fa-clock me-1"></i> Pendente
+                                </span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-center">
+                            <a href="{{ url_for('financeiro.diarias_detalhe', id=it.id) }}"
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye me-1"></i> Ver
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center py-5 text-muted">
+                            <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                            Nenhuma solicitação de diária encontrada.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{# Paginação #}
+{% if pagination.pages > 1 %}
+<nav aria-label="Paginação" class="mt-4">
+    <ul class="pagination justify-content-center">
+        <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+            <a class="page-link" href="{{ url_for('financeiro.diarias_lista', page=pagination.prev_num, q=request.args.get('q', ''), status_nr=filtro_status) }}">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+        </li>
+        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if p %}
+                <li class="page-item {{ 'active' if p == pagination.page }}">
+                    <a class="page-link" href="{{ url_for('financeiro.diarias_lista', page=p, q=request.args.get('q', ''), status_nr=filtro_status) }}">{{ p }}</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endfor %}
+        <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+            <a class="page-link" href="{{ url_for('financeiro.diarias_lista', page=pagination.next_num, q=request.args.get('q', ''), status_nr=filtro_status) }}">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

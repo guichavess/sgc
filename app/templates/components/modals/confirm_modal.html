@@ -1,0 +1,60 @@
+{# Componente: Modal de Confirmação Genérico #}
+{#
+    Uso: {% include 'components/modals/confirm_modal.html' %}
+
+    Depois use o JavaScript para configurar:
+    showConfirmModal({
+        title: 'Confirmar Ação',
+        message: 'Deseja realmente executar esta ação?',
+        confirmText: 'Sim, Confirmar',
+        confirmClass: 'btn-danger',
+        onConfirm: () => { /* ação */ }
+    });
+#}
+<div class="modal fade" id="modalConfirm" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmModalTitle">Confirmar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmModalMessage" class="mb-0">Deseja realmente executar esta ação?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+                <button type="button" class="btn btn-primary" id="confirmModalBtn">
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+window.showConfirmModal = function(options) {
+    const modal = document.getElementById('modalConfirm');
+    const title = document.getElementById('confirmModalTitle');
+    const message = document.getElementById('confirmModalMessage');
+    const btn = document.getElementById('confirmModalBtn');
+
+    title.textContent = options.title || 'Confirmar';
+    message.textContent = options.message || 'Deseja continuar?';
+    btn.textContent = options.confirmText || 'Confirmar';
+    btn.className = 'btn ' + (options.confirmClass || 'btn-primary');
+
+    // Remove listeners anteriores
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+
+    // Adiciona novo listener
+    newBtn.addEventListener('click', function() {
+        if (options.onConfirm) options.onConfirm();
+        bootstrap.Modal.getInstance(modal).hide();
+    });
+
+    new bootstrap.Modal(modal).show();
+};
+</script>

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ titulo }} - SGC</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { 
+            font-size: 11px; 
+            background: white; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+        }
+        
+        /* Ajustes de Tabela */
+        .table-sm td, .table-sm th { padding: 5px; vertical-align: middle; border-color: #dee2e6 !important; }
+        .table-striped tbody tr:nth-of-type(odd) { background-color: rgba(0,0,0,.02) !important; }
+        
+        /* TIMELINE VISUAL OTIMIZADA PARA IMPRESSÃO */
+        .timeline-container {
+            width: 100%;
+            margin-bottom: 30px;
+            padding: 10px 0;
+            position: relative;
+        }
+
+        .timeline-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start; /* Alinha pelo topo para garantir que as bolinhas fiquem niveladas */
+            position: relative;
+        }
+
+        .timeline-step {
+            flex: 1;
+            position: relative;
+            text-align: center;
+            padding: 0 5px;
+            z-index: 1; /* Garante que fique acima da linha */
+        }
+
+        /* A Linha Conectora (Fundo) */
+        /* Criamos uma linha cinza contínua por trás de tudo na altura da bolinha */
+        .timeline-line-bg {
+            position: absolute;
+            top: 15px; /* Metade da altura da bolinha (30px / 2) */
+            left: 5%; /* Começa no meio da primeira coluna aprox */
+            right: 5%; /* Termina no meio da última */
+            height: 3px;
+            background-color: #e9ecef;
+            z-index: 0;
+        }
+
+        .step-circle {
+            width: 30px; 
+            height: 30px;
+            border-radius: 50%;
+            margin: 0 auto 8px auto; /* Centraliza horizontalmente */
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            color: white; 
+            font-weight: bold; 
+            font-size: 12px;
+            position: relative; 
+            z-index: 2; /* Fica acima da linha */
+            border: 2px solid white; /* Borda branca para destacar da linha */
+            box-shadow: 0 0 0 1px #dee2e6; /* Borda sutil para impressão */
+        }
+
+        .step-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #495057;
+            text-transform: uppercase;
+            line-height: 1.2;
+        }
+
+        /* Badge de Tempo (Entre as etapas) */
+        /* Posicionamos ele de forma absoluta relativo ao STEP ANTERIOR */
+        .step-time-badge {
+            position: absolute;
+            top: 8px; /* Ajuste fino para alinhar com a linha */
+            right: -50%; /* Joga para a direita, na divisa com o próximo */
+            width: 100%; /* Ocupa o espaço entre os centros */
+            text-align: center;
+            z-index: 5;
+            pointer-events: none; /* Não interfere no layout */
+        }
+        
+        .step-time-pill {
+            display: inline-block;
+            background-color: #fff;
+            border: 1px solid #0d6efd;
+            color: #0d6efd;
+            font-weight: bold;
+            font-size: 9px;
+            padding: 1px 6px;
+            border-radius: 10px;
+        }
+
+        /* Estilos específicos de Impressão */
+        @media print {
+            @page { size: landscape; margin: 10mm; }
+            .no-print { display: none !important; }
+            a { text-decoration: none; color: black; }
+            .card { break-inside: avoid; border: 1px solid #ccc !important; }
+            
+            /* Força renderização de backgrounds */
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+    </style>
+</head>
+<body onload="setTimeout(window.print, 500)"> 
+<div class="container-fluid mt-2">
+        <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+            <div>
+                <h4 class="fw-bold mb-0 text-dark"><i class="fas fa-file-alt me-2"></i>{{ titulo }}</h4>
+                <div class="text-muted small">Gerado em: {{ agora.strftime('%d/%m/%Y às %H:%M') }}</div>
+                <div class="text-muted small">
+                    Etapas SEI atualizadas em: {{ timestamps.etapas_sei.strftime('%d/%m/%Y às %H:%M') if timestamps.etapas_sei else 'N/D' }}
+                    &nbsp;|&nbsp;
+                    Saldo de Empenho atualizado em: {{ timestamps.saldo_empenho.strftime('%d/%m/%Y às %H:%M') if timestamps.saldo_empenho else 'N/D' }}
+                </div>
+            </div>
+            <div class="no-print">
+                <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="fas fa-print me-2"></i>Imprimir</button>
+                <button onclick="window.close()" class="btn btn-secondary btn-sm">Fechar</button>
+            </div>
+        </div>
+
+        {% if aba_ativa == 'geral' %}
+            
+            <div class="row row-cols-7 g-2 mb-4"> {% for item in resumo %}
+                <div class="col" style="min-width: 120px;"> <div class="card h-100 shadow-none border">
+                        <div class="card-body p-2 text-center border-top border-4" style="border-color: {{ item.cor }} !important;">
+                            <div class="h3 mb-0 fw-bold text-dark">{{ item.qtd }}</div>
+                            <div class="text-uppercase text-muted text-truncate" title="{{ item.nome }}" style="font-size: 0.6rem; font-weight: 700;">
+                                {{ item.nome }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% set ns = namespace(last_etapa=None) %}
+            {% for sol in detalhes %}
+                {% if ns.last_etapa != sol.etapa.nome %}
+                    {% if ns.last_etapa is not none %}
+                        </tbody></table>
+                    {% endif %}
+
+                    <div class="d-flex align-items-center mb-1 mt-3" style="border-left: 5px solid {{ sol.etapa.cor_hex }}; padding-left: 8px;">
+                        <h6 class="mb-0 fw-bold text-uppercase" style="color: {{ sol.etapa.cor_hex }}; font-size: 0.85rem; letter-spacing: 0.5px;">
+                            {{ sol.etapa.nome }}
+                        </h6>
+                        <span class="ms-2 badge bg-light text-dark border" style="font-size: 0.65rem;">
+                            {{ contagem_etapa.get(sol.etapa.nome, 0) }} processo{{ 's' if contagem_etapa.get(sol.etapa.nome, 0) != 1 else '' }}
+                        </span>
+                    </div>
+
+                    <table class="table table-bordered table-striped table-sm w-100 mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 15%">Protocolo / ID</th>
+                                <th style="width: 45%">Contrato / Objeto</th>
+                                <th style="width: 20%">Competência</th>
+                                <th style="width: 20%" class="text-center">Tempo Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    {% set ns.last_etapa = sol.etapa.nome %}
+                {% endif %}
+
+                <tr>
+                    <td>
+                        <div class="fw-bold">{{ sol.protocolo_gerado_sei or "S/ Protocolo" }}</div>
+                        <div>
+                            <small class="text-muted">ID: {{ sol.id }}</small>
+                            {% if sol.tipo_pagamento %}
+                                <span class="badge border fw-normal {{ 'border-danger text-danger' if sol.tipo_pagamento.nome == 'DEA: Indenizatório' else 'text-muted' }}" style="font-size: 0.55rem; padding: 1px 4px; background-color: {{ '#fff5f5' if sol.tipo_pagamento.nome == 'DEA: Indenizatório' else '#f0f0f0' }};">{{ sol.tipo_pagamento.nome }}</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="fw-bold">{{ sol.contrato.nomeContratado }}</div>
+                        <div class="small text-muted text-truncate" style="max-width: 350px;">{{ sol.descricao or sol.especificacao }}</div>
+                    </td>
+                    <td>{{ sol.competencia }}</td>
+                    <td class="text-center fw-bold">{{ sol.tempo_decorrido_visual }}</td>
+                </tr>
+            {% endfor %}
+            {% if detalhes %}
+                </tbody></table>
+            {% endif %}
+
+        {% elif aba_ativa == 'metricas' %}
+            
+            <div class="card mb-4 border-0">
+                <div class="card-body p-0">
+                    <h6 class="text-center fw-bold text-muted mb-4 text-uppercase">Fluxo Médio de Tempo por Fase</h6>
+                    
+                    <div class="timeline-container">
+                        <div class="timeline-line-bg"></div>
+
+                        <div class="timeline-flex">
+                            {% for item in timeline_medias %}
+                            <div class="timeline-step">
+                                <div class="step-circle" style="background-color: {{ item.cor }} !important;">
+                                    {% if item.eh_grupo %}<i class="fas fa-layer-group" style="font-size: 10px"></i>{% else %}{{ loop.index }}{% endif %}
+                                </div>
+                                
+                                <div class="step-label mt-1">{{ item.nome }}</div>
+
+                                {% if not loop.last %}
+                                    <div class="step-time-badge">
+                                        <div class="step-time-pill shadow-sm">
+                                            {{ item.media_entrada }}
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h6 class="fw-bold mt-4 mb-2">Detalhamento por Processo</h6>
+            <table class="table table-bordered table-striped table-sm text-center w-100" style="table-layout: fixed;">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-start" style="width: 15%">Protocolo</th>
+                        <th class="text-start" style="width: 25%">Contratado</th>
+                        {% for etapa in colunas_etapas %}
+                            <th style="font-size: 0.6rem; vertical-align: bottom;">
+                                <div class="text-truncate">{{ etapa.nome }}</div>
+                            </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in matriz_tempos %}
+                    <tr>
+                        <td class="text-start fw-bold" style="font-size: 0.75rem;">
+                            {{ item.solicitacao.protocolo_gerado_sei or item.solicitacao.id }}
+                        </td>
+                        <td class="text-start" style="font-size: 0.7rem;" title="{{ item.solicitacao.contrato.nomeContratado }}">
+                            <div class="text-truncate">{{ item.solicitacao.contrato.nomeContratado }}</div>
+                            {% if item.solicitacao.tipo_pagamento %}
+                                <span class="badge border fw-normal {{ 'border-danger text-danger' if item.solicitacao.tipo_pagamento.nome == 'DEA: Indenizatório' else 'text-muted' }}" style="font-size: 0.5rem; padding: 0px 3px; background-color: {{ '#fff5f5' if item.solicitacao.tipo_pagamento.nome == 'DEA: Indenizatório' else '#f0f0f0' }};">{{ item.solicitacao.tipo_pagamento.nome }}</span>
+                            {% endif %}
+                        </td>
+                        
+                        {% for etapa in colunas_etapas %}
+                        <td>
+                            {% set tempo = item.tempos.get(etapa.id) %}
+                            {% if tempo %}
+                                <span class="fw-bold text-primary" style="font-size: 0.75rem;">{{ tempo }}</span>
+                            {% else %}
+                                <span class="text-muted opacity-25" style="font-size: 0.6rem;">-</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    </div>
+</body>
+</html>

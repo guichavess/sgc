@@ -1,0 +1,383 @@
+{% extends "usuarios/base_usuarios.html" %}
+
+{% block title %}SGC - Editar Usuário{% endblock %}
+
+{% block extra_css %}
+<style>
+    .perm-table thead th {
+        background-color: #343990;
+        color: #fff;
+        font-weight: 600;
+        border: none;
+        font-size: 0.85rem;
+        padding: 0.75rem 0.5rem;
+    }
+    .perm-table td {
+        vertical-align: middle;
+        padding: 0.75rem 0.5rem;
+    }
+    .perm-module-name {
+        font-weight: 600;
+        color: #343990;
+        font-size: 0.95rem;
+    }
+
+    /* Checkboxes maiores e mais visíveis */
+    .perm-table .form-check-input {
+        width: 1.4em;
+        height: 1.4em;
+        cursor: pointer;
+        border: 2px solid #adb5bd;
+        transition: all 0.15s ease-in-out;
+    }
+    .perm-table .form-check-input:hover {
+        border-color: #343990;
+        box-shadow: 0 0 0 3px rgba(52, 57, 144, 0.15);
+    }
+    .perm-table .form-check-input:checked {
+        background-color: #343990;
+        border-color: #343990;
+        box-shadow: 0 0 0 2px rgba(52, 57, 144, 0.2);
+    }
+    .perm-table .form-check-input:focus {
+        box-shadow: 0 0 0 3px rgba(52, 57, 144, 0.25);
+    }
+
+    /* Toggle "Todos" com estilo diferenciado (switch) */
+    .perm-table .form-switch .form-check-input {
+        width: 2.5em;
+        height: 1.3em;
+        border-radius: 2em;
+        border: 2px solid #adb5bd;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23adb5bd'/%3e%3c/svg%3e");
+    }
+    .perm-table .form-switch .form-check-input:checked {
+        background-color: #343990;
+        border-color: #343990;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
+    }
+
+    /* Linha com destaque ao passar o mouse */
+    .perm-table tbody tr {
+        transition: background-color 0.15s ease;
+    }
+    .perm-table tbody tr:hover {
+        background-color: rgba(52, 57, 144, 0.04);
+    }
+
+    /* Célula com permissão ativa recebe fundo sutil */
+    .perm-cell-active {
+        background-color: rgba(52, 57, 144, 0.06) !important;
+    }
+
+    /* Status toggle buttons */
+    .btn-status-group {
+        display: flex;
+        gap: 0.75rem;
+    }
+    .btn-status-group .btn-check + .btn-status {
+        padding: 0.5rem 1.5rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        border-radius: 0.5rem;
+        border: 2px solid #dee2e6;
+        background: #fff;
+        color: #6c757d;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .btn-status-group .btn-check + .btn-status:hover {
+        border-color: #adb5bd;
+        background: #f8f9fa;
+    }
+    .btn-status-group .btn-check:checked + .btn-status-ativo {
+        background-color: #198754;
+        border-color: #198754;
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(25, 135, 84, 0.35);
+    }
+    .btn-status-group .btn-check:checked + .btn-status-inativo {
+        background-color: #dc3545;
+        border-color: #dc3545;
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(220, 53, 69, 0.35);
+    }
+
+    .info-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{{ url_for('usuarios.dashboard') }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i> Voltar para lista
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="mb-0 fw-bold">
+                    <i class="bi bi-pencil me-2" style="color: #343990;"></i>Editar Usuário
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                {# Dados fixos (somente leitura) #}
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <span class="info-label">Nome</span>
+                        <p class="fw-bold mb-0">{{ usuario.nome }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <span class="info-label">Login</span>
+                        <p class="mb-0">{{ usuario.sigla_login }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <span class="info-label">ID SEI</span>
+                        <p class="mb-0 text-muted">{{ usuario.id_usuario_sei }}</p>
+                    </div>
+                </div>
+
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <span class="info-label">Cargo</span>
+                        <p class="mb-0">{{ usuario.cargo or '—' }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="info-label">Último Login</span>
+                        <p class="mb-0">{{ usuario.ultimo_login.strftime('%d/%m/%Y %H:%M') if usuario.ultimo_login else '—' }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="info-label">Tipo</span>
+                        <p class="mb-0">
+                            {% if usuario.is_admin %}
+                                <span class="badge bg-danger"><i class="bi bi-shield-fill-check me-1"></i>Administrador</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Usuário comum</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                {# Formulário editável #}
+                <form method="POST" action="{{ url_for('usuarios.editar_usuario', usuario_id=usuario.id) }}">
+
+                    {# Status ativo/inativo #}
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Status</label>
+                        <div class="btn-status-group">
+                            <input type="radio" class="btn-check" name="ativo" value="1"
+                                   id="ativo_sim" autocomplete="off" {{ 'checked' if usuario.ativo }}>
+                            <label class="btn-status btn-status-ativo" for="ativo_sim">
+                                <i class="bi bi-check-circle-fill"></i> Ativo
+                            </label>
+
+                            <input type="radio" class="btn-check" name="ativo" value="0"
+                                   id="ativo_nao" autocomplete="off" {{ 'checked' if not usuario.ativo }}>
+                            <label class="btn-status btn-status-inativo" for="ativo_nao">
+                                <i class="bi bi-x-circle-fill"></i> Inativo
+                            </label>
+                        </div>
+                    </div>
+
+                    {# Matriz de Permissões - Acesso aos módulos #}
+                    {% if not usuario.is_admin %}
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-key me-1"></i> Acesso aos Módulos
+                    </h6>
+                    <p class="text-muted small mb-3">
+                        Defina quais módulos este usuário pode acessar e quais ações pode realizar em cada um.
+                    </p>
+
+                    <div class="table-responsive mb-4" style="border-radius: 0.5rem; overflow: hidden;">
+                        <table class="table table-bordered perm-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-3" style="width: 30%;">Módulo</th>
+                                    {% for acao_key, acao_label in acoes %}
+                                    <th class="text-center">{{ acao_label }}</th>
+                                    {% endfor %}
+                                    <th class="text-center" style="width: 10%;">Todos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for modulo_key, modulo_label in modulos %}
+                                <tr>
+                                    <td class="ps-3 perm-module-name">
+                                        {% if modulo_key == 'solicitacoes' %}
+                                            <i class="bi bi-cash-stack me-1"></i>
+                                        {% elif modulo_key == 'financeiro' %}
+                                            <i class="bi bi-bank me-1"></i>
+                                        {% elif modulo_key == 'prestacoes_contratos' %}
+                                            <i class="bi bi-clipboard-check me-1"></i>
+                                        {% else %}
+                                            <i class="bi bi-folder2 me-1"></i>
+                                        {% endif %}
+                                        {{ modulo_label }}
+                                    </td>
+                                    {% for acao_key, acao_label in acoes %}
+                                    {% set is_checked = acao_key in permissoes_atuais.get(modulo_key, []) %}
+                                    <td class="text-center {{ 'perm-cell-active' if is_checked }}">
+                                        <div class="form-check d-flex justify-content-center mb-0">
+                                            <input class="form-check-input perm-checkbox perm-{{ modulo_key }}"
+                                                   type="checkbox"
+                                                   name="perm_{{ modulo_key }}_{{ acao_key }}"
+                                                   value="1"
+                                                   id="perm_{{ modulo_key }}_{{ acao_key }}"
+                                                   data-modulo="{{ modulo_key }}"
+                                                   {{ 'checked' if is_checked }}>
+                                        </div>
+                                    </td>
+                                    {% endfor %}
+                                    <td class="text-center" style="background-color: #f8f9fa;">
+                                        <div class="form-check form-switch d-flex justify-content-center mb-0">
+                                            <input class="form-check-input toggle-all-modulo"
+                                                   type="checkbox"
+                                                   data-modulo="{{ modulo_key }}"
+                                                   role="switch"
+                                                   title="Marcar/desmarcar todas">
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info border-0 shadow-sm mb-4">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Administradores</strong> têm acesso total a todos os módulos automaticamente.
+                        Não é necessário definir permissões individuais.
+                    </div>
+                    {% endif %}
+
+                    {# Preferencias de Notificacao #}
+                    <hr class="my-4">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-bell me-1"></i> Preferencias de Notificacao
+                    </h6>
+                    <p class="text-muted small mb-3">
+                        Defina quais notificacoes este usuario recebe e quais estao silenciadas.
+                    </p>
+
+                    {% if notif_tipos %}
+                    <div class="table-responsive mb-4" style="border-radius: 0.5rem; overflow: hidden;">
+                        <table class="table table-bordered perm-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-3" style="width: 40%;">Notificacao</th>
+                                    <th class="text-center" style="width: 15%;">Nivel</th>
+                                    <th class="text-center" style="width: 15%;">Modulo</th>
+                                    <th class="text-center" style="width: 15%;">In-App</th>
+                                    <th class="text-center" style="width: 15%;">Silenciar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in notif_tipos %}
+                                <tr>
+                                    <td class="ps-3">
+                                        <span class="fw-medium small">{{ item.tipo.nome }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if item.tipo.nivel == 'silenciosa' %}
+                                            <span class="badge bg-secondary">Silenciosa</span>
+                                        {% elif item.tipo.nivel == 'lembrete' %}
+                                            <span class="badge bg-info">Lembrete</span>
+                                        {% elif item.tipo.nivel == 'alerta' %}
+                                            <span class="badge bg-warning text-dark">Alerta</span>
+                                        {% elif item.tipo.nivel == 'critica' %}
+                                            <span class="badge bg-danger">Critica</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center small text-muted">
+                                        {{ item.tipo.modulo | replace('_', ' ') | capitalize }}
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="form-check d-flex justify-content-center mb-0">
+                                            <input class="form-check-input" type="checkbox"
+                                                   name="notif_{{ item.tipo.id }}_in_app"
+                                                   value="1"
+                                                   {{ 'checked' if item.canal_in_app }}>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="form-check d-flex justify-content-center mb-0">
+                                            <input class="form-check-input" type="checkbox"
+                                                   name="notif_{{ item.tipo.id }}_silenciado"
+                                                   value="1"
+                                                   {{ 'checked' if item.silenciado }}>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary fw-bold px-4">
+                            <i class="bi bi-check-lg me-1"></i> Salvar
+                        </button>
+                        <a href="{{ url_for('usuarios.dashboard') }}" class="btn btn-outline-secondary px-4">
+                            Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Atualiza o destaque visual da célula conforme estado do checkbox
+    function atualizarCelula(checkbox) {
+        var td = checkbox.closest('td');
+        if (td) {
+            if (checkbox.checked) {
+                td.classList.add('perm-cell-active');
+            } else {
+                td.classList.remove('perm-cell-active');
+            }
+        }
+    }
+
+    // Toggle all permissões de um módulo
+    document.querySelectorAll('.toggle-all-modulo').forEach(function(toggle) {
+        var modulo = toggle.dataset.modulo;
+        var checkboxes = document.querySelectorAll('.perm-' + modulo);
+
+        // Inicializa estado do "todos"
+        toggle.checked = Array.from(checkboxes).every(function(cb) { return cb.checked; }) && checkboxes.length > 0;
+
+        toggle.addEventListener('change', function() {
+            checkboxes.forEach(function(cb) {
+                cb.checked = toggle.checked;
+                atualizarCelula(cb);
+            });
+        });
+
+        // Atualiza "todos" quando checkboxes individuais mudam
+        checkboxes.forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                toggle.checked = Array.from(checkboxes).every(function(c) { return c.checked; });
+                atualizarCelula(cb);
+            });
+        });
+    });
+</script>
+{% endblock %}

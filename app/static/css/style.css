@@ -1,0 +1,945 @@
+/* pagamentos/app/static/css/style.css */
+
+/* --- Importação de Fonte --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+
+/* --- Configurações Globais --- */
+body { 
+    background-color: #f4f6f9; 
+    font-family: 'Inter', sans-serif;
+    color: #495057;
+}
+
+/* --- Cores e Identidade --- */
+.bg-custom-blue {
+    background-color: #343990 !important;
+}
+
+.text-custom-blue {
+    color: #343990 !important;
+}
+
+/* Override do Bootstrap Primary para manter consistência */
+.bg-primary {
+    background-color: #343990 !important;
+}
+.text-primary {
+    color: #343990 !important;
+}
+.border-primary {
+    border-color: #343990 !important;
+}
+
+/* --- Navbar --- */
+.navbar {
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+.navbar-brand {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* --- Cards (Cartões) --- */
+.card, .card-custom {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    background-color: #ffffff;
+    transition: transform 0.2s ease-in-out;
+}
+
+/* --- Tabelas --- */
+.table-custom thead th {
+    background-color: #343990;
+    color: white;
+    font-weight: 500;
+    border: none;
+    padding: 12px 15px;
+}
+.table-custom tbody td {
+    vertical-align: middle;
+    padding: 12px 15px;
+    border-bottom: 1px solid #f0f2f5;
+}
+.table-hover tbody tr:hover {
+    background-color: #eef0f7;
+}
+.table-rounded {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* --- Botões --- */
+.btn-primary {
+    background-color: #343990;
+    border-color: #343990;
+}
+.btn-primary:hover, .btn-primary:active, .btn-primary:focus {
+    background-color: #282c6e !important;
+    border-color: #282c6e !important;
+}
+
+/* --- Formulários --- */
+.form-control, .form-select {
+    border-radius: 8px;
+    padding: 10px 15px;
+    border: 1px solid #ced4da;
+}
+.form-control:focus, .form-select:focus {
+    border-color: #343990;
+    box-shadow: 0 0 0 0.25rem rgba(52, 57, 144, 0.25);
+}
+
+/* Grupos de Input (Ícone + Campo) */
+.input-group-text {
+    background-color: #f8f9fa;
+    border-right: none;
+}
+.input-group .form-control {
+    border-left: none;
+}
+
+/* --- Estilos Específicos: Login --- */
+.login-header-gradient {
+    background: linear-gradient(135deg, #007121, #343990);
+    border-bottom: none;
+    border-radius: 12px 12px 0 0;
+}
+
+/* --- Estilos Específicos: Steps (Nova Solicitação) --- */
+.step-label {
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    color: #343990;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.step-badge {
+    background-color: #343990;
+    color: white;
+    border-radius: 50%;
+    
+    /* Garante círculo perfeito e texto centralizado */
+    width: 24px;
+    height: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    margin-right: 0.5rem;
+    font-size: 0.9em;
+    padding: 0;
+    flex-shrink: 0; /* Impede que a bolinha amasse */
+}
+
+
+
+/* --- Tabela Interativa (Dashboard) --- */
+.clickable-row {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.clickable-row:hover {
+    background-color: #f8f9fa !important; /* Cor de destaque leve ao passar o mouse */
+}
+
+/* --- Timeline de Processos (Detalhes) --- */
+.timeline-wrapper {
+    position: relative;
+    padding: 30px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+/* Linha conectora */
+.timeline-line {
+    position: absolute;
+    top: 48px; /* Ajuste vertical para alinhar com o meio das bolinhas */
+    left: 0;
+    right: 0;
+    height: 3px;
+    background-color: #e9ecef;
+    z-index: 1;
+}
+
+/* O item de cada etapa */
+.timeline-step {
+    position: relative;
+    z-index: 2; /* Fica acima da linha */
+    text-align: center;
+    width: 100%;
+    padding: 0 5px;
+}
+
+/* A "bolinha" da etapa */
+.step-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #fff;
+    border: 3px solid #e9ecef;
+    margin: 0 auto 10px; /* Centraliza horizontalmente */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: #adb5bd;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.step-text {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 2px;
+}
+
+.step-date {
+    font-size: 0.7rem;
+    color: #999;
+}
+
+/* --- Estados da Timeline --- */
+
+/* Etapa Concluída (Passado) */
+.timeline-step.completed .step-circle {
+    background-color: #2ecc71; /* Verde Sucesso */
+    border-color: #2ecc71;
+    color: white;
+}
+
+/* Etapa Atual (Presente) */
+.timeline-step.active .step-circle {
+    transform: scale(1.15); /* Leve aumento */
+    box-shadow: 0 0 0 4px rgba(52, 152, 219, 0.2); /* Aura ao redor */
+}
+/* A cor da borda/texto da etapa ativa é definida inline no HTML para usar a cor do banco */
+
+
+/* --- Timeline de Processo Completa --- */
+.timeline-wrapper {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 40px;
+    position: relative;
+    padding: 20px 0;
+    overflow-x: auto; /* Garante rolagem em telas menores */
+}
+
+/* Linha de Fundo (Cinza - Futuro) */
+.timeline-line {
+    position: absolute;
+    top: 35px;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: #e9ecef;
+    z-index: 1;
+}
+
+/* Item da Timeline */
+.timeline-step {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    flex: 1; /* Distribui espaço igualmente */
+    min-width: 80px; 
+}
+
+/* Bolinha da Etapa */
+.step-circle {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    background: #fff;
+    border: 4px solid #e9ecef; /* Padrão: Cinza */
+    margin: 0 auto 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: #adb5bd;
+    transition: all 0.3s ease;
+}
+
+.step-text {
+    font-size: 0.75rem;
+    color: #adb5bd;
+    font-weight: 500;
+}
+
+/* --- Estados da Timeline --- */
+
+/* 1. Concluído (Passado) -> Verde com Check */
+.timeline-step.completed .step-circle { 
+    background: #2ecc71; 
+    border-color: #2ecc71; 
+    color: white; 
+}
+.timeline-step.completed .step-text { 
+    color: #2ecc71; 
+}
+
+/* 2. Ativo (Presente) -> Azul e Maior */
+.timeline-step.active .step-circle { 
+    border-color: #3498db; 
+    color: #3498db; 
+    transform: scale(1.2); 
+    background: #fff;
+    box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
+}
+.timeline-step.active .step-text { 
+    color: #3498db; 
+    font-weight: bold; 
+}
+
+/* Estado Warning (Amarelo) */
+.timeline-step.warning .step-circle { 
+    background: #f1c40f; 
+    border-color: #f1c40f; 
+    color: white; 
+    font-weight: 900;
+}
+.timeline-step.warning .step-text { 
+    color: #f1c40f; 
+    font-weight: bold;
+}
+
+
+/* --- Ajustes Específicos: Tabela de Pendências NE --- */
+
+/* Ajusta o input dentro da tabela para ficar mais harmônico */
+.table-custom input.form-control {
+    border: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+    font-size: 0.9rem;
+    padding: 0.4rem 0.8rem;
+    height: auto;
+    transition: all 0.2s;
+}
+
+.table-custom input.form-control:focus {
+    background-color: #fff;
+    border-color: #343990;
+    box-shadow: 0 0 0 2px rgba(52, 57, 144, 0.1);
+}
+
+/* Estilo para o botão de ação dentro da linha */
+.table-custom .btn-action {
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.3px;
+    padding: 0.4rem 0.8rem;
+}
+
+/* Destaque suave para o valor monetário */
+.text-value {
+    color: #343990;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+/* Badge de contagem no topo */
+.badge-count {
+    background-color: #ffc107; /* Amarelo Warning */
+    color: #212529;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 0.5em 0.8em;
+}
+
+
+/* =========================================
+   TIMELINE HORIZONTAL DINÂMICA
+   ========================================= */
+
+.timeline-horizontal-wrapper {
+    padding-top: 45px; /* Espaço para as datas flutuantes */
+    padding-bottom: 20px;
+    width: 100%;
+    overflow-x: auto; /* Permite rolagem em telas pequenas */
+    scrollbar-width: thin;
+    scrollbar-color: #dee2e6 #fff;
+}
+
+/* Scrollbar personalizada para Chrome/Safari */
+.timeline-horizontal-wrapper::-webkit-scrollbar {
+    height: 6px;
+}
+.timeline-horizontal-wrapper::-webkit-scrollbar-thumb {
+    background-color: #dee2e6;
+    border-radius: 10px;
+}
+
+.timeline-flex-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    position: relative;
+    min-width: 600px; /* Garante que não amasse demais os itens */
+}
+
+.timeline-item {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* --- 1. DATAS (Topo) --- */
+.timeline-date-container {
+    position: absolute;
+    top: -45px;
+    width: 100%;
+    text-align: center;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.badge-date {
+    background: #fff;
+    color: #212529;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    box-shadow: 0 .125rem .25rem rgba(0,0,0,.075);
+}
+
+.badge-date i {
+    color: #0d6efd; /* Primary Color */
+    margin-right: 3px;
+}
+
+.badge-time {
+    font-size: 0.65rem;
+    font-weight: bold;
+    color: #6c757d;
+    background: rgba(255,255,255,0.9);
+    padding: 0 4px;
+    border-radius: 3px;
+    margin-top: 2px;
+}
+
+.date-spacer {
+    height: 35px;
+}
+
+/* --- 2. CONECTOR E DURAÇÃO --- */
+.timeline-connector {
+    position: absolute;
+    top: 25px; /* Metade da altura da bolinha (50px / 2) */
+    left: -50%;
+    width: 100%;
+    height: 4px;
+    background-color: #e9ecef;
+    z-index: 0;
+}
+
+.connector-fill {
+    width: 0%;
+    height: 100%;
+    background-color: #2ecc71;
+    transition: width 0.3s ease;
+}
+
+.connector-fill.active {
+    width: 100%;
+}
+
+.duration-badge {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    color: #6c757d;
+    border: 1px solid #dee2e6;
+    border-radius: 50rem;
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    white-space: nowrap;
+    box-shadow: 0 .125rem .25rem rgba(0,0,0,.075);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+}
+
+.duration-badge i {
+    margin-right: 4px;
+}
+
+/* --- 3. CÍRCULO (Checkpoint) --- */
+.step-circle {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: #f8f9fa;
+    border: 4px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.step-circle.completed {
+    background-color: #2ecc71;
+    border-color: #2ecc71;
+}
+
+.step-circle.current {
+    background-color: #fff;
+    border-color: #3498db;
+    box-shadow: 0 0 0 4px rgba(52, 152, 219, 0.2);
+}
+
+.step-circle.error {
+    background-color: #e74c3c;
+    border-color: #e74c3c;
+}
+
+.step-number {
+    color: #6c757d;
+    font-weight: bold;
+}
+
+/* Animação do Pin */
+.pulse-animation {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.2); opacity: 0.7; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* --- 4. LABEL (Nome da Etapa) --- */
+.step-label {
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    color: #343990;
+    margin-bottom: 0.5rem;
+    /* Correção de Alinhamento */
+    display: flex;
+    align-items: center; 
+}
+
+.step-name {
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: #adb5bd;
+    display: block;
+}
+
+.step-name.active-text {
+    color: #212529;
+}
+
+.badge-current {
+    background-color: #0d6efd;
+    color: white;
+    font-size: 0.6rem;
+    padding: 2px 4px;
+    border-radius: 3px;
+    margin-top: 4px;
+    display: inline-block;
+}
+
+/* --- LISTA VERTICAL --- */
+.vertical-dot {
+    position: absolute;
+    left: -7px;
+    top: 18px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #dee2e6;
+    border: 2px solid white;
+}
+
+.vertical-dot.completed {
+    background-color: #2ecc71;
+}
+
+.small-date {
+    font-size: 0.75rem;
+}
+
+.small-duration {
+    font-size: 0.7rem;
+}
+
+/* Adicionar no final de style.css */
+
+.timeline-wrapper {
+    position: relative;
+    padding: 0 10px;
+}
+
+/* Linha de fundo cinza fixa */
+.timeline-line {
+    position: absolute;
+    top: 50px; /* Ajustado para alinhar com o centro vertical das bolinhas (considerando o padding top) */
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background-color: #e9ecef;
+    z-index: 0;
+}
+
+.timeline-step {
+    /* Garante que os itens ocupem espaço igual */
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+}
+
+.step-circle {
+    background-color: #fff;
+    transition: all 0.3s ease;
+}
+
+/* =========================================
+   TIMELINE UX/UI REFINADO (MODERNO)
+   ========================================= */
+
+/* Container com scroll horizontal suave e fade nas bordas */
+.timeline-horizontal-wrapper {
+    position: relative;
+    padding: 50px 10px 20px 10px; /* Espaço extra no topo para as datas */
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    /* Máscara opcional para indicar continuidade (scroll) */
+    mask-image: linear-gradient(to right, transparent, black 2%, black 98%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 2%, black 98%, transparent);
+}
+
+/* Layout Flexível */
+.timeline-flex-container {
+    display: flex;
+    justify-content: space-between;
+    min-width: 750px; /* Garante que os itens não fiquem espremidos */
+    position: relative;
+    margin: 0 auto;
+}
+
+/* Item Individual */
+.timeline-item {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 1; /* Garante que fique acima da linha */
+}
+
+/* --- 1. CONECTORES (Linhas) --- */
+.timeline-connector {
+    position: absolute;
+    top: 25px; /* Metade da altura da bolinha (50px / 2) */
+    left: -50%;
+    width: 100%;
+    height: 3px;
+    background-color: #e3e6f0; /* Cinza claro para futuro */
+    z-index: -1; /* Fica atrás das bolinhas */
+    border-radius: 2px;
+}
+
+.connector-fill {
+    height: 100%;
+    width: 0%;
+    background-color: #1cc88a; /* Verde Sucesso */
+    border-radius: 2px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.connector-fill.active {
+    width: 100%;
+}
+
+/* Badge de Tempo (Pílula Flutuante) */
+.duration-pill {
+    position: absolute;
+    top: -22px; /* Flutua acima da linha */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #ffffff;
+    border: 1px solid #e3e6f0;
+    color: #858796;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    z-index: 2;
+}
+
+.duration-pill i {
+    color: #4e73df; /* Azulzinho no ícone */
+    margin-right: 4px;
+}
+
+/* --- 2. DATAS (Topo) --- */
+.timeline-date-block {
+    position: absolute;
+    top: -45px;
+    text-align: center;
+    width: 100px; /* Largura fixa para centralizar texto */
+    transition: all 0.3s ease;
+}
+
+.date-day {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: #5a5c69;
+}
+
+.date-time {
+    display: block;
+    font-size: 0.7rem;
+    color: #aeb0c2;
+    font-weight: 500;
+    margin-top: -2px;
+}
+
+/* --- 3. CÍRCULO (Checkpoint) --- */
+.step-circle {
+    width: 50px;
+    height: 50px;
+    background-color: #fff;
+    border: 3px solid #eaecf4; /* Borda padrão suave */
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #d1d3e2;
+    font-weight: 700;
+    font-size: 1rem;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Efeito elástico */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+}
+
+/* Estado: CONCLUÍDO (Verde Sólido) */
+.step-circle.completed {
+    background-color: #1cc88a;
+    border-color: #1cc88a;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(28, 200, 138, 0.4); /* Sombra colorida */
+    transform: scale(1);
+}
+
+/* Estado: ATUAL (Azul com Aura) */
+.step-circle.current {
+    background-color: #fff;
+    border-color: #4e73df;
+    color: #4e73df;
+    transform: scale(1.15); /* Levemente maior */
+    box-shadow: 0 0 0 6px rgba(78, 115, 223, 0.15); /* Aura translúcida */
+    z-index: 10;
+}
+
+/* Ícone de Pin Pulsante */
+.pin-pulse {
+    animation: bouncePin 2s infinite;
+}
+
+@keyframes bouncePin {
+    0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
+    40% {transform: translateY(-3px);}
+    60% {transform: translateY(-2px);}
+}
+
+/* --- 4. TEXTOS (Base) --- */
+.step-info {
+    margin-top: 15px;
+    text-align: center;
+    max-width: 140px;
+}
+
+.step-title {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #858796;
+    line-height: 1.3;
+    transition: color 0.3s;
+}
+
+.step-title.active-text {
+    color: #2e59d9; /* Azul mais escuro */
+    font-weight: 800;
+}
+
+.status-label {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 0.65rem;
+    background-color: #e8f0fe;
+    color: #2e59d9;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* =========================================
+   AJUSTE DE TAMANHO: TIMELINE COMPACTA
+   ========================================= */
+
+/* 1. Reduzindo o Círculo */
+.step-circle {
+    width: 35px;         /* Era 50px */
+    height: 35px;        /* Era 50px */
+    font-size: 0.85rem;  /* Fonte levemente menor */
+    border-width: 2px;   /* Borda mais fina */
+}
+
+/* 2. Ajustando a Linha Conectora */
+/* A linha deve ficar na metade da altura do círculo (35px / 2 = 17.5px) */
+.timeline-connector {
+    top: 17.5px;         /* Era 25px */
+    height: 2px;         /* Linha um pouco mais fina para combinar */
+}
+
+/* 3. Ajustando a Pílula de Tempo */
+.duration-pill {
+    position: absolute;
+    top: -24px; /* Subi um pouco mais para não encostar na linha */
+    left: 50%;
+    transform: translateX(-50%);
+
+/* 4. Ajustando o Espaço das Datas */
+.timeline-date-block {
+    top: -40px;          /* Aproxima um pouco as datas */
+}
+
+.timeline-horizontal-wrapper {
+    padding-top: 40px;   /* Reduz padding geral */
+}
+
+/* Bloco de data flutuante acima da etapa */
+.timeline-date-block {
+    position: absolute;
+    top: -35px; /* Sobe a data para ficar acima do círculo */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    text-align: center;
+    line-height: 1.1;
+    z-index: 10;
+}
+
+.date-day {
+    display: block;
+    font-weight: bold;
+    font-size: 0.85rem;
+    color: #495057;
+}
+
+.date-time {
+    display: block;
+    font-size: 0.7rem;
+    color: #868e96;
+}
+
+/* Garante que o item da timeline permita posicionamento absoluto */
+.timeline-item {
+    position: relative; 
+    /* ... mantenha suas outras propriedades flex aqui ... */
+}
+
+/* --- ESTILOS DE IMPRESSÃO (RELATÓRIOS) --- */
+@media print {
+    /* 1. Limpeza: Esconde menus e elementos de navegação */
+    nav, header, footer, .sidebar, .navbar, .btn, .no-print, 
+    .nav-tabs, #sidebar-wrapper {
+        display: none !important;
+    }
+
+    /* 2. Ajuste de Layout: Usa toda a largura do papel */
+    body, .container-fluid, .content {
+        background-color: white !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    /* 3. Ajustes de Containers e Abas */
+    .tab-content {
+        border: none !important;
+        padding: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    /* 4. Força a exibição de cores de fundo (Badges, Cards) */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+
+    /* 5. Tratamento Inteligente de Tabelas */
+    table {
+        width: 100% !important;
+        page-break-inside: auto;
+    }
+    tr {
+        page-break-inside: avoid; /* Evita cortar linhas ao meio */
+        page-break-after: auto;
+    }
+    thead {
+        display: table-header-group; /* Repete cabeçalho em cada página */
+    }
+    tfoot {
+        display: table-footer-group;
+    }
+
+    /* 6. Timeline: Remove scroll e ajusta para impressão */
+    .overflow-auto, .custom-scrollbar {
+        overflow: visible !important;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+    }
+    
+    .card {
+        break-inside: avoid;
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+        margin-bottom: 20px !important;
+    }
+
+    /* 7. Controle de Abas: Imprime apenas o que está visível na tela */
+    .tab-pane {
+        display: none !important;
+    }
+    .tab-pane.active {
+        display: block !important;
+        opacity: 1 !important;
+    }
+    
+    /* Remove sublinhados de links */
+    a {
+        text-decoration: none !important;
+        color: black !important;
+    }
+}

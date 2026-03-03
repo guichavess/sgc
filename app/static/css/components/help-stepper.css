@@ -1,0 +1,156 @@
+/**
+ * Help Stepper - Componente visual de hierarquia interativa
+ * Usado nos painéis de ajuda para explicar classificações (CATSERV/CATMAT)
+ */
+
+/* Container do stepper */
+.help-stepper {
+    padding: 0.25rem 0;
+}
+
+/* Step individual */
+.help-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--border-radius-xl);
+    background-color: color-mix(in srgb, var(--step-color) 12%, transparent);
+    color: var(--step-color);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    white-space: nowrap;
+    transition: var(--transition-fast);
+}
+
+.help-step:hover {
+    background-color: color-mix(in srgb, var(--step-color) 20%, transparent);
+}
+
+/* Ícone numerado dentro do step */
+.help-step-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: var(--border-radius-circle);
+    background-color: var(--step-color);
+    color: var(--color-white);
+    font-size: 0.6rem;
+    font-weight: var(--font-weight-bold);
+    line-height: 1;
+}
+
+/* Step final (destaque) */
+.help-step-final {
+    background-color: color-mix(in srgb, var(--step-color) 18%, transparent);
+    font-weight: var(--font-weight-bold);
+    border: 1.5px solid color-mix(in srgb, var(--step-color) 35%, transparent);
+}
+
+/* Steps futuros (Item - mostrado como referência) */
+.help-step-next {
+    opacity: 0.6;
+    border: 1px dashed color-mix(in srgb, var(--step-color) 40%, transparent);
+    background-color: transparent;
+    font-style: italic;
+}
+
+.help-step-next .help-step-icon {
+    background-color: transparent;
+    border: 1px dashed var(--step-color);
+    color: var(--step-color);
+}
+
+/* ========================================
+   STEPS CLICÁVEIS (interativos)
+   ======================================== */
+
+.help-step-clickable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+}
+
+.help-step-clickable:hover {
+    background-color: color-mix(in srgb, var(--step-color) 28%, transparent);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px color-mix(in srgb, var(--step-color) 20%, transparent);
+}
+
+.help-step-clickable:active {
+    transform: translateY(0);
+}
+
+/* Step ativo (selecionado) */
+.help-step-clickable.active {
+    background-color: var(--step-color);
+    color: var(--color-white);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--step-color) 35%, transparent);
+}
+
+.help-step-clickable.active .help-step-icon {
+    background-color: var(--color-white);
+    color: var(--step-color);
+}
+
+/* Step next clicável ativo */
+.help-step-next.help-step-clickable.active {
+    opacity: 1;
+    background-color: var(--step-color);
+    border-style: solid;
+}
+
+.help-step-next.help-step-clickable.active .help-step-icon {
+    background-color: var(--color-white);
+    color: var(--step-color);
+    border-style: solid;
+}
+
+/* ========================================
+   CAIXA DE DETALHE (aparece ao clicar)
+   ======================================== */
+
+.help-detail {
+    animation: helpDetailSlideIn 0.2s ease-out;
+}
+
+@keyframes helpDetailSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.help-detail .border-start {
+    border-width: 3px !important;
+}
+
+/* Botão "Como funciona?" */
+.btn-outline-info.help-toggle {
+    border-radius: var(--border-radius-xl);
+    font-size: var(--font-size-sm);
+}
+
+/* Animação suave na abertura do collapse */
+#helpTipificacao {
+    transition: var(--transition-normal);
+}
+
+/* Responsividade: em telas pequenas, empilhar verticalmente */
+@media (max-width: 576px) {
+    .help-stepper {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .help-stepper > .bi-chevron-right {
+        transform: rotate(90deg);
+        align-self: center;
+    }
+}

@@ -1,0 +1,100 @@
+{% extends "usuarios/base_usuarios.html" %}
+
+{% block title %}SGC - Perfis de Acesso{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-rounded {
+        border-radius: 0.5rem;
+        overflow: hidden;
+    }
+    .table-perfis thead th {
+        background-color: #343990;
+        color: #fff;
+        font-weight: 600;
+        border: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">
+            <i class="bi bi-shield-lock me-2" style="color: #343990;"></i>Perfis de Acesso
+        </h4>
+        <p class="text-muted mb-0 small">Gerencie os perfis e suas permissões</p>
+    </div>
+    <div>
+        <a href="{{ url_for('usuarios.perfil_novo') }}" class="btn btn-primary fw-bold shadow-sm">
+            <i class="bi bi-plus-lg me-1"></i> Novo Perfil
+        </a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive table-rounded">
+            <table class="table table-striped table-hover table-perfis align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Nome</th>
+                        <th>Descrição</th>
+                        <th class="text-center">Usuários</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for perfil in perfis %}
+                    <tr>
+                        <td class="ps-4">
+                            <strong>{{ perfil.nome }}</strong>
+                        </td>
+                        <td>
+                            <span class="text-muted small">{{ perfil.descricao or '—' }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-light text-dark border">
+                                {{ contagem.get(perfil.id, 0) }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            {% if perfil.ativo %}
+                                <span class="badge bg-success">Ativo</span>
+                            {% else %}
+                                <span class="badge bg-danger">Inativo</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <div class="d-flex gap-1 justify-content-center">
+                                <a href="{{ url_for('usuarios.perfil_editar', perfil_id=perfil.id) }}"
+                                   class="btn btn-sm btn-outline-primary" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% if contagem.get(perfil.id, 0) == 0 %}
+                                <form method="POST" action="{{ url_for('usuarios.perfil_excluir', perfil_id=perfil.id) }}"
+                                      class="d-inline"
+                                      onsubmit="return confirm('Tem certeza que deseja excluir o perfil &quot;{{ perfil.nome }}&quot;?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
+                            Nenhum perfil cadastrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

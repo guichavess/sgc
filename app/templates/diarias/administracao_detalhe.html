@@ -1,0 +1,386 @@
+{% extends 'diarias/base_diarias.html' %}
+{% block title %}SGC - Administracao - Solicitacao{% endblock %}
+
+{% block extra_css %}
+<style>
+    .upload-cotacao-area {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        background-color: #fafbfc;
+    }
+    .upload-cotacao-area:hover, .upload-cotacao-area.dragover {
+        border-color: #0d6efd;
+        background-color: #f0f6ff;
+    }
+    .upload-cotacao-area.has-file {
+        border-color: #198754;
+        background-color: #f0fdf4;
+    }
+    .info-card-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .info-card-value {
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{{ url_for('diarias.administracao') }}" class="btn btn-outline-secondary btn-sm mb-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+</div>
+
+{# Cabecalho #}
+<div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center py-3" style="background-color: #343990;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-kanban me-2"></i>Administracao
+            {% if itinerario.sei_id_procedimento %}
+            - <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank" class="text-white text-decoration-none">{{ itinerario.n_processo }} <i class="bi bi-box-arrow-up-right small"></i></a>
+            {% else %}
+            - {{ itinerario.n_processo or 'Sem processo' }}
+            {% endif %}
+        </h5>
+        <div>
+            {% if itinerario.etapa_atual %}
+            <span class="badge fs-6" style="background-color: {{ itinerario.etapa_atual.cor_hex or '#6c757d' }};">
+                <i class="{{ itinerario.etapa_atual.icone }} me-1"></i>{{ itinerario.etapa_atual.nome }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body">
+
+        {# Timeline #}
+        {% include 'diarias/partials/timeline_diarias.html' %}
+
+        {# Cards resumo #}
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <span class="info-card-label d-block mb-1">Tipo</span>
+                    <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else 'bg-warning text-dark' }} fs-6">
+                        {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
+                    </span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <span class="info-card-label d-block mb-1">Diarias</span>
+                    <span class="info-card-value">{{ itinerario.qtd_diarias_solicitadas }}</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <span class="info-card-label d-block mb-1">Periodo</span>
+                    <span class="info-card-value" style="font-size: 0.95rem;">
+                        {{ itinerario.data_viagem.strftime('%d/%m') if itinerario.data_viagem else '-' }}
+                        a
+                        {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}
+                    </span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <span class="info-card-label d-block mb-1">Valor Total</span>
+                    <span class="info-card-value text-success">
+                        {% if itinerario.valor_total %}
+                        {{ "R$ {:,.2f}".format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                        {% else %}
+                        Pendente
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            {# Info Gerais #}
+            <div class="col-md-6">
+                <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2"></i>Informacoes Gerais</h6>
+                <table class="table table-bordered table-sm">
+                    <tr>
+                        <th class="bg-light" style="width:40%">Solicitante</th>
+                        <td>{{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Data Solicitacao</th>
+                        <td>{{ itinerario.data_solicitacao.strftime('%d/%m/%Y') if itinerario.data_solicitacao else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Origem</th>
+                        <td>{{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Destino (Estado)</th>
+                        <td>{{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            {# Processo SEI #}
+            <div class="col-md-6">
+                <h6 class="fw-bold mb-3"><i class="bi bi-link-45deg me-2"></i>Processo SEI</h6>
+                <table class="table table-bordered table-sm">
+                    <tr>
+                        <th class="bg-light" style="width:40%">Protocolo</th>
+                        <td>
+                            {% if itinerario.sei_protocolo %}
+                            <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank">
+                                {{ itinerario.sei_protocolo }} <i class="bi bi-box-arrow-up-right small"></i>
+                            </a>
+                            {% else %}-{% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Memorando</th>
+                        <td>{{ itinerario.sei_memorando_formatado or '-' }}</td>
+                    </tr>
+                    {% if itinerario.sei_requisicao_formatado %}
+                    <tr>
+                        <th class="bg-light">Req. Diarias</th>
+                        <td>{{ itinerario.sei_requisicao_formatado }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if itinerario.sei_requisicao_passagens_formatado %}
+                    <tr>
+                        <th class="bg-light">Req. Passagens</th>
+                        <td><i class="bi bi-airplane me-1"></i>{{ itinerario.sei_requisicao_passagens_formatado }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+        {# Objetivo #}
+        {% if itinerario.objetivo %}
+        <div class="mb-4">
+            <h6 class="fw-bold mb-2"><i class="bi bi-bullseye me-2"></i>Objetivo da Viagem</h6>
+            <div class="p-3 border rounded bg-light">
+                <p class="mb-0">{{ itinerario.objetivo }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Pessoas #}
+        <section class="mb-4">
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header bg-white border-bottom py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-people me-2"></i>Pessoas</h5>
+                        <span class="badge bg-secondary">{{ itens|length }} pessoa(s)</span>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive table-rounded">
+                        <table class="table table-custom table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">Nome</th>
+                                    <th>CPF / Mat.</th>
+                                    <th>Cargo (Folha)</th>
+                                    <th>Setor / Orgao</th>
+                                    <th>Cargo Diaria</th>
+                                    <th>Assessorando</th>
+                                    <th class="text-end">Valor Diaria</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in itens %}
+                                <tr>
+                                    <td class="ps-4 fw-semibold">{{ item.nome_pessoa or item.cpf_pessoa }}</td>
+                                    <td>
+                                        <small>{{ item.cpf_pessoa }}</small>
+                                        {% if item.matricula_pessoa %}<br><small class="text-muted">Mat: {{ item.matricula_pessoa }}</small>{% endif %}
+                                    </td>
+                                    <td><small>{{ item.cargo_folha or '-' }}</small></td>
+                                    <td>
+                                        {% if item.setor or item.orgao %}
+                                        <small>{{ item.orgao or '' }}{% if item.setor and item.orgao %} / {% endif %}{{ item.setor or '' }}</small>
+                                        {% else %}<span class="text-muted small">-</span>{% endif %}
+                                    </td>
+                                    <td>{{ item.cargo.nome if item.cargo else '-' }}</td>
+                                    <td>
+                                        {% if item.cargo_assessorado %}
+                                        <span class="badge rounded-pill bg-success">{{ item.cargo_assessorado.nome }}</span>
+                                        {% else %}<span class="text-muted small">---</span>{% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if item.valor_cargo %}
+                                        <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(item.valor_cargo).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+                                        {% else %}<span class="text-muted small">---</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-5 text-muted">
+                                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                        Nenhuma pessoa adicionada.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-4">
+
+        {# ===== SECAO: Upload de Cotacao ===== #}
+        {% if itinerario.sei_protocolo %}
+        <section class="mb-4">
+            <h6 class="fw-bold mb-3"><i class="bi bi-receipt me-2"></i>Enviar Cotacao ao SEI</h6>
+            <div class="card border-primary">
+                <div class="card-body">
+                    <form action="{{ url_for('diarias.upload_cotacao', id=itinerario.id) }}" method="post" enctype="multipart/form-data" id="form-cotacao">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-5">
+                                <label class="form-label small fw-semibold">Descricao / Nome da Cotacao</label>
+                                <input type="text" name="descricao_cotacao" class="form-control form-control-sm"
+                                       placeholder="Ex: passagens Pedro, cotacao agencia X">
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label small fw-semibold">Arquivo (PDF) <span class="text-danger">*</span></label>
+                                <input type="file" name="arquivo_cotacao" id="arquivo_cotacao"
+                                       class="form-control form-control-sm"
+                                       accept=".pdf,.jpg,.jpeg,.png" required>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary btn-sm w-100">
+                                    <i class="bi bi-cloud-upload me-1"></i>Enviar
+                                </button>
+                            </div>
+                        </div>
+                        <small class="text-muted mt-2 d-block">
+                            <i class="bi bi-info-circle me-1"></i>
+                            O documento sera enviado ao processo SEI como "Cotacao" (serie 272).
+                        </small>
+                    </form>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {# ===== SECAO: Nota de Reserva (Financeiro) ===== #}
+        <section class="mb-4">
+            <h6 class="fw-bold mb-3"><i class="bi bi-journal-bookmark me-2"></i>Nota de Reserva (Financeiro)</h6>
+            {% if itinerario.nota_reserva %}
+            <div class="card border-success">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill text-success fs-3 me-3"></i>
+                        <div>
+                            <span class="fw-bold fs-5">{{ itinerario.nota_reserva }}</span>
+                            <br>
+                            {% if itinerario.sei_nota_reserva_formatado %}
+                            <small class="text-muted">Documento SEI: {{ itinerario.sei_nota_reserva_formatado }}</small>
+                            {% endif %}
+                            <br><small class="text-success">Inserida pelo financeiro</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="card border-warning">
+                <div class="card-body text-center py-4">
+                    <i class="bi bi-clock-history text-warning fs-1 d-block mb-2"></i>
+                    <p class="text-muted mb-0 fw-semibold">Aguardando insercao da Nota de Reserva pelo Financeiro</p>
+                    {% if itinerario.etapa_atual_id < 2 %}
+                    <small class="text-muted">A solicitacao precisa ser autorizada primeiro (Etapa 2)</small>
+                    {% elif itinerario.etapa_atual_id == 2 %}
+                    <small class="text-muted">A solicitacao ja foi autorizada. Pendente de acao do Financeiro.</small>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </section>
+
+        {# Paradas (Estadual) #}
+        {% if paradas %}
+        <section class="mb-4">
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header bg-white border-bottom py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-geo-alt me-2"></i>Paradas</h5>
+                        <span class="badge bg-secondary">{{ paradas|length }} parada(s)</span>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive table-rounded">
+                        <table class="table table-custom table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">Municipio</th>
+                                    <th>Codigo IBGE</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in paradas %}
+                                <tr>
+                                    <td class="ps-4 fw-semibold">{{ p.municipio.nome if p.municipio else '-' }}</td>
+                                    <td>{{ p.municipio_id }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {# Cotacoes existentes (agencias) #}
+        {% if cotacoes %}
+        <section class="mb-4">
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header bg-white border-bottom py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-currency-dollar me-2"></i>Cotacoes de Agencias</h5>
+                        <span class="badge bg-secondary">{{ cotacoes|length }} cotacao(oes)</span>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive table-rounded">
+                        <table class="table table-custom table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">Agencia</th>
+                                    <th>Valor</th>
+                                    <th>Data/Hora</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in cotacoes %}
+                                <tr>
+                                    <td class="ps-4 fw-semibold">{{ c.nome_agencia or '-' }}</td>
+                                    <td>
+                                        {% if c.valor %}
+                                        <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(c.valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+                                        {% else %}<span class="text-muted small">---</span>{% endif %}
+                                    </td>
+                                    <td>{{ c.data_hora.strftime('%d/%m/%Y %H:%M') if c.data_hora else '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}

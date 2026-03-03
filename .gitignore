@@ -1,0 +1,55 @@
+# Ambiente
+.env
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Flask
+flask_session/
+instance/
+
+# Dados e planilhas (nao versionar)
+*.xlsx
+*.xls
+*.csv
+~$*
+
+# SQL dumps
+*.sql
+app/sql/
+scripts/sql/
+
+# Logs
+logs/
+*.log
+
+# Node
+node_modules/
+package-lock.json
+
+# Claude Code
+.claude/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Docs/prompts locais
+PROMPT_*.md
+*.json.bak
+
+# Arquivos avulsos (testes, docs temporarios)
+nul
+placeholder
+*.pdf
+consulta-pessoa-sga-gestor.txt
+consultaProcedimento.json
+listagem de documentos.json

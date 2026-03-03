@@ -1,0 +1,98 @@
+{# Componente: Overlay para notificacoes criticas #}
+{# Renderizado server-side: so aparece se existem criticas pendentes #}
+
+{% if notificacoes_criticas and notificacoes_criticas|length > 0 %}
+<div id="critical-overlay" class="position-fixed top-0 start-0 w-100 h-100"
+     style="z-index: 9999; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px);">
+    <div class="d-flex align-items-center justify-content-center h-100">
+        <div class="card shadow-lg border-danger" style="max-width: 560px; width: 90%;">
+            <div class="card-header bg-danger text-white text-center py-3">
+                <i class="bi bi-exclamation-octagon-fill fs-3 me-2"></i>
+                <strong class="fs-5">NOTIFICACAO CRITICA</strong>
+            </div>
+            <div class="card-body p-4">
+                <div id="critical-messages">
+                    {% for n in notificacoes_criticas %}
+                    <div class="mb-3 p-3 bg-light rounded border-start border-danger border-3"
+                         data-notificacao-id="{{ n.id }}">
+                        <h6 class="fw-bold text-danger mb-1">{{ n.titulo }}</h6>
+                        <p class="mb-0 small text-muted">{{ n.mensagem }}</p>
+                        <small class="text-muted">{{ n.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                    </div>
+                    {% endfor %}
+                </div>
+                <hr>
+                <p class="text-muted small mb-2">
+                    <i class="bi bi-shield-lock me-1"></i>
+                    Para confirmar ciencia, digite seu CPF:
+                </p>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="cpf-confirmacao"
+                           placeholder="000.000.000-00" maxlength="14"
+                           oninput="mascaraCpf(this)">
+                    <button class="btn btn-danger px-4" id="confirmar-critica-btn"
+                            onclick="confirmarCritica()">
+                        <i class="bi bi-check-lg me-1"></i> Confirmar
+                    </button>
+                </div>
+                <div class="text-danger small mt-2 d-none" id="cpf-erro">
+                    <i class="bi bi-x-circle me-1"></i>
+                    CPF invalido ou nao confere com seu cadastro.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function mascaraCpf(input) {
+    let v = input.value.replace(/\D/g, '');
+    if (v.length > 11) v = v.slice(0, 11);
+    if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+    else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+    else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+    input.value = v;
+}
+
+async function confirmarCritica() {
+    const cpf = document.getElementById('cpf-confirmacao').value;
+    const erroEl = document.getElementById('cpf-erro');
+    erroEl.classList.add('d-none');
+
+    const ids = [];
+    document.querySelectorAll('#critical-messages [data-notificacao-id]').forEach(el => {
+        ids.push(parseInt(el.dataset.notificacaoId));
+    });
+
+    let todosOk = true;
+    for (const id of ids) {
+        try {
+            const resp = await fetch('/notificacoes/api/confirmar-critica', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    notificacao_id: id,
+                    cpf: cpf
+                })
+            });
+            const data = await resp.json();
+            if (!data.sucesso) {
+                todosOk = false;
+                erroEl.textContent = data.msg || 'CPF invalido ou nao confere.';
+                erroEl.classList.remove('d-none');
+                break;
+            }
+        } catch (e) {
+            todosOk = false;
+            erroEl.textContent = 'Erro de comunicacao. Tente novamente.';
+            erroEl.classList.remove('d-none');
+            break;
+        }
+    }
+
+    if (todosOk) {
+        document.getElementById('critical-overlay').remove();
+    }
+}
+</script>
+{% endif %}

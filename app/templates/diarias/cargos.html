@@ -1,0 +1,124 @@
+{% extends 'diarias/base_diarias.html' %}
+{% block title %}SGC - Cargos e Valores de Diárias{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="fw-bold">
+        <i class="bi bi-kanban me-2"></i>Administracao
+    </h2>
+</div>
+
+{% include 'diarias/partials/subnav_administracao.html' %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h5 class="fw-bold mb-0">
+        <i class="bi bi-person-badge me-2"></i>Cargos e Valores de Diarias
+    </h5>
+</div>
+
+{# Tabela de valores #}
+<div class="card border-0 shadow-sm overflow-hidden mb-4">
+    <div class="card-header bg-white border-bottom py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Valores por Cargo e Tipo</h5>
+            <span class="badge bg-secondary">{{ valores|length }} registro(s)</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive table-rounded">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Cargo</th>
+                        <th>Tipo</th>
+                        <th>Valor Diaria</th>
+                        <th class="text-center" style="width: 80px;">Acoes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for vc in valores %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">{{ vc.cargo.nome if vc.cargo else '-' }}</td>
+                        <td>
+                            {% if vc.tipo_itinerario_id == 1 %}
+                                <span class="badge rounded-pill bg-info text-white">{{ vc.tipo_itinerario.nome if vc.tipo_itinerario else '-' }}</span>
+                            {% else %}
+                                <span class="badge rounded-pill bg-warning text-dark">{{ vc.tipo_itinerario.nome if vc.tipo_itinerario else '-' }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="fw-bold text-success">R$ {{ "%.2f"|format(vc.valor) }}</span>
+                        </td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-primary"
+                                    onclick="editarValor({{ vc.id }}, {{ vc.cargo_id }}, {{ vc.tipo_itinerario_id }}, {{ vc.valor }})">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                            Nenhum valor cadastrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{# Modal Editar Valor #}
+<div class="modal fade" id="modalValor" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('diarias.salvar_valor_cargo') }}" method="post">
+                <input type="hidden" name="id" id="valor-id">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar Valor de Diária</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Cargo</label>
+                        <select name="cargo_id" id="valor-cargo" class="form-select" required>
+                            {% for c in cargos %}
+                            <option value="{{ c.id }}">{{ c.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tipo de Itinerário</label>
+                        <select name="tipo_itinerario_id" id="valor-tipo" class="form-select" required>
+                            <option value="1">Estadual</option>
+                            <option value="2">Nacional</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Valor (R$)</label>
+                        <input type="number" name="valor" id="valor-valor" class="form-control" step="0.01" min="0" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function editarValor(id, cargoId, tipoId, valor) {
+    document.getElementById('valor-id').value = id;
+    document.getElementById('valor-cargo').value = cargoId;
+    document.getElementById('valor-tipo').value = tipoId;
+    document.getElementById('valor-valor').value = valor;
+    new bootstrap.Modal(document.getElementById('modalValor')).show();
+}
+</script>
+{% endblock %}

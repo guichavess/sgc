@@ -1,0 +1,1054 @@
+{% extends 'diarias/base_diarias.html' %}
+{% block title %}SGC - Nova Solicitação de Diária{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/airbnb.css">
+<style>
+    #campos-restantes.bloqueado {
+        opacity: 0.5 !important;
+        pointer-events: none !important;
+        user-select: none !important;
+    }
+    .flatpickr-input {
+        background-color: #fff !important;
+    }
+    .upload-area {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 24px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        background-color: #fafbfc;
+    }
+    .upload-area:hover, .upload-area.dragover {
+        border-color: #0d6efd;
+        background-color: #f0f6ff;
+    }
+    .upload-area.has-file {
+        border-color: #198754;
+        background-color: #f0fdf4;
+    }
+    .upload-area .upload-icon {
+        font-size: 2rem;
+        color: #6c757d;
+    }
+    .upload-area.has-file .upload-icon {
+        color: #198754;
+    }
+    .file-preview {
+        display: none;
+        margin-top: 12px;
+    }
+    .file-preview.show {
+        display: flex;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="fw-bold">
+        <i class="bi bi-plus-circle me-2"></i>Nova Solicitação de Diária
+    </h2>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-airplane me-2"></i>Dados da Viagem</h5>
+    </div>
+    <div class="card-body">
+        <form id="form-nova-diaria" action="{{ url_for('diarias.store') }}" method="post" enctype="multipart/form-data">
+
+            {# Tipo da Solicitação (primeiro campo, obrigatório) #}
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="tipo_solicitacao" class="form-label fw-semibold">Tipo da Solicitação <span class="text-danger">*</span></label>
+                    <select name="tipo_solicitacao" id="tipo_solicitacao" class="form-select" required>
+                        <option value="">Selecione o tipo da solicitação</option>
+                        {% for ts in tipos_solicitacao %}
+                        <option value="{{ ts.id }}">{{ ts.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            {# Demais campos — bloqueados até selecionar tipo da solicitação #}
+            <div id="campos-restantes" class="bloqueado">
+
+                {# Tipo de Itinerário #}
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="tipo_itinerario" class="form-label fw-semibold">Tipo de Itinerário <span class="text-danger">*</span></label>
+                        <select id="tipo_itinerario" class="form-select">
+                            <option value="">Selecione o tipo</option>
+                            <option value="1">Estadual</option>
+                            <option value="2">Nacional</option>
+                        </select>
+                        <input type="hidden" name="tipo_itinerario" id="tipo_itinerario_hidden">
+                    </div>
+                </div>
+
+                {# Datas #}
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label for="data_viagem" class="form-label fw-semibold">Data da Viagem <span class="text-danger">*</span></label>
+                        <input type="text" name="data_viagem" id="data_viagem" class="form-control" placeholder="Selecione data e hora" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="data_retorno" class="form-label fw-semibold">Data de Retorno <span class="text-danger">*</span></label>
+                        <input type="text" name="data_retorno" id="data_retorno" class="form-control" placeholder="Selecione data e hora" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Quantidade de Diárias</label>
+                        <input type="text" id="qtd_diarias_display" class="form-control" readonly disabled placeholder="Calculado automaticamente">
+                    </div>
+                </div>
+
+                {# Justificativa (aparece se viagem < 10 dias) #}
+                <div class="row mb-3" id="justificativa-container" style="display: none;">
+                    <div class="col-md-12">
+                        <div class="alert alert-warning d-flex align-items-start">
+                            <i class="bi bi-exclamation-triangle-fill me-2 mt-1"></i>
+                            <div class="flex-grow-1">
+                                <strong>Viagem em menos de 10 dias</strong> — Justificativa obrigatória.
+                                <textarea name="justificativa" id="justificativa" class="form-control mt-2" rows="3"
+                                          placeholder="Explique o motivo da viagem ser em menos de 10 dias..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# Info Estadual: Origem e Destino fixos #}
+                <div class="row mb-3" id="info-estadual-container" style="display: none;">
+                    <div class="col-md-12">
+                        <div class="alert alert-info py-2 mb-0">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Viagem Estadual:</strong> Origem e destino: <strong>Teresina - PI</strong>. Defina as cidades intermediárias nas paradas abaixo.
+                        </div>
+                    </div>
+                </div>
+
+                {# Origem/Destino (Nacional) #}
+                <div class="row mb-3" id="origem-nacional-container" style="display: none;">
+                    <div class="col-md-6">
+                        <label for="estado_origem" class="form-label fw-semibold">Estado de Origem</label>
+                        <select name="estado_origem" id="estado_origem" class="form-select" disabled>
+                            <option value="22" selected>Piauí</option>
+                        </select>
+                        <input type="hidden" name="estado_origem" value="22">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="estado_destino" class="form-label fw-semibold">Estado de Destino <span class="text-danger">*</span></label>
+                        <select name="estado_destino" id="estado_destino" class="form-select">
+                            <option value="">Selecione</option>
+                            {% for e in estados %}
+                            <option value="{{ e.cod_ibge }}">{{ e.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                {# Objetivo da Viagem #}
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label for="objetivo" class="form-label fw-semibold">Objetivo da Viagem <span class="text-danger">*</span></label>
+                        <textarea name="objetivo" id="objetivo" class="form-control" rows="3" required
+                                  placeholder="Descreva o objetivo da viagem (ex: Participar de reunião técnica, Evento institucional, etc.)..."></textarea>
+                    </div>
+                </div>
+
+                {# Justificativa do Memorando (Nacional + Passagens) #}
+                <div class="row mb-3" id="justificativa-memorando-container" style="display: none;">
+                    <div class="col-md-12">
+                        <div class="alert alert-primary d-flex align-items-start">
+                            <i class="bi bi-file-earmark-text-fill me-2 mt-1"></i>
+                            <div class="flex-grow-1">
+                                <strong>Justificativa do Memorando (SEI)</strong>
+                                <p class="mb-2 mt-1 text-muted small">Este texto será utilizado no corpo do Memorando SGA encaminhado ao Gabinete do Secretário de Administração.</p>
+                                <textarea name="justificativa_memorando" id="justificativa_memorando" class="form-control" rows="4"
+                                          placeholder="Descreva o motivo da viagem, evento, reunião ou compromisso institucional..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                {# Buscar Servidor por CPF (API pessoaSGA) #}
+                <h5 class="fw-bold mb-3"><i class="bi bi-people me-2"></i>Pessoas da Viagem</h5>
+                <div class="mb-3">
+                    <label for="buscar_pessoa" class="form-label fw-semibold">Buscar Servidor por CPF</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="buscar_pessoa" class="form-control" placeholder="Digite o CPF do servidor (11 dígitos)..." maxlength="14" inputmode="numeric">
+                        <button type="button" id="btn-buscar-cpf" class="btn btn-outline-primary" disabled>
+                            <i class="bi bi-search me-1"></i>Buscar
+                        </button>
+                    </div>
+                    <small class="text-muted">Exemplo: 000.000.000-00 ou 00000000000</small>
+                </div>
+                <div id="pessoas-encontradas" class="mb-3"></div>
+
+                {# Pessoas selecionadas #}
+                <div id="pessoas-selecionadas" class="mb-3"></div>
+
+                {# Resumo de Valores #}
+                <div id="resumo-valores" class="mb-3" style="display: none;">
+                    <div class="card border-success">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-semibold text-success">
+                                    <i class="bi bi-calculator me-2"></i>Valor Total Estimado das Diárias
+                                </span>
+                                <span class="fw-bold fs-5 text-success" id="valor-total-display">R$ 0,00</span>
+                            </div>
+                            <small class="text-muted" id="resumo-calculo-detalhe"></small>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                {# Paradas (Estadual) #}
+                <div id="paradas-container" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold mb-0"><i class="bi bi-geo-alt me-2"></i>Paradas</h5>
+                        <button type="button" class="btn btn-success btn-sm" id="add-parada-btn">
+                            <i class="bi bi-plus-circle me-1"></i> Adicionar Parada
+                        </button>
+                    </div>
+                    <div id="paradas-list">
+                        <div class="parada-item row g-2 align-items-center mb-2">
+                            <div class="col-md-8">
+                                <select name="paradas[]" class="form-select parada-select">
+                                    <option value="">Selecione o município</option>
+                                    {% for m in municipios_pi %}
+                                    <option value="{{ m.cod_ibge }}">{{ m.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="button" class="btn btn-outline-danger btn-sm remover-parada-btn">
+                                    <i class="bi bi-trash me-1"></i> Remover
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                {# Documento Anexo (Documento Externo SEI) #}
+                <h5 class="fw-bold mb-3"><i class="bi bi-paperclip me-2"></i>Documento Anexo</h5>
+                <p class="text-muted small mb-3">Anexe um arquivo para ser adicionado como documento externo no processo SEI (PDF, Word, imagens).</p>
+
+                <div class="upload-area" id="upload-area">
+                    <input type="file" name="arquivo_anexo" id="arquivo_anexo" class="d-none"
+                           accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.xls,.xlsx,.odt,.ods">
+                    <div id="upload-placeholder">
+                        <i class="bi bi-cloud-arrow-up upload-icon"></i>
+                        <p class="mb-1 mt-2 fw-semibold">Clique para selecionar ou arraste o arquivo aqui</p>
+                        <small class="text-muted">PDF, Word, Excel, Imagens (max. 20MB)</small>
+                    </div>
+                    <div class="file-preview align-items-center gap-3" id="file-preview">
+                        <i class="bi bi-file-earmark-check fs-2 text-success"></i>
+                        <div class="text-start flex-grow-1">
+                            <span class="fw-semibold" id="file-name"></span>
+                            <br><small class="text-muted" id="file-size"></small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" id="remove-file-btn">
+                            <i class="bi bi-x-lg"></i> Remover
+                        </button>
+                    </div>
+                </div>
+
+            </div>{# /campos-restantes #}
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="bi bi-check-circle me-1"></i> Salvar Solicitação
+                </button>
+                <a href="{{ url_for('diarias.dashboard') }}" class="btn btn-outline-secondary btn-lg ms-2">
+                    Cancelar
+                </a>
+            </div>
+
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var tipoSolicitacaoSelect = document.getElementById('tipo_solicitacao');
+    var tipoSelect = document.getElementById('tipo_itinerario');
+    var camposRestantes = document.getElementById('campos-restantes');
+    var dataViagem = document.getElementById('data_viagem');
+    var dataRetorno = document.getElementById('data_retorno');
+    var qtdDiariasDisplay = document.getElementById('qtd_diarias_display');
+    var justificativaContainer = document.getElementById('justificativa-container');
+    var justificativa = document.getElementById('justificativa');
+    var infoEstadualContainer = document.getElementById('info-estadual-container');
+    var origemNacionalContainer = document.getElementById('origem-nacional-container');
+    var paradasContainer = document.getElementById('paradas-container');
+    var paradasList = document.getElementById('paradas-list');
+    var tipoItinerarioHidden = document.getElementById('tipo_itinerario_hidden');
+    var justificativaMemorandoContainer = document.getElementById('justificativa-memorando-container');
+    var justificativaMemorandoInput = document.getElementById('justificativa_memorando');
+
+    // Verifica se todos os elementos existem
+    if (!tipoSolicitacaoSelect || !camposRestantes) {
+        console.error('[Diárias] Elementos do formulário não encontrados!');
+        return;
+    }
+
+    console.log('[Diárias] Script inicializado com sucesso');
+
+    // IDs dos tipos de solicitação (da tabela diarias_tipo_solicitacao)
+    var TIPO_SOL_APENAS_DIARIAS = '1';
+    var TIPO_SOL_DIARIAS_PASSAGENS = '2';
+    var TIPO_SOL_APENAS_PASSAGENS = '3';
+
+    function atualizarCamposItinerario() {
+        var tipo = tipoSelect.value;
+        tipoItinerarioHidden.value = tipo;
+
+        if (tipo === '1') {
+            infoEstadualContainer.style.display = 'block';
+            origemNacionalContainer.style.display = 'none';
+            paradasContainer.style.display = 'block';
+        } else if (tipo === '2') {
+            infoEstadualContainer.style.display = 'none';
+            origemNacionalContainer.style.display = 'flex';
+            paradasContainer.style.display = 'none';
+        } else {
+            infoEstadualContainer.style.display = 'none';
+            origemNacionalContainer.style.display = 'none';
+            paradasContainer.style.display = 'none';
+        }
+    }
+
+    // ── Tipo da Solicitação: desbloqueia campos (CRÍTICO - deve rodar antes de tudo) ──
+    tipoSolicitacaoSelect.onchange = function() {
+        var val = this.value;
+        console.log('[Diárias] Tipo solicitação alterado para:', val);
+
+        if (!val) {
+            camposRestantes.className = 'bloqueado';
+            tipoSelect.value = '';
+            tipoSelect.disabled = false;
+            atualizarCamposItinerario();
+            justificativaMemorandoContainer.style.display = 'none';
+            justificativaMemorandoInput.removeAttribute('required');
+            justificativaMemorandoInput.value = '';
+            return;
+        }
+
+        // Desbloqueia
+        camposRestantes.className = '';
+        console.log('[Diárias] Campos desbloqueados');
+
+        if (val === TIPO_SOL_DIARIAS_PASSAGENS || val === TIPO_SOL_APENAS_PASSAGENS) {
+            tipoSelect.value = '2';
+            tipoSelect.disabled = true;
+            atualizarCamposItinerario();
+            justificativaMemorandoContainer.style.display = 'block';
+            justificativaMemorandoInput.setAttribute('required', 'required');
+        } else {
+            tipoSelect.value = '';
+            tipoSelect.disabled = false;
+            atualizarCamposItinerario();
+            justificativaMemorandoContainer.style.display = 'none';
+            justificativaMemorandoInput.removeAttribute('required');
+            justificativaMemorandoInput.value = '';
+        }
+    };
+
+    // ── Cálculo de diárias ──
+    function calcularDiarias() {
+        if (dataViagem.value && dataRetorno.value) {
+            var dViagem = new Date(dataViagem.value);
+            var dRetorno = new Date(dataRetorno.value);
+            var diffDias = Math.ceil((dRetorno - dViagem) / (1000 * 60 * 60 * 24));
+            if (diffDias >= 0) {
+                qtdDiariasDisplay.value = diffDias + 0.5;
+            }
+        }
+    }
+
+    function verificarJustificativa() {
+        if (!dataViagem.value) return;
+        var viagemDate = new Date(dataViagem.value);
+        var limite = new Date();
+        limite.setDate(limite.getDate() + 10);
+        if (viagemDate < limite) {
+            justificativaContainer.style.display = 'block';
+            justificativa.setAttribute('required', 'required');
+        } else {
+            justificativaContainer.style.display = 'none';
+            justificativa.removeAttribute('required');
+            justificativa.value = '';
+        }
+    }
+
+    // ── Flatpickr: Data + Hora (envolvido em try-catch para não bloquear o formulário) ──
+    var fpViagem, fpRetorno;
+    try {
+        var configBase = {
+            locale: 'pt',
+            enableTime: true,
+            time_24hr: true,
+            dateFormat: 'Y-m-d\\TH:i',
+            altInput: true,
+            altFormat: 'd/m/Y H:i',
+            minuteIncrement: 30,
+            defaultHour: 8,
+            defaultMinute: 0
+        };
+
+        fpViagem = flatpickr(dataViagem, Object.assign({}, configBase, {
+            onChange: function(selectedDates) {
+                if (selectedDates.length) {
+                    fpRetorno.set('minDate', selectedDates[0]);
+                }
+                calcularDiarias();
+                verificarJustificativa();
+                recalcularValores();
+            }
+        }));
+
+        fpRetorno = flatpickr(dataRetorno, Object.assign({}, configBase, {
+            defaultHour: 18,
+            onChange: function() {
+                calcularDiarias();
+                recalcularValores();
+            }
+        }));
+        console.log('[Diárias] Flatpickr inicializado com sucesso');
+    } catch(err) {
+        console.error('[Diárias] Erro ao inicializar Flatpickr:', err);
+    }
+
+    // ── Paradas ──
+    document.getElementById('add-parada-btn').onclick = function() {
+        var firstParada = paradasList.querySelector('.parada-item');
+        var clone = firstParada.cloneNode(true);
+        clone.querySelector('.parada-select').value = '';
+        paradasList.appendChild(clone);
+    };
+
+    paradasList.onclick = function(e) {
+        if (e.target.closest('.remover-parada-btn')) {
+            var items = paradasList.querySelectorAll('.parada-item');
+            if (items.length > 1) {
+                e.target.closest('.parada-item').remove();
+            }
+        }
+    };
+
+    // ── Buscar servidor por CPF (API pessoaSGA) ──
+    var buscarPessoa = document.getElementById('buscar_pessoa');
+    var btnBuscarCpf = document.getElementById('btn-buscar-cpf');
+    var pessoasEncontradas = document.getElementById('pessoas-encontradas');
+
+    // Máscara de CPF: formata enquanto digita
+    buscarPessoa.oninput = function() {
+        var v = this.value.replace(/\D/g, '');
+        if (v.length > 11) v = v.substring(0, 11);
+        if (v.length > 9) {
+            v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+        } else if (v.length > 6) {
+            v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+        } else if (v.length > 3) {
+            v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+        }
+        this.value = v;
+        // Habilita botão quando CPF tem 11 dígitos
+        var cpfLimpo = v.replace(/\D/g, '');
+        btnBuscarCpf.disabled = cpfLimpo.length !== 11;
+        // Limpa resultado anterior quando muda o CPF
+        pessoasEncontradas.innerHTML = '';
+    };
+
+    // Busca ao clicar no botão ou pressionar Enter
+    function executarBuscaCpf() {
+        var cpfLimpo = buscarPessoa.value.replace(/\D/g, '');
+        if (cpfLimpo.length !== 11) return;
+
+        // Verifica se já foi adicionado
+        var jaAdicionado = document.querySelector('input[name="pessoas_cpf[]"][value="' + cpfLimpo + '"]');
+        if (jaAdicionado) {
+            pessoasEncontradas.innerHTML = '<div class="alert alert-warning py-2"><i class="bi bi-exclamation-triangle me-2"></i>Este servidor já foi adicionado à viagem.</div>';
+            return;
+        }
+
+        pessoasEncontradas.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Consultando API do Gestor SEAD...</div>';
+        btnBuscarCpf.disabled = true;
+
+        fetch('{{ url_for("diarias.api_buscar_pessoa_cpf") }}?cpf=' + cpfLimpo)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                pessoasEncontradas.innerHTML = '';
+                btnBuscarCpf.disabled = false;
+
+                if (!data.encontrado) {
+                    // Mostra formulário para cadastro manual
+                    var cpfFormatado = buscarPessoa.value;
+                    var card = document.createElement('div');
+                    card.className = 'card border-warning shadow-sm mb-2';
+                    card.innerHTML = '<div class="card-body py-3">'
+                        + '<h6 class="mb-3 fw-bold text-warning"><i class="bi bi-exclamation-triangle me-2"></i>Servidor nao encontrado na base do Gestor SEAD</h6>'
+                        + '<p class="text-muted small mb-3">Preencha os dados manualmente para adicionar o servidor.</p>'
+                        + '<div class="row g-2 mb-2">'
+                        + '<div class="col-md-6">'
+                        + '<label class="form-label small fw-semibold mb-1">Nome completo <span class="text-danger">*</span></label>'
+                        + '<input type="text" class="form-control form-control-sm manual-nome" placeholder="Ex: Maria da Silva" required>'
+                        + '</div>'
+                        + '<div class="col-md-3">'
+                        + '<label class="form-label small fw-semibold mb-1">Matricula</label>'
+                        + '<input type="text" class="form-control form-control-sm manual-matricula" placeholder="000000">'
+                        + '</div>'
+                        + '<div class="col-md-3">'
+                        + '<label class="form-label small fw-semibold mb-1">CPF</label>'
+                        + '<input type="text" class="form-control form-control-sm" value="' + cpfFormatado + '" readonly disabled>'
+                        + '</div>'
+                        + '</div>'
+                        + '<div class="row g-2 mb-2">'
+                        + '<div class="col-md-4">'
+                        + '<label class="form-label small fw-semibold mb-1">Cargo (folha)</label>'
+                        + '<input type="text" class="form-control form-control-sm manual-cargo-folha" placeholder="Ex: Analista Governamental">'
+                        + '</div>'
+                        + '<div class="col-md-4">'
+                        + '<label class="form-label small fw-semibold mb-1">Setor</label>'
+                        + '<input type="text" class="form-control form-control-sm manual-setor" placeholder="Ex: SEAD/SUTIC">'
+                        + '</div>'
+                        + '<div class="col-md-4">'
+                        + '<label class="form-label small fw-semibold mb-1">Orgao</label>'
+                        + '<input type="text" class="form-control form-control-sm manual-orgao" placeholder="Ex: SEAD">'
+                        + '</div>'
+                        + '</div>'
+                        + '<div class="row g-2 mb-3">'
+                        + '<div class="col-md-4">'
+                        + '<label class="form-label small fw-semibold mb-1">Vinculo</label>'
+                        + '<input type="text" class="form-control form-control-sm manual-vinculo" placeholder="Ex: Efetivo">'
+                        + '</div>'
+                        + '<div class="col-md-4">'
+                        + '<label class="form-label small fw-semibold mb-1">Agencia bancaria</label>'
+                        + '<input type="text" class="form-control form-control-sm manual-banco-agencia" placeholder="0000">'
+                        + '</div>'
+                        + '<div class="col-md-4">'
+                        + '<label class="form-label small fw-semibold mb-1">Conta bancaria</label>'
+                        + '<input type="text" class="form-control form-control-sm manual-banco-conta" placeholder="00000-0">'
+                        + '</div>'
+                        + '</div>'
+                        + '<div class="d-flex justify-content-end">'
+                        + '<button type="button" class="btn btn-warning btn-sm btn-adicionar-manual"'
+                        + ' data-cpf="' + cpfLimpo + '">'
+                        + '<i class="bi bi-plus-circle me-1"></i>Adicionar Servidor'
+                        + '</button>'
+                        + '</div>'
+                        + '</div>';
+                    pessoasEncontradas.appendChild(card);
+                    // Foca no campo nome
+                    var inputNome = card.querySelector('.manual-nome');
+                    if (inputNome) inputNome.focus();
+                    return;
+                }
+
+                // Exibe card com dados do servidor encontrado
+                var isLocal = data.origem === 'local';
+                var origemLabel = isLocal ? ' <span class="badge bg-secondary ms-2">Base Local</span>' : '';
+                var card = document.createElement('div');
+                card.className = 'card border-success shadow-sm mb-2';
+                card.innerHTML = '<div class="card-body py-3">'
+                    + '<div class="d-flex justify-content-between align-items-start">'
+                    + '<div class="flex-grow-1">'
+                    + '<h6 class="mb-1 fw-bold text-success"><i class="bi bi-check-circle me-2"></i>Servidor Encontrado' + origemLabel + '</h6>'
+                    + '<div class="mb-1"><strong>' + data.nome + '</strong></div>'
+                    + '<div class="d-flex flex-wrap gap-2 mb-1">'
+                    + '<small class="text-muted"><i class="bi bi-person-badge me-1"></i>Mat: ' + data.matricula + '</small>'
+                    + '<small class="text-muted"><i class="bi bi-card-text me-1"></i>CPF: ' + buscarPessoa.value + '</small>'
+                    + '</div>'
+                    + '<div class="d-flex flex-wrap gap-2">'
+                    + (data.cargo ? '<span class="badge bg-light text-dark border"><i class="bi bi-briefcase me-1"></i>' + data.cargo + '</span>' : '')
+                    + (data.setor ? '<span class="badge bg-light text-dark border"><i class="bi bi-geo-alt me-1"></i>' + data.setor + '</span>' : '')
+                    + (data.orgao ? '<span class="badge bg-light text-dark border"><i class="bi bi-building me-1"></i>' + data.orgao + '</span>' : '')
+                    + (data.vinculo ? '<span class="badge bg-light text-dark border"><i class="bi bi-link-45deg me-1"></i>' + data.vinculo + '</span>' : '')
+                    + '</div>'
+                    + '</div>'
+                    + '<button type="button" class="btn btn-success btn-sm btn-adicionar-pessoa"'
+                    + ' data-matricula="' + data.matricula + '"'
+                    + ' data-cpf="' + data.cpf + '"'
+                    + ' data-nome="' + (data.nome || '').replace(/"/g, '&quot;') + '"'
+                    + ' data-cargo="' + (data.cargo || '').replace(/"/g, '&quot;') + '"'
+                    + ' data-setor="' + (data.setor || '').replace(/"/g, '&quot;') + '"'
+                    + ' data-orgao="' + (data.orgao || '').replace(/"/g, '&quot;') + '"'
+                    + ' data-superintendencia="' + (data.superintendencia || '').replace(/"/g, '&quot;') + '"'
+                    + ' data-banco-agencia="' + (data.banco_agencia || '') + '"'
+                    + ' data-banco-conta="' + (data.banco_conta || '') + '"'
+                    + ' data-vinculo="' + (data.vinculo || '').replace(/"/g, '&quot;') + '">'
+                    + '<i class="bi bi-plus-circle me-1"></i>Adicionar'
+                    + '</button>'
+                    + '</div>'
+                    + '</div>';
+                pessoasEncontradas.appendChild(card);
+            })
+            .catch(function() {
+                pessoasEncontradas.innerHTML = '<div class="alert alert-danger py-2"><i class="bi bi-x-circle me-2"></i>Erro ao consultar API. Tente novamente ou use o cadastro manual abaixo.</div>';
+                btnBuscarCpf.disabled = false;
+            });
+    }
+
+    btnBuscarCpf.onclick = executarBuscaCpf;
+    buscarPessoa.onkeydown = function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (!btnBuscarCpf.disabled) executarBuscaCpf();
+        }
+    };
+
+    // ── Cargos e Valores de Diárias ──
+    var valoresCargo = {{ valores_cargo_json | safe }};
+    var cargosOptions = '';
+    {% for c in cargos %}
+    {% if c.nome != 'Assessor Técnico' %}
+    cargosOptions += '<option value="{{ c.id }}">{{ c.nome }}</option>';
+    {% endif %}
+    {% endfor %}
+
+    // Opções de cargo do assessorado (apenas Superintendente e Secretário)
+    var assessoradoOptions = '';
+    {% for c in cargos %}
+    {% if c.nome in ['Superintendente', 'Secretário'] %}
+    assessoradoOptions += '<option value="{{ c.id }}">{{ c.nome }}</option>';
+    {% endif %}
+    {% endfor %}
+
+    function formatarMoeda(valor) {
+        return 'R$ ' + valor.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    }
+
+    function getValorCargo(cargoId) {
+        var tipoIt = tipoItinerarioHidden.value || tipoSelect.value || '';
+        if (!cargoId || !tipoIt) return 0;
+        var chave = cargoId + '_' + tipoIt;
+        return valoresCargo[chave] || 0;
+    }
+
+    function recalcularValores() {
+        var cards = document.querySelectorAll('.pessoa-selecionada');
+        var totalGeral = 0;
+        var qtdDiarias = parseFloat(qtdDiariasDisplay.value) || 0;
+
+        for (var i = 0; i < cards.length; i++) {
+            var card = cards[i];
+            var selectCargo = card.querySelector('.select-cargo-diaria');
+            var checkAssessorando = card.querySelector('.checkbox-assessorando');
+            var selectAssessorado = card.querySelector('.select-cargo-assessorado');
+            var valorDisplay = card.querySelector('.valor-diaria-display');
+            if (!selectCargo) continue;
+
+            var cargoId = selectCargo.value;
+            // Se assessorando, usa o cargo do assessorado para calcular valor
+            var cargoAssId = (checkAssessorando && checkAssessorando.checked && selectAssessorado) ? selectAssessorado.value : '';
+            var cargoParaCalculo = cargoAssId || cargoId;
+            var valorUnit = getValorCargo(cargoParaCalculo);
+            var valorPessoa = valorUnit * qtdDiarias;
+            totalGeral += valorPessoa;
+
+            if (valorDisplay) {
+                if (cargoParaCalculo && valorUnit > 0) {
+                    var labelExtra = cargoAssId ? ' <span class="text-primary">(assessorando)</span>' : '';
+                    valorDisplay.innerHTML = '<i class="bi bi-cash me-1"></i>' + formatarMoeda(valorUnit) + '/dia &times; ' + qtdDiarias + ' = <b>' + formatarMoeda(valorPessoa) + '</b>' + labelExtra;
+                    valorDisplay.style.display = 'block';
+                } else {
+                    valorDisplay.style.display = 'none';
+                }
+            }
+        }
+
+        var resumoDiv = document.getElementById('resumo-valores');
+        var totalDisplay = document.getElementById('valor-total-display');
+        var detalheDisplay = document.getElementById('resumo-calculo-detalhe');
+
+        if (cards.length > 0 && totalGeral > 0) {
+            resumoDiv.style.display = 'block';
+            totalDisplay.textContent = formatarMoeda(totalGeral);
+            detalheDisplay.textContent = cards.length + ' pessoa(s) \u00d7 ' + qtdDiarias + ' di\u00e1ria(s)';
+        } else {
+            resumoDiv.style.display = 'none';
+        }
+    }
+
+    // ── Auto-match de cargo: relaciona cargo da API com diarias_cargos ──
+    // Mapa de cargos: { id: nome } para matching (exclui Assessor Técnico)
+    var cargosMap = {};
+    {% for c in cargos %}
+    {% if c.nome != 'Assessor Técnico' %}
+    cargosMap['{{ c.id }}'] = '{{ c.nome }}';
+    {% endif %}
+    {% endfor %}
+
+    function normalizarTexto(str) {
+        // Remove acentos e converte para minúsculo
+        return (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    function encontrarCargoId(cargoApi) {
+        if (!cargoApi) return '';
+        var cargoNorm = normalizarTexto(cargoApi);
+
+        // 1. Match exato (ignorando acentos e case)
+        for (var id in cargosMap) {
+            if (normalizarTexto(cargosMap[id]) === cargoNorm) return id;
+        }
+
+        // 2. Cargo da API contém o nome do cargo do sistema
+        for (var id in cargosMap) {
+            var nomeNorm = normalizarTexto(cargosMap[id]);
+            if (cargoNorm.indexOf(nomeNorm) !== -1) return id;
+        }
+
+        // 3. Nome do cargo do sistema contém o cargo da API
+        for (var id in cargosMap) {
+            var nomeNorm = normalizarTexto(cargosMap[id]);
+            if (nomeNorm.indexOf(cargoNorm) !== -1) return id;
+        }
+
+        return '';
+    }
+
+    // ── Adicionar pessoa (API ou manual) ──
+    pessoasEncontradas.onclick = function(e) {
+        // ── Cadastro manual (servidor não encontrado) ──
+        var btnManual = e.target.closest('.btn-adicionar-manual');
+        if (btnManual) {
+            var cardManual = btnManual.closest('.card');
+            var nomeInput = cardManual.querySelector('.manual-nome');
+            var nomeVal = (nomeInput.value || '').trim();
+            if (!nomeVal) {
+                nomeInput.classList.add('is-invalid');
+                nomeInput.focus();
+                return;
+            }
+            nomeInput.classList.remove('is-invalid');
+
+            var matricula = (cardManual.querySelector('.manual-matricula').value || '').trim();
+            var cpf = btnManual.getAttribute('data-cpf');
+            var nome = nomeVal;
+            var cargo = (cardManual.querySelector('.manual-cargo-folha').value || '').trim();
+            var setor = (cardManual.querySelector('.manual-setor').value || '').trim();
+            var orgao = (cardManual.querySelector('.manual-orgao').value || '').trim();
+            var superintendencia = '';
+            var bancoAgencia = (cardManual.querySelector('.manual-banco-agencia').value || '').trim();
+            var bancoConta = (cardManual.querySelector('.manual-banco-conta').value || '').trim();
+            var vinculo = (cardManual.querySelector('.manual-vinculo').value || '').trim();
+
+            // Salva servidor na base local antes de adicionar
+            btnManual.disabled = true;
+            btnManual.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Salvando...';
+
+            fetch('{{ url_for("diarias.api_salvar_servidor") }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    cpf: cpf, nome: nome, matricula: matricula,
+                    cargo: cargo, setor: setor, orgao: orgao,
+                    vinculo: vinculo, banco_agencia: bancoAgencia, banco_conta: bancoConta
+                })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(resp) {
+                if (resp.error) {
+                    btnManual.disabled = false;
+                    btnManual.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Adicionar Servidor';
+                    alert('Erro ao salvar: ' + resp.error);
+                    return;
+                }
+                // Adiciona à lista de viajantes
+                adicionarPessoa(matricula, cpf, nome, cargo, setor, orgao, superintendencia, bancoAgencia, bancoConta, vinculo, true);
+            })
+            .catch(function() {
+                // Mesmo com erro no salvamento, permite adicionar à viagem
+                adicionarPessoa(matricula, cpf, nome, cargo, setor, orgao, superintendencia, bancoAgencia, bancoConta, vinculo, true);
+            });
+            return;
+        }
+
+        // ── Cadastro via API (servidor encontrado) ──
+        var btn = e.target.closest('.btn-adicionar-pessoa');
+        if (!btn) return;
+
+        var matricula = btn.getAttribute('data-matricula');
+        var cpf = btn.getAttribute('data-cpf');
+        var nome = btn.getAttribute('data-nome');
+        var cargo = btn.getAttribute('data-cargo');
+        var setor = btn.getAttribute('data-setor');
+        var orgao = btn.getAttribute('data-orgao');
+        var superintendencia = btn.getAttribute('data-superintendencia');
+        var bancoAgencia = btn.getAttribute('data-banco-agencia');
+        var bancoConta = btn.getAttribute('data-banco-conta');
+        var vinculo = btn.getAttribute('data-vinculo');
+
+        adicionarPessoa(matricula, cpf, nome, cargo, setor, orgao, superintendencia, bancoAgencia, bancoConta, vinculo, false);
+    };
+
+    // ── Função central: adiciona pessoa à lista de viajantes ──
+    function adicionarPessoa(matricula, cpf, nome, cargo, setor, orgao, superintendencia, bancoAgencia, bancoConta, vinculo, isManual) {
+        // Tenta encontrar o cargo correspondente automaticamente
+        var cargoAutoId = encontrarCargoId(cargo);
+
+        var existente = document.querySelector('input[name="pessoas_cpf[]"][value="' + cpf + '"]');
+        if (existente) return;
+
+        var container = document.getElementById('pessoas-selecionadas');
+        var uid = 'p_' + cpf.replace(/\D/g, '');
+        var badgeOrigem = isManual
+            ? '<span class="badge bg-warning text-dark ms-2"><i class="bi bi-pencil-fill me-1"></i>Manual</span>'
+            : '';
+
+        var div = document.createElement('div');
+        div.className = 'pessoa-selecionada p-3 border rounded mb-2 bg-light shadow-sm';
+        div.innerHTML = '<div class="d-flex justify-content-between align-items-start">'
+            + '<div class="flex-grow-1">'
+            // Linha 1: Nome + badges
+            + '<div class="d-flex align-items-center gap-2 mb-2">'
+            + '<h6 class="mb-0"><i class="bi bi-person-fill me-1 text-primary"></i>' + nome + '</h6>'
+            + (orgao ? '<span class="badge bg-info text-dark">' + orgao + '</span>' : '')
+            + badgeOrigem
+            + '</div>'
+            // Linha 2: Info do servidor
+            + '<div class="d-flex flex-wrap gap-3 mb-2">'
+            + (matricula ? '<small class="text-muted"><i class="bi bi-person-badge me-1"></i>Mat: ' + matricula + '</small>' : '')
+            + '<small class="text-muted"><i class="bi bi-card-text me-1"></i>CPF: ' + cpf + '</small>'
+            + (cargo ? '<small class="text-muted"><i class="bi bi-briefcase me-1"></i>' + cargo + '</small>' : '')
+            + (setor ? '<small class="text-muted"><i class="bi bi-geo-alt me-1"></i>' + setor + '</small>' : '')
+            + (vinculo ? '<small class="text-muted"><i class="bi bi-link-45deg me-1"></i>' + vinculo + '</small>' : '')
+            + '</div>'
+            // Linha 3: Cargo para Diária + Valor
+            + '<div class="row g-2 mb-2">'
+            + '<div class="col-md-5">'
+            + '<label class="form-label small fw-semibold mb-1">Cargo para Diaria <span class="text-danger">*</span></label>'
+            + '<select name="pessoas_cargo_id[]" class="form-select form-select-sm select-cargo-diaria" required>'
+            + '<option value="">Selecione</option>'
+            + cargosOptions
+            + '</select>'
+            + '</div>'
+            + '<div class="col-md-4 d-flex align-items-end">'
+            + '<div class="valor-diaria-display small text-success fw-semibold" style="display:none;"></div>'
+            + '</div>'
+            + '</div>'
+            // Linha 4: Assessorando
+            + '<div class="row g-2 mb-1 align-items-center">'
+            + '<div class="col-auto">'
+            + '<div class="form-check">'
+            + '<input type="checkbox" class="form-check-input checkbox-assessorando" id="chk_' + uid + '">'
+            + '<label class="form-check-label small fw-semibold" for="chk_' + uid + '">Voce vai assessorar alguem?</label>'
+            + '</div>'
+            + '</div>'
+            + '<div class="col-md-4 assessorado-container" style="display:none;">'
+            + '<select name="pessoas_cargo_assessorado_id[]" class="form-select form-select-sm select-cargo-assessorado">'
+            + '<option value="">Cargo do assessorado</option>'
+            + assessoradoOptions
+            + '</select>'
+            + '</div>'
+            + '<div class="col assessorado-info" style="display:none;">'
+            + '<small class="text-muted fst-italic"><i class="bi bi-info-circle me-1"></i>Valor sera calculado pelo cargo do assessorado</small>'
+            + '</div>'
+            + '</div>'
+            // Hidden inputs (dados do servidor)
+            + '<input type="hidden" name="pessoas_matricula[]" value="' + (matricula || '') + '">'
+            + '<input type="hidden" name="pessoas_cpf[]" value="' + cpf + '">'
+            + '<input type="hidden" name="pessoas_nome[]" value="' + nome.replace(/"/g, '&quot;') + '">'
+            + '<input type="hidden" name="pessoas_banco_agencia[]" value="' + (bancoAgencia || '') + '">'
+            + '<input type="hidden" name="pessoas_banco_conta[]" value="' + (bancoConta || '') + '">'
+            + '<input type="hidden" name="pessoas_vinculo[]" value="' + (vinculo || '') + '">'
+            + '<input type="hidden" name="pessoas_cargo_folha[]" value="' + (cargo || '') + '">'
+            + '<input type="hidden" name="pessoas_setor[]" value="' + (setor || '') + '">'
+            + '<input type="hidden" name="pessoas_orgao[]" value="' + (orgao || '') + '">'
+            + '</div>'
+            + '<button type="button" class="btn btn-sm btn-outline-danger remover-pessoa-btn ms-2"><i class="bi bi-trash"></i></button>'
+            + '</div>';
+        container.appendChild(div);
+
+        // Event listeners
+        var selectCargo = div.querySelector('.select-cargo-diaria');
+        var checkAssessorando = div.querySelector('.checkbox-assessorando');
+        var assessoradoContainer = div.querySelector('.assessorado-container');
+        var assessoradoInfo = div.querySelector('.assessorado-info');
+        var selectAssessorado = div.querySelector('.select-cargo-assessorado');
+
+        // Auto-seleciona cargo se encontrou correspondência com a API
+        if (cargoAutoId) {
+            selectCargo.value = cargoAutoId;
+        }
+
+        selectCargo.onchange = function() {
+            recalcularValores();
+        };
+
+        checkAssessorando.onchange = function() {
+            if (this.checked) {
+                assessoradoContainer.style.display = 'block';
+                assessoradoInfo.style.display = 'block';
+            } else {
+                assessoradoContainer.style.display = 'none';
+                assessoradoInfo.style.display = 'none';
+                selectAssessorado.value = '';
+            }
+            recalcularValores();
+        };
+
+        selectAssessorado.onchange = function() {
+            recalcularValores();
+        };
+
+        // Limpa o resultado da busca e o campo de CPF
+        pessoasEncontradas.innerHTML = '';
+        buscarPessoa.value = '';
+        btnBuscarCpf.disabled = true;
+
+        recalcularValores();
+    }
+
+    // ── Remover pessoa ──
+    document.onclick = function(e) {
+        if (e.target.closest('.remover-pessoa-btn')) {
+            e.target.closest('.pessoa-selecionada').remove();
+            recalcularValores();
+        }
+    };
+
+    // Recalcula valores quando tipo de itinerário muda
+    var originalAtualizarCamposItinerario = atualizarCamposItinerario;
+    atualizarCamposItinerario = function() {
+        originalAtualizarCamposItinerario();
+        recalcularValores();
+    };
+    tipoSelect.onchange = atualizarCamposItinerario;
+
+    // ── Upload de arquivo (drag & drop + click) ──
+    var uploadArea = document.getElementById('upload-area');
+    var fileInput = document.getElementById('arquivo_anexo');
+    var filePlaceholder = document.getElementById('upload-placeholder');
+    var filePreview = document.getElementById('file-preview');
+    var fileName = document.getElementById('file-name');
+    var fileSize = document.getElementById('file-size');
+    var removeFileBtn = document.getElementById('remove-file-btn');
+
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    function showFilePreview(file) {
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        filePlaceholder.style.display = 'none';
+        filePreview.className = 'file-preview show';
+        uploadArea.classList.add('has-file');
+    }
+
+    function clearFile() {
+        fileInput.value = '';
+        filePlaceholder.style.display = 'block';
+        filePreview.className = 'file-preview';
+        uploadArea.classList.remove('has-file');
+    }
+
+    uploadArea.onclick = function(e) {
+        if (e.target.closest('#remove-file-btn')) return;
+        fileInput.click();
+    };
+
+    fileInput.onchange = function() {
+        if (this.files && this.files[0]) {
+            var file = this.files[0];
+            if (file.size > 20 * 1024 * 1024) {
+                alert('Arquivo muito grande. O tamanho maximo e 20MB.');
+                clearFile();
+                return;
+            }
+            showFilePreview(file);
+        }
+    };
+
+    removeFileBtn.onclick = function(e) {
+        e.stopPropagation();
+        clearFile();
+    };
+
+    // Drag & Drop
+    uploadArea.ondragover = function(e) {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    };
+    uploadArea.ondragleave = function() {
+        uploadArea.classList.remove('dragover');
+    };
+    uploadArea.ondrop = function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            var file = e.dataTransfer.files[0];
+            if (file.size > 20 * 1024 * 1024) {
+                alert('Arquivo muito grande. O tamanho maximo e 20MB.');
+                return;
+            }
+            fileInput.files = e.dataTransfer.files;
+            showFilePreview(file);
+        }
+    };
+
+    // ── Validação do formulário ──
+    document.getElementById('form-nova-diaria').onsubmit = function(e) {
+        var pessoas = document.querySelectorAll('input[name="pessoas_cpf[]"]');
+        if (pessoas.length === 0) {
+            e.preventDefault();
+            alert('Adicione pelo menos uma pessoa à viagem.');
+            return false;
+        }
+
+        // Valida cargo de cada pessoa
+        var cargos = document.querySelectorAll('select[name="pessoas_cargo_id[]"]');
+        for (var p = 0; p < cargos.length; p++) {
+            if (!cargos[p].value) {
+                e.preventDefault();
+                alert('Selecione o cargo para diária de todas as pessoas.');
+                cargos[p].focus();
+                return false;
+            }
+        }
+
+        var tipo = tipoItinerarioHidden.value;
+        if (tipo === '1') {
+            var paradas = document.querySelectorAll('select[name="paradas[]"]');
+            var temParada = false;
+            for (var i = 0; i < paradas.length; i++) {
+                if (paradas[i].value) temParada = true;
+            }
+            if (!temParada) {
+                e.preventDefault();
+                alert('Selecione pelo menos uma parada para viagem estadual.');
+                return false;
+            }
+        }
+
+        if (tipo === '2') {
+            var estadoDestino = document.getElementById('estado_destino').value;
+            if (!estadoDestino) {
+                e.preventDefault();
+                alert('Selecione o estado de destino para viagem nacional.');
+                return false;
+            }
+        }
+    };
+});
+</script>
+{% endblock %}

@@ -1,0 +1,209 @@
+{% extends 'diarias/base_diarias.html' %}
+{% block title %}SGC - Minhas Solicitações de Diárias{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-end mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">
+            <i class="bi bi-airplane-engines me-2"></i>Minhas Solicitações
+        </h3>
+        <p class="text-muted mb-0">Acompanhe suas solicitações de diárias e passagens.</p>
+    </div>
+    <div>
+        {% if current_user.tem_permissao('diarias', 'criar') %}
+        <a href="{{ url_for('diarias.nova') }}" class="btn btn-success btn-sm rounded-pill px-3">
+            <i class="bi bi-plus-lg me-1"></i> Nova Solicitação
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+{# Filtros #}
+<div class="card mb-4 border-0 shadow-sm" style="overflow: visible; position: relative; z-index: 10;">
+    <div class="card-body p-3" style="overflow: visible;">
+        <form method="GET" action="{{ url_for('diarias.dashboard') }}">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-2">
+                    <select name="tipo_itinerario" class="form-select form-select-sm">
+                        <option value="">Tipo: Todos</option>
+                        <option value="1" {{ 'selected' if filtros.tipo_itinerario == '1' }}>Estadual</option>
+                        <option value="2" {{ 'selected' if filtros.tipo_itinerario == '2' }}>Nacional</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">Status: Todos</option>
+                        {% for s in status_list %}
+                        <option value="{{ s.id }}" {{ 'selected' if filtros.status == s.id|string }}>{{ s.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                        <input type="text" name="n_processo" class="form-control border-start-0 ps-0"
+                               placeholder="Nº Processo..." value="{{ filtros.n_processo or '' }}">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white text-muted small px-2">Viagem</span>
+                        <input type="date" name="data_viagem" class="form-control px-2"
+                               value="{{ filtros.data_viagem or '' }}">
+                    </div>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold" title="Filtrar">
+                        <i class="bi bi-funnel"></i>
+                    </button>
+                    {% if filtros.tipo_itinerario or filtros.status or filtros.n_processo or filtros.data_viagem %}
+                    <a href="{{ url_for('diarias.dashboard') }}" class="btn btn-outline-danger btn-sm" title="Limpar Filtros">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# Tabela de resultados #}
+<div class="card border-0 shadow-sm overflow-hidden">
+    <div class="card-header bg-white border-bottom py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Solicitações</h5>
+            <span class="badge bg-secondary">{{ itinerarios.total }} registro(s)</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive table-rounded">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Tipo</th>
+                        <th>Nº Processo</th>
+                        <th>Data Solicitação</th>
+                        <th class="text-center">Diárias</th>
+                        <th>Período</th>
+                        <th>Destino</th>
+                        <th class="text-end">Valor Total</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-center" style="width: 80px;">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for it in itinerarios.items %}
+                    <tr style="cursor: pointer;" onclick="window.location='{{ url_for('diarias.detalhes', id=it.id) }}'">
+                        <td class="ps-4">
+                            {% if it.tipo_itinerario == 1 %}
+                                <span class="badge rounded-pill bg-info text-white">Estadual</span>
+                            {% else %}
+                                <span class="badge rounded-pill bg-warning text-dark">Nacional</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if it.n_processo and it.sei_id_procedimento %}
+                                <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ it.sei_id_procedimento }}" target="_blank" class="fw-bold text-decoration-none" onclick="event.stopPropagation();">{{ it.n_processo }} <i class="bi bi-box-arrow-up-right small"></i></a>
+                            {% elif it.n_processo %}
+                                <span class="fw-bold text-dark">{{ it.n_processo }}</span>
+                            {% else %}
+                                <span class="text-muted small">---</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ it.data_solicitacao.strftime('%d/%m/%Y') if it.data_solicitacao else '-' }}
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-light text-dark border">{{ it.qtd_diarias_solicitadas }}</span>
+                        </td>
+                        <td>
+                            <div class="small">
+                                <i class="bi bi-calendar-event text-muted me-1"></i>
+                                {{ it.data_viagem.strftime('%d/%m/%Y') if it.data_viagem else '-' }}
+                            </div>
+                            <div class="small text-muted">
+                                <i class="bi bi-calendar-check me-1"></i>
+                                {{ it.data_retorno.strftime('%d/%m/%Y') if it.data_retorno else '-' }}
+                            </div>
+                        </td>
+                        <td>
+                            {{ it.estado_destino_obj.nome if it.estado_destino_obj else '-' }}
+                        </td>
+                        <td class="text-end">
+                            {% if it.valor_total %}
+                                <span class="fw-bold text-success">
+                                    R$ {{ "{:,.2f}".format(it.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                                </span>
+                            {% else %}
+                                <span class="text-muted small">---</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if it.status_id == 1 %}
+                                <span class="badge rounded-pill bg-secondary">{{ it.status.nome }}</span>
+                            {% elif it.status_id == 2 %}
+                                <span class="badge rounded-pill bg-success">{{ it.status.nome }}</span>
+                            {% elif it.status_id == 3 %}
+                                <span class="badge rounded-pill bg-danger">{{ it.status.nome }}</span>
+                            {% elif it.status_id == 4 %}
+                                <span class="badge rounded-pill bg-dark">{{ it.status.nome }}</span>
+                            {% else %}
+                                <span class="badge rounded-pill bg-secondary">{{ it.status.nome if it.status else '-' }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <a href="{{ url_for('diarias.detalhes', id=it.id) }}"
+                               class="btn btn-sm btn-outline-primary" title="Ver detalhes"
+                               onclick="event.stopPropagation()">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                            Nenhuma solicitação encontrada.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# Paginação #}
+    {% if itinerarios.pages > 1 %}
+    <div class="card-footer bg-white border-top py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                Mostrando <strong>{{ itinerarios.items|length }}</strong> de <strong>{{ itinerarios.total }}</strong> solicitações
+            </div>
+            <nav aria-label="Navegação de páginas">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item {{ 'disabled' if not itinerarios.has_prev }}">
+                        <a class="page-link" href="{{ url_for('diarias.dashboard', page=itinerarios.prev_num, **filtros) if itinerarios.has_prev else '#' }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% for p in itinerarios.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if p %}
+                        <li class="page-item {{ 'active' if p == itinerarios.page }}">
+                            <a class="page-link" href="{{ url_for('diarias.dashboard', page=p, **filtros) }}">{{ p }}</a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    <li class="page-item {{ 'disabled' if not itinerarios.has_next }}">
+                        <a class="page-link" href="{{ url_for('diarias.dashboard', page=itinerarios.next_num, **filtros) if itinerarios.has_next else '#' }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

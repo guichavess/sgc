@@ -1,0 +1,148 @@
+{% extends 'prestacoes_contratos/base_prestacoes.html' %}
+
+{% block title %}Registrar Execução{% endblock %}
+
+{% block content %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Registrar Execução</h2>
+        {% if contrato %}
+        <a href="{{ url_for('prestacoes_contratos.execucoes_selecionar_itens', codigo=contrato.codigo) }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Voltar
+        </a>
+        {% else %}
+        <a href="{{ url_for('prestacoes_contratos.prestacoes_index') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Voltar
+        </a>
+        {% endif %}
+    </div>
+
+    {# Dados do Contrato (se disponível) #}
+    {% if contrato %}
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header bg-primary text-white fw-semibold">
+            <i class="bi bi-file-earmark-text me-1"></i>Dados do Contrato
+        </div>
+        <div class="card-body" style="border-left: 4px solid #0d6efd;">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="mb-1"><strong>Código:</strong> {{ contrato.codigo }}</div>
+                    <div><strong>Objeto:</strong> {{ contrato.objeto }}</div>
+                </div>
+                <div class="col-md-4">
+                    <div><strong>Valor:</strong> <span class="text-success fw-semibold">{{ contrato.valor_formatado }}</span></div>
+                </div>
+                <div class="col-md-4">
+                    {# Info de itens restantes no fluxo #}
+                    {% if itens_restantes > 0 %}
+                    <div class="alert alert-info py-2 mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Ainda {{ 'resta' if itens_restantes == 1 else 'restam' }} <strong>{{ itens_restantes }}</strong>
+                        {{ 'item' if itens_restantes == 1 else 'itens' }} após este.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Dados do Item #}
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header bg-white fw-semibold">
+            <i class="bi bi-box me-1"></i>Dados do Item
+        </div>
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-3">
+                {% if item.tipo == 'S' %}
+                    <span class="badge bg-success fs-6 px-3 py-2">Serviço</span>
+                {% else %}
+                    <span class="badge bg-info text-dark fs-6 px-3 py-2">Material</span>
+                {% endif %}
+                <div>
+                    <div class="fw-semibold">{{ item.nome }}</div>
+                    <div class="text-muted small">ID: {{ item.id }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Formulário de Execução #}
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white fw-semibold">
+            <i class="bi bi-pencil-square me-1"></i>Dados da Execução
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('prestacoes_contratos.prestacoes_store', item_tipo=item.tipo, item_id=item.id) }}" method="post">
+                {% if contrato %}
+                    <input type="hidden" name="codigo_contrato" value="{{ contrato.codigo }}">
+                {% endif %}
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="quantidade" class="form-label fw-semibold">Quantidade</label>
+                        <input type="number" class="form-control" id="quantidade" name="quantidade"
+                               min="1" value="1" required>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label for="valor" class="form-label fw-semibold">Valor Unitário</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="text" class="form-control" id="valor" name="valor" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label for="data" class="form-label fw-semibold">Data</label>
+                        <input type="date" class="form-control" id="data" name="data" required>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-2">
+                    {% if contrato %}
+                    <a href="{{ url_for('prestacoes_contratos.execucoes_selecionar_itens', codigo=contrato.codigo) }}" class="btn btn-secondary">
+                        <i class="bi bi-x-lg me-1"></i>Cancelar
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('prestacoes_contratos.dashboard') }}" class="btn btn-secondary">
+                        <i class="bi bi-x-lg me-1"></i>Cancelar
+                    </a>
+                    {% endif %}
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-lg me-1"></i>Registrar Execução
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Define data padrão como hoje
+        const dataInput = document.getElementById('data');
+        if (dataInput && !dataInput.value) {
+            const hoje = new Date().toISOString().split('T')[0];
+            dataInput.value = hoje;
+        }
+
+        // Formatação do campo de valor para moeda brasileira
+        const valorInput = document.getElementById('valor');
+        valorInput.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value === '') {
+                e.target.value = '';
+                return;
+            }
+
+            value = (parseInt(value) / 100).toFixed(2);
+            value = value.replace('.', ',');
+            value = value.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+            e.target.value = value;
+        });
+    });
+</script>
+{% endblock %}

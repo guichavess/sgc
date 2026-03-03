@@ -1,0 +1,40 @@
+{# Componente: Modal de Sincronização Unificada #}
+{#
+    Uso: {% include 'components/modals/sync_modal.html' %}
+
+    Este modal é usado para sincronização em 3 fases:
+    - Fase 1: Download de documentos SEI
+    - Fase 2: Processamento de etapas
+    - Fase 3: Atualização de saldos
+#}
+<div class="modal fade" id="modalSyncSei" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-arrow-repeat me-2"></i>Sincronização Unificada
+                </h5>
+            </div>
+            <div class="modal-body">
+                <h6 id="tituloFaseSei" class="fw-bold text-primary mb-2">Preparando...</h6>
+
+                <div class="progress mb-3" style="height: 25px;">
+                    <div id="barraProgressoSei"
+                         class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+                         role="progressbar" style="width: 0%;">0%</div>
+                </div>
+
+                <p id="msgProgressoSei" class="text-center text-muted small mb-2">Aguardando início...</p>
+
+                <div id="logDetalhesSei" class="border rounded p-2 bg-light"
+                     style="height: 150px; overflow-y: auto; font-size: 11px; font-family: monospace;">
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled id="btnFecharModalSei">
+                    Aguarde...
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

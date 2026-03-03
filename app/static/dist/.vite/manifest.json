@@ -1,0 +1,89 @@
+{
+  "_Modal-BdqnsjNv.js": {
+    "file": "js/chunks/Modal-BdqnsjNv.js",
+    "name": "Modal"
+  },
+  "_react-vendor-C-8u0GKz.js": {
+    "file": "js/chunks/react-vendor-C-8u0GKz.js",
+    "name": "react-vendor"
+  },
+  "_recharts-vendor-BKSBomDm.js": {
+    "file": "js/chunks/recharts-vendor-BKSBomDm.js",
+    "name": "recharts-vendor",
+    "imports": [
+      "_react-vendor-C-8u0GKz.js"
+    ]
+  },
+  "dashboards/main.tsx": {
+    "file": "js/dashboards-app-D9_VsTjr.js",
+    "name": "dashboards-app",
+    "src": "dashboards/main.tsx",
+    "isEntry": true,
+    "imports": [
+      "_react-vendor-C-8u0GKz.js",
+      "_recharts-vendor-BKSBomDm.js"
+    ]
+  },
+  "js/components/MoneyInput.js": {
+    "file": "js/chunks/MoneyInput-DB_fWgPv.js",
+    "name": "MoneyInput",
+    "src": "js/components/MoneyInput.js",
+    "isDynamicEntry": true
+  },
+  "js/main.js": {
+    "file": "js/main-BHmVAw9D.js",
+    "name": "main",
+    "src": "js/main.js",
+    "isEntry": true,
+    "imports": [
+      "_Modal-BdqnsjNv.js",
+      "js/components/MoneyInput.js"
+    ],
+    "dynamicImports": [
+      "js/components/MoneyInput.js"
+    ]
+  },
+  "js/pages/dashboard.js": {
+    "file": "js/dashboard-CZ5gE76o.js",
+    "name": "dashboard",
+    "src": "js/pages/dashboard.js",
+    "isEntry": true,
+    "imports": [
+      "_Modal-BdqnsjNv.js",
+      "js/components/MoneyInput.js"
+    ]
+  },
+  "js/pages/detalhes.js": {
+    "file": "js/detalhes-DXaGMHYW.js",
+    "name": "detalhes",
+    "src": "js/pages/detalhes.js",
+    "isEntry": true
+  },
+  "js/pages/login.js": {
+    "file": "js/login-N2HZpP6P.js",
+    "name": "login",
+    "src": "js/pages/login.js",
+    "isEntry": true
+  },
+  "js/pages/nova.js": {
+    "file": "js/nova-BXwQTk9i.js",
+    "name": "nova",
+    "src": "js/pages/nova.js",
+    "isEntry": true,
+    "imports": [
+      "_Modal-BdqnsjNv.js"
+    ]
+  },
+  "js/pages/pendencias.js": {
+    "file": "js/pendencias-Bd5Ot4cA.js",
+    "name": "pendencias",
+    "src": "js/pages/pendencias.js",
+    "isEntry": true
+  },
+  "js/pages/relatorios.js": {
+    "file": "js/relatorios-B08y_4wl.js",
+    "name": "relatorios",
+    "src": "js/pages/relatorios.js",
+    "isEntry": true
+  }
+}

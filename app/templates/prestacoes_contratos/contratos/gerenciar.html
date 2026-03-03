@@ -1,0 +1,2467 @@
+{% extends 'prestacoes_contratos/base_prestacoes.html' %}
+
+{% block title %}Gerenciar Contrato {{ contrato.codigo }}{% endblock %}
+
+{% block content %}
+<div class="mt-4">
+    {# ===== HEADER (padrão entre módulos — igual detalhes pagamentos) ===== #}
+    <div class="d-flex justify-content-end mb-3">
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('prestacoes_contratos.contrato_execucoes', codigo=contrato.codigo) }}"
+               class="btn btn-outline-success btn-sm">
+                <i class="bi bi-play-circle me-1"></i> Execuções
+            </a>
+            <a href="{{ url_for('prestacoes_contratos.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body p-0">
+            {# --- Cabeçalho: Contratado, Código | Objeto --- #}
+            <div class="bg-light p-3 border-bottom">
+                <h4 class="fw-bold text-dark mb-1">
+                    {{ contrato.nomeContratado or '—' }}
+                </h4>
+                <p class="text-secondary mb-0">
+                    <strong>SIAFE: {{ contrato.codigo }}</strong> | Objeto: {{ contrato.objeto or '—' }}
+                </p>
+            </div>
+
+            {# --- Classificadores (esq) + Dados do contrato (dir) --- #}
+            <div class="border-bottom p-3">
+                <div class="row">
+                    {# Coluna esquerda: Fonte, Tipo de despesa, Sub item #}
+                    <div class="col-md-6">
+                        {% if classificadores and (classificadores.fontes or classificadores.tipos_patrimoniais or classificadores.subitens) %}
+                        <div class="mb-1">
+                            <strong>Fonte:</strong>
+                            {% if classificadores.fontes %}
+                                {% for f in classificadores.fontes %}
+                                    <span class="ms-1">{{ f.codigo }} - {{ f.nome }}{{ ', ' if not loop.last }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                        <div class="mb-1">
+                            <strong>Tipo de despesa:</strong>
+                            {% if classificadores.tipos_patrimoniais %}
+                                {% for tp in classificadores.tipos_patrimoniais %}
+                                    <span class="ms-1">{{ tp.codigo }} - {{ tp.nome }}{{ ', ' if not loop.last }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <strong>Sub item:</strong>
+                            {% if classificadores.subitens %}
+                                {% for si in classificadores.subitens %}
+                                    <span class="ms-1">{{ si.codigo }} - {{ si.nome }}{{ ', ' if not loop.last }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {# Coluna direita: Natureza, Centro de custo, Tipo execução, Processo #}
+                    <div class="col-md-6">
+                        <div class="mb-1">
+                            <strong>Natureza:</strong>
+                            {% if naturezas_contrato %}
+                                {% for nat in naturezas_contrato %}
+                                    <div>{{ nat.codigo }} - {{ nat.titulo }}</div>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                        <div class="mb-1">
+                            <strong>Centro de custo:</strong>
+                            {% if contrato.centro_de_custo %}
+                                <span>{{ contrato.centro_de_custo.descricao }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                        <div class="mb-1">
+                            <strong>Tipo de execução:</strong>
+                            {% if contrato.tipo_execucao %}
+                                <span>{{ contrato.tipo_execucao.descricao }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <strong>Processo:</strong>
+                            <span>{{ contrato.numProcesso or '—' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# --- Dados Financeiros --- #}
+            <div class="p-3">
+                <h6 class="text-uppercase text-muted fw-bold mb-3 small">
+                    <i class="bi bi-currency-dollar me-1"></i> Dados Financeiros
+                </h6>
+
+                {# Exercício atual #}
+                <div>
+                    <span class="fw-semibold text-primary small">Exercicio atual: {{ totais_financeiros.ano }}</span>
+                    <div class="row mt-1">
+                        <div class="col">
+                            <strong>Empenho:</strong>
+                            <span class="fw-semibold">
+                                R$ {{ "{:,.2f}".format(totais_financeiros.exercicio.empenho)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                            </span>
+                        </div>
+                        <div class="col">
+                            <strong>Liquidacao:</strong>
+                            <span class="fw-semibold">
+                                R$ {{ "{:,.2f}".format(totais_financeiros.exercicio.liquidacao)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                            </span>
+                        </div>
+                        <div class="col">
+                            <strong>PD (em aberto):</strong>
+                            <span class="fw-semibold text-warning">
+                                R$ {{ "{:,.2f}".format(totais_financeiros.exercicio.pd_aberto)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                            </span>
+                        </div>
+                        <div class="col">
+                            <strong>PD (executada):</strong>
+                            <span class="fw-semibold text-success">
+                                R$ {{ "{:,.2f}".format(totais_financeiros.exercicio.pd_executada)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                            </span>
+                        </div>
+                        <div class="col">
+                            <strong>Pagamento:</strong>
+                            <span class="fw-semibold">
+                                R$ {{ "{:,.2f}".format(totais_financeiros.exercicio.pagamento)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ===== ABAS ===== #}
+    {# Tipo-Contrato: check se tipificado + centro de custo + tipo execução #}
+    {% set tipo_contrato_ok = contrato.esta_tipificado and contrato.centro_de_custo_id and contrato.tipo_execucao_id %}
+    <ul class="nav nav-tabs mb-0" id="tabsContrato" role="tablist">
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {{ 'active' if aba == 'tipificacao' }}"
+               href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='tipificacao') }}">
+                <i class="bi bi-tags me-1"></i> Tipo-Contrato
+                {% if tipo_contrato_ok %}
+                <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                {% else %}
+                <i class="bi bi-exclamation-circle text-warning ms-1"></i>
+                {% endif %}
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {{ 'active' if aba == 'itens' }}"
+               href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='itens') }}">
+                <i class="bi bi-list-ul me-1"></i> Itens
+                {% if qtd_itens_vinculados > 0 %}
+                <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                {% else %}
+                <i class="bi bi-exclamation-circle text-warning ms-1"></i>
+                {% endif %}
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {{ 'active' if aba == 'fiscal' }}"
+               href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='fiscal') }}">
+                <i class="bi bi-person-badge me-1"></i> Fiscal
+                {% if contrato.fiscais %}
+                <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                {% else %}
+                <i class="bi bi-exclamation-circle text-warning ms-1"></i>
+                {% endif %}
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {{ 'active' if aba == 'aditivos' }}"
+               href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='aditivos') }}">
+                <i class="bi bi-file-earmark-plus me-1"></i> Aditivos
+                {% if qtd_aditivos > 0 %}
+                <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                {% else %}
+                <i class="bi bi-exclamation-circle text-warning ms-1"></i>
+                {% endif %}
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {{ 'active' if aba == 'saldo' }}"
+               href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='saldo') }}">
+                <i class="bi bi-wallet2 me-1"></i> Saldo
+                {% if saldo %}
+                <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                {% else %}
+                <i class="bi bi-exclamation-circle text-warning ms-1"></i>
+                {% endif %}
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {{ 'active' if aba == 'financeiro' }}"
+               href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='financeiro') }}">
+                <i class="bi bi-currency-dollar me-1"></i> Financeiro
+                {% if tem_empenhos %}
+                <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                {% else %}
+                <i class="bi bi-exclamation-circle text-warning ms-1"></i>
+                {% endif %}
+            </a>
+        </li>
+    </ul>
+
+    {# ===== CONTEÚDO DA ABA ===== #}
+    <div class="card border-0 shadow-sm border-top-0" style="border-top-left-radius: 0; border-top-right-radius: 0;">
+        <div class="card-body">
+
+            {# ----- ABA TIPO-CONTRATO ----- #}
+            {% if aba == 'tipificacao' %}
+
+            {# Sub-abas de Tipo-Contrato #}
+            <ul class="nav nav-tabs mb-4" id="tabsTipoContrato">
+                <li class="nav-item">
+                    <a class="nav-link {{ 'active' if sub_aba_tipo == 'categorizacao' }}"
+                       href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='tipificacao', sub_aba_tipo='categorizacao') }}">
+                        <i class="bi bi-tags me-1"></i> Categorização
+                        {% if contrato.esta_tipificado %}
+                        <i class="bi bi-check-circle-fill text-success ms-1" style="font-size: 0.7rem;"></i>
+                        {% else %}
+                        <i class="bi bi-exclamation-circle text-warning ms-1" style="font-size: 0.7rem;"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ 'active' if sub_aba_tipo == 'centro_custo' }}"
+                       href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='tipificacao', sub_aba_tipo='centro_custo') }}">
+                        <i class="bi bi-building me-1"></i> Centro de Custo
+                        {% if contrato.centro_de_custo_id %}
+                        <i class="bi bi-check-circle-fill text-success ms-1" style="font-size: 0.7rem;"></i>
+                        {% else %}
+                        <i class="bi bi-exclamation-circle text-warning ms-1" style="font-size: 0.7rem;"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ 'active' if sub_aba_tipo == 'tipo_execucao' }}"
+                       href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='tipificacao', sub_aba_tipo='tipo_execucao') }}">
+                        <i class="bi bi-arrow-repeat me-1"></i> Tipo de Execução
+                        {% if contrato.tipo_execucao_id %}
+                        <i class="bi bi-check-circle-fill text-success ms-1" style="font-size: 0.7rem;"></i>
+                        {% else %}
+                        <i class="bi bi-exclamation-circle text-warning ms-1" style="font-size: 0.7rem;"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ 'active' if sub_aba_tipo == 'detalhamento' }}"
+                       href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='tipificacao', sub_aba_tipo='detalhamento') }}">
+                        <i class="bi bi-clipboard-data me-1"></i> Detalhamento
+                        {% if tem_empenhos %}
+                        <i class="bi bi-check-circle-fill text-success ms-1" style="font-size: 0.7rem;"></i>
+                        {% else %}
+                        <i class="bi bi-exclamation-circle text-warning ms-1" style="font-size: 0.7rem;"></i>
+                        {% endif %}
+                    </a>
+                </li>
+            </ul>
+
+            {# ===== SUB-ABA: CATEGORIZAÇÃO ===== #}
+            {% if sub_aba_tipo == 'categorizacao' %}
+
+            {% if tipificacao %}
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h5 class="mb-0">Tipificação do Contrato</h5>
+                    {% if current_user.tem_permissao('prestacoes_contratos', 'editar') %}
+                    <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalTipificar">
+                        <i class="bi bi-pencil me-1"></i> Editar Tipificação
+                    </button>
+                    {% endif %}
+                </div>
+
+                {# Resumo #}
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="text-muted small">Tipo do Contrato</div>
+                        <div class="fw-semibold">{{ tipificacao.tipo_contrato_display }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Data da Tipificação</div>
+                        <div class="fw-semibold">
+                            {% if tipificacao.data_tipificacao %}
+                                {{ tipificacao.data_tipificacao.strftime('%d/%m/%Y %H:%M') }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Status</div>
+                        <div>
+                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Tipificado</span>
+                        </div>
+                    </div>
+                </div>
+
+                {# Tabela CATSERV #}
+                {% if tipificacao.catserv %}
+                <h6 class="fw-bold border-bottom pb-2 mb-0">
+                    <i class="bi bi-diagram-3 me-1 text-success"></i> Classificação de Serviço (CATSERV)
+                </h6>
+                <div class="table-responsive mb-4">
+                    <table class="table table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:25%">Seção</th>
+                                <th style="width:25%">Divisão</th>
+                                <th style="width:25%">Grupo</th>
+                                <th style="width:25%">Classe</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <span class="text-muted small d-block">{{ tipificacao.catserv.secao.id }}</span>
+                                    {{ tipificacao.catserv.secao.nome }}
+                                </td>
+                                <td>
+                                    <span class="text-muted small d-block">{{ tipificacao.catserv.divisao.id }}</span>
+                                    {{ tipificacao.catserv.divisao.nome }}
+                                </td>
+                                <td>
+                                    <span class="text-muted small d-block">{{ tipificacao.catserv.grupo.id }}</span>
+                                    {{ tipificacao.catserv.grupo.nome }}
+                                </td>
+                                <td>
+                                    <span class="text-muted small d-block">{{ tipificacao.catserv.classe.id }}</span>
+                                    <strong>{{ tipificacao.catserv.classe.nome }}</strong>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+
+                {# Tabela CATMAT #}
+                {% if tipificacao.catmat %}
+                <h6 class="fw-bold border-bottom pb-2 mb-0">
+                    <i class="bi bi-box-seam me-1 text-info"></i> Classificação de Material (CATMAT)
+                </h6>
+                <div class="table-responsive mb-4">
+                    <table class="table table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:30%">Grupo</th>
+                                <th style="width:30%">Classe</th>
+                                <th style="width:40%">PDM</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <span class="text-muted small d-block">{{ tipificacao.catmat.grupo.codigo }}</span>
+                                    {{ tipificacao.catmat.grupo.nome }}
+                                </td>
+                                <td>
+                                    <span class="text-muted small d-block">{{ tipificacao.catmat.classe.codigo }}</span>
+                                    {{ tipificacao.catmat.classe.nome }}
+                                </td>
+                                <td>
+                                    {% if tipificacao.catmat.pdm %}
+                                    <span class="text-muted small d-block">{{ tipificacao.catmat.pdm.codigo }}</span>
+                                    <strong>{{ tipificacao.catmat.pdm.nome }}</strong>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+
+            {% else %}
+                {# Não tipificado #}
+                <h5 class="mb-3">Tipificação do Contrato</h5>
+
+                {# === Explicação interativa da hierarquia (ANTES do alerta) === #}
+                <div class="card border-0 bg-light mb-3">
+                    <div class="card-body py-3">
+                        <p class="fw-semibold text-muted small mb-2 text-uppercase" style="letter-spacing: 0.5px;">
+                            <i class="bi bi-lightbulb-fill text-warning me-1"></i> O que é tipificação?
+                        </p>
+                        <p class="small text-muted mb-3">
+                            A tipificação classifica o contrato dentro dos catálogos oficiais, determinando quais itens poderão ser vinculados e executados.
+                            <strong>Clique nos níveis abaixo</strong> para entender cada etapa.
+                        </p>
+
+                        {# Stepper CATMAT interativo #}
+                        <div class="mb-3">
+                            <div class="small fw-semibold text-info mb-2">
+                                <i class="bi bi-box-seam me-1"></i> Hierarquia de Materiais (CATMAT)
+                            </div>
+                            <div class="d-flex align-items-center flex-wrap gap-1 help-stepper">
+                                <span class="help-step help-step-clickable" style="--step-color: #0dcaf0"
+                                      data-help-target="help-mat-grupo" role="button" tabindex="0">
+                                    <span class="help-step-icon">1</span> Grupo
+                                </span>
+                                <i class="bi bi-chevron-right text-muted small"></i>
+                                <span class="help-step help-step-clickable" style="--step-color: #0dcaf0"
+                                      data-help-target="help-mat-classe" role="button" tabindex="0">
+                                    <span class="help-step-icon">2</span> Classe
+                                </span>
+                                <i class="bi bi-chevron-right text-muted small"></i>
+                                <span class="help-step help-step-final help-step-clickable" style="--step-color: #0dcaf0"
+                                      data-help-target="help-mat-pdm" role="button" tabindex="0">
+                                    <span class="help-step-icon">3</span> PDM
+                                </span>
+                                <i class="bi bi-chevron-right text-muted small opacity-50"></i>
+                                <span class="help-step help-step-next help-step-clickable" style="--step-color: #adb5bd"
+                                      data-help-target="help-mat-item" role="button" tabindex="0">
+                                    <span class="help-step-icon">4</span> Item
+                                </span>
+                            </div>
+                            {# Caixas de explicação (aparecem ao clicar) #}
+                            <div class="help-detail mt-2" id="help-mat-grupo" style="display:none;">
+                                <div class="small p-2 rounded border-start border-3 border-info bg-white">
+                                    <strong class="text-info">Grupo</strong> — É a categoria mais ampla. Reúne grandes áreas de materiais.<br>
+                                    <span class="text-muted">Ex: Grupo 89 = Subsistência (alimentação e consumo básico).</span>
+                                </div>
+                            </div>
+                            <div class="help-detail mt-2" id="help-mat-classe" style="display:none;">
+                                <div class="small p-2 rounded border-start border-3 border-info bg-white">
+                                    <strong class="text-info">Classe (Subgrupo)</strong> — Refina a classificação dentro do grupo, separando por tipo de produto.<br>
+                                    <span class="text-muted">Ex: Dentro de Subsistência, a Classe 8960 reúne todas as bebidas sem álcool.</span>
+                                </div>
+                            </div>
+                            <div class="help-detail mt-2" id="help-mat-pdm" style="display:none;">
+                                <div class="small p-2 rounded border-start border-3 border-info bg-white">
+                                    <strong class="text-info">PDM</strong> — Padrão Descritivo de Material. Define o tipo genérico do produto, sem marca, com características essenciais.<br>
+                                    <span class="text-muted">Ex: PDM 947 = Refrigerante.</span>
+                                </div>
+                            </div>
+                            <div class="help-detail mt-2" id="help-mat-item" style="display:none;">
+                                <div class="small p-2 rounded border-start border-3 border-info bg-white">
+                                    <strong class="text-muted">Item CATMAT</strong> — Nível mais específico. Representa o produto com características detalhadas para aquisição.<br>
+                                    <span class="text-muted">Ex: Item 305734 = Refrigerante, sabor cola, light.</span><br>
+                                    <em class="text-muted" style="font-size: 0.7rem;">O Item é selecionado na aba <strong>Itens</strong>, não na tipificação.</em>
+                                </div>
+                            </div>
+                        </div>
+
+                        {# Stepper CATSERV interativo #}
+                        <div>
+                            <div class="small fw-semibold text-success mb-2">
+                                <i class="bi bi-diagram-3 me-1"></i> Hierarquia de Serviços (CATSERV)
+                            </div>
+                            <div class="d-flex align-items-center flex-wrap gap-1 help-stepper">
+                                <span class="help-step help-step-clickable" style="--step-color: #6c757d"
+                                      data-help-target="help-serv-secao" role="button" tabindex="0">
+                                    <span class="help-step-icon">1</span> Seção
+                                </span>
+                                <i class="bi bi-chevron-right text-muted small"></i>
+                                <span class="help-step help-step-clickable" style="--step-color: #6c757d"
+                                      data-help-target="help-serv-divisao" role="button" tabindex="0">
+                                    <span class="help-step-icon">2</span> Divisão
+                                </span>
+                                <i class="bi bi-chevron-right text-muted small"></i>
+                                <span class="help-step help-step-clickable" style="--step-color: #198754"
+                                      data-help-target="help-serv-grupo" role="button" tabindex="0">
+                                    <span class="help-step-icon">3</span> Grupo
+                                </span>
+                                <i class="bi bi-chevron-right text-muted small"></i>
+                                <span class="help-step help-step-final help-step-clickable" style="--step-color: #198754"
+                                      data-help-target="help-serv-classe" role="button" tabindex="0">
+                                    <span class="help-step-icon">4</span> Classe
+                                </span>
+                            </div>
+                            {# Caixas de explicação CATSERV #}
+                            <div class="help-detail mt-2" id="help-serv-secao" style="display:none;">
+                                <div class="small p-2 rounded border-start border-3 border-success bg-white">
+                                    <strong class="text-success">Seção</strong> — Agrupamento mais amplo de serviços, organizados por grandes áreas de atuação.
+                                </div>
+                            </div>
+                            <div class="help-detail mt-2" id="help-serv-divisao" style="display:none;">
+                                <div class="small p-2 rounded border-start border-3 border-success bg-white">
+                                    <strong class="text-success">Divisão</strong> — Subdivide a seção em segmentos mais específicos de serviços.
+                                </div>
+                            </div>
+                            <div class="help-detail mt-2" id="help-serv-grupo" style="display:none;">
+                                <div class="small p-2 rounded border-start border-3 border-success bg-white">
+                                    <strong class="text-success">Grupo</strong> — Agrupa serviços por natureza semelhante dentro da divisão.
+                                </div>
+                            </div>
+                            <div class="help-detail mt-2" id="help-serv-classe" style="display:none;">
+                                <div class="small p-2 rounded border-start border-3 border-success bg-white">
+                                    <strong class="text-success">Classe</strong> — Nível mais específico da tipificação. Define quais serviços estarão disponíveis para vinculação e execução.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# Alerta "não tipificado" com botão de ação #}
+                <div class="alert alert-warning d-flex align-items-start gap-3">
+                    <i class="bi bi-exclamation-triangle fs-3 text-warning"></i>
+                    <div>
+                        <strong>Contrato não tipificado.</strong><br>
+                        Tipifique o contrato para habilitar a seleção de itens e o registro de execuções.
+                        {% if current_user.tem_permissao('prestacoes_contratos', 'editar') %}
+                        <div class="mt-2">
+                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalTipificar">
+                                <i class="bi bi-tags me-1"></i> Tipificar Agora
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {# ===== SUB-ABA: CENTRO DE CUSTO ===== #}
+            {% elif sub_aba_tipo == 'centro_custo' %}
+
+            <h5 class="mb-3"><i class="bi bi-building me-1"></i> Centro de Custo</h5>
+
+            {% if contrato.centro_de_custo %}
+            <div class="card border-0 bg-light mb-3">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <div class="text-muted small">Centro de Custo atual</div>
+                            <div class="fw-semibold fs-5">{{ contrato.centro_de_custo.descricao }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Definido</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if current_user.tem_permissao('prestacoes_contratos', 'editar') %}
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('prestacoes_contratos.contrato_centro_custo_salvar', codigo=contrato.codigo) }}">
+                        <div class="mb-3">
+                            <label for="centro_de_custo_id" class="form-label fw-semibold">
+                                {{ 'Alterar Centro de Custo' if contrato.centro_de_custo else 'Selecione o Centro de Custo' }}
+                            </label>
+                            <select name="centro_de_custo_id" id="centro_de_custo_id" class="form-select">
+                                <option value="">— Nenhum —</option>
+                                {% for cc in centros_de_custo %}
+                                <option value="{{ cc.id }}" {{ 'selected' if contrato.centro_de_custo_id == cc.id }}>
+                                    {{ cc.descricao }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i> Salvar
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            {# ===== SUB-ABA: TIPO DE EXECUÇÃO ===== #}
+            {% elif sub_aba_tipo == 'tipo_execucao' %}
+
+            <h5 class="mb-3"><i class="bi bi-arrow-repeat me-1"></i> Tipo de Execução</h5>
+
+            {% if contrato.tipo_execucao %}
+            <div class="card border-0 bg-light mb-3">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <div class="text-muted small">Tipo de Execução atual</div>
+                            <div class="fw-semibold fs-5">
+                                {% if contrato.tipo_execucao.descricao == 'CONTINUADO' %}
+                                <span class="badge bg-info fs-6"><i class="bi bi-arrow-repeat me-1"></i>{{ contrato.tipo_execucao.descricao }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary fs-6"><i class="bi bi-dash-circle me-1"></i>{{ contrato.tipo_execucao.descricao }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Definido</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if current_user.tem_permissao('prestacoes_contratos', 'editar') %}
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('prestacoes_contratos.contrato_tipo_execucao_salvar', codigo=contrato.codigo) }}">
+                        <div class="mb-3">
+                            <label for="tipo_execucao_id" class="form-label fw-semibold">
+                                {{ 'Alterar Tipo de Execução' if contrato.tipo_execucao else 'Selecione o Tipo de Execução' }}
+                            </label>
+                            <select name="tipo_execucao_id" id="tipo_execucao_id" class="form-select">
+                                <option value="">— Nenhum —</option>
+                                {% for te in tipos_execucao %}
+                                <option value="{{ te.id }}" {{ 'selected' if contrato.tipo_execucao_id == te.id }}>
+                                    {{ te.descricao }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i> Salvar
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            {# ===== SUB-ABA: DETALHAMENTO (Natureza → SubItem → valores) ===== #}
+            {% elif sub_aba_tipo == 'detalhamento' %}
+
+            <h5 class="mb-3"><i class="bi bi-clipboard-data me-1"></i> Detalhamento Financeiro</h5>
+            <p class="text-muted small mb-4">
+                Gasto por Sub-Item da Despesa, agrupado por Natureza de Despesa.
+                Dados extraídos dos empenhos (NEs) vinculados a este contrato via SIAFE.
+            </p>
+
+            {% if detalhamento_financeiro and detalhamento_financeiro.tem_dados %}
+
+                {# === RESUMO: Total + Donut por Sub-Item === #}
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-body">
+                        {# Total geral inline #}
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <span class="text-muted" style="font-size: 0.8rem;">Total Empenhado</span>
+                                <div class="fs-4 fw-bold" style="color: #343990;">R$ {{ "{:,.2f}".format(detalhamento_financeiro.total_geral)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</div>
+                            </div>
+                            <div class="text-end">
+                                <span class="text-muted" style="font-size: 0.8rem;">{{ detalhamento_financeiro.qtd_nes }} NEs</span>
+                                <div class="text-muted small">{{ detalhamento_financeiro.naturezas|length }} natureza{{ 's' if detalhamento_financeiro.naturezas|length > 1 }}</div>
+                            </div>
+                        </div>
+
+                        {# Donut + Legenda lateral #}
+                        <div class="mb-2">
+                            <span class="fw-semibold" style="font-size: 0.85rem; color: #343990;">Distribuição por Sub-Item da Despesa</span>
+                            <span class="text-muted" style="font-size: 0.73rem;"> — top {{ [detalhamento_financeiro.naturezas|map(attribute='subitens')|map('length')|sum, 8]|min }} sub-itens</span>
+                        </div>
+                        <div class="row align-items-center">
+                            <div class="col-sm-5 col-md-4 col-lg-3">
+                                <div style="position: relative; max-width: 190px; margin: 0 auto;">
+                                    <canvas id="chartDonut"></canvas>
+                                </div>
+                            </div>
+                            <div class="col-sm-7 col-md-8 col-lg-9 mt-3 mt-sm-0">
+                                <div id="legendDonut" class="d-flex flex-column gap-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# === CARDS COMPACTOS POR NATUREZA (barra + collapse) === #}
+                <div class="d-flex align-items-baseline gap-2 mb-3">
+                    <span class="fw-semibold" style="font-size: 0.85rem; color: #343990;">
+                        <i class="bi bi-layers me-1" style="font-size: 0.8rem;"></i>Naturezas de Despesa
+                    </span>
+                    <span class="text-muted" style="font-size: 0.73rem;">— {{ detalhamento_financeiro.naturezas|length }} natureza{{ 's' if detalhamento_financeiro.naturezas|length > 1 }} encontrada{{ 's' if detalhamento_financeiro.naturezas|length > 1 }}</span>
+                </div>
+                {% for nat in detalhamento_financeiro.naturezas %}
+                {% set nat_pct = "%.1f"|format(nat.total / detalhamento_financeiro.total_geral * 100) if detalhamento_financeiro.total_geral > 0 else '0.0' %}
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-body py-3 px-4">
+                        {# Linha principal: nome + valor + botão #}
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div style="min-width: 0; flex: 1;">
+                                <div class="d-flex align-items-baseline gap-2">
+                                    <span class="fw-semibold" style="color: #343990; font-size: 0.95rem;">{{ nat.codigo }}</span>
+                                    <span class="text-truncate" style="font-size: 0.9rem; color: #495057;">{{ nat.nome }}</span>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3 flex-shrink-0 ms-3">
+                                <span class="text-muted" style="font-size: 0.8rem;">{{ nat.qtd_nes }} NE{{ 's' if nat.qtd_nes > 1 }}</span>
+                                <span class="fw-bold" style="font-size: 0.95rem; color: #343990;">R$ {{ "{:,.2f}".format(nat.total)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</span>
+                            </div>
+                        </div>
+
+                        {# Barra de progresso + percentual #}
+                        <div class="d-flex align-items-center gap-2">
+                            <div style="flex: 1; height: 6px; background: #e9ecef; border-radius: 3px;">
+                                <div style="height: 100%; width: {{ nat_pct }}%; background: #343990; border-radius: 3px; transition: width 0.4s;"></div>
+                            </div>
+                            <span class="fw-semibold" style="font-size: 0.8rem; color: #343990; min-width: 42px; text-align: right;">{{ nat_pct }}%</span>
+                        </div>
+
+                        {# Botão de expandir detalhes #}
+                        <div class="mt-2">
+                            <a class="text-muted small text-decoration-none" style="cursor: pointer; font-size: 0.78rem;"
+                               data-bs-toggle="collapse" href="#detNat{{ loop.index }}" role="button"
+                               aria-expanded="false" aria-controls="detNat{{ loop.index }}">
+                                <i class="bi bi-chevron-down me-1" style="font-size: 0.65rem;"></i>Ver detalhes
+                            </a>
+                        </div>
+
+                        {# Conteúdo colapsável: subitens em lista limpa #}
+                        <div class="collapse mt-3" id="detNat{{ loop.index }}">
+                            <div style="border-top: 1px solid #e9ecef; padding-top: 12px;">
+                                <div class="mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #8c8c8c; font-weight: 600;">Sub-Itens da Despesa</div>
+                                {% for si in nat.subitens %}
+                                {% set si_pct = "%.1f"|format(si.total / detalhamento_financeiro.total_geral * 100) if detalhamento_financeiro.total_geral > 0 else '0.0' %}
+                                <div class="d-flex justify-content-between align-items-start{% if not loop.last %} mb-3{% endif %}">
+                                    <div style="min-width: 0; flex: 1;">
+                                        <div style="font-size: 0.82rem; color: #495057;">
+                                            <span style="font-family: monospace; color: #6c757d; font-size: 0.75rem;">{{ si.codigo }}</span>
+                                            <span class="ms-1">{{ si.nome }}</span>
+                                        </div>
+                                        <div class="d-flex gap-3 mt-1" style="font-size: 0.73rem; color: #8c8c8c;">
+                                            <span>Tipo Patr.: <strong style="color: #6c757d;">{{ si.tipo_patrimonial_codigo }} — {{ si.tipo_patrimonial_nome }}</strong></span>
+                                            <span>Fonte: <strong style="color: #6c757d;">{{ si.fontes }}</strong></span>
+                                            <span>{{ si.qtd_nes }} NE{{ 's' if si.qtd_nes > 1 }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-end flex-shrink-0 ms-3">
+                                        <div class="fw-semibold" style="font-size: 0.85rem; color: #343990;">R$ {{ "{:,.2f}".format(si.total)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</div>
+                                        <div style="font-size: 0.73rem; color: #8c8c8c;">{{ si_pct }}%</div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {# === NEs INDIVIDUAIS (colapsável) === #}
+                <div class="d-flex align-items-baseline gap-2 mt-4 mb-1">
+                    <span class="fw-semibold" style="font-size: 0.85rem; color: #343990;">
+                        <i class="bi bi-receipt me-1" style="font-size: 0.8rem;"></i>Notas de Empenho
+                    </span>
+                    <span class="text-muted" style="font-size: 0.73rem;">— {{ detalhamento_financeiro.empenhos_detalhe|length }} NE{{ 's' if detalhamento_financeiro.empenhos_detalhe|length > 1 }}</span>
+                </div>
+                <div class="mt-1">
+                    <a class="text-muted small text-decoration-none" style="cursor: pointer; font-size: 0.78rem;"
+                       data-bs-toggle="collapse" href="#collapseNEs" role="button"
+                       aria-expanded="false" aria-controls="collapseNEs">
+                        <i class="bi bi-chevron-down me-1" style="font-size: 0.65rem;"></i>
+                        Ver todas as NEs individuais
+                    </a>
+                </div>
+                <div class="collapse mt-2" id="collapseNEs">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0" style="font-size: 0.82rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>NE</th>
+                                            <th>Emissão</th>
+                                            <th>Natureza</th>
+                                            <th>Sub-Item</th>
+                                            <th>Tipo Patrimonial</th>
+                                            <th class="text-center">Fonte</th>
+                                            <th class="text-end">Valor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for ne in detalhamento_financeiro.empenhos_detalhe %}
+                                        <tr>
+                                            <td class="fw-semibold" style="color: #343990;">{{ ne.codigo_ne or '—' }}</td>
+                                            <td class="text-muted">{{ ne.data_emissao or '—' }}</td>
+                                            <td>{{ ne.natureza }}</td>
+                                            <td><span style="font-family: monospace; color: #6c757d; font-size: 0.75rem;">{{ ne.subitem_codigo }}</span> {{ ne.subitem_nome }}</td>
+                                            <td><span style="font-family: monospace; color: #6c757d; font-size: 0.75rem;">{{ ne.tipo_patrimonial_codigo }}</span> {{ ne.tipo_patrimonial_nome }}</td>
+                                            <td class="text-center">{{ ne.fonte }}</td>
+                                            <td class="text-end fw-semibold" style="color: #343990;">R$ {{ "{:,.2f}".format(ne.valor)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            {% else %}
+                <div class="alert alert-info d-flex align-items-start gap-3">
+                    <i class="bi bi-info-circle fs-3 text-info"></i>
+                    <div>
+                        <strong>Sem dados de detalhamento.</strong><br>
+                        Nenhum empenho encontrado para este contrato na tabela normalizada.
+                        Verifique se o script de atualização de empenhos já foi executado.
+                    </div>
+                </div>
+            {% endif %}
+
+            {% endif %} {# fim sub_aba_tipo #}
+
+            {# ----- ABA ITENS (Vinculação) ----- #}
+            {% elif aba == 'itens' %}
+
+            {% if not contrato.esta_tipificado %}
+                <div class="alert alert-warning d-flex align-items-start gap-3">
+                    <i class="bi bi-exclamation-triangle fs-3 text-warning"></i>
+                    <div>
+                        <strong>Tipifique o contrato primeiro.</strong><br>
+                        Os itens serão carregados de acordo com a classificação definida.
+                        <div class="mt-2">
+                            <a href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='tipificacao') }}"
+                               class="btn btn-primary btn-sm">
+                                <i class="bi bi-tags me-1"></i> Ir para Tipificação
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+
+                <style>
+                    .item-add-check:hover {
+                        background-color: #f8f9fa;
+                    }
+                    .item-add-check .form-check-input:checked + .form-check-label {
+                        color: #198754;
+                        font-weight: 600;
+                    }
+                </style>
+
+                {# === CARD 1: ITENS VINCULADOS === #}
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center" style="background-color: #343990; color: #fff;">
+                        <h6 class="mb-0"><i class="bi bi-link-45deg me-1"></i> Itens Vinculados</h6>
+                        <span class="badge bg-light text-dark" id="badge-total-vinculados">
+                            {{ itens_vinculados|length }}
+                        </span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:60px">Tipo</th>
+                                        <th>Descrição do Item</th>
+                                        <th>Item Associado (CATMAT/CATSERV)</th>
+                                        <th style="width:130px">Vinculado em</th>
+                                        <th style="width:70px" class="text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-vinculados">
+                                    {% for item in itens_vinculados %}
+                                    <tr data-vinculacao-id="{{ item.vinculacao_id }}">
+                                        <td>
+                                            {% if item.tipo == 'S' %}
+                                                <span class="badge bg-success">Serviço</span>
+                                            {% elif item.tipo == 'M' %}
+                                                <span class="badge bg-info text-dark">Material</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ item.descricao }}</td>
+                                        <td>
+                                            {% if item.associacao %}
+                                                <span class="text-success small">
+                                                    <i class="bi bi-link-45deg me-1"></i>{{ item.associacao }}
+                                                </span>
+                                            {% else %}
+                                                <span class="text-muted small fst-italic">
+                                                    <i class="bi bi-hourglass-split me-1"></i>Pendente de associação
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-muted small">{{ item.data_vinculacao.strftime('%d/%m/%Y') if item.data_vinculacao else '—' }}</td>
+                                        <td class="text-center">
+                                            {% if current_user.tem_permissao('prestacoes_contratos', 'excluir') %}
+                                            <button class="btn btn-sm btn-outline-danger btn-desvincular"
+                                                    data-vinculacao-id="{{ item.vinculacao_id }}"
+                                                    title="Remover vinculação">
+                                                <i class="bi bi-trash3"></i>
+                                            </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr class="tr-vazio">
+                                        <td colspan="5" class="text-center text-muted py-4">
+                                            <i class="bi bi-inbox fs-3 d-block mb-1"></i> Nenhum item vinculado a este contrato.
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                {# === CARD 2: ADICIONAR ITENS DO CATÁLOGO (Serviços / PDMs) === #}
+                {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
+                            <i class="bi bi-plus-circle me-1"></i>
+                            Adicionar Itens do Catálogo
+                            {% if contrato.tipo_contrato_label == 'SERVICO' %}
+                                <small class="opacity-75">(Serviços da mesma classe)</small>
+                            {% elif contrato.tipo_contrato_label == 'MATERIAL' %}
+                                <small class="opacity-75">(PDMs da mesma classe)</small>
+                            {% elif contrato.tipo_contrato_label == 'MISTO' %}
+                                <small class="opacity-75">(Serviços + PDMs da mesma classe)</small>
+                            {% endif %}
+                        </h6>
+                        <span class="badge bg-light text-dark" id="badge-selecionados" style="display:none;">
+                            0 selecionados
+                        </span>
+                    </div>
+                    <div class="card-body">
+
+                        {# Campo de pesquisa local #}
+                        <div class="input-group mb-3">
+                            <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                            <input type="text" class="form-control" id="input-filtro-item"
+                                   placeholder="Filtrar por descrição..." autocomplete="off">
+                        </div>
+
+                        {# Lista de checkboxes com itens do catálogo #}
+                        <div class="border rounded" style="max-height: 400px; overflow-y: auto;" id="lista-itens-adicionar">
+                            {% for ic in itens_catalogo %}
+                            <div class="item-add-check d-flex align-items-center px-3 py-2 border-bottom {{ 'opacity-50' if ic.ja_vinculado }}"
+                                 data-descricao="{{ ic.descricao|lower }}">
+                                <div class="form-check flex-grow-1 mb-0">
+                                    <input class="form-check-input cb-item" type="checkbox"
+                                           value="{{ ic.tipo }}:{{ ic.id }}" id="add_{{ ic.tipo }}_{{ ic.id }}"
+                                           {{ 'disabled checked' if ic.ja_vinculado }}>
+                                    <label class="form-check-label w-100" for="add_{{ ic.tipo }}_{{ ic.id }}">
+                                        <div class="d-flex align-items-start">
+                                            <span>
+                                                {% if ic.tipo == 'S' %}
+                                                <span class="badge bg-success me-2">S</span>
+                                                {% else %}
+                                                <span class="badge bg-info text-dark me-2">M</span>
+                                                {% endif %}
+                                                <strong>{{ ic.descricao }}</strong>
+                                            </span>
+                                        </div>
+                                        <small class="text-muted ms-4 d-block mt-1">
+                                            <i class="bi bi-hash me-1"></i>Código: {{ ic.codigo }}
+                                        </small>
+                                        {% if ic.ja_vinculado %}
+                                        <small class="text-secondary ms-4 d-block">
+                                            <i class="bi bi-check-circle me-1"></i>Já vinculado
+                                        </small>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+                                Nenhum item disponível no catálogo para esta tipificação.
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        {# Sem resultados do filtro #}
+                        <div class="text-center text-muted py-3 d-none" id="sem-resultados-filtro">
+                            <i class="bi bi-search fs-4 d-block mb-1"></i>
+                            Nenhum item encontrado para o filtro.
+                        </div>
+
+                        {# Botão salvar seleção #}
+                        <div class="mt-3 d-flex justify-content-between align-items-center" id="area-salvar" style="display:none !important;">
+                            <small class="text-muted" id="texto-selecionados">0 itens selecionados</small>
+                            <button type="button" class="btn btn-success" id="btn-salvar-selecao" disabled>
+                                <i class="bi bi-check-lg me-1"></i> Vincular Selecionados
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+                {% endif %}
+
+            {% endif %}
+
+            {# ----- ABA FISCAL ----- #}
+            {% elif aba == 'fiscal' %}
+            <h5 class="mb-3">Fiscal do Contrato</h5>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Tipo</th>
+                            <th>CPF</th>
+                            <th>Telefone</th>
+                            <th>Email</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if contrato.fiscais %}
+                            {% for fiscal in contrato.fiscais %}
+                            <tr>
+                                <td><strong>{{ fiscal.nome }}</strong></td>
+                                <td><span class="badge bg-info text-dark">{{ fiscal.tipo }}</span></td>
+                                <td>{{ fiscal.cpf or '—' }}</td>
+                                <td>{{ fiscal.telefone or '—' }}</td>
+                                <td>{{ fiscal.email or '—' }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    <i class="bi bi-person-x fs-3 d-block mb-2"></i>
+                                    Nenhum fiscal cadastrado
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            {# ----- ABA ADITIVOS ----- #}
+            {% elif aba == 'aditivos' %}
+            <h5 class="mb-3">Aditivos do Contrato</h5>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Processo</th>
+                            <th>Objeto</th>
+                            <th>Vigência Início</th>
+                            <th>Vigência Fim</th>
+                            <th>Publicação</th>
+                            <th class="text-end">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if aditivos %}
+                            {% for ad in aditivos %}
+                            <tr>
+                                <td>{{ ad.numProcesso or '—' }}</td>
+                                <td>{{ ad.objeto or '—' }}</td>
+                                <td>{{ ad.dtVigenciaIni.strftime('%d/%m/%Y') if ad.dtVigenciaIni else '—' }}</td>
+                                <td>{{ ad.dtVigenciaFim.strftime('%d/%m/%Y') if ad.dtVigenciaFim else '—' }}</td>
+                                <td>{{ ad.dtPublicacao.strftime('%d/%m/%Y') if ad.dtPublicacao else '—' }}</td>
+                                <td class="text-end">
+                                    {% if ad.valor is not none %}
+                                        R$ {{ "{:,.2f}".format(ad.valor)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    <i class="bi bi-file-earmark-x fs-3 d-block mb-2"></i>
+                                    Nenhum aditivo encontrado
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            {# ----- ABA SALDO ----- #}
+            {% elif aba == 'saldo' %}
+
+            {% if saldo %}
+            <div class="card border-0 mb-4" style="background: linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%);">
+                <div class="card-body d-flex justify-content-between align-items-center py-3 px-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <i class="bi bi-wallet2 fs-3 text-primary"></i>
+                        <div>
+                            <span class="text-muted small">Saldo Global:</span>
+                            <span class="fs-4 fw-bold text-primary ms-2">{{ saldo.saldo_formatado }}</span>
+                        </div>
+                    </div>
+                    {% if current_user.tem_permissao('prestacoes_contratos', 'editar') %}
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditarSaldo">
+                            <i class="bi bi-pencil me-1"></i> Editar saldo
+                        </button>
+                        {% if itens_vinculados_saldo %}
+                        <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalDividirSaldo">
+                            <i class="bi bi-pie-chart me-1"></i> Dividir por item
+                        </button>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# === TABELA RESUMO DA DIVISAO === #}
+            {% if divisao_saldo %}
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-success bg-opacity-10 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 text-success"><i class="bi bi-pie-chart me-1"></i> Saldo Dividido por Item</h6>
+                    {% set total_distribuido = divisao_saldo|map(attribute='valor')|map('float')|sum %}
+                    {% set saldo_num = saldo.saldo_global|float %}
+                    {% set nao_distribuido = saldo_num - total_distribuido %}
+                    <span class="badge {{ 'bg-success' if nao_distribuido|abs < 0.01 else 'bg-warning text-dark' }}">
+                        {{ 'Totalmente distribuido' if nao_distribuido|abs < 0.01 else 'R$ ' ~ "{:,.2f}".format(nao_distribuido)|replace(",", "X")|replace(".", ",")|replace("X", ".") ~ ' nao distribuido' }}
+                    </span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item</th>
+                                    <th class="text-end" style="width:160px">Valor Alocado</th>
+                                    <th class="text-end" style="width:100px">% do Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ds in divisao_saldo %}
+                                {% set pct = (ds.valor|float / saldo_num * 100) if saldo_num > 0 else 0 %}
+                                <tr>
+                                    <td>
+                                        {% if ds.item_vinculado and ds.item_vinculado.item_contrato %}
+                                            {{ ds.item_vinculado.item_contrato.descricao }}
+                                        {% elif ds.item_vinculado and ds.item_vinculado.servico %}
+                                            {{ ds.item_vinculado.servico.nome }}
+                                        {% else %}
+                                            Item #{{ ds.item_vinculado_id }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end fw-semibold text-success">{{ ds.valor_formatado }}</td>
+                                    <td class="text-end text-muted">{{ "%.1f"|format(pct) }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr class="fw-bold">
+                                    <td>Total Distribuido</td>
+                                    <td class="text-end">R$ {{ "{:,.2f}".format(total_distribuido)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
+                                    <td class="text-end">{{ "%.1f"|format(total_distribuido / saldo_num * 100 if saldo_num > 0 else 0) }}%</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <h5 class="fw-bold text-center mb-4">Histórico de Movimentações</h5>
+
+            {% if saldo.movimentacoes %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Valor</th>
+                            <th>Descrição</th>
+                            <th>Data</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mov in saldo.movimentacoes %}
+                        <tr>
+                            <td>
+                                {% if mov.tipo == 'CREDITO' %}
+                                    <span class="badge bg-success">Crédito</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Débito</span>
+                                {% endif %}
+                            </td>
+                            <td class="{{ 'text-success' if mov.tipo == 'CREDITO' else 'text-danger' }} fw-semibold">
+                                {{ '+' if mov.tipo == 'CREDITO' else '-' }} {{ mov.valor_formatado }}
+                            </td>
+                            <td>{{ mov.descricao or '—' }}</td>
+                            <td>{{ mov.created_at.strftime('%d/%m/%Y %H:%M') if mov.created_at else '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center text-muted py-4">
+                <p>Nenhuma movimentação registrada.</p>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="alert alert-warning d-flex align-items-start gap-3 mb-4" role="alert">
+                <i class="bi bi-exclamation-triangle fs-3 text-warning"></i>
+                <div>
+                    <strong>Aviso:</strong><br>
+                    Não há um saldo global disponível para este contrato.
+                </div>
+            </div>
+            {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalCriarSaldo">
+                <i class="bi bi-plus-circle me-1"></i> Adicionar saldo ao contrato
+            </button>
+            {% endif %}
+            {% endif %}
+
+            {# ----- ABA FINANCEIRO ----- #}
+            {% elif aba == 'financeiro' %}
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <ul class="nav nav-tabs mb-0" id="tabsFinanceiro">
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if sub_aba == 'empenhos' }}"
+                           href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='financeiro', sub_aba='empenhos') }}">
+                            Empenhos
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if sub_aba == 'liquidacoes' }}"
+                           href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='financeiro', sub_aba='liquidacoes') }}">
+                            Liquidações
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if sub_aba == 'pds' }}"
+                           href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='financeiro', sub_aba='pds') }}">
+                            PD
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if sub_aba == 'pagamentos' }}"
+                           href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='financeiro', sub_aba='pagamentos') }}">
+                            Pagamentos
+                        </a>
+                    </li>
+                </ul>
+                <a href="{{ url_for('prestacoes_contratos.api_relatorio_financeiro', codigo=contrato.codigo) }}"
+                   class="btn btn-success btn-sm">
+                    <i class="bi bi-file-earmark-excel me-1"></i> Exportar Excel
+                </a>
+            </div>
+
+            {# ── Macro: seção por ano com paginação ── #}
+            {% macro paginacao_ano(section_id) %}
+            <nav class="d-flex justify-content-between align-items-center mt-2" data-pagination-for="{{ section_id }}">
+                <span class="text-muted small" data-page-info></span>
+                <ul class="pagination pagination-sm mb-0" data-page-buttons></ul>
+            </nav>
+            {% endmacro %}
+
+            {% if sub_aba == 'empenhos' %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">
+                    <i class="bi bi-file-earmark-text me-1"></i> Empenhos
+                    <span class="badge bg-primary ms-2">{{ empenhos|length }}</span>
+                </h5>
+                {% if empenhos %}
+                <span class="text-muted small">
+                    Total: <strong class="text-success">R$ {{ "{:,.2f}".format(empenhos|sum(attribute='valor') or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</strong>
+                </span>
+                {% endif %}
+            </div>
+            {% if empenhos %}
+                {# Agrupar por ano (desc) #}
+                {% set ns = namespace(anos={}) %}
+                {% for emp in empenhos %}
+                    {% set ano = emp.dataEmissao.year if emp.dataEmissao else 0 %}
+                    {% if ano not in ns.anos %}{% set _ = ns.anos.update({ano: []}) %}{% endif %}
+                    {% set _ = ns.anos[ano].append(emp) %}
+                {% endfor %}
+                {% for ano in ns.anos|sort(reverse=true) %}
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-2">
+                        <h6 class="fw-bold text-secondary mb-0">
+                            <i class="bi bi-calendar3 me-1"></i>{{ ano if ano else 'Sem data' }}
+                            <span class="badge bg-secondary ms-1">{{ ns.anos[ano]|length }}</span>
+                        </h6>
+                        <span class="text-muted small">
+                            Subtotal: <strong class="text-success">R$ {{ "{:,.2f}".format(ns.anos[ano]|sum(attribute='valor') or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</strong>
+                        </span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead style="background-color: #343990; color: white;">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Credor</th>
+                                    <th>Data Emissão</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody data-paginated="emp-{{ ano }}" data-per-page="10">
+                                {% for emp in ns.anos[ano] %}
+                                <tr>
+                                    <td><strong>{{ emp.codigo or '—' }}</strong></td>
+                                    <td>{{ emp.nomeCredor or '—' }}</td>
+                                    <td>{{ emp.dataEmissao.strftime('%d/%m/%Y') if emp.dataEmissao else '—' }}</td>
+                                    <td>
+                                        {% if emp.statusDocumento %}
+                                        <span class="badge bg-{{ 'success' if emp.statusDocumento == 'Contabilizado' else 'warning' }}">{{ emp.statusDocumento }}</span>
+                                        {% else %}—{% endif %}
+                                    </td>
+                                    <td class="text-end text-success fw-semibold">R$ {{ "{:,.2f}".format(emp.valor or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {{ paginacao_ano('emp-' ~ ano) }}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Nenhum empenho encontrado para este contrato.</div>
+            {% endif %}
+
+            {% elif sub_aba == 'liquidacoes' %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">
+                    <i class="bi bi-file-earmark-check me-1"></i> Liquidações
+                    <span class="badge bg-primary ms-2">{{ liquidacoes|length }}</span>
+                </h5>
+                {% if liquidacoes %}
+                <span class="text-muted small">
+                    Total: <strong class="text-success">R$ {{ "{:,.2f}".format(liquidacoes|sum(attribute='valor') or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</strong>
+                </span>
+                {% endif %}
+            </div>
+            {% if liquidacoes %}
+                {% set ns = namespace(anos={}) %}
+                {% for liq in liquidacoes %}
+                    {% set ano = liq.dataEmissao.year if liq.dataEmissao else 0 %}
+                    {% if ano not in ns.anos %}{% set _ = ns.anos.update({ano: []}) %}{% endif %}
+                    {% set _ = ns.anos[ano].append(liq) %}
+                {% endfor %}
+                {% for ano in ns.anos|sort(reverse=true) %}
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-2">
+                        <h6 class="fw-bold text-secondary mb-0">
+                            <i class="bi bi-calendar3 me-1"></i>{{ ano if ano else 'Sem data' }}
+                            <span class="badge bg-secondary ms-1">{{ ns.anos[ano]|length }}</span>
+                        </h6>
+                        <span class="text-muted small">
+                            Subtotal: <strong class="text-success">R$ {{ "{:,.2f}".format(ns.anos[ano]|sum(attribute='valor') or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</strong>
+                        </span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead style="background-color: #343990; color: white;">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Credor</th>
+                                    <th>Data Emissão</th>
+                                    <th>NE Vinculada</th>
+                                    <th class="text-end">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody data-paginated="liq-{{ ano }}" data-per-page="10">
+                                {% for liq in ns.anos[ano] %}
+                                <tr>
+                                    <td><strong>{{ liq.codigo or '—' }}</strong></td>
+                                    <td>{{ liq.nomeCredor or '—' }}</td>
+                                    <td>{{ liq.dataEmissao.strftime('%d/%m/%Y') if liq.dataEmissao else '—' }}</td>
+                                    <td>{{ liq.codigoEmpenhoVinculado or '—' }}</td>
+                                    <td class="text-end text-success fw-semibold">R$ {{ "{:,.2f}".format(liq.valor or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {{ paginacao_ano('liq-' ~ ano) }}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Nenhuma liquidação encontrada para este contrato.</div>
+            {% endif %}
+
+            {% elif sub_aba == 'pds' %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">
+                    <i class="bi bi-file-earmark-ruled me-1"></i> Programação de Desembolso (PD)
+                    <span class="badge bg-primary ms-2">{{ pds|length }}</span>
+                </h5>
+                {% if pds %}
+                <span class="text-muted small">
+                    Total: <strong class="text-success">R$ {{ "{:,.2f}".format(pds|sum(attribute='valor') or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</strong>
+                </span>
+                {% endif %}
+            </div>
+            {% if pds %}
+                {% set ns = namespace(anos={}) %}
+                {% for pd_item in pds %}
+                    {% set ano = pd_item.dataEmissao.year if pd_item.dataEmissao else 0 %}
+                    {% if ano not in ns.anos %}{% set _ = ns.anos.update({ano: []}) %}{% endif %}
+                    {% set _ = ns.anos[ano].append(pd_item) %}
+                {% endfor %}
+                {% for ano in ns.anos|sort(reverse=true) %}
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-2">
+                        <h6 class="fw-bold text-secondary mb-0">
+                            <i class="bi bi-calendar3 me-1"></i>{{ ano if ano else 'Sem data' }}
+                            <span class="badge bg-secondary ms-1">{{ ns.anos[ano]|length }}</span>
+                        </h6>
+                        <span class="text-muted small">
+                            Subtotal: <strong class="text-success">R$ {{ "{:,.2f}".format(ns.anos[ano]|sum(attribute='valor') or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</strong>
+                        </span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead style="background-color: #343990; color: white;">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Credor</th>
+                                    <th>Data Emissão</th>
+                                    <th>NE Vinculada</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody data-paginated="pd-{{ ano }}" data-per-page="10">
+                                {% for pd_item in ns.anos[ano] %}
+                                <tr>
+                                    <td><strong>{{ pd_item.codigo or '—' }}</strong></td>
+                                    <td>{{ pd_item.nomeCredor or '—' }}</td>
+                                    <td>{{ pd_item.dataEmissao.strftime('%d/%m/%Y') if pd_item.dataEmissao else '—' }}</td>
+                                    <td>{{ pd_item.codigoNE or '—' }}</td>
+                                    <td>
+                                        {% if pd_item.statusExecucao %}
+                                        <span class="badge bg-{{ 'success' if pd_item.statusExecucao == 'Pago' else ('info' if pd_item.statusExecucao == 'Contabilizado' else 'warning') }}">{{ pd_item.statusExecucao }}</span>
+                                        {% else %}—{% endif %}
+                                    </td>
+                                    <td class="text-end text-success fw-semibold">R$ {{ "{:,.2f}".format(pd_item.valor or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {{ paginacao_ano('pd-' ~ ano) }}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Nenhuma PD encontrada para este contrato.</div>
+            {% endif %}
+
+            {% elif sub_aba == 'pagamentos' %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">
+                    <i class="bi bi-cash-stack me-1"></i> Pagamentos (OB)
+                    <span class="badge bg-primary ms-2">{{ pagamentos|length }}</span>
+                </h5>
+                {% if pagamentos %}
+                <span class="text-muted small">
+                    Total: <strong class="text-success">R$ {{ "{:,.2f}".format(pagamentos|sum(attribute='valor') or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</strong>
+                </span>
+                {% endif %}
+            </div>
+            {% if pagamentos %}
+                {% set ns = namespace(anos={}) %}
+                {% for pag in pagamentos %}
+                    {% set ano = pag.dataEmissao.year if pag.dataEmissao else 0 %}
+                    {% if ano not in ns.anos %}{% set _ = ns.anos.update({ano: []}) %}{% endif %}
+                    {% set _ = ns.anos[ano].append(pag) %}
+                {% endfor %}
+                {% for ano in ns.anos|sort(reverse=true) %}
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-2">
+                        <h6 class="fw-bold text-secondary mb-0">
+                            <i class="bi bi-calendar3 me-1"></i>{{ ano if ano else 'Sem data' }}
+                            <span class="badge bg-secondary ms-1">{{ ns.anos[ano]|length }}</span>
+                        </h6>
+                        <span class="text-muted small">
+                            Subtotal: <strong class="text-success">R$ {{ "{:,.2f}".format(ns.anos[ano]|sum(attribute='valor') or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</strong>
+                        </span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead style="background-color: #343990; color: white;">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Credor</th>
+                                    <th>Data Emissão</th>
+                                    <th>Data Pagamento</th>
+                                    <th>Tipo OB</th>
+                                    <th class="text-end">Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody data-paginated="pag-{{ ano }}" data-per-page="10">
+                                {% for pag in ns.anos[ano] %}
+                                <tr>
+                                    <td><strong>{{ pag.codigo or '—' }}</strong></td>
+                                    <td>{{ pag.nomeCredor or '—' }}</td>
+                                    <td>{{ pag.dataEmissao.strftime('%d/%m/%Y') if pag.dataEmissao else '—' }}</td>
+                                    <td>{{ pag.dataPagamento.strftime('%d/%m/%Y') if pag.dataPagamento else '—' }}</td>
+                                    <td>{{ pag.tipoOB or '—' }}</td>
+                                    <td class="text-end text-success fw-semibold">R$ {{ "{:,.2f}".format(pag.valor or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {{ paginacao_ano('pag-' ~ ano) }}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Nenhum pagamento encontrado para este contrato.</div>
+            {% endif %}
+            {% endif %}
+
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+
+{# ============================================================= #}
+{# ===== MODAIS ================================================ #}
+{# ============================================================= #}
+
+{# Modal Tipificar Contrato #}
+{% if contrato.tipo_contrato_label and current_user.tem_permissao('prestacoes_contratos', 'editar') %}
+<div class="modal fade" id="modalTipificar" tabindex="-1" aria-labelledby="modalTipificarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('prestacoes_contratos.contrato_tipificar_salvar', codigo=contrato.codigo) }}" id="formTipificacao">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTipificarLabel">
+                        <i class="bi bi-tags me-1"></i> Tipificar Contrato
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <strong>Modalidade:</strong> {{ contrato.modalidade }}
+                            <span class="ms-3"><strong>Tipo:</strong> {{ contrato.tipo_contrato_display }}</span>
+                        </div>
+                        <button class="btn btn-sm btn-outline-info ms-2 d-flex align-items-center gap-1"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#helpTipificacao"
+                                aria-expanded="false"
+                                aria-controls="helpTipificacao">
+                            <i class="bi bi-question-circle"></i>
+                            <span class="d-none d-md-inline">Como funciona?</span>
+                        </button>
+                    </div>
+
+                    {# === Painel de ajuda colapsável interativo === #}
+                    <div class="collapse mb-3" id="helpTipificacao">
+                        <div class="card border-0 bg-light">
+                            <div class="card-body py-3 px-3">
+                                <p class="fw-semibold text-muted small mb-2 text-uppercase" style="letter-spacing: 0.5px;">
+                                    <i class="bi bi-lightbulb-fill text-warning me-1"></i> Entenda a classificação
+                                    <span class="fw-normal text-muted" style="letter-spacing: 0; text-transform: none;"> — clique nos níveis</span>
+                                </p>
+
+                                {% if contrato.tipo_contrato_label in ['MATERIAL', 'MISTO'] %}
+                                {# Stepper CATMAT interativo #}
+                                <div class="mb-3">
+                                    <div class="small fw-semibold text-info mb-2">
+                                        <i class="bi bi-box-seam me-1"></i> Materiais (CATMAT)
+                                    </div>
+                                    <div class="d-flex align-items-center flex-wrap gap-1 help-stepper">
+                                        <span class="help-step help-step-clickable" style="--step-color: #0dcaf0"
+                                              data-help-target="help-modal-mat-grupo" role="button" tabindex="0">
+                                            <span class="help-step-icon">1</span> Grupo
+                                        </span>
+                                        <i class="bi bi-chevron-right text-muted small"></i>
+                                        <span class="help-step help-step-clickable" style="--step-color: #0dcaf0"
+                                              data-help-target="help-modal-mat-classe" role="button" tabindex="0">
+                                            <span class="help-step-icon">2</span> Classe
+                                        </span>
+                                        <i class="bi bi-chevron-right text-muted small"></i>
+                                        <span class="help-step help-step-final help-step-clickable" style="--step-color: #0dcaf0"
+                                              data-help-target="help-modal-mat-pdm" role="button" tabindex="0">
+                                            <span class="help-step-icon">3</span> PDM
+                                        </span>
+                                        <i class="bi bi-chevron-right text-muted small opacity-50"></i>
+                                        <span class="help-step help-step-next help-step-clickable" style="--step-color: #adb5bd"
+                                              data-help-target="help-modal-mat-item" role="button" tabindex="0">
+                                            <span class="help-step-icon">4</span> Item
+                                        </span>
+                                    </div>
+                                    <div class="help-detail mt-2" id="help-modal-mat-grupo" style="display:none;">
+                                        <div class="small p-2 rounded border-start border-3 border-info bg-white">
+                                            <strong class="text-info">Grupo</strong> — Categoria mais ampla, reúne grandes áreas de materiais.<br>
+                                            <span class="text-muted">Ex: Grupo 89 = Subsistência.</span>
+                                        </div>
+                                    </div>
+                                    <div class="help-detail mt-2" id="help-modal-mat-classe" style="display:none;">
+                                        <div class="small p-2 rounded border-start border-3 border-info bg-white">
+                                            <strong class="text-info">Classe</strong> — Refina a classificação dentro do grupo, por tipo de produto.<br>
+                                            <span class="text-muted">Ex: Classe 8960 = Bebidas não alcoólicas.</span>
+                                        </div>
+                                    </div>
+                                    <div class="help-detail mt-2" id="help-modal-mat-pdm" style="display:none;">
+                                        <div class="small p-2 rounded border-start border-3 border-info bg-white">
+                                            <strong class="text-info">PDM</strong> — Padrão Descritivo de Material. Tipo genérico do produto, sem marca.<br>
+                                            <span class="text-muted">Ex: PDM 947 = Refrigerante.</span>
+                                        </div>
+                                    </div>
+                                    <div class="help-detail mt-2" id="help-modal-mat-item" style="display:none;">
+                                        <div class="small p-2 rounded border-start border-3 border-info bg-white">
+                                            <strong class="text-muted">Item</strong> — Especificação exata para aquisição. Selecionado na aba <strong>Itens</strong>.<br>
+                                            <span class="text-muted">Ex: Item 305734 = Refrigerante, sabor cola, light.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+
+                                {% if contrato.tipo_contrato_label in ['SERVICO', 'MISTO'] %}
+                                {# Stepper CATSERV interativo #}
+                                <div class="mb-2">
+                                    <div class="small fw-semibold text-success mb-2">
+                                        <i class="bi bi-diagram-3 me-1"></i> Serviços (CATSERV)
+                                    </div>
+                                    <div class="d-flex align-items-center flex-wrap gap-1 help-stepper">
+                                        <span class="help-step help-step-clickable" style="--step-color: #6c757d"
+                                              data-help-target="help-modal-serv-secao" role="button" tabindex="0">
+                                            <span class="help-step-icon">1</span> Seção
+                                        </span>
+                                        <i class="bi bi-chevron-right text-muted small"></i>
+                                        <span class="help-step help-step-clickable" style="--step-color: #6c757d"
+                                              data-help-target="help-modal-serv-divisao" role="button" tabindex="0">
+                                            <span class="help-step-icon">2</span> Divisão
+                                        </span>
+                                        <i class="bi bi-chevron-right text-muted small"></i>
+                                        <span class="help-step help-step-clickable" style="--step-color: #198754"
+                                              data-help-target="help-modal-serv-grupo" role="button" tabindex="0">
+                                            <span class="help-step-icon">3</span> Grupo
+                                        </span>
+                                        <i class="bi bi-chevron-right text-muted small"></i>
+                                        <span class="help-step help-step-final help-step-clickable" style="--step-color: #198754"
+                                              data-help-target="help-modal-serv-classe" role="button" tabindex="0">
+                                            <span class="help-step-icon">4</span> Classe
+                                        </span>
+                                    </div>
+                                    <div class="help-detail mt-2" id="help-modal-serv-secao" style="display:none;">
+                                        <div class="small p-2 rounded border-start border-3 border-success bg-white">
+                                            <strong class="text-success">Seção</strong> — Agrupamento mais amplo de serviços por grandes áreas de atuação.
+                                        </div>
+                                    </div>
+                                    <div class="help-detail mt-2" id="help-modal-serv-divisao" style="display:none;">
+                                        <div class="small p-2 rounded border-start border-3 border-success bg-white">
+                                            <strong class="text-success">Divisão</strong> — Subdivide a seção em segmentos mais específicos.
+                                        </div>
+                                    </div>
+                                    <div class="help-detail mt-2" id="help-modal-serv-grupo" style="display:none;">
+                                        <div class="small p-2 rounded border-start border-3 border-success bg-white">
+                                            <strong class="text-success">Grupo</strong> — Agrupa serviços por natureza semelhante dentro da divisão.
+                                        </div>
+                                    </div>
+                                    <div class="help-detail mt-2" id="help-modal-serv-classe" style="display:none;">
+                                        <div class="small p-2 rounded border-start border-3 border-success bg-white">
+                                            <strong class="text-success">Classe</strong> — Nível mais específico. Define quais serviços estarão disponíveis para vinculação.
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    {# CATSERV section (SERVICO ou MISTO) #}
+                    {% if contrato.tipo_contrato_label in ['SERVICO', 'MISTO'] %}
+                    <h6 class="border-bottom pb-2 mb-3">
+                        <i class="bi bi-diagram-3 me-1"></i> Classificação de Serviço (CATSERV)
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Seção</label>
+                            <select class="form-select" id="catserv_secao" required>
+                                <option value="">Selecione...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Divisão</label>
+                            <select class="form-select" id="catserv_divisao" required disabled>
+                                <option value="">Selecione a seção primeiro</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Grupo</label>
+                            <select class="form-select" id="catserv_grupo" required disabled>
+                                <option value="">Selecione a divisão primeiro</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">Classe</label>
+                            <select class="form-select" name="catserv_classe_id" id="catserv_classe" required disabled>
+                                <option value="">Selecione o grupo primeiro</option>
+                            </select>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {# CATMAT section (MATERIAL ou MISTO) #}
+                    {% if contrato.tipo_contrato_label in ['MATERIAL', 'MISTO'] %}
+                    <h6 class="border-bottom pb-2 mb-3 {{ 'mt-3' if contrato.tipo_contrato_label == 'MISTO' }}">
+                        <i class="bi bi-box-seam me-1"></i> Classificação de Material (CATMAT)
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-semibold">Grupo</label>
+                            <select class="form-select" id="catmat_grupo" required>
+                                <option value="">Selecione...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-semibold">Classe</label>
+                            <select class="form-select" id="catmat_classe" required disabled>
+                                <option value="">Selecione o grupo primeiro</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-semibold">PDM
+                                <i class="bi bi-info-circle text-muted small" data-bs-toggle="tooltip"
+                                   title="Padrão Descritivo de Material — define o tipo genérico do produto"></i>
+                            </label>
+                            <select class="form-select" name="catmat_pdm_id" id="catmat_pdm" required disabled>
+                                <option value="">Selecione a classe primeiro</option>
+                            </select>
+                            <input type="hidden" name="catmat_classe_id" id="catmat_classe_hidden">
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Salvar Tipificação
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# Modal Editar Saldo #}
+{% if aba == 'saldo' and saldo and current_user.tem_permissao('prestacoes_contratos', 'editar') %}
+<div class="modal fade" id="modalEditarSaldo" tabindex="-1" aria-labelledby="modalEditarSaldoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('prestacoes_contratos.contrato_saldo_editar', codigo=contrato.codigo, saldo_id=saldo.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalEditarSaldoLabel">Editar Saldo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Saldo Global</label>
+                        <input type="text" name="saldo_global" class="form-control"
+                               value="{{ saldo.saldo_global }}" required placeholder="Ex: 1.000.000,00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Data Início</label>
+                        <input type="date" name="data_inicio" class="form-control"
+                               value="{{ saldo.data_inicio.strftime('%Y-%m-%d') if saldo.data_inicio else '' }}">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# Modal Criar Saldo #}
+{% if aba == 'saldo' and not saldo and current_user.tem_permissao('prestacoes_contratos', 'criar') %}
+<div class="modal fade" id="modalCriarSaldo" tabindex="-1" aria-labelledby="modalCriarSaldoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('prestacoes_contratos.contrato_saldo_criar', codigo=contrato.codigo) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalCriarSaldoLabel">Adicionar Saldo ao Contrato</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Saldo Global</label>
+                        <input type="text" name="saldo_global" class="form-control" required placeholder="Ex: 1.000.000,00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Data Início</label>
+                        <input type="date" name="data_inicio" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# Modal Dividir Saldo por Item #}
+{% if aba == 'saldo' and saldo and itens_vinculados_saldo and current_user.tem_permissao('prestacoes_contratos', 'editar') %}
+<div class="modal fade" id="modalDividirSaldo" tabindex="-1" aria-labelledby="modalDividirSaldoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('prestacoes_contratos.contrato_saldo_dividir', codigo=contrato.codigo, saldo_id=saldo.id) }}">
+                <div class="modal-header bg-success bg-opacity-10">
+                    <h5 class="modal-title text-success" id="modalDividirSaldoLabel">
+                        <i class="bi bi-pie-chart me-2"></i>Dividir Saldo por Item
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 mb-3">
+                        <strong>Saldo Global:</strong> {{ saldo.saldo_formatado }}
+                    </div>
+
+                    {# Indexar divisao existente #}
+                    {% set ds_map = {} %}
+                    {% for ds in divisao_saldo %}
+                        {% if ds_map.update({ds.item_vinculado_id: ds.valor|float}) %}{% endif %}
+                    {% endfor %}
+
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item</th>
+                                    <th style="width:200px">Valor (R$)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in itens_vinculados_saldo %}
+                                <tr>
+                                    <td class="align-middle">
+                                        <span class="badge {{ 'bg-success' if item.tipo == 'S' else 'bg-info text-dark' }} me-1">
+                                            {{ 'Serv.' if item.tipo == 'S' else 'Mat.' }}
+                                        </span>
+                                        {{ item.descricao }}
+                                    </td>
+                                    <td>
+                                        <input type="text" name="item_{{ item.vinculacao_id }}"
+                                               class="form-control form-control-sm input-divisao-saldo"
+                                               value="{{ "%.2f"|format(ds_map.get(item.vinculacao_id, 0))|replace(".", ",") }}"
+                                               placeholder="0,00">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr class="fw-bold">
+                                    <td class="align-middle">Total Distribuido</td>
+                                    <td>
+                                        <span id="totalDistribuido" class="fs-6">R$ 0,00</span>
+                                        <br>
+                                        <small id="restanteDistribuido" class="text-muted"></small>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-lg me-1"></i> Salvar Divisao
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const saldoGlobal = {{ saldo.saldo_global|float }};
+    const inputs = document.querySelectorAll('.input-divisao-saldo');
+    const totalEl = document.getElementById('totalDistribuido');
+    const restanteEl = document.getElementById('restanteDistribuido');
+
+    function parseBR(val) {
+        if (!val) return 0;
+        return parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
+    }
+
+    function formatBR(num) {
+        return 'R$ ' + num.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    }
+
+    function recalcular() {
+        let total = 0;
+        inputs.forEach(function(inp) { total += parseBR(inp.value); });
+        totalEl.textContent = formatBR(total);
+        const restante = saldoGlobal - total;
+        if (Math.abs(restante) < 0.01) {
+            restanteEl.textContent = 'Totalmente distribuido';
+            restanteEl.className = 'text-success small';
+        } else if (restante > 0) {
+            restanteEl.textContent = formatBR(restante) + ' restante';
+            restanteEl.className = 'text-warning small';
+        } else {
+            restanteEl.textContent = formatBR(Math.abs(restante)) + ' excedente';
+            restanteEl.className = 'text-danger small';
+        }
+    }
+
+    inputs.forEach(function(inp) { inp.addEventListener('input', recalcular); });
+    recalcular();
+});
+</script>
+{% endif %}
+
+{# Modais de criação manual de empenho/liquidação/pagamento removidos.
+   Os dados financeiros agora vêm automaticamente das tabelas SIAFE. #}
+
+{% endblock %}
+
+{% block extra_js %}
+{# JavaScript para cascading dropdowns da tipificação #}
+{% if contrato.tipo_contrato_label %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const BASE_URL = '/prestacoes-contratos';
+
+    // Inicializar tooltips Bootstrap
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+
+    // ===== Help Stepper Interativo (clique nos steps para ver detalhes) =====
+    document.querySelectorAll('.help-step-clickable').forEach(function(step) {
+        step.addEventListener('click', function() {
+            const targetId = this.dataset.helpTarget;
+            if (!targetId) return;
+
+            const targetEl = document.getElementById(targetId);
+            if (!targetEl) return;
+
+            // Encontrar o container pai (stepper section)
+            const parentSection = this.closest('.mb-3, .mb-2, div:not(.help-stepper)');
+
+            // Esconder todos os detalhes no mesmo bloco de hierarquia
+            if (parentSection) {
+                parentSection.querySelectorAll('.help-detail').forEach(function(detail) {
+                    if (detail.id !== targetId) {
+                        detail.style.display = 'none';
+                    }
+                });
+                // Remover .active de todos os steps do mesmo stepper
+                parentSection.querySelectorAll('.help-step-clickable').forEach(function(s) {
+                    if (s !== step) s.classList.remove('active');
+                });
+            }
+
+            // Toggle o detalhe clicado
+            const isVisible = targetEl.style.display !== 'none';
+            if (isVisible) {
+                targetEl.style.display = 'none';
+                this.classList.remove('active');
+            } else {
+                targetEl.style.display = 'block';
+                this.classList.add('active');
+            }
+        });
+    });
+
+    // Utilidades
+    function populateSelect(selectEl, items, valueKey, textKey, placeholder, prefixKey) {
+        selectEl.innerHTML = `<option value="">${placeholder || 'Selecione...'}</option>`;
+        items.forEach(function(item) {
+            const opt = document.createElement('option');
+            opt.value = item[valueKey];
+            // Se prefixKey informado, exibe "{prefixo} - {texto}"
+            if (prefixKey && item[prefixKey] !== undefined) {
+                opt.textContent = item[prefixKey] + ' - ' + item[textKey];
+            } else {
+                opt.textContent = item[textKey];
+            }
+            selectEl.appendChild(opt);
+        });
+        selectEl.disabled = false;
+    }
+
+    function resetSelect(selectEl, placeholder) {
+        selectEl.innerHTML = `<option value="">${placeholder}</option>`;
+        selectEl.disabled = true;
+    }
+
+    async function fetchData(url) {
+        const resp = await fetch(url);
+        const data = await resp.json();
+        return data.success ? data.data : [];
+    }
+
+    // ===== CATSERV Cascading =====
+    const secaoSel = document.getElementById('catserv_secao');
+    const divisaoSel = document.getElementById('catserv_divisao');
+    const grupoSel = document.getElementById('catserv_grupo');
+    const classeSel = document.getElementById('catserv_classe');
+
+    if (secaoSel) {
+        // Carregar seções ao abrir modal
+        document.getElementById('modalTipificar').addEventListener('shown.bs.modal', async function() {
+            if (secaoSel.options.length <= 1) {
+                const secoes = await fetchData(BASE_URL + '/api/catserv/secoes');
+                populateSelect(secaoSel, secoes, 'id', 'nome', 'Selecione a seção...', 'id');
+            }
+        });
+
+        secaoSel.addEventListener('change', async function() {
+            resetSelect(divisaoSel, 'Carregando...');
+            resetSelect(grupoSel, 'Selecione a divisão primeiro');
+            resetSelect(classeSel, 'Selecione o grupo primeiro');
+            if (this.value) {
+                const divisoes = await fetchData(BASE_URL + '/api/catserv/divisoes/' + this.value);
+                populateSelect(divisaoSel, divisoes, 'id', 'nome', 'Selecione a divisão...', 'id');
+            } else {
+                resetSelect(divisaoSel, 'Selecione a seção primeiro');
+            }
+        });
+
+        divisaoSel.addEventListener('change', async function() {
+            resetSelect(grupoSel, 'Carregando...');
+            resetSelect(classeSel, 'Selecione o grupo primeiro');
+            if (this.value) {
+                const grupos = await fetchData(BASE_URL + '/api/catserv/grupos/' + this.value);
+                populateSelect(grupoSel, grupos, 'id', 'nome', 'Selecione o grupo...', 'id');
+            } else {
+                resetSelect(grupoSel, 'Selecione a divisão primeiro');
+            }
+        });
+
+        grupoSel.addEventListener('change', async function() {
+            resetSelect(classeSel, 'Carregando...');
+            if (this.value) {
+                const classes = await fetchData(BASE_URL + '/api/catserv/classes/' + this.value);
+                populateSelect(classeSel, classes, 'id', 'nome', 'Selecione a classe...', 'id');
+            } else {
+                resetSelect(classeSel, 'Selecione o grupo primeiro');
+            }
+        });
+    }
+
+    // ===== CATMAT Cascading (Grupo → Classe → PDM) =====
+    const catmatGrupoSel = document.getElementById('catmat_grupo');
+    const catmatClasseSel = document.getElementById('catmat_classe');
+    const catmatPdmSel = document.getElementById('catmat_pdm');
+    const catmatClasseHidden = document.getElementById('catmat_classe_hidden');
+
+    if (catmatGrupoSel) {
+        document.getElementById('modalTipificar').addEventListener('shown.bs.modal', async function() {
+            if (catmatGrupoSel.options.length <= 1) {
+                const grupos = await fetchData(BASE_URL + '/api/catmat/grupos');
+                populateSelect(catmatGrupoSel, grupos, 'codigo', 'nome', 'Selecione o grupo...', 'codigo');
+            }
+        });
+
+        catmatGrupoSel.addEventListener('change', async function() {
+            resetSelect(catmatClasseSel, 'Carregando...');
+            resetSelect(catmatPdmSel, 'Selecione a classe primeiro');
+            if (catmatClasseHidden) catmatClasseHidden.value = '';
+            if (this.value) {
+                const classes = await fetchData(BASE_URL + '/api/catmat/classes/' + this.value);
+                // Popula com codigo como value (para cascading de PDM) e salva id no data-id
+                catmatClasseSel.innerHTML = '<option value="">Selecione a classe...</option>';
+                classes.forEach(function(c) {
+                    const opt = document.createElement('option');
+                    opt.value = c.codigo;      // codigo para buscar PDMs
+                    opt.dataset.id = c.id;     // id para salvar no form
+                    opt.textContent = c.codigo + ' - ' + c.nome;
+                    catmatClasseSel.appendChild(opt);
+                });
+                catmatClasseSel.disabled = false;
+            } else {
+                resetSelect(catmatClasseSel, 'Selecione o grupo primeiro');
+            }
+        });
+
+        catmatClasseSel.addEventListener('change', async function() {
+            resetSelect(catmatPdmSel, 'Carregando...');
+            // Salvar o ID da classe no hidden field (para o backend)
+            const selectedOption = catmatClasseSel.options[catmatClasseSel.selectedIndex];
+            if (catmatClasseHidden) {
+                catmatClasseHidden.value = this.value ? (selectedOption.dataset.id || '') : '';
+            }
+            if (this.value) {
+                const pdms = await fetchData(BASE_URL + '/api/catmat/pdms/' + this.value);
+                populateSelect(catmatPdmSel, pdms, 'id', 'nome', 'Selecione o PDM...', 'codigo');
+            } else {
+                resetSelect(catmatPdmSel, 'Selecione a classe primeiro');
+            }
+        });
+    }
+
+    // ===== VINCULAÇÃO DE ITENS (aba itens) =====
+    const codigoContrato = '{{ contrato.codigo }}';
+
+    // --- Filtro local de checkboxes (tudo já renderizado no HTML) ---
+    const inputFiltro = document.getElementById('input-filtro-item');
+    const todosItensAdd = document.querySelectorAll('#lista-itens-adicionar .item-add-check');
+    const semResultadosFiltro = document.getElementById('sem-resultados-filtro');
+    const areaSalvar = document.getElementById('area-salvar');
+    const badgeSelecionados = document.getElementById('badge-selecionados');
+    const textoSelecionados = document.getElementById('texto-selecionados');
+    const btnSalvar = document.getElementById('btn-salvar-selecao');
+
+    // Filtro em tempo real (client-side)
+    if (inputFiltro) {
+        inputFiltro.addEventListener('input', function() {
+            const termo = this.value.toLowerCase().trim();
+            let visiveis = 0;
+
+            todosItensAdd.forEach(function(item) {
+                const desc = item.dataset.descricao || '';
+                const match = !termo || desc.includes(termo);
+                item.style.display = match ? '' : 'none';
+                if (match) visiveis++;
+            });
+
+            if (semResultadosFiltro) {
+                if (visiveis === 0 && termo) {
+                    semResultadosFiltro.classList.remove('d-none');
+                } else {
+                    semResultadosFiltro.classList.add('d-none');
+                }
+            }
+        });
+    }
+
+    // Atualizar contador de selecionados
+    function atualizarContador() {
+        const selecionados = document.querySelectorAll('#lista-itens-adicionar .cb-item:checked:not(:disabled)');
+        const total = selecionados.length;
+
+        if (total > 0) {
+            areaSalvar.style.display = '';
+            areaSalvar.style.cssText = '';
+            badgeSelecionados.style.display = '';
+            badgeSelecionados.textContent = total + ' selecionado' + (total !== 1 ? 's' : '');
+            textoSelecionados.textContent = total + ' item(ns) selecionado(s)';
+            btnSalvar.disabled = false;
+        } else {
+            areaSalvar.style.display = 'none';
+            areaSalvar.style.cssText = 'display:none !important;';
+            badgeSelecionados.style.display = 'none';
+            btnSalvar.disabled = true;
+        }
+    }
+
+    // Eventos nos checkboxes
+    document.querySelectorAll('#lista-itens-adicionar .cb-item').forEach(function(cb) {
+        cb.addEventListener('change', atualizarContador);
+    });
+
+    // Salvar seleção em batch (catálogo: tipo:id)
+    if (btnSalvar) {
+        btnSalvar.addEventListener('click', function() {
+            const selecionados = document.querySelectorAll('#lista-itens-adicionar .cb-item:checked:not(:disabled)');
+            const itens = Array.from(selecionados).map(function(cb) {
+                const parts = cb.value.split(':');
+                return { tipo: parts[0], id: parseInt(parts[1]) };
+            });
+
+            if (itens.length === 0) return;
+
+            btnSalvar.disabled = true;
+            btnSalvar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Vinculando...';
+
+            fetch(BASE_URL + '/api/contratos/' + codigoContrato + '/vincular-catalogo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ itens: itens })
+            })
+            .then(r => r.json())
+            .then(function(data) {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message || 'Erro ao vincular itens.');
+                    btnSalvar.disabled = false;
+                    btnSalvar.innerHTML = '<i class="bi bi-check-lg me-1"></i> Vincular Selecionados';
+                }
+            })
+            .catch(function(err) {
+                alert('Erro: ' + err.message);
+                btnSalvar.disabled = false;
+                btnSalvar.innerHTML = '<i class="bi bi-check-lg me-1"></i> Vincular Selecionados';
+            });
+        });
+    }
+
+    // Desvincular item
+    document.querySelectorAll('.btn-desvincular').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const vinculacaoId = this.dataset.vinculacaoId;
+            if (!confirm('Deseja realmente remover esta vinculação?')) return;
+
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+            fetch(BASE_URL + '/api/itens-vinculados/' + vinculacaoId, {
+                method: 'DELETE'
+            })
+            .then(r => r.json())
+            .then(function(data) {
+                if (data.success) {
+                    if (data.warning) {
+                        alert(data.warning);
+                    }
+                    location.reload();
+                } else {
+                    alert(data.message || 'Erro ao remover vinculação.');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-trash3"></i>';
+                }
+            })
+            .catch(function(err) {
+                alert('Erro: ' + err.message);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-trash3"></i>';
+            });
+        });
+    });
+});
+</script>
+{% endif %}
+
+{# === Chart.js — Donut por Sub-Item do Detalhamento === #}
+{% if sub_aba_tipo == 'detalhamento' and detalhamento_financeiro and detalhamento_financeiro.tem_dados %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const COR_PRIMARIA = '#343990';
+    const PALETA = ['#343990','#4A90D9','#7BAFD4','#F5A623','#6BBF8A','#E8637A','#9B59B6','#3498DB','#1ABC9C','#E67E22'];
+
+    function formatBRL(valor) {
+        return 'R$ ' + valor.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    }
+
+    /* Defaults */
+    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    Chart.defaults.color = '#6c757d';
+    Chart.defaults.plugins.legend.display = false;
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(52, 57, 144, 0.95)';
+    Chart.defaults.plugins.tooltip.bodyFont = { size: 13, weight: 'bold' };
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.cornerRadius = 6;
+    Chart.defaults.plugins.tooltip.displayColors = false;
+
+    /* Montar dados agregados por sub-item */
+    const canvas = document.getElementById('chartDonut');
+    if (canvas) {
+        const map = {};
+        {% for nat in detalhamento_financeiro.naturezas %}
+            {% for si in nat.subitens %}
+            {
+                const key = '{{ si.codigo }}';
+                if (!map[key]) { map[key] = { codigo: '{{ si.codigo }}', nome: {{ si.nome|tojson }}, total: 0 }; }
+                map[key].total += {{ si.total }};
+            }
+            {% endfor %}
+        {% endfor %}
+
+        const arr = Object.values(map).sort((a, b) => b.total - a.total).slice(0, 8);
+        const totalGeral = {{ detalhamento_financeiro.total_geral }};
+        const cores = PALETA.slice(0, arr.length);
+
+        new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: arr.map(s => s.codigo + ' — ' + s.nome),
+                datasets: [{
+                    data: arr.map(s => s.total),
+                    backgroundColor: cores,
+                    hoverBackgroundColor: cores.map(c => c + 'DD'),
+                    borderWidth: 2,
+                    borderColor: '#fff',
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                cutout: '58%',
+                layout: { padding: 4 },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const pct = totalGeral > 0 ? (ctx.raw / totalGeral * 100).toFixed(1) : 0;
+                                return formatBRL(ctx.raw) + ' (' + pct + '%)';
+                            }
+                        }
+                    }
+                }
+            },
+            plugins: [{
+                id: 'centerText',
+                afterDraw: function(chart) {
+                    const ctx = chart.ctx;
+                    const { top, bottom, left, right } = chart.chartArea;
+                    const cx = (left + right) / 2;
+                    const cy = (top + bottom) / 2;
+                    ctx.save();
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.font = '500 10px -apple-system, sans-serif';
+                    ctx.fillStyle = '#6c757d';
+                    ctx.fillText('Sub-Itens', cx, cy - 9);
+                    ctx.font = 'bold 11px -apple-system, sans-serif';
+                    ctx.fillStyle = COR_PRIMARIA;
+                    ctx.fillText(formatBRL(totalGeral), cx, cy + 7);
+                    ctx.restore();
+                }
+            }]
+        });
+
+        /* Legenda HTML lateral */
+        const legend = document.getElementById('legendDonut');
+        if (legend) {
+            /* Header da legenda */
+            const header = document.createElement('div');
+            header.className = 'd-flex justify-content-between align-items-baseline mb-1';
+            header.innerHTML =
+                '<span style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px; color:#8c8c8c; font-weight:600;">Código / Descrição</span>' +
+                '<span style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px; color:#8c8c8c; font-weight:600;">Participação</span>';
+            legend.appendChild(header);
+
+            arr.forEach(function(s, i) {
+                const pct = totalGeral > 0 ? (s.total / totalGeral * 100).toFixed(1) : '0.0';
+                const cor = cores[i];
+                const row = document.createElement('div');
+                row.className = 'd-flex align-items-start gap-2';
+                row.innerHTML =
+                    '<span style="flex-shrink:0; width:10px; height:10px; border-radius:2px; margin-top:4px; background:' + cor + ';"></span>' +
+                    '<div style="min-width:0; flex:1;">' +
+                        '<div class="d-flex justify-content-between align-items-baseline gap-2">' +
+                            '<span class="text-truncate" style="font-size:0.82rem; color:#495057;">' +
+                                '<span style="font-family:monospace; color:#6c757d; font-size:0.75rem;">' + s.codigo + '</span> ' + s.nome +
+                            '</span>' +
+                            '<span style="flex-shrink:0; font-size:0.8rem; font-weight:600; color:' + cor + ';">' + pct + '%</span>' +
+                        '</div>' +
+                        '<div style="font-size:0.73rem; color:#8c8c8c;">' + formatBRL(s.total) + '</div>' +
+                    '</div>';
+                legend.appendChild(row);
+            });
+        }
+    }
+});
+</script>
+{% endif %}
+
+{# ── Paginação client-side para tabelas financeiras por ano ── #}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('tbody[data-paginated]').forEach(function(tbody) {
+        var sectionId  = tbody.getAttribute('data-paginated');
+        var perPage    = parseInt(tbody.getAttribute('data-per-page')) || 10;
+        var rows       = Array.from(tbody.querySelectorAll('tr'));
+        var totalRows  = rows.length;
+        var totalPages = Math.ceil(totalRows / perPage);
+        var currentPage = 1;
+
+        var nav = document.querySelector('[data-pagination-for="' + sectionId + '"]');
+        if (totalRows <= perPage) {
+            if (nav) nav.style.display = 'none';
+            return;
+        }
+
+        var info    = nav ? nav.querySelector('[data-page-info]') : null;
+        var btnList = nav ? nav.querySelector('[data-page-buttons]') : null;
+
+        function goTo(page) {
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            render();
+        }
+
+        function buildButtons() {
+            if (!btnList) return;
+            btnList.innerHTML = '';
+
+            /* « Primeira */
+            addBtn('«', 1, currentPage <= 1);
+
+            /* ‹ Anterior */
+            addBtn('‹', currentPage - 1, currentPage <= 1);
+
+            /* Números de página (com elipses) */
+            var pages = getVisiblePages(currentPage, totalPages);
+            pages.forEach(function(p) {
+                if (p === '...') {
+                    var li = document.createElement('li');
+                    li.className = 'page-item disabled';
+                    li.innerHTML = '<span class="page-link">…</span>';
+                    btnList.appendChild(li);
+                } else {
+                    addBtn(String(p), p, false, p === currentPage);
+                }
+            });
+
+            /* › Próxima */
+            addBtn('›', currentPage + 1, currentPage >= totalPages);
+
+            /* » Última */
+            addBtn('»', totalPages, currentPage >= totalPages);
+        }
+
+        function addBtn(label, targetPage, disabled, active) {
+            var li = document.createElement('li');
+            li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+            var a = document.createElement('a');
+            a.className = 'page-link';
+            a.href = '#';
+            a.textContent = label;
+            if (!disabled && !active) {
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    goTo(targetPage);
+                });
+            } else {
+                a.addEventListener('click', function(e) { e.preventDefault(); });
+            }
+            li.appendChild(a);
+            btnList.appendChild(li);
+        }
+
+        function getVisiblePages(current, total) {
+            /* Mostra até 7 botões numéricos com elipses */
+            if (total <= 7) {
+                var arr = [];
+                for (var i = 1; i <= total; i++) arr.push(i);
+                return arr;
+            }
+            var pages = [];
+            pages.push(1);
+            if (current > 3) pages.push('...');
+            var start = Math.max(2, current - 1);
+            var end   = Math.min(total - 1, current + 1);
+            for (var i = start; i <= end; i++) pages.push(i);
+            if (current < total - 2) pages.push('...');
+            pages.push(total);
+            return pages;
+        }
+
+        function render() {
+            var start = (currentPage - 1) * perPage;
+            var end   = start + perPage;
+            var showing = Math.min(end, totalRows);
+            rows.forEach(function(row, i) {
+                row.style.display = (i >= start && i < end) ? '' : 'none';
+            });
+            if (info) {
+                info.textContent = 'Exibindo ' + (start + 1) + '–' + showing +
+                    ' de ' + totalRows + ' registros';
+            }
+            buildButtons();
+        }
+
+        render();
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,464 @@
+import time
+import warnings
+import requests
+import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from sqlalchemy import text
+from config.config import ENGINE, TOKEN
+
+# =========================
+# CONFIGURAÇÕES (FÁCIL DE ALTERAR)
+# =========================
+YEAR = 2026
+
+tabela_destino = "pd"
+tabela_destino_aux = "pd_itens"
+
+# Delete por ano em campo de data (fácil de alterar no futuro)
+DELETE_YEAR = YEAR
+DELETE_DATE_FIELD_MAIN = "dataEmissao"   # na tabela principal
+DELETE_DATE_FIELD_ITENS = "dataEmissao"  # na tabela itens (mesmo nome, mas aqui será TEXTO)
+
+# Escolha do modo:
+# - "single" -> usa só a UG definida em UG_SINGLE
+# - "all" -> busca todas as UGs do banco (SELECT codigo FROM ug)
+UG_MODE = "all"  # "single" ou "all"
+UG_SINGLE = "210101"  # usado apenas no modo "single"
+UG_PAD_SIZE = 6
+
+# Performance
+MAX_WORKERS_CAP = 16
+CHUNKSIZE_SQL = 2000
+
+# =========================
+# COLUNAS DA API / TABELA PD
+# =========================
+COLUMNS_PD = [
+    "id",
+    "codigo",
+    "codProcesso",
+    "statusDocumento",
+    "codigoUG",
+    "codigoGestao",
+    "codFonte",
+    "codNatureza",
+    "codigoCredor",
+    "nomeCredor",
+    "dataEmissao",
+    "valor",
+    "itens",
+    "observacao",
+    "codClassificacao",
+    "statusExecucao",
+    "codUgPagadora",
+    "codigoOB",
+    "codigoNE",
+    "codigoNL",
+    "valorTotalPD",
+]
+
+# BIGINT: zeros à esquerda não existem como número (00000000 vira 0).
+INT_COLUMNS_PD = [
+    "codigoGestao",
+    "codFonte",
+    "codNatureza",
+    "codigoCredor",
+    "codUgPagadora",
+    "codContrato",
+]
+
+# =========================
+# HTTP SESSION ROBUSTA
+# =========================
+def make_session() -> requests.Session:
+    session = requests.Session()
+    retry = Retry(
+        total=5,
+        connect=5,
+        read=5,
+        status=5,
+        backoff_factor=0.6,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset(["GET"]),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(
+        max_retries=retry,
+        pool_connections=20,
+        pool_maxsize=20,
+    )
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+# =========================
+# BANCO / UGs
+# =========================
+def table_exists_mysql(conn, table_name: str) -> bool:
+    q = text("""
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+          AND table_name = :t
+        LIMIT 1
+    """)
+    return conn.execute(q, {"t": table_name}).fetchone() is not None
+
+def normalize_ug(value, size: int):
+    if value is None:
+        return None
+    s = str(value).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    digits = [c for c in s if c.isdigit()]
+    s = "".join(digits)
+    if not s:
+        return None
+    return s.zfill(size)
+
+def load_ugs_from_db():
+    q = text("SELECT codigo FROM ug")
+    with ENGINE.connect() as conn:
+        rows = conn.execute(q).fetchall()
+
+    ugs = []
+    seen = set()
+    for r in rows:
+        if not r:
+            continue
+        ug = normalize_ug(r[0], UG_PAD_SIZE)
+        if ug and ug not in seen:
+            seen.add(ug)
+            ugs.append(ug)
+    return ugs
+
+def resolve_ugs():
+    mode = (UG_MODE or "").lower().strip()
+
+    if mode == "single":
+        ug = normalize_ug(UG_SINGLE, UG_PAD_SIZE)
+        if not ug:
+            raise ValueError("UG_SINGLE está vazio/inválido, mas UG_MODE='single'.")
+        return [ug]
+
+    if mode == "all":
+        ugs = load_ugs_from_db()
+        if not ugs:
+            raise ValueError("Nenhuma UG encontrada na tabela 'ug'.")
+        return ugs
+
+    raise ValueError("UG_MODE inválido. Use 'single' ou 'all'.")
+
+# =========================
+# DELETE POR ANO (MySQL)
+# =========================
+def delete_year_data(conn):
+    """
+    - Na tabela principal (pd_2026): dataEmissao é data/datetime -> usa range de datas.
+    - Na tabela itens (pd_itens_2026): dataEmissao será TEXTO 'YYYY-MM-DD' -> também dá pra usar range por string.
+    """
+    start_date = f"{DELETE_YEAR}-01-01"
+    end_date = f"{DELETE_YEAR + 1}-01-01"
+    deleted_total = 0
+
+    if table_exists_mysql(conn, tabela_destino):
+        del_stmt = text(f"""
+            DELETE FROM {tabela_destino}
+            WHERE {DELETE_DATE_FIELD_MAIN} >= :start_date
+              AND {DELETE_DATE_FIELD_MAIN} < :end_date
+        """)
+        r = conn.execute(del_stmt, {"start_date": start_date, "end_date": end_date})
+        deleted_total += (r.rowcount or 0)
+
+    if table_exists_mysql(conn, tabela_destino_aux):
+        # Como dataEmissao será "YYYY-MM-DD", comparação lexicográfica funciona para range anual.
+        del_stmt = text(f"""
+            DELETE FROM {tabela_destino_aux}
+            WHERE {DELETE_DATE_FIELD_ITENS} >= :start_date
+              AND {DELETE_DATE_FIELD_ITENS} < :end_date
+        """)
+        r = conn.execute(del_stmt, {"start_date": start_date, "end_date": end_date})
+        deleted_total += (r.rowcount or 0)
+
+    print(f"{deleted_total} registros de {DELETE_YEAR} deletados com sucesso!")
+    return deleted_total
+
+# =========================
+# UTILITÁRIOS
+# =========================
+def parse_cod_contrato(series: pd.Series) -> pd.Series:
+    """
+    Extrai o codContrato a partir do codClassificacao.
+
+    Layout observado:
+      ... 23005147. 0
+      ... 00000000. 0
+
+    O contrato é o bloco de 8 dígitos imediatamente antes do sufixo ". 0".
+    Em BIGINT, "00000000" vira 0 (esperado).
+    """
+    s = series.astype("string").fillna("").str.strip()
+
+    # 1) 8 dígitos imediatamente antes de ". 0" no final
+    contrato = s.str.extract(r"(\d{8})\s*\.\s*0\s*$", expand=False)
+
+    # 2) fallback: último bloco de 8 dígitos da string
+    contrato = contrato.fillna(s.str.extract(r"(\d{8})(?!.*\d{8})", expand=False))
+
+    # 3) default
+    return contrato.fillna("0")
+
+# =========================
+# EXPANSÃO ITENS (pd_itens_2026)
+# =========================
+def expand_items(df_raw: pd.DataFrame) -> pd.DataFrame:
+    """
+    Preenche pd_itens_2026 repetindo:
+    - id (mesmo id do PD em pd_2026)
+    - codigo (mesmo codigo do PD)
+    - codigoUG
+    - dataEmissao (SERÁ CONVERTIDA PARA TEXTO NO FINAL)
+    """
+    if df_raw is None or df_raw.empty:
+        return pd.DataFrame()
+
+    rows = []
+    for _, row in df_raw.iterrows():
+        itens = row.get("itens", None)
+        if not isinstance(itens, list) or not itens:
+            continue
+
+        pd_id = row.get("id", None)
+        codigo_pd = row.get("codigo", None)
+        codigo_ug = row.get("codigoUG", None)
+        data_emissao = row.get("dataEmissao", None)
+
+        for item in itens:
+            if not isinstance(item, dict):
+                continue
+            classificadores = item.get("classificadores", None)
+            if not isinstance(classificadores, list) or not classificadores:
+                continue
+
+            for c in classificadores:
+                if not isinstance(c, dict):
+                    continue
+                rows.append(
+                    {
+                        "id": pd_id,
+                        "codigo": codigo_pd,
+                        "codigoUG": codigo_ug,
+                        "dataEmissao": data_emissao,
+                        "codigoTipoClassificador": c.get("codigoTipoClassificador", None),
+                        "nomeTipoClassificador": c.get("nomeTipoClassificador", None),
+                        "nomeClassificador": c.get("nomeClassificador", None),
+                    }
+                )
+
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+# =========================
+# API
+# =========================
+def fetch_data(session: requests.Session, ug: str, token: str, year: int):
+    start_time = time.time()
+    url = f"https://tesouro.sefaz.pi.gov.br/siafe-api/programacao-desembolso-orcamentaria/{year}/{ug}"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    try:
+        resp = session.get(url, headers=headers, timeout=(5, 30))
+        elapsed = time.time() - start_time
+        status = resp.status_code
+
+        if status != 200:
+            return ug, pd.DataFrame(), pd.DataFrame(), 0, elapsed, status
+
+        try:
+            data = resp.json()
+        except ValueError:
+            return ug, pd.DataFrame(), pd.DataFrame(), 0, elapsed, "json_error"
+
+        if not data:
+            return ug, pd.DataFrame(), pd.DataFrame(), 0, elapsed, "no_data"
+
+        df_raw = pd.json_normalize(data)
+        df_main = df_raw.reindex(columns=COLUMNS_PD)
+
+        # <<< CORREÇÃO DO codContrato
+        if "codClassificacao" in df_main.columns:
+            df_main["codContrato"] = parse_cod_contrato(df_main["codClassificacao"])
+        else:
+            df_main["codContrato"] = "0"
+
+        if "codigo" in df_main.columns:
+            df_main = df_main.drop_duplicates(subset="codigo", keep="first")
+
+        df_items = expand_items(df_raw)
+
+        if "itens" in df_main.columns:
+            df_main = df_main.drop(columns=["itens"], errors="ignore")
+
+        qtd = len(df_main)
+        return ug, df_main, df_items, qtd, elapsed, 200
+
+    except requests.RequestException:
+        elapsed = time.time() - start_time
+        return ug, pd.DataFrame(), pd.DataFrame(), 0, elapsed, "request_error"
+
+# =========================
+# MAIN
+# =========================
+def main_pd_2026():
+    t0 = time.time()
+
+    ugs = resolve_ugs()
+    is_all_mode = (UG_MODE or "").lower().strip() == "all"
+
+    print("=" * 70)
+    print(f"Iniciando atualização de dados de PD - Ano {YEAR}")
+    if is_all_mode:
+        print(f"UGs da SEAD: {len(ugs)} UGs (modo all)")
+    else:
+        print(f"UGs da SEAD: {', '.join(ugs)}")
+    print("=" * 70)
+    print("Buscando dados da API...")
+
+    session = make_session()
+
+    dfs_main = []
+    dfs_items = []
+    total_docs = 0
+    per_ug_summary = []
+    status_counts = {}
+
+    max_workers = min(MAX_WORKERS_CAP, max(1, len(ugs)))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(fetch_data, session, ug, TOKEN, YEAR) for ug in ugs]
+
+        for fut in as_completed(futures):
+            ug, df_main, df_items, qtd, elapsed, status = fut.result()
+
+            total_docs += qtd
+            status_counts[status] = status_counts.get(status, 0) + 1
+            per_ug_summary.append((ug, qtd, elapsed))
+
+            if df_main is not None and not df_main.empty:
+                dfs_main.append(df_main)
+            if df_items is not None and not df_items.empty:
+                dfs_items.append(df_items)
+
+    if not dfs_main:
+        print("Nenhum dado foi retornado da API.")
+        print(f"Resumo de status/erros da API: {status_counts}")
+        print(f"Exemplo de UGs usadas: {ugs[:10]}")
+        return
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        final_main = pd.concat(dfs_main, ignore_index=True) if dfs_main else pd.DataFrame()
+        final_items = pd.concat(dfs_items, ignore_index=True) if dfs_items else pd.DataFrame()
+
+    # =========================
+    # CONVERSÕES: TABELA PRINCIPAL
+    # =========================
+    for col in INT_COLUMNS_PD:
+        if col in final_main.columns:
+            final_main[col] = (
+                pd.to_numeric(final_main[col], errors="coerce")
+                .fillna(0)
+                .astype("int64")
+            )
+
+    if "valorTotalPD" in final_main.columns:
+        final_main["valorTotalPD"] = pd.to_numeric(
+            final_main["valorTotalPD"], errors="coerce"
+        ).astype("float64")
+
+    if "dataEmissao" in final_main.columns:
+        final_main["dataEmissao"] = pd.to_datetime(final_main["dataEmissao"], errors="coerce")
+
+    # =========================
+    # CONVERSÕES: TABELA ITENS
+    # =========================
+    if final_items is not None and not final_items.empty:
+        final_items["id"] = (
+            pd.to_numeric(final_items["id"], errors="coerce")
+            .fillna(0)
+            .astype("int64")
+        )
+
+        # <<< AQUI: dataEmissao COMO TEXTO (YYYY-MM-DD)
+        # Se vier inválida, vira NaT e depois vira NaN -> preenche com string vazia.
+        dt = pd.to_datetime(final_items["dataEmissao"], errors="coerce")
+        final_items["dataEmissao"] = dt.dt.strftime("%Y-%m-%d").fillna("")
+
+        final_items = final_items.reindex(
+            columns=[
+                "id",
+                "codigo",
+                "codigoUG",
+                "dataEmissao",  # TEXTO
+                "codigoTipoClassificador",
+                "nomeTipoClassificador",
+                "nomeClassificador",
+            ]
+        )
+
+    # =========================
+    # INSERT NO BANCO
+    # =========================
+    try:
+        with ENGINE.begin() as conn:
+            delete_year_data(conn)
+
+            final_main.to_sql(
+                name=tabela_destino,
+                con=conn,
+                if_exists="append",
+                index=False,
+                chunksize=CHUNKSIZE_SQL,
+                method="multi",
+            )
+
+            if final_items is not None and not final_items.empty:
+                final_items.to_sql(
+                    name=tabela_destino_aux,
+                    con=conn,
+                    if_exists="append",
+                    index=False,
+                    chunksize=CHUNKSIZE_SQL,
+                    method="multi",
+                )
+
+        elapsed_total = time.time() - t0
+
+        print("=" * 70)
+        print("RESUMO DA OPERAÇÃO")
+        print("=" * 70)
+
+        if is_all_mode:
+            per_ug_summary.sort(key=lambda x: x[0])
+            print("UG | Quantidade de PD | Tempo de busca (s)")
+            for ug, qtd, elapsed in per_ug_summary:
+                print(f"{ug} | {qtd} | {elapsed:.2f}")
+            print("-" * 70)
+            print(f"UGs buscadas: {len(per_ug_summary)}")
+            print(f"Total de PD: {total_docs}")
+            print(f"Tempo total do procedimento: {elapsed_total / 60.0:.2f} min")
+        else:
+            print(f"Total de documentos processados: {total_docs}")
+            print(f"Tempo total do procedimento: {elapsed_total:.2f}s")
+
+        print(f"Registros inseridos no banco: {len(final_main)}")
+        print(f"Tabela '{tabela_destino}' atualizada com sucesso!")
+        print(f"Tabela '{tabela_destino_aux}' atualizada com sucesso! (dataEmissao como TEXTO)")
+        print("=" * 70)
+
+    except Exception as e:
+        print(f"Erro ao inserir no banco (rollback automático): {e}")
+
+if __name__ == "__main__":
+    main_pd_2026()

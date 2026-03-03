@@ -1,0 +1,157 @@
+{% extends "usuarios/base_usuarios.html" %}
+
+{% block title %}SGC - {{ 'Editar' if perfil else 'Novo' }} Perfil{% endblock %}
+
+{% block extra_css %}
+<style>
+    .perm-table thead th {
+        background-color: #343990;
+        color: #fff;
+        font-weight: 600;
+        border: none;
+        font-size: 0.85rem;
+    }
+    .perm-table td {
+        vertical-align: middle;
+    }
+    .perm-module-name {
+        font-weight: 600;
+        color: #343990;
+    }
+    .form-check-input:checked {
+        background-color: #343990;
+        border-color: #343990;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{{ url_for('usuarios.perfis_index') }}" class="text-decoration-none text-muted small">
+        <i class="bi bi-arrow-left me-1"></i> Voltar para perfis
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="mb-0 fw-bold">
+                    <i class="bi bi-shield-lock me-2" style="color: #343990;"></i>
+                    {{ 'Editar Perfil' if perfil else 'Novo Perfil' }}
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST">
+                    {# Dados do perfil #}
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-5">
+                            <label for="nome" class="form-label fw-semibold">Nome do Perfil <span class="text-danger">*</span></label>
+                            <input type="text" name="nome" id="nome" class="form-control"
+                                   placeholder="Ex: Administrador"
+                                   value="{{ perfil.nome if perfil else '' }}" required>
+                        </div>
+                        <div class="col-md-5">
+                            <label for="descricao" class="form-label fw-semibold">Descrição</label>
+                            <input type="text" name="descricao" id="descricao" class="form-control"
+                                   placeholder="Descrição do perfil"
+                                   value="{{ perfil.descricao if perfil and perfil.descricao else '' }}">
+                        </div>
+                        {% if perfil %}
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Status</label>
+                            <select name="ativo" class="form-select">
+                                <option value="1" {{ 'selected' if perfil.ativo }}>Ativo</option>
+                                <option value="0" {{ 'selected' if not perfil.ativo }}>Inativo</option>
+                            </select>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {# Matriz de Permissões #}
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-key me-1"></i> Permissões por Módulo
+                    </h6>
+
+                    <div class="table-responsive mb-4" style="border-radius: 0.5rem; overflow: hidden;">
+                        <table class="table table-bordered perm-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-3" style="width: 30%;">Módulo</th>
+                                    {% for acao_key, acao_label in acoes %}
+                                    <th class="text-center" style="width: {{ 70 // acoes|length }}%;">{{ acao_label }}</th>
+                                    {% endfor %}
+                                    <th class="text-center" style="width: 10%;">Todos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for modulo_key, modulo_label in modulos %}
+                                <tr>
+                                    <td class="ps-3 perm-module-name">
+                                        <i class="bi bi-folder2 me-1"></i> {{ modulo_label }}
+                                    </td>
+                                    {% for acao_key, acao_label in acoes %}
+                                    <td class="text-center">
+                                        <div class="form-check d-flex justify-content-center mb-0">
+                                            <input class="form-check-input perm-checkbox perm-{{ modulo_key }}"
+                                                   type="checkbox"
+                                                   name="perm_{{ modulo_key }}_{{ acao_key }}"
+                                                   value="1"
+                                                   id="perm_{{ modulo_key }}_{{ acao_key }}"
+                                                   data-modulo="{{ modulo_key }}"
+                                                   {{ 'checked' if acao_key in permissoes_atuais.get(modulo_key, []) }}>
+                                        </div>
+                                    </td>
+                                    {% endfor %}
+                                    <td class="text-center">
+                                        <div class="form-check d-flex justify-content-center mb-0">
+                                            <input class="form-check-input toggle-all-modulo"
+                                                   type="checkbox"
+                                                   data-modulo="{{ modulo_key }}"
+                                                   title="Marcar/desmarcar todas">
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary fw-bold px-4">
+                            <i class="bi bi-check-lg me-1"></i> Salvar
+                        </button>
+                        <a href="{{ url_for('usuarios.perfis_index') }}" class="btn btn-outline-secondary px-4">
+                            Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Toggle all permissões de um módulo
+    document.querySelectorAll('.toggle-all-modulo').forEach(function(toggle) {
+        const modulo = toggle.dataset.modulo;
+        const checkboxes = document.querySelectorAll('.perm-' + modulo);
+
+        // Inicializa estado do "todos"
+        toggle.checked = Array.from(checkboxes).every(cb => cb.checked);
+
+        toggle.addEventListener('change', function() {
+            checkboxes.forEach(cb => cb.checked = toggle.checked);
+        });
+
+        // Atualiza "todos" quando checkboxes individuais mudam
+        checkboxes.forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                toggle.checked = Array.from(checkboxes).every(c => c.checked);
+            });
+        });
+    });
+</script>
+{% endblock %}

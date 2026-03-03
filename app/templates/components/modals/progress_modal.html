@@ -1,0 +1,45 @@
+{# Componente: Modal de Progresso Genérico #}
+{#
+    Uso: {% include 'components/modals/progress_modal.html' %}
+
+    IDs disponíveis:
+    - modalProgresso: O modal em si
+    - statusTexto: Texto de status
+    - progressBar: Barra de progresso
+    - logContainer: Container de logs
+    - btnFecharModal: Botão de fechar
+    - iconLoading: Ícone de loading (para parar animação)
+#}
+<div class="modal fade" id="modalProgresso" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-sync-alt fa-spin me-2" id="iconLoading"></i>
+                    <span id="modalTitulo">Processando...</span>
+                </h5>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-2" id="statusTexto">Iniciando...</p>
+
+                <div class="progress mb-3" style="height: 25px;">
+                    <div id="progressBar"
+                         class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                         role="progressbar" style="width: 0%;">0%</div>
+                </div>
+
+                <div class="card bg-light border">
+                    <div class="card-body p-2" id="logContainer"
+                         style="height: 150px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; color: #555;">
+                        <div class="text-muted">Aguardando início...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="btnFecharModal" data-bs-dismiss="modal" disabled>
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

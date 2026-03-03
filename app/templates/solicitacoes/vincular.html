@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-9">
+
+        <div class="d-flex align-items-center mb-4">
+            <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary me-3 shadow-sm rounded-circle" style="width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center;">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <div>
+                <h4 class="fw-bold mb-0 text-dark">Vincular Processo Existente</h4>
+                <small class="text-muted">Localize um processo SEI existente e vincule-o a um contrato no sistema.</small>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-body p-4">
+
+                <!-- PASSO 1: Buscar Processo SEI -->
+                <div class="mb-4">
+                    <label for="protocolo_sei_input" class="step-label">
+                        <span class="step-badge">1</span> Buscar Processo no SEI
+                    </label>
+                    <div class="input-group input-group-lg">
+                        <input type="text" class="form-control bg-light" id="protocolo_sei_input"
+                               placeholder="Digite o n° do processo (ex: 00002.009305/2025-23)">
+                        <button class="btn btn-primary px-4" type="button" id="btn-buscar-sei">
+                            <i class="bi bi-search me-2"></i> Buscar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Resultado da busca SEI -->
+                <div id="resultado-sei" class="d-none mb-4">
+                    <!-- Sucesso -->
+                    <div id="sei-sucesso" class="alert alert-success d-none">
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-check-circle-fill fs-4 me-3 mt-1"></i>
+                            <div>
+                                <strong>Processo localizado no SEI!</strong>
+                                <div class="mt-2">
+                                    <div class="row g-2">
+                                        <div class="col-md-8">
+                                            <small class="text-muted d-block">Protocolo</small>
+                                            <span id="sei-protocolo" class="fw-bold"></span>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <a id="sei-link" href="#" target="_blank" class="btn btn-sm btn-outline-primary mt-1">
+                                                <i class="bi bi-box-arrow-up-right me-1"></i> Abrir no SEI
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2" id="sei-especificacao-container">
+                                        <small class="text-muted d-block">Especificacao</small>
+                                        <span id="sei-especificacao" class="small"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Erro -->
+                    <div id="sei-erro" class="alert alert-danger d-none">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <span id="sei-erro-msg"></span>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ url_for('solicitacoes.vincular_solicitacao') }}" id="form-vincular">
+                    <input type="hidden" name="protocolo_sei" id="protocolo_sei" required>
+                    <input type="hidden" name="contrato_selecionado" id="contrato_selecionado" required>
+
+                    <!-- PASSO 2: Buscar Contrato -->
+                    <div id="secao-contrato" class="mb-4" style="opacity: 0.5; pointer-events: none;">
+                        <label for="termo_busca" class="step-label">
+                            <span class="step-badge">2</span> Buscar Contrato
+                        </label>
+                        <div class="input-group input-group-lg">
+                            <input type="text" class="form-control bg-light" id="termo_busca"
+                                   placeholder="Digite codigo, n° contrato ou nome da empresa...">
+                            <button class="btn btn-primary px-4" type="button" id="btn-buscar">
+                                <i class="bi bi-search me-2"></i> Pesquisar
+                            </button>
+                        </div>
+
+                        <div id="container-resultados" class="mt-3 d-none">
+                            <div class="card border">
+                                <div class="card-header bg-light fw-bold text-uppercase small text-muted">
+                                    Selecione um contrato abaixo:
+                                </div>
+                                <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                                    <table class="table table-custom table-hover align-middle mb-0">
+                                        <thead style="position: sticky; top: 0; z-index: 10;">
+                                            <tr>
+                                                <th scope="col" style="width: 60px;" class="text-center"><i class="bi bi-check2-circle"></i></th>
+                                                <th scope="col">Codigo</th>
+                                                <th scope="col">N° Contrato</th>
+                                                <th scope="col">Empresa / Objeto</th>
+                                                <th scope="col">Proc. Origem</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tabela-corpo" class="bg-white">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div id="msg-nenhum-resultado" class="alert alert-warning d-flex align-items-center mt-3 d-none">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                <div>Nenhum contrato encontrado com esses dados. Tente outro termo.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PASSO 3: Competencia, Tipo de Pagamento e Valor do Empenho -->
+                    <div id="secao-competencia" class="mb-4" style="opacity: 0.5; pointer-events: none;">
+                        <div class="row g-4">
+                            <div class="col-md-4">
+                                <label for="competencia" class="step-label">
+                                    <span class="step-badge">3</span> Competencia
+                                </label>
+                                <input type="text" class="form-control form-control-lg" id="competencia" name="competencia"
+                                       placeholder="MM/AAAA" required>
+                                <div class="form-text">Mes/Ano de referencia do pagamento.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="id_tipo_pagamento" class="step-label">
+                                    <span class="step-badge">4</span> Tipo de Pagamento
+                                </label>
+                                <select class="form-select form-select-lg" id="id_tipo_pagamento" name="id_tipo_pagamento" required>
+                                    <option value="" selected disabled>Selecione o tipo...</option>
+                                    {% for tipo in tipos_pagamento %}
+                                        <option value="{{ tipo.id }}">{{ tipo.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Classificacao do pagamento.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="valor_empenho" class="step-label">
+                                    <span class="step-badge">5</span> Valor do Empenho
+                                </label>
+                                <div class="input-group input-group-lg">
+                                    <span class="input-group-text bg-light">R$</span>
+                                    <input type="text" class="form-control form-control-lg" id="valor_empenho" name="valor_empenho"
+                                           placeholder="0,00">
+                                </div>
+                                <div class="form-text">Valor solicitado para empenho (opcional).</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-light border-start border-4 border-primary shadow-sm py-3">
+                        <div class="d-flex">
+                            <i class="bi bi-info-circle-fill text-primary fs-4 me-3"></i>
+                            <div>
+                                <strong>Vinculacao de Processo:</strong>
+                                O sistema ira importar os documentos do processo SEI e detectar automaticamente a etapa atual da solicitacao.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end pt-3 border-top mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg px-5 shadow fw-bold" id="btn-vincular" disabled>
+                            <i class="bi bi-link-45deg me-2"></i> Vincular Processo
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Carregamento - Vincular Processo -->
+<div class="modal fade" id="modalVincular" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-primary text-white border-0">
+                <h5 class="modal-title"><i class="bi bi-link-45deg me-2"></i>Vinculando Processo</h5>
+            </div>
+            <div class="modal-body py-4">
+                <!-- Barra de progresso -->
+                <div class="progress mb-4" style="height: 8px; border-radius: 4px;">
+                    <div id="vincularProgresso" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                         role="progressbar" style="width: 0%; transition: width 0.5s ease;"></div>
+                </div>
+
+                <!-- Etapas visuais -->
+                <div id="vincularEtapas">
+                    <div class="d-flex align-items-center mb-3 etapa-item" id="etapaVincular1">
+                        <div class="etapa-icone me-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status" style="display: none;"></div>
+                            <i class="bi bi-circle text-muted" style="font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <span class="fw-bold text-muted">Validando dados e autenticando no SEI...</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center mb-3 etapa-item" id="etapaVincular2">
+                        <div class="etapa-icone me-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status" style="display: none;"></div>
+                            <i class="bi bi-circle text-muted" style="font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <span class="fw-bold text-muted">Consultando processo no SEI...</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center mb-3 etapa-item" id="etapaVincular3">
+                        <div class="etapa-icone me-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status" style="display: none;"></div>
+                            <i class="bi bi-circle text-muted" style="font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <span class="fw-bold text-muted">Importando documentos do processo...</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center mb-3 etapa-item" id="etapaVincular4">
+                        <div class="etapa-icone me-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status" style="display: none;"></div>
+                            <i class="bi bi-circle text-muted" style="font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <span class="fw-bold text-muted">Detectando etapa atual...</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center etapa-item" id="etapaVincular5">
+                        <div class="etapa-icone me-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status" style="display: none;"></div>
+                            <i class="bi bi-circle text-muted" style="font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <span class="fw-bold text-muted">Finalizando vinculação...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center mt-4">
+                    <small class="text-muted">Isso pode levar alguns segundos. Não feche esta janela.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+}
+
+// Estado do formulario
+var estadoForm = { seiValido: false, contratoSelecionado: false, competenciaPreenchida: false, tipoPagamentoSelecionado: false };
+
+function verificarBotaoVincular() {
+    var habilitado = estadoForm.seiValido && estadoForm.contratoSelecionado && estadoForm.competenciaPreenchida && estadoForm.tipoPagamentoSelecionado;
+    $('#btn-vincular').prop('disabled', !habilitado);
+}
+
+$(document).ready(function() {
+    $('#competencia').mask('00/0000');
+    $('#valor_empenho').mask('#.##0,00', {reverse: true});
+
+    // Monitorar competencia
+    $('#competencia').on('input', function() {
+        estadoForm.competenciaPreenchida = $(this).val().length === 7;
+        verificarBotaoVincular();
+    });
+
+    // Monitorar tipo de pagamento
+    $('#id_tipo_pagamento').on('change', function() {
+        estadoForm.tipoPagamentoSelecionado = $(this).val() !== '' && $(this).val() !== null;
+        verificarBotaoVincular();
+    });
+
+    // ==========================================
+    // PASSO 1: Buscar Processo SEI
+    // ==========================================
+    $('#btn-buscar-sei').click(buscarProcessoSEI);
+    $('#protocolo_sei_input').keypress(function(e) { if(e.which == 13) { buscarProcessoSEI(); } });
+
+    function buscarProcessoSEI() {
+        var protocolo = $('#protocolo_sei_input').val().trim();
+        if (protocolo.length < 5) { alert("Digite um protocolo valido."); return; }
+
+        var btn = $('#btn-buscar-sei');
+        var originalText = btn.html();
+        btn.html('<span class="spinner-border spinner-border-sm"></span> Consultando SEI...').prop('disabled', true);
+
+        $('#resultado-sei').removeClass('d-none');
+        $('#sei-sucesso').addClass('d-none');
+        $('#sei-erro').addClass('d-none');
+
+        $.ajax({
+            url: "{{ url_for('solicitacoes.api_validar_protocolo_sei') }}",
+            data: { protocolo: protocolo },
+            success: function(response) {
+                if (response.valido) {
+                    $('#sei-protocolo').text(response.protocolo_formatado);
+                    if (response.link_acesso) {
+                        $('#sei-link').attr('href', response.link_acesso).show();
+                    } else {
+                        $('#sei-link').hide();
+                    }
+                    if (response.especificacao) {
+                        $('#sei-especificacao').text(response.especificacao);
+                        $('#sei-especificacao-container').show();
+                    } else {
+                        $('#sei-especificacao-container').hide();
+                    }
+                    $('#sei-sucesso').removeClass('d-none');
+
+                    // Salva protocolo formatado no hidden
+                    $('#protocolo_sei').val(response.protocolo_formatado);
+
+                    // Habilita passo 2
+                    estadoForm.seiValido = true;
+                    $('#secao-contrato').css({'opacity': '1', 'pointer-events': 'auto'});
+                    $('#secao-competencia').css({'opacity': '1', 'pointer-events': 'auto'});
+                    verificarBotaoVincular();
+                } else {
+                    $('#sei-erro-msg').text(response.erro);
+                    $('#sei-erro').removeClass('d-none');
+                    estadoForm.seiValido = false;
+                    $('#secao-contrato').css({'opacity': '0.5', 'pointer-events': 'none'});
+                    $('#secao-competencia').css({'opacity': '0.5', 'pointer-events': 'none'});
+                    verificarBotaoVincular();
+                }
+            },
+            error: function() {
+                $('#sei-erro-msg').text('Erro de comunicacao com o servidor.');
+                $('#sei-erro').removeClass('d-none');
+            },
+            complete: function() { btn.html(originalText).prop('disabled', false); }
+        });
+    }
+
+    // ==========================================
+    // PASSO 2: Buscar Contrato (mesmo de nova.html)
+    // ==========================================
+    $('#btn-buscar').click(realizarBusca);
+    $('#termo_busca').keypress(function(e) { if(e.which == 13) { realizarBusca(); } });
+
+    function realizarBusca() {
+        var termo = $('#termo_busca').val();
+        if (termo.length < 3) { alert("Digite pelo menos 3 caracteres."); return; }
+
+        var btn = $('#btn-buscar');
+        var originalText = btn.html();
+        btn.html('<span class="spinner-border spinner-border-sm"></span> Buscando...').prop('disabled', true);
+
+        $('#tabela-corpo').empty();
+        $('#container-resultados').removeClass('d-none');
+        $('#msg-nenhum-resultado').addClass('d-none');
+
+        $.ajax({
+            url: "{{ url_for('solicitacoes.api_buscar_contratos') }}",
+            data: { q: termo },
+            success: function(response) {
+                var contratos = response.results;
+                if (contratos.length === 0) {
+                    $('#msg-nenhum-resultado').removeClass('d-none');
+                    $('#container-resultados .card').addClass('d-none');
+                } else {
+                    $('#container-resultados .card').removeClass('d-none');
+                    contratos.forEach(function(c) {
+                        var cod = escapeHtml(c.codigo);
+                        var numOrig = escapeHtml(c.numeroOriginal) || '-';
+                        var nome = escapeHtml(c.nomeContratado);
+                        var obj = escapeHtml(c.objeto);
+                        var proc = escapeHtml(c.numProcesso) || '-';
+
+                        var row = '<tr style="cursor: pointer;" onclick="document.getElementById(\'radio_' + cod + '\').click(); selecionarContrato(\'' + cod + '\')">' +
+                            '<td class="text-center">' +
+                                '<input class="form-check-input" type="radio" name="selecao_contrato_visual" id="radio_' + cod + '" value="' + cod + '" style="transform: scale(1.3); cursor: pointer;">' +
+                            '</td>' +
+                            '<td class="fw-bold text-secondary">' + cod + '</td>' +
+                            '<td><span class="badge bg-light text-dark border">' + numOrig + '</span></td>' +
+                            '<td>' +
+                                '<div class="fw-bold text-dark">' + nome + '</div>' +
+                                '<small class="text-muted d-block text-truncate" style="max-width: 250px;">' + obj + '</small>' +
+                            '</td>' +
+                            '<td class="small font-monospace">' + proc + '</td>' +
+                        '</tr>';
+                        $('#tabela-corpo').append(row);
+                    });
+                }
+            },
+            error: function() { alert("Erro na busca."); },
+            complete: function() { btn.html(originalText).prop('disabled', false); }
+        });
+    }
+});
+
+function selecionarContrato(codigo) {
+    document.getElementById('contrato_selecionado').value = codigo;
+    estadoForm.contratoSelecionado = true;
+    $('tr').removeClass('table-primary');
+    $('#radio_' + codigo).closest('tr').addClass('table-primary');
+    verificarBotaoVincular();
+}
+
+// ==========================================
+// Modal de Carregamento ao Vincular
+// ==========================================
+(function() {
+    var form = document.getElementById('form-vincular');
+    if (!form) return;
+
+    var etapas = [
+        { id: 'etapaVincular1', progresso: 10, delay: 0 },
+        { id: 'etapaVincular2', progresso: 30, delay: 1500 },
+        { id: 'etapaVincular3', progresso: 55, delay: 3500 },
+        { id: 'etapaVincular4', progresso: 80, delay: 6000 },
+        { id: 'etapaVincular5', progresso: 95, delay: 8500 }
+    ];
+
+    function ativarEtapa(idx) {
+        var el = document.getElementById(etapas[idx].id);
+        if (!el) return;
+
+        // Marca etapas anteriores como concluídas
+        for (var i = 0; i < idx; i++) {
+            var prev = document.getElementById(etapas[i].id);
+            if (prev) {
+                prev.querySelector('.spinner-border').style.display = 'none';
+                var icone = prev.querySelector('.bi');
+                icone.className = 'bi bi-check-circle-fill text-success';
+                icone.style.fontSize = '1.1rem';
+                prev.querySelector('.fw-bold').classList.remove('text-muted');
+                prev.querySelector('.fw-bold').classList.add('text-success');
+            }
+        }
+
+        // Ativa a etapa atual
+        el.querySelector('.spinner-border').style.display = 'inline-block';
+        el.querySelector('.bi').style.display = 'none';
+        el.querySelector('.fw-bold').classList.remove('text-muted');
+        el.querySelector('.fw-bold').classList.add('text-dark');
+
+        // Atualiza barra de progresso
+        document.getElementById('vincularProgresso').style.width = etapas[idx].progresso + '%';
+    }
+
+    form.addEventListener('submit', function(e) {
+        // Mostra o modal
+        var modal = new bootstrap.Modal(document.getElementById('modalVincular'));
+        modal.show();
+
+        // Desabilita o botão para evitar duplo clique
+        document.getElementById('btn-vincular').disabled = true;
+
+        // Inicia animação das etapas
+        etapas.forEach(function(etapa, idx) {
+            setTimeout(function() {
+                ativarEtapa(idx);
+            }, etapa.delay);
+        });
+
+        // O form submete normalmente (POST) e o redirect do servidor substituirá a página
+    });
+})();
+</script>
+{% endblock %}

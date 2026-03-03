@@ -1,0 +1,316 @@
+{% extends "financeiro/base_financeiro.html" %}
+{% block title %}SGC - Diária #{{ itinerario.id }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{{ url_for('financeiro.diarias_lista') }}" class="btn btn-outline-secondary btn-sm mb-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar para Lista
+    </a>
+</div>
+
+{# Cabeçalho #}
+<div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center py-3" style="background-color: #B8860B;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-airplane me-2"></i>
+            {% if itinerario.sei_id_procedimento %}
+                <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}"
+                   target="_blank" class="text-white text-decoration-none">
+                    {{ itinerario.sei_protocolo or itinerario.n_processo or 'Sem processo' }}
+                    <i class="bi bi-box-arrow-up-right small"></i>
+                </a>
+            {% else %}
+                {{ itinerario.n_processo or 'Sem processo' }}
+            {% endif %}
+        </h5>
+        <div>
+            {% if itinerario.tipo_solicitacao %}
+                {% if itinerario.tipo_solicitacao.id == 1 %}
+                    <span class="badge bg-info text-dark fs-6">Diárias</span>
+                {% elif itinerario.tipo_solicitacao.id == 2 %}
+                    <span class="badge bg-primary fs-6">Diárias + Passagens</span>
+                {% elif itinerario.tipo_solicitacao.id == 3 %}
+                    <span class="badge bg-secondary fs-6">Passagens</span>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row mb-4">
+            {# Informações Gerais #}
+            <div class="col-md-6">
+                <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2"></i>Informações Gerais</h6>
+                <table class="table table-bordered table-sm">
+                    <tr>
+                        <th class="bg-light" style="width:40%">Tipo de Itinerário</th>
+                        <td>
+                            <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else 'bg-warning text-dark' }}">
+                                {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Solicitante</th>
+                        <td>{{ itinerario.usuario_gerador }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Data de Solicitação</th>
+                        <td>{{ itinerario.data_solicitacao.strftime('%d/%m/%Y') if itinerario.data_solicitacao else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Qtd. Diárias</th>
+                        <td>{{ itinerario.qtd_diarias_solicitadas }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Valor Total</th>
+                        <td class="fw-bold {{ 'text-success' if itinerario.valor_total }}">
+                            {{ itinerario.valor_total_formatado }}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            {# Datas e Locais #}
+            <div class="col-md-6">
+                <h6 class="fw-bold mb-3"><i class="bi bi-calendar-event me-2"></i>Datas e Locais</h6>
+                <table class="table table-bordered table-sm">
+                    <tr>
+                        <th class="bg-light" style="width:40%">Data da Viagem</th>
+                        <td>{{ itinerario.data_viagem.strftime('%d/%m/%Y %H:%M') if itinerario.data_viagem else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Data de Retorno</th>
+                        <td>{{ itinerario.data_retorno.strftime('%d/%m/%Y %H:%M') if itinerario.data_retorno else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Origem</th>
+                        <td>{{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Estado de Origem</th>
+                        <td>{{ itinerario.estado_origem_obj.nome if itinerario.estado_origem_obj else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Estado de Destino</th>
+                        <td>{{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        {# Objetivo #}
+        {% if itinerario.objetivo %}
+        <div class="mb-4">
+            <h6 class="fw-bold mb-2"><i class="bi bi-bullseye me-2"></i>Objetivo da Viagem</h6>
+            <div class="p-3 border rounded bg-light">
+                <p class="mb-0">{{ itinerario.objetivo }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Processo SEI #}
+        {% if itinerario.sei_protocolo %}
+        <div class="mb-4">
+            <h6 class="fw-bold mb-2"><i class="bi bi-link-45deg me-2"></i>Processo SEI</h6>
+            <div class="p-3 border rounded bg-light">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Protocolo</small>
+                        <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}"
+                           target="_blank" class="fw-bold text-decoration-none">
+                            {{ itinerario.sei_protocolo }} <i class="bi bi-box-arrow-up-right small"></i>
+                        </a>
+                    </div>
+                    {% if itinerario.sei_memorando_formatado or itinerario.sei_id_memorando %}
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Memorando SGA</small>
+                        <span>{{ itinerario.sei_memorando_formatado or itinerario.sei_id_memorando }}</span>
+                    </div>
+                    {% endif %}
+                    {% if itinerario.sei_requisicao_formatado or itinerario.sei_id_requisicao %}
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Requisição de Diárias</small>
+                        <span>{{ itinerario.sei_requisicao_formatado or itinerario.sei_id_requisicao }}</span>
+                    </div>
+                    {% endif %}
+                    {% if itinerario.sei_requisicao_passagens_formatado or itinerario.sei_id_requisicao_passagens %}
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Requisição de Passagens</small>
+                        <span><i class="bi bi-airplane me-1"></i>{{ itinerario.sei_requisicao_passagens_formatado or itinerario.sei_id_requisicao_passagens }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Pessoas #}
+        <div class="mb-4">
+            <h6 class="fw-bold mb-2"><i class="bi bi-people me-2"></i>Pessoas</h6>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Nome</th>
+                            <th>CPF</th>
+                            <th>Cargo</th>
+                            <th>Assessorando</th>
+                            <th>Valor Diária</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in itens %}
+                        <tr>
+                            <td>{{ item.nome_pessoa or item.cpf_pessoa }}</td>
+                            <td>{{ item.cpf_pessoa }}</td>
+                            <td>{{ item.cargo.nome if item.cargo else '-' }}</td>
+                            <td>
+                                {% if item.cargo_assessorado %}
+                                    <span class="badge bg-success">{{ item.cargo_assessorado.nome }}</span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="fw-bold">{{ item.valor_cargo_formatado }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {# Cotações (Nacional) #}
+        {% if cotacoes %}
+        <div class="mb-4">
+            <h6 class="fw-bold mb-2"><i class="bi bi-currency-dollar me-2"></i>Cotações</h6>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Agência</th>
+                            <th>Valor</th>
+                            <th>Data/Hora</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in cotacoes %}
+                        <tr>
+                            <td>{{ c.agencia.nome if c.agencia else '-' }}</td>
+                            <td>{{ c.valor_formatado }}</td>
+                            <td>{{ c.data_hora.strftime('%d/%m/%Y %H:%M') if c.data_hora else '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# Seção Nota de Reserva #}
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-3" style="background-color: #B8860B;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-receipt me-2"></i>Nota de Reserva
+        </h5>
+    </div>
+    <div class="card-body">
+
+        {% if itinerario.nota_reserva %}
+            {# NR já inserida - modo visualização #}
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+                <i class="fas fa-check-circle fs-4 me-3"></i>
+                <div>
+                    <strong>Nota de Reserva inserida!</strong>
+                    <div class="mt-1">
+                        {% if itinerario.sei_id_procedimento %}
+                            <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}"
+                               target="_blank" class="fw-bold text-decoration-none fs-5">
+                                NR{{ itinerario.nota_reserva }}
+                                <i class="bi bi-box-arrow-up-right small"></i>
+                            </a>
+                        {% else %}
+                            <span class="fw-bold fs-5">NR{{ itinerario.nota_reserva }}</span>
+                        {% endif %}
+
+                        {% if itinerario.sei_nota_reserva_formatado %}
+                            <br>
+                            <small class="text-muted">Documento SEI: {{ itinerario.sei_nota_reserva_formatado }}</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="text-muted small">
+                <i class="bi bi-info-circle me-1"></i>
+                Etapa atual: <span class="badge bg-success">{{ itinerario.etapa_atual.nome if itinerario.etapa_atual else 'Financeiro' }}</span>
+            </div>
+
+        {% elif current_user.tem_permissao('financeiro', 'criar') and itinerario.etapa_atual_id == 2 %}
+            {# Formulário de inserção #}
+            <form method="POST" action="{{ url_for('financeiro.inserir_nr', id=itinerario.id) }}"
+                  enctype="multipart/form-data" id="formNR">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="nota_reserva" class="form-label fw-bold">
+                            <i class="bi bi-hash me-1"></i>Código da Nota de Reserva <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="nota_reserva" name="nota_reserva"
+                               placeholder="Ex: 2026NR00123" required>
+                        <div class="form-text">Informe o código da Nota de Reserva emitida.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="arquivo_nr" class="form-label fw-bold">
+                            <i class="bi bi-file-pdf me-1"></i>Documento da Nota de Reserva (PDF)
+                        </label>
+                        <input type="file" class="form-control" id="arquivo_nr" name="arquivo_nr"
+                               accept=".pdf">
+                        <div class="form-text">
+                            {% if itinerario.sei_protocolo %}
+                                O PDF será enviado ao processo SEI automaticamente.
+                            {% else %}
+                                Nenhum processo SEI vinculado. O PDF não será enviado ao SEI.
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary fw-bold px-4" id="btnInserirNR">
+                        <i class="bi bi-save me-1"></i> Inserir Nota de Reserva
+                    </button>
+                    <a href="{{ url_for('financeiro.diarias_lista') }}" class="btn btn-outline-secondary ms-2">
+                        Cancelar
+                    </a>
+                </div>
+            </form>
+
+        {% else %}
+            {# Sem permissão ou etapa incorreta #}
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="fas fa-info-circle fs-4 me-3"></i>
+                <div>
+                    <strong>Aguardando inserção da Nota de Reserva.</strong>
+                    <p class="mb-0 mt-1 small text-muted">
+                        Esta solicitação está na etapa
+                        <span class="badge bg-warning text-dark">{{ itinerario.etapa_atual.nome if itinerario.etapa_atual else '-' }}</span>
+                        e aguarda a inserção da NR por um usuário com permissão.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    // Previne duplo-clique no submit
+    document.getElementById('formNR')?.addEventListener('submit', function() {
+        const btn = document.getElementById('btnInserirNR');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando...';
+    });
+</script>
+{% endblock %}
+{% endblock %}

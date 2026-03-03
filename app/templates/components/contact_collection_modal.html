@@ -1,0 +1,207 @@
+{# Componente: Modal de coleta de dados de contato (primeiro login) #}
+{# Renderizado server-side: so aparece se precisa_preencher_contato = True #}
+
+{% if precisa_preencher_contato %}
+<div class="modal fade" id="modalContato" data-bs-backdrop="static"
+     data-bs-keyboard="false" tabindex="-1" aria-labelledby="modalContatoLabel">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-primary text-white border-0">
+                <h5 class="modal-title" id="modalContatoLabel">
+                    <i class="bi bi-person-badge me-2"></i>
+                    Complete seu Cadastro
+                </h5>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-muted mb-4">
+                    Preencha seus dados de contato para o sistema.
+                    Esta acao e necessaria apenas uma vez.
+                </p>
+                <form id="formContato" novalidate>
+                    {# Email #}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="contato-email">
+                            Email <span class="text-danger">*</span>
+                        </label>
+                        <input type="email" class="form-control" id="contato-email"
+                               required placeholder="seu.email@dominio.com"
+                               autocomplete="email">
+                        <div class="invalid-feedback" id="contato-email-erro">
+                            Informe um email valido.
+                        </div>
+                    </div>
+
+                    {# CPF #}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="contato-cpf">
+                            CPF <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="contato-cpf"
+                               required placeholder="000.000.000-00" maxlength="14"
+                               oninput="mascaraCpfContato(this)">
+                        <div class="invalid-feedback" id="contato-cpf-erro">
+                            CPF invalido.
+                        </div>
+                    </div>
+
+                    {# Telefone #}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="contato-telefone">
+                            Telefone Celular
+                        </label>
+                        <input type="text" class="form-control" id="contato-telefone"
+                               placeholder="(00) 00000-0000" maxlength="15"
+                               oninput="mascaraTelefone(this)">
+                        <div class="invalid-feedback" id="contato-telefone-erro">
+                            Formato invalido. Use (XX) XXXXX-XXXX.
+                        </div>
+                    </div>
+
+                    {# Telegram - em standby, descomentar quando ativar
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="contato-telegram">
+                            Telegram Chat ID
+                        </label>
+                        <input type="text" class="form-control" id="contato-telegram"
+                               placeholder="Ex: 123456789">
+                        <div class="form-text">
+                            <i class="bi bi-telegram me-1"></i>
+                            Envie <code>/start</code> ao bot <strong>@SGC_SEAD_bot</strong> para obter seu Chat ID.
+                        </div>
+                    </div>
+                    #}
+
+                    {# Mensagem de erro geral #}
+                    <div class="alert alert-danger d-none small" id="contato-erro-geral"></div>
+                </form>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary" id="contato-pular-btn"
+                        onclick="pularContato()">
+                    Preencher depois
+                </button>
+                <button type="button" class="btn btn-primary px-4" id="contato-salvar-btn"
+                        onclick="salvarContato()">
+                    <i class="bi bi-check-lg me-1"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Mascaras
+function mascaraCpfContato(input) {
+    let v = input.value.replace(/\D/g, '');
+    if (v.length > 11) v = v.slice(0, 11);
+    if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+    else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+    else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+    input.value = v;
+}
+
+function mascaraTelefone(input) {
+    let v = input.value.replace(/\D/g, '');
+    if (v.length > 11) v = v.slice(0, 11);
+    if (v.length > 6) v = v.replace(/(\d{2})(\d{5})(\d{1,4})/, '($1) $2-$3');
+    else if (v.length > 2) v = v.replace(/(\d{2})(\d{1,5})/, '($1) $2');
+    input.value = v;
+}
+
+// Validacao de CPF
+function validarCpf(cpf) {
+    cpf = cpf.replace(/\D/g, '');
+    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+    let soma = 0;
+    for (let i = 0; i < 9; i++) soma += parseInt(cpf[i]) * (10 - i);
+    let resto = soma % 11;
+    let d1 = resto < 2 ? 0 : 11 - resto;
+    if (parseInt(cpf[9]) !== d1) return false;
+    soma = 0;
+    for (let i = 0; i < 10; i++) soma += parseInt(cpf[i]) * (11 - i);
+    resto = soma % 11;
+    let d2 = resto < 2 ? 0 : 11 - resto;
+    return parseInt(cpf[10]) === d2;
+}
+
+function pularContato() {
+    bootstrap.Modal.getInstance(document.getElementById('modalContato')).hide();
+}
+
+async function salvarContato() {
+    const email = document.getElementById('contato-email');
+    const cpf = document.getElementById('contato-cpf');
+    const telefone = document.getElementById('contato-telefone');
+    const erroGeral = document.getElementById('contato-erro-geral');
+
+    // Reset validacao
+    [email, cpf, telefone].forEach(el => el.classList.remove('is-invalid'));
+    erroGeral.classList.add('d-none');
+
+    let valido = true;
+
+    // Validar email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.value.trim() || !emailRegex.test(email.value.trim())) {
+        email.classList.add('is-invalid');
+        valido = false;
+    }
+
+    // Validar CPF
+    if (!cpf.value.trim() || !validarCpf(cpf.value)) {
+        cpf.classList.add('is-invalid');
+        valido = false;
+    }
+
+    // Validar telefone (se preenchido)
+    if (telefone.value.trim()) {
+        const digits = telefone.value.replace(/\D/g, '');
+        if (digits.length < 10 || digits.length > 11) {
+            telefone.classList.add('is-invalid');
+            valido = false;
+        }
+    }
+
+    if (!valido) return;
+
+    // Enviar
+    const btn = document.getElementById('contato-salvar-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Salvando...';
+
+    try {
+        const resp = await fetch('/notificacoes/api/salvar-contato', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                email: email.value.trim(),
+                cpf: cpf.value.trim(),
+                telefone: telefone.value.trim(),
+            })
+        });
+        const data = await resp.json();
+
+        if (data.sucesso) {
+            bootstrap.Modal.getInstance(document.getElementById('modalContato')).hide();
+        } else {
+            erroGeral.innerHTML = (data.erros || [data.msg || 'Erro ao salvar']).join('<br>');
+            erroGeral.classList.remove('d-none');
+        }
+    } catch (e) {
+        erroGeral.textContent = 'Erro de comunicacao. Tente novamente.';
+        erroGeral.classList.remove('d-none');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Salvar';
+    }
+}
+
+// Abrir modal ao carregar pagina
+document.addEventListener('DOMContentLoaded', () => {
+    const modalEl = document.getElementById('modalContato');
+    if (modalEl) {
+        new bootstrap.Modal(modalEl).show();
+    }
+});
+</script>
+{% endif %}

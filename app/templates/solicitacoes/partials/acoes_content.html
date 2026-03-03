@@ -1,0 +1,95 @@
+<div class="card-header text-white" style="background-color: {{ etapa_atual.cor_hex }}">
+    Ação Necessária: {{ etapa_atual.nome }}
+</div>
+<div class="card-body">
+
+    {# 1. FASE DE ANÁLISE DE DOCUMENTOS #}
+    {% if etapa_atual.alias in ['aguardando_docs', 'criado', 'doc_incompleta'] %}
+        <div class="alert alert-light border border-secondary">
+            <i class="bi bi-file-text me-2"></i> Valide a documentação no SEI.
+        </div>
+        <form class="ajax-form">
+            <div class="d-flex justify-content-end gap-2">
+                <button type="submit" name="acao" value="doc_incompleta" class="btn btn-outline-danger">
+                    <i class="bi bi-x-lg"></i> Incompleta
+                </button>
+                <button type="submit" name="acao" value="doc_completa" class="btn btn-success text-white">
+                    <i class="bi bi-check-lg"></i> Completa
+                </button>
+            </div>
+        </form>
+
+    {# 2. DOCUMENTAÇÃO OK -> AGUARDANDO EMPENHO / NOTIFICAR #}
+    {% elif etapa_atual.alias == 'doc_completa' %}
+        
+        {# Verifica se o empenho já foi atendido (via Dashboard) #}
+        {% if solicitacao.status_empenho_id == 2 %}
+            <div class="alert alert-success border-success">
+                <h6 class="fw-bold"><i class="bi bi-cash-coin me-2"></i>Empenho Atendido!</h6>
+                <p class="mb-0 small">A NE já foi vinculada. Você pode notificar os fiscais agora.</p>
+            </div>
+            
+            <form class="ajax-form">
+                <button type="submit" name="acao" value="notificar_fiscais" class="btn btn-primary w-100">
+                    <i class="bi bi-telegram me-2"></i> Notificar Fiscais
+                </button>
+            </form>
+
+        {% else %}
+            <div class="alert alert-warning border-warning text-center py-3">
+                <i class="bi bi-exclamation-circle fs-4 text-warning"></i>
+                <h6 class="fw-bold mt-2">Aguardando Empenho</h6>
+                <p class="small mb-0">Solicite e vincule a NE através do <strong>Painel Principal</strong> (Dashboard) para prosseguir.</p>
+            </div>
+            <div class="d-grid">
+                <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                    Voltar para Dashboard
+                </a>
+            </div>
+        {% endif %}
+
+    {# 3. FISCALIZAÇÃO E NOTA FISCAL #}
+    {% elif etapa_atual.alias in ['notificacao_enviada', 'nf_pendente'] %}
+        {% if etapa_atual.alias == 'notificacao_enviada' %}
+            <div class="alert alert-info border-info">
+                <i class="bi bi-send-check me-2"></i> <strong>Fiscais Notificados.</strong>
+                <div class="small mt-1">Aguarde a análise e ateste o recebimento da Nota Fiscal.</div>
+            </div>
+        {% else %}
+            <div class="alert alert-danger border-danger">
+                <strong>Pendência:</strong> Resolva a pendência da NF anterior.
+            </div>
+        {% endif %}
+
+        <form class="ajax-form">
+            <div class="d-flex justify-content-end gap-2">
+                <button type="submit" name="acao" value="nf_pendente" class="btn btn-outline-danger">
+                    <i class="bi bi-exclamation-triangle"></i> Pendência
+                </button>
+                <button type="submit" name="acao" value="nf_atestada" class="btn btn-success text-white">
+                    <i class="bi bi-check-circle"></i> Atestar Recebimento
+                </button>
+            </div>
+        </form>
+
+    {# 4. LIQUIDAÇÃO #}
+    {% elif etapa_atual.alias == 'nf_atestada' %}
+        <div class="alert alert-success">NF Atestada. Liberar Liquidação?</div>
+        <form class="ajax-form">
+            <button type="submit" name="acao" value="realizar_liquidacao" class="btn btn-primary w-100">Liquidar</button>
+        </form>
+
+    {# 5. PAGAMENTO #}
+    {% elif etapa_atual.alias == 'liquidado' %}
+        <div class="alert alert-info">Liquidado. Confirmar Pagamento?</div>
+        <form class="ajax-form">
+            <button type="submit" name="acao" value="realizar_pagamento" class="btn btn-success text-white w-100">Pagar</button>
+        </form>
+
+    {# 6. CONCLUÍDO #}
+    {% elif etapa_atual.alias == 'pago' %}
+        <div class="text-center text-success py-3">
+            <h4><i class="bi bi-check-circle-fill"></i> Concluído</h4>
+        </div>
+    {% endif %}
+</div>

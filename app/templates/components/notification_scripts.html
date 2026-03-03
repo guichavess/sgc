@@ -1,0 +1,191 @@
+{# Componente: Scripts de Notificacoes (polling, dropdown, tab title, toasts) #}
+{# Incluir apos Bootstrap JS e antes de extra_js em todos os base templates #}
+
+{% if current_user.is_authenticated %}
+<script>
+(function() {
+    // === Configuracao ===
+    const POLL_INTERVAL = 30000; // 30 segundos
+    const TITULO_ORIGINAL = document.title;
+    let ultimaContagem = {{ notificacao_count }};
+    let blinkInterval = null;
+
+    // === Tab Title com contagem ===
+    function atualizarTituloAba(count) {
+        if (count > 0) {
+            document.title = `(${count > 99 ? '99+' : count}) ${TITULO_ORIGINAL}`;
+            if (!blinkInterval) {
+                let mostrando = true;
+                blinkInterval = setInterval(() => {
+                    document.title = mostrando
+                        ? TITULO_ORIGINAL
+                        : `(${count > 99 ? '99+' : count}) ${TITULO_ORIGINAL}`;
+                    mostrando = !mostrando;
+                }, 2000);
+            }
+        } else {
+            document.title = TITULO_ORIGINAL;
+            if (blinkInterval) {
+                clearInterval(blinkInterval);
+                blinkInterval = null;
+            }
+        }
+    }
+
+    // === Atualizar Badge ===
+    function atualizarBadge(count) {
+        const badge = document.getElementById('notificacao-badge');
+        if (!badge) return;
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.classList.remove('d-none');
+        } else {
+            badge.classList.add('d-none');
+        }
+    }
+
+    // === Toasts ===
+    function mostrarToast(titulo, mensagem, nivel) {
+        const containerId = nivel === 'alerta' ? 'toast-container-alerta' : 'toast-container-lembrete';
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const autoHide = nivel !== 'alerta';
+        const delay = nivel === 'alerta' ? 8000 : 5000;
+        const borderClass = nivel === 'alerta' ? 'alerta' : 'lembrete';
+        const iconClass = nivel === 'alerta' ? 'bi-exclamation-triangle text-warning' : 'bi-info-circle text-info';
+
+        const toastEl = document.createElement('div');
+        toastEl.className = `toast toast-notificacao ${borderClass}`;
+        toastEl.setAttribute('role', 'alert');
+        toastEl.innerHTML = `
+            <div class="toast-header border-0">
+                <i class="bi ${iconClass} me-2"></i>
+                <strong class="me-auto small">${titulo}</strong>
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body small py-2">${mensagem}</div>
+        `;
+        container.appendChild(toastEl);
+
+        const toast = new bootstrap.Toast(toastEl, {autohide: autoHide, delay: delay});
+        toast.show();
+
+        toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+    }
+
+    // === Polling ===
+    async function poll() {
+        try {
+            const resp = await fetch('/notificacoes/api/contagem');
+            const data = await resp.json();
+            const novaContagem = data.nao_lidas || 0;
+
+            atualizarBadge(novaContagem);
+            atualizarTituloAba(novaContagem);
+
+            // Se houve novas notificacoes, buscar e mostrar toast
+            if (novaContagem > ultimaContagem) {
+                const recentes = await fetch('/notificacoes/api/recentes');
+                const recData = await recentes.json();
+                const novas = (recData.notificacoes || []).filter(n => !n.lida);
+                const diff = novaContagem - ultimaContagem;
+
+                // Mostrar toast para as mais recentes (max 3)
+                novas.slice(0, Math.min(diff, 3)).forEach(n => {
+                    if (n.nivel === 'lembrete' || n.nivel === 'alerta') {
+                        mostrarToast(n.titulo, n.mensagem, n.nivel);
+                    }
+                });
+            }
+
+            ultimaContagem = novaContagem;
+        } catch (e) {
+            // Silencioso - nao interromper o polling por erros de rede
+        }
+    }
+
+    // === Dropdown: Popular ao abrir ===
+    const bellTrigger = document.getElementById('notificacao-bell-trigger');
+    if (bellTrigger) {
+        bellTrigger.addEventListener('show.bs.dropdown', async () => {
+            const lista = document.getElementById('notificacao-lista');
+            const vazio = document.getElementById('notificacao-vazio');
+            if (!lista) return;
+
+            try {
+                const resp = await fetch('/notificacoes/api/recentes');
+                const data = await resp.json();
+
+                if (!data.notificacoes || data.notificacoes.length === 0) {
+                    if (vazio) vazio.style.display = '';
+                    return;
+                }
+
+                if (vazio) vazio.style.display = 'none';
+
+                // Limpar lista existente (exceto vazio)
+                lista.querySelectorAll('.notificacao-item').forEach(el => el.remove());
+
+                data.notificacoes.forEach(n => {
+                    const item = document.createElement('a');
+                    item.href = n.ref_url || '#';
+                    item.className = `notificacao-item ${n.lida ? '' : 'nao-lida'}`;
+                    item.onclick = function(e) {
+                        if (!n.lida) {
+                            fetch('/notificacoes/api/marcar-lida', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({id: n.id})
+                            });
+                        }
+                    };
+                    item.innerHTML = `
+                        <div class="d-flex align-items-start gap-2">
+                            <span class="nivel-indicator ${n.nivel} mt-1"></span>
+                            <div class="flex-grow-1 overflow-hidden">
+                                <div class="titulo">${n.titulo}</div>
+                                <div class="mensagem">${n.mensagem}</div>
+                                <div class="tempo">${n.tempo}</div>
+                            </div>
+                        </div>
+                    `;
+                    lista.appendChild(item);
+                });
+            } catch (e) {
+                // Silencioso
+            }
+        });
+    }
+
+    // === Inicializar ===
+    atualizarTituloAba(ultimaContagem);
+    setInterval(poll, POLL_INTERVAL);
+})();
+
+// === Funcao global: Marcar todas como lidas (chamada pelo botao no dropdown) ===
+async function marcarTodasLidas() {
+    try {
+        const resp = await fetch('/notificacoes/api/marcar-todas-lidas', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const data = await resp.json();
+        if (data.sucesso) {
+            const badge = document.getElementById('notificacao-badge');
+            if (badge) badge.classList.add('d-none');
+            document.title = document.title.replace(/^\(\d+\+?\)\s*/, '');
+            // Limpar dropdown
+            const lista = document.getElementById('notificacao-lista');
+            if (lista) {
+                lista.querySelectorAll('.notificacao-item.nao-lida').forEach(el => {
+                    el.classList.remove('nao-lida');
+                });
+            }
+        }
+    } catch (e) {
+        // Silencioso
+    }
+}
+</script>
+{% endif %}

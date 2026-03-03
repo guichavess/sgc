@@ -1,0 +1,42 @@
+{% extends 'prestacoes_contratos/base_prestacoes.html' %}
+
+{% block title %}Adicionar Item{% endblock %}
+
+{% block content %}
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Adicionar Novo Item</h2>
+        <a href="{{ url_for('prestacoes_contratos.itens_index') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Voltar
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form action="{{ url_for('prestacoes_contratos.itens_store') }}" method="post">
+                <div class="mb-3">
+                    <label for="descricao" class="form-label">Descrição do Item</label>
+                    <input type="text" class="form-control" id="descricao" name="descricao" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="tipo_item" class="form-label">Tipo do Item</label>
+                    <select class="form-select" id="tipo_item" name="tipo_item" required>
+                        <option value="">-- Selecione o tipo --</option>
+                        <option value="Serviço">Serviço</option>
+                        <option value="Material">Material</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <p class="text-muted">Usuário: {{ session.get('usuario_nome') or session.get('nome_pessoa') }}</p>
+                </div>
+
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-lg me-1"></i>Salvar Item
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

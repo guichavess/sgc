@@ -1,0 +1,44 @@
+{# Componente: Sino de Notificacoes #}
+{# Incluir dentro do <ul class="navbar-nav ms-auto"> de cada navbar, ANTES do dropdown do usuario #}
+{% if current_user.is_authenticated %}
+<li class="nav-item dropdown" id="notificacao-bell-container">
+    <a class="nav-link position-relative px-2" href="#" role="button"
+       data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
+       id="notificacao-bell-trigger">
+        <i class="bi bi-bell fs-5"></i>
+        {% if notificacao_count > 0 %}
+        <span class="badge rounded-pill bg-danger position-absolute top-0 start-100 translate-middle"
+              id="notificacao-badge" style="font-size: 0.6rem;">
+            {{ notificacao_count if notificacao_count <= 99 else '99+' }}
+        </span>
+        {% else %}
+        <span class="badge rounded-pill bg-danger position-absolute top-0 start-100 translate-middle d-none"
+              id="notificacao-badge" style="font-size: 0.6rem;">0</span>
+        {% endif %}
+    </a>
+    <div class="dropdown-menu dropdown-menu-end shadow-lg p-0" style="width: 380px; max-height: 480px;"
+         id="notificacao-dropdown">
+        {# Cabecalho #}
+        <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom bg-light">
+            <h6 class="mb-0 fw-bold small">Notificacoes</h6>
+            <button class="btn btn-link btn-sm text-decoration-none p-0 small"
+                    id="marcar-todas-lidas-btn" onclick="marcarTodasLidas()">
+                Marcar todas como lidas
+            </button>
+        </div>
+        {# Lista de notificacoes (preenchida via JS) #}
+        <div class="overflow-auto" style="max-height: 380px;" id="notificacao-lista">
+            <div class="text-center py-4 text-muted" id="notificacao-vazio">
+                <i class="bi bi-bell-slash fs-3 d-block mb-2 opacity-50"></i>
+                <span class="small">Nenhuma notificacao</span>
+            </div>
+        </div>
+        {# Rodape #}
+        <div class="border-top text-center py-2 bg-light">
+            <a href="{{ url_for('notificacoes.listar') }}" class="text-decoration-none small fw-semibold">
+                Ver todas as notificacoes
+            </a>
+        </div>
+    </div>
+</li>
+{% endif %}
