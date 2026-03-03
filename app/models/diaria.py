@@ -227,8 +227,10 @@ class DiariasItinerario(db.Model):
                               cascade='all, delete-orphan')
     justificativa = db.relationship('DiariasJustificativa', backref='itinerario', uselist=False,
                                     lazy='joined', cascade='all, delete-orphan')
-    cotacoes = db.relationship('DiariasCotacao', backref='itinerario', lazy='dynamic',
-                               cascade='all, delete-orphan')
+    cotacoes = db.relationship('DiariasCotacao', lazy='dynamic',
+                               cascade='all, delete-orphan',
+                               primaryjoin='DiariasItinerario.id == foreign(DiariasCotacao.itinerario_id)',
+                               backref=db.backref('itinerario', lazy='joined'))
 
     def __repr__(self):
         return f'<DiariasItinerario {self.id} - {self.usuario_gerador}>'
@@ -372,7 +374,7 @@ class DiariasCotacao(db.Model):
     __tablename__ = 'diarias_cotacoes'
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-    itinerario_id = db.Column(db.Integer, db.ForeignKey('diarias_itinerario.id'), nullable=False)
+    itinerario_id = db.Column(db.Integer, nullable=False, index=True)
     contrato_codigo = db.Column(db.String(20), nullable=True, index=True)
     valor = db.Column(db.Numeric(10, 2), nullable=False)
     data_hora = db.Column(db.DateTime)
