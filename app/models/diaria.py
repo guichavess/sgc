@@ -373,11 +373,12 @@ class DiariasCotacao(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     itinerario_id = db.Column(db.Integer, db.ForeignKey('diarias_itinerario.id'), nullable=False)
-    contrato_codigo = db.Column(db.String(20), db.ForeignKey('contratos.codigo'), nullable=True)
+    contrato_codigo = db.Column(db.String(20), nullable=True, index=True)
     valor = db.Column(db.Numeric(10, 2), nullable=False)
     data_hora = db.Column(db.DateTime)
 
-    contrato = db.relationship('Contrato', lazy='joined', foreign_keys=[contrato_codigo])
+    contrato = db.relationship('Contrato', lazy='joined',
+                               primaryjoin='foreign(DiariasCotacao.contrato_codigo) == Contrato.codigo')
 
     def __repr__(self):
         return f'<DiariasCotacao {self.id} - Contrato {self.contrato_codigo} - R${self.valor}>'
