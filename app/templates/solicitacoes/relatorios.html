@@ -8,12 +8,7 @@
             <h3 class="fw-bold text-dark mb-0"><i class="fas fa-chart-line me-2"></i>Relatórios Gerenciais</h3>
             <p class="text-muted mb-0">Análise de performance do fluxo de pagamentos.</p>
         </div>
-        <div class="d-flex gap-2">
-            {% if current_user.is_admin %}
-            <a href="{{ url_for('solicitacoes.relatorios_auditoria') }}" class="btn btn-outline-primary fw-bold shadow-sm no-print">
-                <i class="fas fa-clipboard-check me-2"></i>Auditoria de Dados
-            </a>
-            {% endif %}
+        <div>
             <a href="#" onclick="abrirImpressaoCompleta(event)" class="btn btn-outline-danger fw-bold shadow-sm no-print">
                 <i class="fas fa-print me-2"></i>Imprimir Todos (PDF)
             </a>

@@ -548,44 +548,67 @@ def relatorios_auditoria():
     """Página de auditoria de dados — identifica informações faltantes."""
     resultados, contadores = _gerar_dados_auditoria()
 
-    # Filtro: exibir só com pendências ou todos
-    filtro_pendencia = request.args.get('pendencia', 'todos')
-    if filtro_pendencia == 'incompletos':
-        resultados = [r for r in resultados if r['qtd_faltando'] > 0]
-    elif filtro_pendencia == 'completos':
-        resultados = [r for r in resultados if r['qtd_faltando'] == 0]
+    # Extrair listas distintas para os dropdowns (antes de filtrar)
+    todas_competencias = sorted({r['solicitacao'].competencia for r in resultados
+                                  if r['solicitacao'].competencia})
+    todos_contratados = sorted({r['contratado'] for r in resultados if r['contratado']})
+    todas_etapas = sorted({r['etapa_nome'] for r in resultados if r['etapa_nome']})
+    todos_status = sorted({r['solicitacao'].status_geral for r in resultados
+                           if r['solicitacao'].status_geral and r['solicitacao'].status_geral.strip()})
 
-    # Filtro por campo específico faltando
-    filtro_campo = request.args.get('campo', '')
-    mapa_campo_flag = {
-        'protocolo': 'tem_protocolo',
-        'competencia': 'tem_competencia',
-        'contrato': 'tem_contrato',
-        'etapa': 'tem_etapa',
-        'data': 'tem_data',
-        'tipo_pgto': 'tem_tipo_pgto',
-        'link_sei': 'tem_link_sei',
-        'id_proc': 'tem_id_proc',
-        'status_emp': 'tem_status_emp',
-        'valor_emp': 'tem_valor_emp',
-        'ne': 'tem_ne',
-        'nl': 'tem_nl',
-        'pd': 'tem_pd',
-        'ob': 'tem_ob',
-        'tempo': 'tem_tempo',
-        'status': 'tem_status',
-        'historico': 'tem_historico',
+    # Ler filtros da query string (multi-select via getlist)
+    f_competencias = request.args.getlist('filtro_competencia')
+    f_contratados = request.args.getlist('filtro_contratado')
+    f_etapas = request.args.getlist('filtro_etapa')
+    f_status = request.args.getlist('filtro_status')
+    f_docs = request.args.getlist('filtro_docs')       # sem_ne, sem_nl, sem_pd, sem_ob
+    f_pendencia = request.args.getlist('filtro_pendencia')  # completos, incompletos
+
+    # Aplicar filtros
+    if f_competencias:
+        resultados = [r for r in resultados
+                      if r['solicitacao'].competencia in f_competencias]
+    if f_contratados:
+        resultados = [r for r in resultados
+                      if r['contratado'] in f_contratados]
+    if f_etapas:
+        resultados = [r for r in resultados
+                      if r['etapa_nome'] in f_etapas]
+    if f_status:
+        resultados = [r for r in resultados
+                      if r['solicitacao'].status_geral in f_status]
+
+    # Filtro documentos ausentes (AND — todos os selecionados devem faltar)
+    mapa_docs = {
+        'sem_ne': 'tem_ne', 'sem_nl': 'tem_nl',
+        'sem_pd': 'tem_pd', 'sem_ob': 'tem_ob',
     }
-    if filtro_campo in mapa_campo_flag:
-        flag = mapa_campo_flag[filtro_campo]
-        resultados = [r for r in resultados if not r[flag]]
+    for doc_key in f_docs:
+        flag = mapa_docs.get(doc_key)
+        if flag:
+            resultados = [r for r in resultados if not r[flag]]
+
+    # Filtro pendência
+    if f_pendencia:
+        filtered = []
+        for r in resultados:
+            if 'completos' in f_pendencia and r['qtd_faltando'] == 0:
+                filtered.append(r)
+            elif 'incompletos' in f_pendencia and r['qtd_faltando'] > 0:
+                filtered.append(r)
+        resultados = filtered
+
+    tem_filtros = any([f_competencias, f_contratados, f_etapas, f_status, f_docs, f_pendencia])
 
     return render_template(
         'solicitacoes/auditoria.html',
         resultados=resultados,
         contadores=contadores,
-        filtro_pendencia=filtro_pendencia,
-        filtro_campo=filtro_campo,
+        todas_competencias=todas_competencias,
+        todos_contratados=todos_contratados,
+        todas_etapas=todas_etapas,
+        todos_status=todos_status,
+        tem_filtros=tem_filtros,
     )
 
 
