@@ -26,8 +26,9 @@ class LiquidacaoRepository(BaseRepository[Liquidacao]):
         Calcula o total liquidado para um contrato em um ano específico.
 
         Regra:
-        - statusDocumento = 'CONTABILIZADO' → soma valor positivo
-        - statusDocumento = 'ANULADO' → soma valor * -1 (abate)
+        - Filtra apenas statusDocumento = 'CONTABILIZADO'
+        - Se tipoAlteracao = 'ANULACAO' → valor * -1 (abate)
+        - Caso contrário → valor positivo
         - Filtra por dataEmissao BETWEEN ano-01-01 e ano-12-31
         """
         from datetime import date
@@ -37,7 +38,7 @@ class LiquidacaoRepository(BaseRepository[Liquidacao]):
         data_fim = date(ano, 12, 31)
 
         vlr_calculado = case(
-            (cls.model.statusDocumento == 'ANULADO', cls.model.valor * -1),
+            (cls.model.tipoAlteracao == 'ANULACAO', cls.model.valor * -1),
             else_=cls.model.valor
         )
 
@@ -45,7 +46,7 @@ class LiquidacaoRepository(BaseRepository[Liquidacao]):
             func.sum(vlr_calculado)
         ).filter(
             cls.model.codigoUG == codigo_ug,
-            cls.model.statusDocumento.in_(['CONTABILIZADO', 'ANULADO']),
+            cls.model.statusDocumento == 'CONTABILIZADO',
             cls.model.dataEmissao.between(data_inicio, data_fim),
             cls.model.codContrato == cod_contrato_limpo
         ).scalar()

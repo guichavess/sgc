@@ -244,11 +244,20 @@
         </div>
     </div>
 
-    {# === CONTADOR RESULTADOS === #}
+    {# === CONTADOR RESULTADOS + ITENS POR PÁGINA === #}
     <div class="d-flex justify-content-between align-items-center mb-2">
-        <small class="text-muted">
+        <small class="text-muted" id="contadorResultados">
             Mostrando <strong>{{ resultados|length }}</strong> de <strong>{{ contadores.total }}</strong> processos
         </small>
+        <div class="d-flex align-items-center gap-2">
+            <small class="text-muted">Exibir:</small>
+            <select id="itensPorPagina" class="form-select form-select-sm" style="width: auto;" onchange="mudarPagina(1)">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="0">Todos</option>
+            </select>
+        </div>
     </div>
 
     {# === TABELA DE RESULTADOS === #}
@@ -416,6 +425,12 @@
         </div>
     </div>
 
+    {# === PAGINAÇÃO === #}
+    <nav id="paginacaoAuditoria" class="d-flex justify-content-center mb-4" style="display: none !important;">
+        <ul class="pagination pagination-sm mb-0" id="paginacaoControles">
+        </ul>
+    </nav>
+
     {# === LEGENDA === #}
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body py-2">
@@ -489,6 +504,104 @@ function filtrarDropdownAud(input) {
     }
 }
 
+/* --- Paginação client-side --- */
+var paginaAtual = 1;
+
+function mudarPagina(pagina) {
+    var tabela = document.querySelector('.table-custom tbody');
+    var linhas = tabela.querySelectorAll('tr[onclick]');
+    var totalLinhas = linhas.length;
+
+    if (totalLinhas === 0) {
+        document.getElementById('paginacaoAuditoria').style.display = 'none';
+        return;
+    }
+
+    var porPagina = parseInt(document.getElementById('itensPorPagina').value);
+    var totalRegistros = {{ resultados|length }};
+
+    // Se "Todos", exibe tudo
+    if (porPagina === 0) {
+        linhas.forEach(function(tr) { tr.style.display = ''; });
+        document.getElementById('paginacaoAuditoria').style.display = 'none';
+        document.getElementById('contadorResultados').innerHTML =
+            'Mostrando <strong>' + totalRegistros + '</strong> de <strong>{{ contadores.total }}</strong> processos';
+        paginaAtual = 1;
+        return;
+    }
+
+    var totalPaginas = Math.ceil(totalLinhas / porPagina);
+    if (pagina < 1) pagina = 1;
+    if (pagina > totalPaginas) pagina = totalPaginas;
+    paginaAtual = pagina;
+
+    var inicio = (pagina - 1) * porPagina;
+    var fim = inicio + porPagina;
+
+    // Exibir/ocultar linhas
+    linhas.forEach(function(tr, i) {
+        tr.style.display = (i >= inicio && i < fim) ? '' : 'none';
+    });
+
+    // Atualizar contador
+    var mostrandoAte = Math.min(fim, totalLinhas);
+    document.getElementById('contadorResultados').innerHTML =
+        'Mostrando <strong>' + (inicio + 1) + '-' + mostrandoAte + '</strong> de <strong>' + totalRegistros + '</strong> processos';
+
+    // Renderizar controles de paginação
+    renderizarPaginacao(pagina, totalPaginas);
+}
+
+function renderizarPaginacao(paginaAtual, totalPaginas) {
+    var nav = document.getElementById('paginacaoAuditoria');
+    var ul = document.getElementById('paginacaoControles');
+
+    if (totalPaginas <= 1) {
+        nav.style.display = 'none';
+        return;
+    }
+
+    nav.style.display = 'flex';
+    var html = '';
+
+    // Botão Anterior
+    html += '<li class="page-item ' + (paginaAtual === 1 ? 'disabled' : '') + '">';
+    html += '<a class="page-link" href="#" onclick="mudarPagina(' + (paginaAtual - 1) + '); return false;">&laquo;</a></li>';
+
+    // Páginas com reticências
+    var paginas = gerarNumerosPagina(paginaAtual, totalPaginas);
+    paginas.forEach(function(p) {
+        if (p === '...') {
+            html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+        } else {
+            html += '<li class="page-item ' + (p === paginaAtual ? 'active' : '') + '">';
+            html += '<a class="page-link" href="#" onclick="mudarPagina(' + p + '); return false;">' + p + '</a></li>';
+        }
+    });
+
+    // Botão Próximo
+    html += '<li class="page-item ' + (paginaAtual === totalPaginas ? 'disabled' : '') + '">';
+    html += '<a class="page-link" href="#" onclick="mudarPagina(' + (paginaAtual + 1) + '); return false;">&raquo;</a></li>';
+
+    ul.innerHTML = html;
+}
+
+function gerarNumerosPagina(atual, total) {
+    var paginas = [];
+    if (total <= 7) {
+        for (var i = 1; i <= total; i++) paginas.push(i);
+    } else {
+        paginas.push(1);
+        if (atual > 3) paginas.push('...');
+        var de = Math.max(2, atual - 1);
+        var ate = Math.min(total - 1, atual + 1);
+        for (var j = de; j <= ate; j++) paginas.push(j);
+        if (atual < total - 2) paginas.push('...');
+        paginas.push(total);
+    }
+    return paginas;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     atualizarLabelAud('CompAud', 'Competência');
     atualizarLabelAud('ContAud', 'Contratado');
@@ -496,6 +609,9 @@ document.addEventListener('DOMContentLoaded', function() {
     atualizarLabelAud('StatusAud', 'Status');
     atualizarLabelAud('DocsAud', 'Docs Ausentes');
     atualizarLabelAud('PendAud', 'Pendência');
+
+    // Inicializa paginação
+    mudarPagina(1);
 });
 </script>
 {% endblock %}

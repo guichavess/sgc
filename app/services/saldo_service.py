@@ -26,6 +26,11 @@ class SaldoService:
 
         Fórmula: Total Empenhado - Total Liquidado
 
+        Empenho: soma valor onde statusDocumento='CONTABILIZADO',
+                 com valor*-1 quando tipoAlteracaoNE='ANULACAO'
+        Liquidação: soma valor onde statusDocumento='CONTABILIZADO',
+                    com valor*-1 quando tipoAlteracao='ANULACAO'
+
         Args:
             codigo_contrato: Código do contrato
             competencia: Competência (ex: "01/2026")
@@ -44,16 +49,16 @@ class SaldoService:
         if not ano:
             ano = datetime.now().year
 
-        # Total empenhado: SUM(vlr) da tabela empenho
-        # Filtra por YEAR(dataEmissao) = ano, codContrato, codigoUG, CONTABILIZADO
+        # Total empenhado: SUM(valor) da tabela empenho
+        # Filtra por statusDocumento='CONTABILIZADO', com tipoAlteracaoNE='ANULACAO' → valor*-1
         total_empenhado = EmpenhoRepository.calcular_total_empenhado(
             codigo_contrato=codigo_contrato,
             ano=ano,
             codigo_ug=UG_CODE
         )
 
-        # Total liquidado: SUM(CASE WHEN ANULADO THEN valor*-1 ELSE valor END)
-        # Filtra por YEAR(dataEmissao) = ano, codContrato, codigoUG
+        # Total liquidado: SUM(valor) da tabela liquidacao
+        # Filtra por statusDocumento='CONTABILIZADO', com tipoAlteracao='ANULACAO' → valor*-1
         total_liquidado = LiquidacaoRepository.calcular_total_liquidado(
             codigo_contrato=codigo_contrato,
             ano=ano,
@@ -102,6 +107,8 @@ class SaldoService:
         """
         try:
             # Calcula saldo disponível (Empenhado - Liquidado)
+            # Empenho: CONTABILIZADO com tipoAlteracaoNE='ANULACAO' → *-1
+            # Liquidação: CONTABILIZADO com tipoAlteracao='ANULACAO' → *-1
             saldo_disponivel = SaldoService.calcular_saldo_disponivel(
                 codigo_contrato=solicitacao.codigo_contrato,
                 competencia=solicitacao.competencia

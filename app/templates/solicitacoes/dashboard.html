@@ -581,7 +581,13 @@
        2. SINCRONIZAÇÃO UNIFICADA (3 FASES: Docs -> Etapas -> Saldos)
        ========================================================================== */
     
+    // Acumulador global de erros durante sincronização
+    var errosSincronizacao = [];
+
     function iniciarSincronizacaoUnificada() {
+        // Limpa erros de execuções anteriores
+        errosSincronizacao = [];
+
         // Elementos do Modal
         var modalEl = document.getElementById('modalSyncSei');
         var barra = document.getElementById('barraProgressoSei');
@@ -592,7 +598,7 @@
 
         // Validação
         if (!modalEl) { alert("Erro: Modal 'modalSyncSei' não encontrado no HTML."); return; }
-        
+
         var modal = new bootstrap.Modal(modalEl);
 
         // --- FASE 1: PREPARAÇÃO VISUAL ---
@@ -603,7 +609,7 @@
         barra.innerText = '0%';
         msg.innerText = "Conectando ao SEI...";
         logDiv.innerHTML = '<div class="text-primary fw-bold">--- INÍCIO: DOWNLOAD DE DOCUMENTOS ---</div>';
-        
+
         btnFechar.setAttribute('disabled', 'true');
         btnFechar.innerText = 'Processando...';
         btnFechar.className = 'btn btn-secondary';
@@ -615,15 +621,20 @@
 
         sourceDocs.onmessage = function(event) {
             var dados = JSON.parse(event.data);
-            
+
             // Chama a função auxiliar corrigida
             atualizarProgresso(barra, msg, dados.progresso, "[Docs] " + dados.msg);
             logarDetalhe(logDiv, dados.msg);
 
+            // Coleta erros/alertas da Fase 1
+            if (dados.msg && (dados.msg.includes('[ALERTA]') || dados.msg.includes('Erro'))) {
+                errosSincronizacao.push({ fase: 'Download SEI', msg: dados.msg });
+            }
+
             if (dados.concluido) {
                 sourceDocs.close();
                 logDiv.innerHTML += '<div class="text-success fw-bold mt-2">--- FIM FASE 1 ---</div>';
-                
+
                 // Dispara Fase 2 após 1 segundo
                 setTimeout(() => iniciarFase2(barra, msg, logDiv, btnFechar, titulo), 1000);
             }
@@ -649,15 +660,20 @@
         sourceEtapas.onmessage = function(event) {
             var dados = JSON.parse(event.data);
             atualizarProgresso(barra, msg, dados.progresso, "[Etapas] " + dados.msg);
-            
+
             if (dados.msg.includes("Movimentado")) {
                 logarDetalhe(logDiv, dados.msg);
+            }
+
+            // Coleta erros/alertas da Fase 2
+            if (dados.msg && (dados.msg.includes('[ALERTA]') || dados.msg.includes('Erro'))) {
+                errosSincronizacao.push({ fase: 'Etapas', msg: dados.msg });
             }
 
             if (dados.concluido) {
                 sourceEtapas.close();
                 logDiv.innerHTML += '<div class="text-success fw-bold mt-2">--- FIM FASE 2 ---</div>';
-                
+
                 // Dispara Fase 3
                 setTimeout(() => iniciarFase3(barra, msg, logDiv, btnFechar, titulo), 1000);
             }
@@ -692,6 +708,11 @@
                         const dados = JSON.parse(line.replace('data: ', ''));
                         atualizarProgresso(barra, msg, dados.progresso, "[Saldos] " + dados.msg);
 
+                        // Coleta erros/alertas da Fase 3
+                        if (dados.msg && (dados.msg.includes('[ALERTA]') || dados.msg.includes('Erro') || dados.msg.includes('erro'))) {
+                            errosSincronizacao.push({ fase: 'Saldos', msg: dados.msg });
+                        }
+
                         if (dados.concluido) {
                             finalizarTudo(barra, msg, logDiv, btnFechar, titulo);
                         }
@@ -710,19 +731,41 @@
 
     // --- FINALIZAÇÃO ---
     function finalizarTudo(barra, msg, logDiv, btnFechar, titulo) {
-        titulo.innerText = "Sincronização Completa!";
-        titulo.className = "fw-bold text-success mb-2";
-        
-        barra.className = "progress-bar bg-success"; // Remove animação
+        var temErros = errosSincronizacao.length > 0;
+
+        titulo.innerText = temErros ? "Sincronização Concluída (com alertas)" : "Sincronização Completa!";
+        titulo.className = temErros ? "fw-bold text-warning mb-2" : "fw-bold text-success mb-2";
+
+        barra.className = temErros ? "progress-bar bg-warning" : "progress-bar bg-success";
         barra.style.width = '100%';
         barra.innerText = '100%';
-        
-        msg.innerText = "Processo finalizado com sucesso.";
-        logDiv.innerHTML += '<div class="text-success fw-bold mt-3 p-2 border border-success rounded bg-white">✅ TUDO ATUALIZADO!</div>';
+
+        if (temErros) {
+            msg.innerText = errosSincronizacao.length + " processo(s) não foram atualizados.";
+
+            // Monta lista de erros agrupados por fase
+            var htmlErros = '<div class="mt-3 p-2 border border-warning rounded bg-white">';
+            htmlErros += '<div class="fw-bold text-warning mb-2"><i class="bi bi-exclamation-triangle me-1"></i> Processos com falha (' + errosSincronizacao.length + '):</div>';
+            htmlErros += '<div style="max-height: 180px; overflow-y: auto;" class="custom-scrollbar">';
+
+            errosSincronizacao.forEach(function(erro) {
+                htmlErros += '<div class="small py-1 border-bottom d-flex align-items-start">';
+                htmlErros += '<span class="badge bg-secondary me-2 flex-shrink-0" style="font-size: 0.65rem;">' + erro.fase + '</span>';
+                htmlErros += '<span class="text-danger">' + erro.msg + '</span>';
+                htmlErros += '</div>';
+            });
+
+            htmlErros += '</div></div>';
+            logDiv.innerHTML += htmlErros;
+        } else {
+            msg.innerText = "Processo finalizado com sucesso.";
+            logDiv.innerHTML += '<div class="text-success fw-bold mt-3 p-2 border border-success rounded bg-white">✅ TUDO ATUALIZADO!</div>';
+        }
+
         logDiv.scrollTop = logDiv.scrollHeight;
 
         btnFechar.removeAttribute('disabled');
-        btnFechar.className = 'btn btn-success fw-bold w-100';
+        btnFechar.className = temErros ? 'btn btn-warning fw-bold w-100' : 'btn btn-success fw-bold w-100';
         btnFechar.innerText = 'Concluir e Atualizar Página';
         btnFechar.onclick = function() { window.location.reload(); };
     }
