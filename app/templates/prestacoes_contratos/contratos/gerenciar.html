@@ -95,9 +95,29 @@
                                 <span class="text-muted">—</span>
                             {% endif %}
                         </div>
-                        <div>
+                        <div class="mb-1">
                             <strong>Processo:</strong>
-                            <span>{{ contrato.numProcesso or '—' }}</span>
+                            {% if contrato.numProcesso %}
+                                <a href="https://sei.pi.gov.br/sei/controlador.php?acao=protocolo_pesquisar&txt_pesquisa_rapida={{ contrato.numProcesso }}"
+                                   target="_blank" class="fw-bold text-decoration-none">
+                                    {{ contrato.numProcesso }} <i class="bi bi-box-arrow-up-right small"></i>
+                                </a>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                        <div class="mb-1">
+                            <strong>Vigencia inicio:</strong>
+                            <span>{{ contrato.data_inicio_vigencia_fmt or '—' }}</span>
+                        </div>
+                        <div>
+                            <strong>Vigencia final:</strong>
+                            <span>{{ vigencia_final_efetiva or contrato.data_fim_vigencia_fmt or '—' }}</span>
+                            {% if vigencia_final_aditivo %}
+                                <span class="badge bg-info ms-1" title="Data atualizada por aditivo">
+                                    <i class="bi bi-file-earmark-plus"></i> Aditivo
+                                </span>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -213,6 +233,17 @@
                href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='financeiro') }}">
                 <i class="bi bi-currency-dollar me-1"></i> Financeiro
                 {% if tem_empenhos %}
+                <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                {% else %}
+                <i class="bi bi-exclamation-circle text-warning ms-1"></i>
+                {% endif %}
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {{ 'active' if aba == 'pagamentos' }}"
+               href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='pagamentos') }}">
+                <i class="bi bi-credit-card me-1"></i> Pagamentos
+                {% if contrato.solicitacoes|length > 0 %}
                 <i class="bi bi-check-circle-fill text-success ms-1"></i>
                 {% else %}
                 <i class="bi bi-exclamation-circle text-warning ms-1"></i>
@@ -1505,6 +1536,100 @@
             {% else %}
                 <div class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Nenhum pagamento encontrado para este contrato.</div>
             {% endif %}
+            {% endif %}
+
+            {# ----- ABA PAGAMENTOS (Solicitações de Pagamento) ----- #}
+            {% elif aba == 'pagamentos' %}
+
+            {% macro paginacao_pag(section_id) %}
+            <nav class="d-flex justify-content-between align-items-center mt-2" data-pagination-for="{{ section_id }}">
+                <span class="text-muted small" data-page-info></span>
+                <ul class="pagination pagination-sm mb-0" data-page-buttons></ul>
+            </nav>
+            {% endmacro %}
+
+            {# Namespace para agrupar por ano #}
+            {% set ns_pag = namespace(total=0, anos={}) %}
+            {% for sol in solicitacoes_pagamento %}
+                {% set ano = sol.ano or 'Sem data' %}
+                {% if ano not in ns_pag.anos %}{% set _ = ns_pag.anos.update({ano: []}) %}{% endif %}
+                {% set _ = ns_pag.anos[ano].append(sol) %}
+                {% set ns_pag.total = ns_pag.total + sol.valor %}
+            {% endfor %}
+
+            {% if solicitacoes_pagamento %}
+            {# Cabeçalho com total #}
+            <h5>
+                <i class="bi bi-credit-card me-1"></i> Pagamentos
+                <span class="badge bg-primary ms-2">{{ solicitacoes_pagamento|length }}</span>
+            </h5>
+            <span class="text-muted small">
+                Total geral: <strong class="text-success">
+                    R$ {{ "{:,.2f}".format(ns_pag.total)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                </strong>
+            </span>
+
+            {# Tabela agrupada por ano (desc) #}
+            {% for ano in ns_pag.anos|sort(reverse=true) %}
+            <div class="mb-4 mt-3">
+                {# Header do ano com subtotal #}
+                {% set subtotal_pag = ns_pag.anos[ano]|sum(attribute='valor') %}
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-2">
+                    <h6 class="fw-bold text-secondary mb-0">
+                        <i class="bi bi-calendar3 me-1"></i>{{ ano }}
+                        <span class="badge bg-secondary ms-1">{{ ns_pag.anos[ano]|length }}</span>
+                    </h6>
+                    <span class="text-muted small">
+                        Subtotal: <strong>
+                            R$ {{ "{:,.2f}".format(subtotal_pag)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                        </strong>
+                    </span>
+                </div>
+
+                {# Tabela #}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-1">
+                        <thead>
+                            <tr style="background-color: #343990; color: white;">
+                                <th>N° Processo</th>
+                                <th>Etapa</th>
+                                <th>N° Empenho</th>
+                                <th class="text-end">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody data-paginated="solpag-{{ ano }}" data-per-page="10">
+                            {% for sol in ns_pag.anos[ano] %}
+                            <tr>
+                                <td>
+                                    {% if sol.link_sei %}
+                                    <a href="{{ sol.link_sei }}" target="_blank"
+                                       class="fw-bold text-decoration-none">
+                                        {{ sol.protocolo }} <i class="bi bi-box-arrow-up-right small"></i>
+                                    </a>
+                                    {% else %}
+                                    {{ sol.protocolo or '—' }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge" style="background-color: {{ sol.etapa_cor }};">{{ sol.etapa_nome }}</span>
+                                </td>
+                                <td>{{ sol.ne or '—' }}</td>
+                                <td class="text-end">
+                                    R$ {{ "{:,.2f}".format(sol.valor)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {{ paginacao_pag('solpag-' ~ ano) }}
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                    Nenhuma solicitacao de pagamento encontrada para este contrato.
+                </div>
             {% endif %}
 
             {% endif %}

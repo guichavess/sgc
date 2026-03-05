@@ -1,7 +1,14 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-end mb-3">
+<div class="d-flex justify-content-between mb-3">
+    <div>
+        {% if current_user.is_admin %}
+        <button id="btn-atualizar-individual" class="btn btn-primary btn-sm" onclick="atualizarIndividual()">
+            <i class="bi bi-arrow-repeat me-1"></i> Atualizar Etapas e Saldo
+        </button>
+        {% endif %}
+    </div>
     <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
@@ -70,13 +77,39 @@
                                 R$ {{ "{:,.2f}".format(ultimo_empenho.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}
                             </span>
                         </div>
+                        {% if mov_ne or (ultimo_empenho and ultimo_empenho.ne) %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-muted">Nota de Empenho:</span>
+                            {% if mov_ne %}
+                                <a href="{{ mov_ne.link_acesso }}" target="_blank" class="fw-bold text-info text-decoration-none">
+                                    {{ mov_ne.numero }} <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.75rem;"></i>
+                                </a>
+                            {% else %}
+                                <span class="fw-bold text-dark">{{ ultimo_empenho.ne }}</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                     {% endif %}
                 </div>
 
                 {# === DADOS DE EXECUÇÃO COM SETAS E DATAS === #}
                 <h6 class="text-muted text-uppercase small fw-bold mb-3"><i class="bi bi-bank me-1"></i> Dados de Execução</h6>
                 <div class="d-flex align-items-center justify-content-between mb-4">
-                    
+
+                    {# BOX NE #}
+                    <a href="{{ mov_ne.link_acesso if mov_ne else '#' }}"
+                    target="{{ '_blank' if mov_ne else '_self' }}"
+                    class="flex-fill border rounded p-2 text-center text-decoration-none transition-hover {{ 'bg-light' if mov_ne else 'bg-white' }}"
+                    style="{{ 'cursor: pointer;' if mov_ne else 'cursor: default; pointer-events: none;' }}">
+                        <small class="d-block text-muted">Empenho</small>
+                        <strong class="text-info d-block">{{ mov_ne.numero if mov_ne else '-' }}</strong>
+                        <small class="text-muted" style="font-size: 0.7rem;">
+                            {{ mov_ne.data if mov_ne else 'Aguardando' }}
+                        </small>
+                    </a>
+
+                    <div class="px-2 text-muted"><i class="bi bi-arrow-right fs-4"></i></div>
+
                     {# BOX NL #}
                     <a href="{{ mov_nl.link_acesso if mov_nl else '#' }}" 
                     target="{{ '_blank' if mov_nl else '_self' }}"
@@ -145,4 +178,37 @@
         color: #0d6efd !important;
     }
 </style>
+
+{% if current_user.is_admin %}
+<script>
+function atualizarIndividual() {
+    const btn = document.getElementById('btn-atualizar-individual');
+    const iconOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Atualizando...';
+
+    fetch("{{ url_for('solicitacoes.api_atualizar_individual', id_solicitacao=solicitacao.id) }}", {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Atualizado!';
+            btn.classList.replace('btn-primary', 'btn-success');
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            alert('Erro: ' + data.msg);
+            btn.innerHTML = iconOriginal;
+            btn.disabled = false;
+        }
+    })
+    .catch(() => {
+        alert('Erro de conexão.');
+        btn.innerHTML = iconOriginal;
+        btn.disabled = false;
+    });
+}
+</script>
+{% endif %}
 {% endblock %}

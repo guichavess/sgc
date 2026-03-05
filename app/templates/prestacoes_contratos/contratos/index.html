@@ -42,6 +42,22 @@
         min-height: calc(1.5em + 0.75rem + 2px);
         font-size: 1rem;
     }
+    .ts-wrapper.multi .ts-control {
+        padding: 0.25rem 0.5rem;
+        min-height: calc(1.5em + 0.75rem + 2px);
+        font-size: 0.875rem;
+    }
+    .ts-wrapper.multi .ts-control .item {
+        font-size: 0.75rem;
+    }
+    /* Fix: card de filtros acima da tabela para evitar conflito com dropdowns */
+    .card-filtros {
+        position: relative;
+        z-index: 10;
+    }
+    .ts-dropdown {
+        z-index: 1050 !important;
+    }
 </style>
 {% endblock %}
 
@@ -62,7 +78,7 @@
     </div>
 
     {# ===== FILTROS ===== #}
-    <div class="card mb-4 border-0 shadow-sm">
+    <div class="card mb-4 border-0 shadow-sm card-filtros">
         <div class="card-body p-3">
             <form method="GET" action="{{ url_for('prestacoes_contratos.dashboard') }}" id="formFiltros">
                 <div class="row g-2 align-items-end">
@@ -166,10 +182,9 @@
                     {# Tipo de despesa (Tipo Patrimonial) — filtra pelo Natureza #}
                     <div class="col-md-3">
                         <label class="form-label small fw-semibold text-muted mb-1">Tipo de despesa</label>
-                        <select name="tipo_patrimonial" id="selectTipoPatrimonial" class="form-select">
-                            <option value="">Todos</option>
+                        <select name="tipo_patrimonial" id="selectTipoPatrimonial" class="form-select" multiple>
                             {% for tp in todos_tipos_patrimoniais %}
-                                <option value="{{ tp.codigo }}" {{ 'selected' if filtro_tipo_patrimonial == tp.codigo }}>
+                                <option value="{{ tp.codigo }}" {{ 'selected' if tp.codigo in filtro_tipo_patrimonial }}>
                                     {{ tp.codigo }} - {{ tp.nome }}
                                 </option>
                             {% endfor %}
@@ -179,10 +194,9 @@
                     {# Sub item — filtra pelo Natureza + Tipo de despesa #}
                     <div class="col-md-3">
                         <label class="form-label small fw-semibold text-muted mb-1">Sub item</label>
-                        <select name="subitem_despesa" id="selectSubItem" class="form-select">
-                            <option value="">Todos</option>
+                        <select name="subitem_despesa" id="selectSubItem" class="form-select" multiple>
                             {% for si in todos_subitens %}
-                                <option value="{{ si.codigo }}" {{ 'selected' if filtro_subitem == si.codigo }}>
+                                <option value="{{ si.codigo }}" {{ 'selected' if si.codigo in filtro_subitem }}>
                                     {{ si.codigo }} - {{ si.nome }}
                                 </option>
                             {% endfor %}
@@ -211,7 +225,7 @@
     </div>
 
     {# ===== TABELA ===== #}
-    <div class="card border-0 shadow-sm">
+    <div class="card border-0 shadow-sm" style="position: relative; z-index: 1;">
         <div class="card-body p-0">
             <div class="table-responsive table-rounded">
                 <table class="table table-striped table-hover table-contratos mb-0">
@@ -368,28 +382,35 @@ document.addEventListener('DOMContentLoaded', function() {
         controlInput: '<input placeholder="Pesquisar...">'
     };
 
+    const tomConfigMulti = {
+        ...tomConfig,
+        plugins: ['remove_button'],
+        maxItems: null
+    };
+
     /* Inicializar Tom Select nos 3 selects de classificadores */
     const tsNatureza = new TomSelect(selNatureza, {
         ...tomConfig,
         onChange: function(value) {
-            loadTipoPatrimonial(value, '');
-            loadSubItem(value, '', '');
+            loadTipoPatrimonial(value, []);
+            loadSubItem(value, '', []);
         }
     });
 
     const tsTipoPatr = new TomSelect(selTipoPatr, {
-        ...tomConfig,
-        onChange: function(value) {
+        ...tomConfigMulti,
+        onChange: function(values) {
             const nat = tsNatureza.getValue();
-            loadSubItem(nat, value, '');
+            const tp = Array.isArray(values) ? values.join(',') : values;
+            loadSubItem(nat, tp, []);
         }
     });
 
-    const tsSubItem = new TomSelect(selSubItem, tomConfig);
+    const tsSubItem = new TomSelect(selSubItem, tomConfigMulti);
 
     /* Valores preservados do servidor (para manter seleção após page load) */
-    const savedTipoPatr = '{{ filtro_tipo_patrimonial|default("", true) }}';
-    const savedSubItem  = '{{ filtro_subitem|default("", true) }}';
+    const savedTipoPatr = {{ filtro_tipo_patrimonial|tojson }};
+    const savedSubItem  = {{ filtro_subitem|tojson }};
 
     /* URLs da API */
     const urlTipoPatr = '{{ url_for("prestacoes_contratos.api_filtro_tipos_patrimoniais") }}';
@@ -398,12 +419,11 @@ document.addEventListener('DOMContentLoaded', function() {
     function repopulateTomSelect(tsInstance, data, savedValue) {
         tsInstance.clear(true);
         tsInstance.clearOptions();
-        tsInstance.addOption({ value: '', text: 'Todos' });
         data.forEach(function(item) {
             tsInstance.addOption({ value: item.codigo, text: item.codigo + ' - ' + item.nome });
         });
         tsInstance.refreshOptions(false);
-        if (savedValue) {
+        if (savedValue && savedValue.length) {
             tsInstance.setValue(savedValue, true);
         }
     }

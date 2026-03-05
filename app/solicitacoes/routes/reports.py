@@ -1,18 +1,23 @@
 """
 Rotas de Relatórios.
 """
-from flask import render_template, request
+from flask import render_template, request, Response
 from flask_login import login_required
 from datetime import datetime, timedelta
+import csv
+import io
 
 from sqlalchemy import func
 
 from app.extensions import db
 from app.solicitacoes.routes import solicitacoes_bp
 from app.services import ReportService
-from app.models import Solicitacao, Contrato, Etapa, HistoricoMovimentacao, TipoPagamento
-from app.constants import CHECKPOINTS_RELATORIO
-from app.utils.permissions import requires_permission
+from app.models import (
+    Solicitacao, Contrato, Etapa, HistoricoMovimentacao,
+    TipoPagamento, SeiMovimentacao, SolicitacaoEmpenho
+)
+from app.constants import CHECKPOINTS_RELATORIO, SerieDocumentoSEI
+from app.utils.permissions import requires_permission, requires_admin
 
 
 def _aplicar_filtros(query_obj, filtro_competencia, filtro_contratado, data_inicio, data_fim, tipo_pagamento_ids=None):
@@ -322,4 +327,320 @@ def relatorios_imprimir():
         aba_ativa=aba_ativa,
         agora=datetime.now(),
         timestamps=timestamps,
+    )
+
+
+# =============================================================================
+# AUDITORIA DE DADOS
+# =============================================================================
+
+def _gerar_dados_auditoria():
+    """Audita todas as solicitações e identifica informações faltantes.
+
+    Para cada solicitação, verifica:
+      - Dados básicos: protocolo, competência, contrato, data, tipo pagamento
+      - Etapa: se possui etapa atual definida
+      - Empenho: status e valor solicitado
+      - Documentos financeiros (SEI): NE, NL, PD, OB
+      - Links: link do processo e id_procedimento SEI
+      - Tempo total calculado
+      - Status geral
+      - Histórico de movimentações
+    """
+    solicitacoes = (
+        Solicitacao.query
+        .join(Contrato, Solicitacao.codigo_contrato == Contrato.codigo)
+        .outerjoin(Etapa, Solicitacao.etapa_atual_id == Etapa.id)
+        .order_by(Solicitacao.id)
+        .all()
+    )
+
+    # Pré-carregar empenhos (último por solicitação)
+    todos_empenhos = (
+        db.session.query(SolicitacaoEmpenho)
+        .order_by(SolicitacaoEmpenho.data.desc())
+        .all()
+    )
+    mapa_empenho = {}
+    for emp in todos_empenhos:
+        if emp.id_solicitacao not in mapa_empenho:
+            mapa_empenho[emp.id_solicitacao] = emp
+
+    # Pré-carregar documentos SEI (NE, NL, PD, OB) por protocolo
+    series_financeiras = [
+        SerieDocumentoSEI.NOTA_EMPENHO,
+        SerieDocumentoSEI.LIQUIDACAO,
+        SerieDocumentoSEI.PD,
+        SerieDocumentoSEI.OB
+    ]
+    docs_sei = SeiMovimentacao.query.filter(
+        SeiMovimentacao.id_serie.in_([int(s) for s in series_financeiras])
+    ).all()
+
+    # Agrupar por protocolo_procedimento
+    mapa_docs = {}
+    for doc in docs_sei:
+        proto = doc.protocolo_procedimento
+        if proto not in mapa_docs:
+            mapa_docs[proto] = {}
+        serie = str(doc.id_serie)
+        if serie not in mapa_docs[proto]:
+            mapa_docs[proto][serie] = doc
+
+    # Pré-carregar contagem de histórico por solicitação
+    hist_contagem = dict(
+        db.session.query(
+            HistoricoMovimentacao.id_solicitacao,
+            func.count(HistoricoMovimentacao.id)
+        ).group_by(HistoricoMovimentacao.id_solicitacao).all()
+    )
+
+    resultados = []
+    contadores = {
+        'total': 0,
+        'sem_protocolo': 0,
+        'sem_competencia': 0,
+        'sem_contrato': 0,
+        'sem_etapa': 0,
+        'sem_data_solicitacao': 0,
+        'sem_tipo_pagamento': 0,
+        'sem_link_sei': 0,
+        'sem_id_procedimento': 0,
+        'sem_status_empenho': 0,
+        'sem_valor_empenho': 0,
+        'sem_ne': 0,
+        'sem_nl': 0,
+        'sem_pd': 0,
+        'sem_ob': 0,
+        'sem_tempo_total': 0,
+        'sem_status_geral': 0,
+        'sem_historico': 0,
+        'completos': 0,
+    }
+
+    for sol in solicitacoes:
+        contadores['total'] += 1
+        proto = sol.protocolo_gerado_sei
+        docs_proto = mapa_docs.get(proto, {}) if proto else {}
+        empenho = mapa_empenho.get(sol.id)
+        qtd_hist = hist_contagem.get(sol.id, 0)
+
+        # Verificações
+        faltando = []
+
+        tem_protocolo = bool(proto and proto.strip())
+        tem_competencia = bool(sol.competencia and sol.competencia.strip())
+        tem_contrato = bool(sol.codigo_contrato)
+        tem_etapa = bool(sol.etapa_atual_id)
+        tem_data = bool(sol.data_solicitacao)
+        tem_tipo_pgto = bool(sol.id_tipo_pagamento)
+        tem_link_sei = bool(sol.link_processo_sei and sol.link_processo_sei.strip())
+        tem_id_proc = bool(sol.id_procedimento_sei and sol.id_procedimento_sei.strip())
+        tem_status_emp = bool(sol.status_empenho_id)
+        tem_valor_emp = bool(empenho and empenho.valor and float(empenho.valor) > 0)
+        tem_ne = bool(docs_proto.get(SerieDocumentoSEI.NOTA_EMPENHO) or (sol.num_ne and sol.num_ne.strip()))
+        tem_nl = bool(docs_proto.get(SerieDocumentoSEI.LIQUIDACAO) or (sol.num_nl and sol.num_nl.strip()))
+        tem_pd = bool(docs_proto.get(SerieDocumentoSEI.PD) or (sol.num_pd and sol.num_pd.strip()))
+        tem_ob = bool(docs_proto.get(SerieDocumentoSEI.OB) or (sol.num_ob and sol.num_ob.strip()))
+        tem_tempo = bool(sol.tempo_total and sol.tempo_total.strip())
+        tem_status = bool(sol.status_geral and sol.status_geral.strip())
+        tem_historico = qtd_hist > 0
+
+        if not tem_protocolo:
+            faltando.append('Protocolo SEI')
+            contadores['sem_protocolo'] += 1
+        if not tem_competencia:
+            faltando.append('Competência')
+            contadores['sem_competencia'] += 1
+        if not tem_contrato:
+            faltando.append('Contrato')
+            contadores['sem_contrato'] += 1
+        if not tem_etapa:
+            faltando.append('Etapa Atual')
+            contadores['sem_etapa'] += 1
+        if not tem_data:
+            faltando.append('Data Solicitação')
+            contadores['sem_data_solicitacao'] += 1
+        if not tem_tipo_pgto:
+            faltando.append('Tipo Pagamento')
+            contadores['sem_tipo_pagamento'] += 1
+        if not tem_link_sei:
+            faltando.append('Link SEI')
+            contadores['sem_link_sei'] += 1
+        if not tem_id_proc:
+            faltando.append('ID Procedimento SEI')
+            contadores['sem_id_procedimento'] += 1
+        if not tem_status_emp:
+            faltando.append('Status Empenho')
+            contadores['sem_status_empenho'] += 1
+        if not tem_valor_emp:
+            faltando.append('Valor Empenho')
+            contadores['sem_valor_empenho'] += 1
+        if not tem_ne:
+            faltando.append('NE')
+            contadores['sem_ne'] += 1
+        if not tem_nl:
+            faltando.append('NL')
+            contadores['sem_nl'] += 1
+        if not tem_pd:
+            faltando.append('PD')
+            contadores['sem_pd'] += 1
+        if not tem_ob:
+            faltando.append('OB')
+            contadores['sem_ob'] += 1
+        if not tem_tempo:
+            faltando.append('Tempo Total')
+            contadores['sem_tempo_total'] += 1
+        if not tem_status:
+            faltando.append('Status Geral')
+            contadores['sem_status_geral'] += 1
+        if not tem_historico:
+            faltando.append('Histórico Movimentações')
+            contadores['sem_historico'] += 1
+
+        if not faltando:
+            contadores['completos'] += 1
+
+        # Dados para NE da tabela SolicitacaoEmpenho (campo ne separado)
+        ne_empenho = empenho.ne if empenho else None
+
+        resultados.append({
+            'solicitacao': sol,
+            'contratado': sol.contrato.nomeContratado if sol.contrato else '',
+            'etapa_nome': sol.etapa.nome if sol.etapa else '',
+            'empenho_valor': float(empenho.valor) if empenho and empenho.valor else None,
+            'empenho_ne': ne_empenho,
+            'status_empenho_nome': sol.status_empenho.nome if sol.status_empenho else '',
+            'mov_ne': docs_proto.get(SerieDocumentoSEI.NOTA_EMPENHO),
+            'mov_nl': docs_proto.get(SerieDocumentoSEI.LIQUIDACAO),
+            'mov_pd': docs_proto.get(SerieDocumentoSEI.PD),
+            'mov_ob': docs_proto.get(SerieDocumentoSEI.OB),
+            'qtd_historico': qtd_hist,
+            'faltando': faltando,
+            'qtd_faltando': len(faltando),
+            # Flags individuais para template
+            'tem_protocolo': tem_protocolo,
+            'tem_competencia': tem_competencia,
+            'tem_contrato': tem_contrato,
+            'tem_etapa': tem_etapa,
+            'tem_data': tem_data,
+            'tem_tipo_pgto': tem_tipo_pgto,
+            'tem_link_sei': tem_link_sei,
+            'tem_id_proc': tem_id_proc,
+            'tem_status_emp': tem_status_emp,
+            'tem_valor_emp': tem_valor_emp,
+            'tem_ne': tem_ne,
+            'tem_nl': tem_nl,
+            'tem_pd': tem_pd,
+            'tem_ob': tem_ob,
+            'tem_tempo': tem_tempo,
+            'tem_status': tem_status,
+            'tem_historico': tem_historico,
+        })
+
+    return resultados, contadores
+
+
+@solicitacoes_bp.route('/relatorios/auditoria')
+@login_required
+@requires_admin
+def relatorios_auditoria():
+    """Página de auditoria de dados — identifica informações faltantes."""
+    resultados, contadores = _gerar_dados_auditoria()
+
+    # Filtro: exibir só com pendências ou todos
+    filtro_pendencia = request.args.get('pendencia', 'todos')
+    if filtro_pendencia == 'incompletos':
+        resultados = [r for r in resultados if r['qtd_faltando'] > 0]
+    elif filtro_pendencia == 'completos':
+        resultados = [r for r in resultados if r['qtd_faltando'] == 0]
+
+    # Filtro por campo específico faltando
+    filtro_campo = request.args.get('campo', '')
+    mapa_campo_flag = {
+        'protocolo': 'tem_protocolo',
+        'competencia': 'tem_competencia',
+        'contrato': 'tem_contrato',
+        'etapa': 'tem_etapa',
+        'data': 'tem_data',
+        'tipo_pgto': 'tem_tipo_pgto',
+        'link_sei': 'tem_link_sei',
+        'id_proc': 'tem_id_proc',
+        'status_emp': 'tem_status_emp',
+        'valor_emp': 'tem_valor_emp',
+        'ne': 'tem_ne',
+        'nl': 'tem_nl',
+        'pd': 'tem_pd',
+        'ob': 'tem_ob',
+        'tempo': 'tem_tempo',
+        'status': 'tem_status',
+        'historico': 'tem_historico',
+    }
+    if filtro_campo in mapa_campo_flag:
+        flag = mapa_campo_flag[filtro_campo]
+        resultados = [r for r in resultados if not r[flag]]
+
+    return render_template(
+        'solicitacoes/auditoria.html',
+        resultados=resultados,
+        contadores=contadores,
+        filtro_pendencia=filtro_pendencia,
+        filtro_campo=filtro_campo,
+    )
+
+
+@solicitacoes_bp.route('/relatorios/auditoria/csv')
+@login_required
+@requires_admin
+def relatorios_auditoria_csv():
+    """Download CSV da auditoria de dados."""
+    resultados, _ = _gerar_dados_auditoria()
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+
+    # Cabeçalho
+    writer.writerow([
+        'ID', 'Protocolo SEI', 'Competência', 'Código Contrato', 'Contratado',
+        'Etapa Atual', 'Data Solicitação', 'Tipo Pagamento',
+        'Status Empenho', 'Valor Empenho', 'NE (Empenho)', 'NE (SEI)', 'NL', 'PD', 'OB',
+        'Link SEI', 'ID Procedimento SEI', 'Tempo Total', 'Status Geral',
+        'Qtd Histórico', 'Qtd Campos Faltando', 'Campos Faltando'
+    ])
+
+    for r in resultados:
+        sol = r['solicitacao']
+        writer.writerow([
+            sol.id,
+            sol.protocolo_gerado_sei or '',
+            sol.competencia or '',
+            sol.codigo_contrato or '',
+            r['contratado'],
+            r['etapa_nome'],
+            sol.data_solicitacao.strftime('%d/%m/%Y %H:%M') if sol.data_solicitacao else '',
+            sol.tipo_pagamento.nome if sol.tipo_pagamento else '',
+            r['status_empenho_nome'],
+            f"{r['empenho_valor']:.2f}" if r['empenho_valor'] else '',
+            r['empenho_ne'] or '',
+            r['mov_ne'].numero if r['mov_ne'] else (sol.num_ne or ''),
+            r['mov_nl'].numero if r['mov_nl'] else (sol.num_nl or ''),
+            r['mov_pd'].numero if r['mov_pd'] else (sol.num_pd or ''),
+            r['mov_ob'].numero if r['mov_ob'] else (sol.num_ob or ''),
+            sol.link_processo_sei or '',
+            sol.id_procedimento_sei or '',
+            sol.tempo_total or '',
+            sol.status_geral or '',
+            r['qtd_historico'],
+            r['qtd_faltando'],
+            ' | '.join(r['faltando']) if r['faltando'] else 'Completo'
+        ])
+
+    output.seek(0)
+    agora = datetime.now().strftime('%Y%m%d_%H%M')
+    return Response(
+        '\ufeff' + output.getvalue(),  # BOM para Excel
+        mimetype='text/csv; charset=utf-8',
+        headers={
+            'Content-Disposition': f'attachment; filename=auditoria_pagamentos_{agora}.csv'
+        }
     )

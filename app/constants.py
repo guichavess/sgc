@@ -16,6 +16,7 @@ class SerieDocumentoSEI:
     NOTA_FISCAL = '64'
     ATESTO_FISCAL = '461'
     ATESTO_GESTOR = '464'
+    NOTA_EMPENHO = '419'  # NE - Nota de Empenho
     LIQUIDACAO = '420'  # NL
     PD = '421'  # Programação de Desembolso
     OB = '422'  # Ordem Bancária

@@ -25,7 +25,7 @@
     {# Navbar - Componente reutilizável #}
     {% include 'components/navbar.html' %}
 
-    <div class="container pb-5">
+    <div class="{% block container_class %}container{% endblock %} pb-5">
         {# Mensagens Flash - Componente reutilizável #}
         {% include 'components/flash_messages.html' %}
 

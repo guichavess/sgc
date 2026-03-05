@@ -191,7 +191,7 @@ def assinar_ajax():
                 comentario=f"Processo criado e documento {protocolo_doc} assinado com sucesso."
             )
 
-            SaldoService.registrar_e_atualizar_saldo(solicitacao, current_user.id, valor_empenho=0.0)
+            SaldoService.registrar_e_atualizar_saldo(solicitacao, current_user.id, valor_solicitado=0.0, validar_saldo=False)
             db.session.add(novo_historico)
             db.session.commit()
 
@@ -208,10 +208,12 @@ def assinar_ajax():
 @login_required
 @requires_permission('solicitacoes.editar')
 def api_solicitar_empenho():
-    """Registra solicitação de empenho."""
+    """Registra solicitação de empenho e notifica financeiro."""
     data = request.get_json() or {}
     solicitacao_id = data.get('solicitacao_id')
     valor = data.get('valor', 0.0)
+
+    current_app.logger.info(f"[EMPENHO] Recebido: solicitacao_id={solicitacao_id}, valor={valor}")
 
     if not solicitacao_id:
         return jsonify({'sucesso': False, 'msg': 'ID da solicitação não informado'})
@@ -220,11 +222,51 @@ def api_solicitar_empenho():
     if not solicitacao:
         return jsonify({'sucesso': False, 'msg': 'Solicitação não encontrada'})
 
+    # Converte valor formatado "1.234,56" para float
+    if isinstance(valor, str):
+        valor = valor.replace('.', '').replace(',', '.')
+    valor_float = float(valor)
+
+    current_app.logger.info(f"[EMPENHO] valor_float={valor_float}, contrato={solicitacao.codigo_contrato}")
+
     resultado = SaldoService.registrar_e_atualizar_saldo(
         solicitacao,
         current_user.id,
-        float(valor)
+        valor_float,
+        validar_saldo=False  # Solicitação é um pedido, não exige saldo prévio
     )
+
+    current_app.logger.info(f"[EMPENHO] Resultado SaldoService: {resultado}")
+
+    if resultado.get('sucesso'):
+        # Atualiza status para "Solicitado" (id=1)
+        solicitacao.status_empenho_id = 1
+        db.session.commit()
+        current_app.logger.info(f"[EMPENHO] status_empenho_id atualizado para 1")
+
+        # Notifica usuarios do modulo financeiro
+        try:
+            from app.services.notification_engine import NotificationEngine
+            dest = NotificationEngine.resolver_destinatarios(
+                'financeiro.nova_solicitacao',
+                codigo_contrato=solicitacao.codigo_contrato,
+            )
+            current_app.logger.info(f"[EMPENHO] Destinatarios notificacao: {dest}")
+            if dest:
+                valor_fmt = f"R$ {valor_float:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+                contratado = solicitacao.contrato.nomeContratadoResumido or solicitacao.contrato.nomeContratado if solicitacao.contrato else solicitacao.codigo_contrato
+                NotificationEngine.notificar(
+                    tipo_codigo='financeiro.nova_solicitacao',
+                    destinatarios=dest,
+                    titulo='Novo Empenho Solicitado',
+                    mensagem=f'{contratado} — {valor_fmt} (Comp. {solicitacao.competencia})',
+                    ref_modulo='financeiro',
+                    ref_id=str(solicitacao.id),
+                    ref_url='/financeiro/pendencias_ne',
+                )
+                current_app.logger.info(f"[EMPENHO] Notificacao enviada com sucesso")
+        except Exception as e:
+            current_app.logger.error(f"[EMPENHO] Erro ao notificar: {e}")
 
     return jsonify(resultado)
 
@@ -343,6 +385,7 @@ def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem):
         SERIE_REQUERIMENTO = SerieDocumentoSEI.REQUERIMENTO
         SERIE_ATESTO_FISCAL = SerieDocumentoSEI.ATESTO_FISCAL
         SERIE_ATESTO_GESTOR = SerieDocumentoSEI.ATESTO_GESTOR
+        SERIE_NOTA_EMPENHO = SerieDocumentoSEI.NOTA_EMPENHO
         SERIE_LIQUIDACAO = SerieDocumentoSEI.LIQUIDACAO
         SERIE_PD = SerieDocumentoSEI.PD
         SERIE_OB = SerieDocumentoSEI.OB
@@ -486,12 +529,20 @@ def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem):
                 except ValueError:
                     pass
 
-            # --- C. FINANCEIRO (OB > PD > NL) ---
+            # --- C. FINANCEIRO (OB > PD > NL > NE) ---
+            doc_ne = next((d for d in docs if str(d.id_serie) == SERIE_NOTA_EMPENHO), None)
             doc_nl = next((d for d in docs if str(d.id_serie) == SERIE_LIQUIDACAO), None)
             doc_pd = next((d for d in docs if str(d.id_serie) == SERIE_PD), None)
             doc_ob = next((d for d in docs if str(d.id_serie) == SERIE_OB), None)
 
-            # Atualização dos números (NL, PD, OB)
+            # Atualização dos números (NE, NL, PD, OB)
+            if doc_ne and doc_ne.numero and sol.num_ne != str(doc_ne.numero):
+                sol.num_ne = str(doc_ne.numero)
+                # Atualiza status_empenho para Atendido (2) se tiver NE no SEI
+                if sol.status_empenho_id != 2:
+                    sol.status_empenho_id = 2
+                mudou = True
+
             if doc_nl and doc_nl.numero and sol.num_nl != str(doc_nl.numero):
                 sol.num_nl = str(doc_nl.numero)
                 mudou = True
@@ -888,6 +939,54 @@ def api_atualizar_todos_saldos():
 
 
 # =============================================================================
+# ATUALIZAÇÃO INDIVIDUAL (ETAPA + SALDO)
+# =============================================================================
+
+@solicitacoes_bp.route('/api/atualizar-individual/<int:id_solicitacao>', methods=['POST'])
+@login_required
+@requires_permission('solicitacoes.aprovar')
+def api_atualizar_individual(id_solicitacao):
+    """Atualiza etapas SEI e saldo de empenho de uma única solicitação."""
+    from app.utils.permissions import requires_admin  # noqa: F811
+    if not current_user.is_admin:
+        return jsonify({'sucesso': False, 'msg': 'Acesso restrito a administradores.'}), 403
+
+    sol = Solicitacao.query.get(id_solicitacao)
+    if not sol:
+        return jsonify({'sucesso': False, 'msg': 'Solicitação não encontrada.'}), 404
+
+    app_real = current_app._get_current_object()
+    usuario_id = current_user.id
+    token_sei = session.get('sei_token')
+    todas_etapas = Etapa.query.all()
+    mapa_ordem = {e.id: e.ordem for e in todas_etapas}
+
+    msgs = []
+
+    # 1. Atualizar etapas via SEI
+    try:
+        resultado = processar_item_sei(app_real, sol.id, token_sei, usuario_id, mapa_ordem)
+        if resultado:
+            msgs.append(f'Etapa atualizada: {resultado}')
+        else:
+            msgs.append('Etapas: sem alterações.')
+    except Exception as e:
+        msgs.append(f'Erro ao atualizar etapas: {str(e)}')
+
+    # 2. Atualizar saldo de empenho
+    try:
+        if sol.codigo_contrato and sol.competencia:
+            SaldoService.atualizar_saldo_contrato(sol.codigo_contrato, sol.competencia)
+            msgs.append('Saldo de empenho atualizado.')
+        else:
+            msgs.append('Saldo: dados insuficientes (contrato/competência).')
+    except Exception as e:
+        msgs.append(f'Erro ao atualizar saldo: {str(e)}')
+
+    return jsonify({'sucesso': True, 'msg': ' | '.join(msgs)})
+
+
+# =============================================================================
 # CRIAÇÃO EM LOTE
 # =============================================================================
 
@@ -904,9 +1003,8 @@ def api_criar_lote():
     competencia = dados.get('competencia', '').strip()
     id_tipo_pagamento = dados.get('id_tipo_pagamento')
     unidade_id = dados.get('unidade_id', '').strip()
-    senha = dados.get('senha', '').strip()
 
-    if not codigos_contratos or not competencia or not unidade_id or not senha:
+    if not codigos_contratos or not competencia or not unidade_id:
         return jsonify({'sucesso': False, 'erro': 'Dados incompletos.'}), 400
 
     app_real = current_app._get_current_object()
@@ -914,15 +1012,6 @@ def api_criar_lote():
     usuario_nome = session.get('usuario_nome', current_user.nome if hasattr(current_user, 'nome') else '')
     usuario_cargo = session.get('usuario_cargo', 'Colaborador')
     sei_token = session.get('sei_token') or gerar_token_sei_admin()
-
-    # Dados de assinatura do usuário logado
-    dados_base_ass = {
-        'orgao': session.get('usuario_orgao', 'SEAD-PI'),
-        'cargo': session.get('usuario_cargo', 'Colaborador'),
-        'id_login': session.get('usuario_sei_id_login'),
-        'id_usuario': session.get('usuario_sei_id'),
-        'senha': senha
-    }
 
     def generate():
         with app_real.app_context():
@@ -934,7 +1023,7 @@ def api_criar_lote():
             total_criados = 0
             erros_count = 0
 
-            yield f"data: {json.dumps({'msg': f'Iniciando criação e assinatura de {total} processos...', 'progresso': 5})}\n\n"
+            yield f"data: {json.dumps({'msg': f'Iniciando criação de {total} processos...', 'progresso': 5})}\n\n"
 
             for i, codigo in enumerate(codigos_contratos):
                 progresso = 5 + int(((i + 1) / total) * 90)
@@ -976,18 +1065,9 @@ def api_criar_lote():
                         sei_token, unidade_id, proc_criado['IdProcedimento'], ctx_doc
                     )
 
-                    doc_protocolo = doc_criado.get('DocumentoFormatado', '') if doc_criado else ''
                     protocolo_formatado = proc_criado.get('ProcedimentoFormatado', '')
 
-                    # 4. Assina o documento
-                    assinatura_ok = False
-                    if doc_protocolo:
-                        dados_ass = {**dados_base_ass, 'protocolo_doc': doc_protocolo}
-                        resultado_ass = assinar_documento(sei_token, unidade_id, dados_ass)
-                        assinatura_ok = resultado_ass.get('sucesso', False)
-
-                    # 5. Salva Solicitação no banco
-                    status_final = 'ABERTO' if assinatura_ok else 'AGUARDANDO_ASSINATURA'
+                    # 4. Salva Solicitação no banco
                     nova_sol = Solicitacao(
                         codigo_contrato=codigo,
                         id_usuario_solicitante=usuario_id,
@@ -999,34 +1079,30 @@ def api_criar_lote():
                         id_caixa_sei=unidade_id,
                         id_tipo_pagamento=id_tipo_pagamento,
                         descricao=f'Solicitação de Pagamento - {competencia}',
-                        status_geral=status_final,
+                        status_geral='ABERTO',
+                        criado_em_lote=True,
                         data_solicitacao=datetime.now()
                     )
                     db.session.add(nova_sol)
                     db.session.flush()
 
-                    # 6. Se assinado, cria histórico e saldo
-                    if assinatura_ok:
-                        novo_historico = HistoricoMovimentacao(
-                            id_solicitacao=nova_sol.id,
-                            id_etapa_anterior=None,
-                            id_etapa_nova=1,
-                            id_usuario_responsavel=usuario_id,
-                            data_movimentacao=datetime.now(),
-                            comentario=f"Processo criado em lote e documento {doc_protocolo} assinado."
-                        )
-                        db.session.add(novo_historico)
-                        SaldoService.registrar_e_atualizar_saldo(nova_sol, usuario_id, valor_empenho=0.0)
+                    # 5. Cria histórico e saldo
+                    novo_historico = HistoricoMovimentacao(
+                        id_solicitacao=nova_sol.id,
+                        id_etapa_anterior=None,
+                        id_etapa_nova=1,
+                        id_usuario_responsavel=usuario_id,
+                        data_movimentacao=datetime.now(),
+                        comentario=f"Processo criado em lote."
+                    )
+                    db.session.add(novo_historico)
+                    SaldoService.registrar_e_atualizar_saldo(nova_sol, usuario_id, valor_solicitado=0.0, validar_saldo=False)
 
                     db.session.commit()
                     total_criados += 1
 
-                    status_txt = '✅' if assinatura_ok else '⚠️ (criado, assinatura falhou)'
                     link_sei = proc_criado.get('LinkAcesso', '')
-                    yield f"data: {json.dumps({'msg': f'{status_txt} {codigo} → {protocolo_formatado}', 'progresso': progresso, 'contrato': codigo, 'protocolo': protocolo_formatado, 'contratado': contrato.nomeContratado, 'link_sei': link_sei, 'sucesso': assinatura_ok})}\n\n"
-
-                    if not assinatura_ok:
-                        erros_count += 1
+                    yield f"data: {json.dumps({'msg': f'✅ {codigo} → {protocolo_formatado}', 'progresso': progresso, 'contrato': codigo, 'protocolo': protocolo_formatado, 'contratado': contrato.nomeContratado, 'link_sei': link_sei, 'sucesso': True})}\n\n"
 
                 except Exception as e:
                     db.session.rollback()
@@ -1035,7 +1111,7 @@ def api_criar_lote():
                     yield f"data: {json.dumps({'msg': f'❌ Erro em {codigo}: {str(e)[:80]}', 'progresso': progresso, 'contrato': codigo, 'sucesso': False})}\n\n"
 
             # Resumo final
-            msg_final = f'Concluído: {total_criados}/{total} processos criados e assinados.'
+            msg_final = f'Concluído: {total_criados}/{total} processos criados.'
             if erros_count:
                 msg_final += f' ({erros_count} com erro)'
 

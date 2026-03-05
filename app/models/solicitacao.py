@@ -25,10 +25,12 @@ class Solicitacao(db.Model):
     descricao = db.Column(db.Text)
     id_caixa_sei = db.Column(db.String(50))
     status_geral = db.Column(db.String(100), default='ABERTO')
+    num_ne = db.Column(db.String(50))
     num_nl = db.Column(db.String(50))
     num_pd = db.Column(db.String(50))
     num_ob = db.Column(db.String(50))
     tempo_total = db.Column(db.String(50))
+    criado_em_lote = db.Column(db.Boolean, default=False, nullable=False)
 
     # Relacionamentos
     contrato = db.relationship('Contrato', backref='solicitacoes')

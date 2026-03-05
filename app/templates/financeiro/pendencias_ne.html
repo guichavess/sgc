@@ -115,8 +115,7 @@
 
                         {% if current_user.tem_permissao('financeiro', 'criar') %}
                         <td class="pe-4" style="width: 300px;">
-                            <form method="POST" action="{{ url_for('financeiro.pendencias_ne') }}" class="d-flex gap-2">
-                                <input type="hidden" name="id_solicitacao" value="{{ sol.id }}">
+                            <form method="POST" action="{{ url_for('financeiro.inserir_ne', solicitacao_id=sol.id) }}" class="d-flex gap-2">
                                 <input type="text" name="ne" class="form-control form-control-sm" placeholder="Ex: 2026NE..." required>
                                 <button type="submit" class="btn btn-sm btn-primary">
                                     <i class="bi bi-save"></i> Salvar

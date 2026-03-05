@@ -24,8 +24,8 @@ def dashboard():
     filtro_centro_custo = request.args.get('centro_custo', type=int) or None
     filtro_tipo_contrato = request.args.get('tipo_contrato', '').strip()
     filtro_pdm = request.args.get('pdm', type=int) or None
-    filtro_subitem = request.args.get('subitem_despesa', '').strip()
-    filtro_tipo_patrimonial = request.args.get('tipo_patrimonial', '').strip()
+    filtro_subitem = [v.strip() for v in request.args.getlist('subitem_despesa') if v.strip()]
+    filtro_tipo_patrimonial = [v.strip() for v in request.args.getlist('tipo_patrimonial') if v.strip()]
     page = request.args.get('page', 1, type=int)
     per_page = 20
 
@@ -212,6 +212,23 @@ def contrato_gerenciar(codigo):
         pagamentos = PrestacaoContratoService.listar_pagamentos_contrato(codigo)
         pds = PrestacaoContratoService.listar_pds(codigo)
 
+    # Solicitações de pagamento (aba Pagamentos)
+    solicitacoes_pagamento = []
+    if aba == 'pagamentos':
+        solicitacoes_pagamento = PrestacaoContratoService.listar_solicitacoes_contrato(codigo)
+
+    # Vigência final efetiva (verifica aditivos)
+    ultimo_aditivo = ContratoAditivo.query.filter(
+        ContratoAditivo.codigo_contrato == str(codigo),
+        ContratoAditivo.dtVigenciaFim.isnot(None)
+    ).order_by(ContratoAditivo.dtVigenciaFim.desc()).first()
+
+    vigencia_final_aditivo = False
+    vigencia_final_efetiva = None
+    if ultimo_aditivo and ultimo_aditivo.dtVigenciaFim:
+        vigencia_final_efetiva = ultimo_aditivo.dtVigenciaFim.strftime('%d/%m/%Y')
+        vigencia_final_aditivo = True
+
     return render_template(
         'prestacoes_contratos/contratos/gerenciar.html',
         contrato=contrato,
@@ -237,7 +254,10 @@ def contrato_gerenciar(codigo):
         detalhamento_financeiro=detalhamento_financeiro,
         naturezas_contrato=naturezas_contrato,
         divisao_saldo=divisao_saldo,
-        itens_vinculados_saldo=itens_vinculados_saldo
+        itens_vinculados_saldo=itens_vinculados_saldo,
+        solicitacoes_pagamento=solicitacoes_pagamento,
+        vigencia_final_efetiva=vigencia_final_efetiva,
+        vigencia_final_aditivo=vigencia_final_aditivo
     )
 
 

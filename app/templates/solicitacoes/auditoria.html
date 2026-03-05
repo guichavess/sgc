@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid px-4">
+
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+        <div>
+            <h3 class="fw-bold text-dark mb-0"><i class="fas fa-clipboard-check me-2"></i>Auditoria de Dados</h3>
+            <p class="text-muted mb-0">Identifica informações faltantes nos processos de pagamento.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('solicitacoes.relatorios_auditoria_csv') }}" class="btn btn-outline-success fw-bold shadow-sm">
+                <i class="fas fa-file-csv me-1"></i> Exportar CSV
+            </a>
+            <a href="{{ url_for('solicitacoes.relatorios') }}" class="btn btn-outline-secondary shadow-sm">
+                <i class="fas fa-arrow-left me-1"></i> Relatórios
+            </a>
+        </div>
+    </div>
+
+    {# === CARDS DE RESUMO === #}
+    <div class="row g-3 mb-4">
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center py-3">
+                    <div class="fs-2 fw-bold text-dark">{{ contadores.total }}</div>
+                    <small class="text-muted fw-bold text-uppercase">Total</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('solicitacoes.relatorios_auditoria', pendencia='completos') }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm h-100 {{ 'border-start border-success border-3' if filtro_pendencia == 'completos' }}">
+                    <div class="card-body text-center py-3">
+                        <div class="fs-2 fw-bold text-success">{{ contadores.completos }}</div>
+                        <small class="text-muted fw-bold text-uppercase">Completos</small>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('solicitacoes.relatorios_auditoria', pendencia='incompletos') }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm h-100 {{ 'border-start border-danger border-3' if filtro_pendencia == 'incompletos' }}">
+                    <div class="card-body text-center py-3">
+                        <div class="fs-2 fw-bold text-danger">{{ contadores.total - contadores.completos }}</div>
+                        <small class="text-muted fw-bold text-uppercase">Incompletos</small>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2">
+                    <small class="text-muted fw-bold text-uppercase d-block mb-2">Campos com pendências</small>
+                    <div class="d-flex flex-wrap gap-1">
+                        {% set campos_pendencia = [
+                            ('ne', 'NE', contadores.sem_ne, 'info'),
+                            ('nl', 'NL', contadores.sem_nl, 'primary'),
+                            ('pd', 'PD', contadores.sem_pd, 'warning'),
+                            ('ob', 'OB', contadores.sem_ob, 'success'),
+                            ('valor_emp', 'Valor Empenho', contadores.sem_valor_empenho, 'danger'),
+                            ('status_emp', 'Status Empenho', contadores.sem_status_empenho, 'secondary'),
+                            ('tipo_pgto', 'Tipo Pgto', contadores.sem_tipo_pagamento, 'dark'),
+                            ('etapa', 'Etapa', contadores.sem_etapa, 'danger'),
+                            ('protocolo', 'Protocolo', contadores.sem_protocolo, 'secondary'),
+                            ('tempo', 'Tempo Total', contadores.sem_tempo_total, 'secondary'),
+                            ('historico', 'Histórico', contadores.sem_historico, 'secondary'),
+                            ('link_sei', 'Link SEI', contadores.sem_link_sei, 'secondary'),
+                            ('id_proc', 'ID Proc.', contadores.sem_id_procedimento, 'secondary'),
+                        ] %}
+                        {% for campo_key, label, qtd, cor in campos_pendencia %}
+                            {% if qtd > 0 %}
+                            <a href="{{ url_for('solicitacoes.relatorios_auditoria', campo=campo_key, pendencia='incompletos') }}"
+                               class="badge bg-{{ cor }}-subtle text-{{ cor }} border border-{{ cor }}-subtle text-decoration-none {{ 'fw-bold' if filtro_campo == campo_key }}"
+                               style="font-size: 0.75rem;">
+                                {{ label }}: {{ qtd }}
+                            </a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# === FILTROS ATIVOS === #}
+    {% if filtro_pendencia != 'todos' or filtro_campo %}
+    <div class="alert alert-light border d-flex align-items-center justify-content-between py-2 mb-3">
+        <div>
+            <i class="fas fa-filter me-1 text-primary"></i>
+            <small class="text-muted">
+                Filtros:
+                {% if filtro_pendencia == 'incompletos' %}<span class="badge bg-danger">Incompletos</span>{% endif %}
+                {% if filtro_pendencia == 'completos' %}<span class="badge bg-success">Completos</span>{% endif %}
+                {% if filtro_campo %}<span class="badge bg-primary">Sem {{ filtro_campo|upper }}</span>{% endif %}
+                &mdash; {{ resultados|length }} resultado(s)
+            </small>
+        </div>
+        <a href="{{ url_for('solicitacoes.relatorios_auditoria') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-times me-1"></i> Limpar
+        </a>
+    </div>
+    {% endif %}
+
+    {# === TABELA DE RESULTADOS === #}
+    <div class="card shadow-sm mb-4">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 align-middle" style="font-size: 0.8rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3" style="min-width: 60px;">ID</th>
+                            <th style="min-width: 140px;">Protocolo SEI</th>
+                            <th style="min-width: 100px;">Competência</th>
+                            <th style="min-width: 200px;">Contratado</th>
+                            <th style="min-width: 120px;">Etapa Atual</th>
+                            <th class="text-center" style="min-width: 80px;">Tipo Pgto</th>
+                            <th class="text-center" style="min-width: 90px;">Status Emp.</th>
+                            <th class="text-end" style="min-width: 100px;">Valor Emp.</th>
+                            <th class="text-center" style="min-width: 50px;">NE</th>
+                            <th class="text-center" style="min-width: 50px;">NL</th>
+                            <th class="text-center" style="min-width: 50px;">PD</th>
+                            <th class="text-center" style="min-width: 50px;">OB</th>
+                            <th class="text-center" style="min-width: 60px;">Link SEI</th>
+                            <th class="text-center" style="min-width: 70px;">Histórico</th>
+                            <th class="text-center" style="min-width: 80px;">Tempo Total</th>
+                            <th class="text-center" style="min-width: 90px;">Status</th>
+                            <th class="text-center" style="min-width: 70px;">Pendências</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in resultados %}
+                        {% set sol = r.solicitacao %}
+                        <tr class="{{ 'table-warning' if r.qtd_faltando > 5 else ('table-light' if r.qtd_faltando > 0 else '') }}">
+                            <td class="ps-3">
+                                <a href="{{ url_for('solicitacoes.detalhes_solicitacao', id_solicitacao=sol.id) }}"
+                                   class="text-decoration-none fw-bold">{{ sol.id }}</a>
+                            </td>
+                            <td>
+                                {% if r.tem_protocolo %}
+                                    <span class="text-dark">{{ sol.protocolo_gerado_sei }}</span>
+                                {% else %}
+                                    <span class="text-danger"><i class="fas fa-exclamation-circle"></i> Ausente</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ sol.competencia or '-' }}</td>
+                            <td>
+                                <span class="text-truncate d-inline-block" style="max-width: 200px;" title="{{ r.contratado }}">
+                                    {{ r.contratado or '-' }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if r.tem_etapa %}
+                                    <span class="badge bg-light text-dark border">{{ r.etapa_nome }}</span>
+                                {% else %}
+                                    <span class="text-danger"><i class="fas fa-exclamation-circle"></i></span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if r.tem_tipo_pgto %}
+                                    <i class="fas fa-check text-success"></i>
+                                {% else %}
+                                    <i class="fas fa-times text-danger"></i>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if r.tem_status_emp %}
+                                    <span class="badge bg-{{ sol.status_empenho.cor_badge if sol.status_empenho else 'secondary' }}">
+                                        {{ r.status_empenho_nome }}
+                                    </span>
+                                {% else %}
+                                    <i class="fas fa-times text-danger"></i>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if r.tem_valor_emp %}
+                                    <span class="fw-bold">R$ {{ "{:,.2f}".format(r.empenho_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+                                {% else %}
+                                    <span class="text-danger">-</span>
+                                {% endif %}
+                            </td>
+                            {# NE #}
+                            <td class="text-center">
+                                {% if r.tem_ne %}
+                                    <i class="fas fa-check-circle text-success" title="{{ r.mov_ne.numero if r.mov_ne else sol.num_ne }}"></i>
+                                {% else %}
+                                    <i class="fas fa-times-circle text-danger"></i>
+                                {% endif %}
+                            </td>
+                            {# NL #}
+                            <td class="text-center">
+                                {% if r.tem_nl %}
+                                    <i class="fas fa-check-circle text-success" title="{{ r.mov_nl.numero if r.mov_nl else sol.num_nl }}"></i>
+                                {% else %}
+                                    <i class="fas fa-times-circle text-danger"></i>
+                                {% endif %}
+                            </td>
+                            {# PD #}
+                            <td class="text-center">
+                                {% if r.tem_pd %}
+                                    <i class="fas fa-check-circle text-success" title="{{ r.mov_pd.numero if r.mov_pd else sol.num_pd }}"></i>
+                                {% else %}
+                                    <i class="fas fa-times-circle text-danger"></i>
+                                {% endif %}
+                            </td>
+                            {# OB #}
+                            <td class="text-center">
+                                {% if r.tem_ob %}
+                                    <i class="fas fa-check-circle text-success" title="{{ r.mov_ob.numero if r.mov_ob else sol.num_ob }}"></i>
+                                {% else %}
+                                    <i class="fas fa-times-circle text-danger"></i>
+                                {% endif %}
+                            </td>
+                            {# Link SEI #}
+                            <td class="text-center">
+                                {% if r.tem_link_sei %}
+                                    <a href="{{ sol.link_processo_sei }}" target="_blank" class="text-info"><i class="fas fa-external-link-alt"></i></a>
+                                {% else %}
+                                    <i class="fas fa-times text-danger"></i>
+                                {% endif %}
+                            </td>
+                            {# Histórico #}
+                            <td class="text-center">
+                                {% if r.tem_historico %}
+                                    <span class="badge bg-light text-dark border">{{ r.qtd_historico }}</span>
+                                {% else %}
+                                    <span class="text-danger">0</span>
+                                {% endif %}
+                            </td>
+                            {# Tempo Total #}
+                            <td class="text-center">
+                                {% if r.tem_tempo %}
+                                    <span class="text-muted">{{ sol.tempo_total }}</span>
+                                {% else %}
+                                    <span class="text-danger">-</span>
+                                {% endif %}
+                            </td>
+                            {# Status Geral #}
+                            <td class="text-center">
+                                {% if r.tem_status %}
+                                    {% if sol.status_geral == 'PAGO' %}
+                                        <span class="badge bg-success">PAGO</span>
+                                    {% elif sol.status_geral == 'EM ANDAMENTO' %}
+                                        <span class="badge bg-primary">EM ANDAMENTO</span>
+                                    {% elif sol.status_geral == 'EM LIQUIDAÇÃO' %}
+                                        <span class="badge bg-info">EM LIQUIDAÇÃO</span>
+                                    {% elif sol.status_geral == 'CANCELADO' %}
+                                        <span class="badge bg-dark">CANCELADO</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ sol.status_geral }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <i class="fas fa-times text-danger"></i>
+                                {% endif %}
+                            </td>
+                            {# Pendências #}
+                            <td class="text-center">
+                                {% if r.qtd_faltando == 0 %}
+                                    <span class="badge bg-success"><i class="fas fa-check"></i> OK</span>
+                                {% elif r.qtd_faltando <= 3 %}
+                                    <span class="badge bg-warning text-dark" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
+                                {% else %}
+                                    <span class="badge bg-danger" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+
+                        {% if not resultados %}
+                        <tr>
+                            <td colspan="17" class="text-center text-muted py-4">
+                                <i class="fas fa-search me-1"></i> Nenhum resultado encontrado com os filtros aplicados.
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {# === LEGENDA === #}
+    <div class="card shadow-sm mb-4">
+        <div class="card-body py-2">
+            <small class="text-muted">
+                <i class="fas fa-info-circle me-1"></i>
+                <strong>Legenda:</strong>
+                <i class="fas fa-check-circle text-success ms-2"></i> Presente |
+                <i class="fas fa-times-circle text-danger ms-2"></i> Ausente |
+                <span class="badge bg-success ms-2">OK</span> Sem pendências |
+                <span class="badge bg-warning text-dark ms-2">N</span> N campos faltando |
+                <span class="badge bg-danger ms-2">N</span> Muitos campos faltando |
+                NE = Nota de Empenho | NL = Liquidação | PD = Progr. Desembolso | OB = Ordem Bancária
+            </small>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

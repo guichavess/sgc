@@ -940,6 +940,36 @@ class PrestacaoContratoService:
             codContrato=cod
         ).order_by(PD.dataEmissao.desc()).all()
 
+    @staticmethod
+    def listar_solicitacoes_contrato(codigo_contrato):
+        """Busca solicitações de pagamento vinculadas ao contrato."""
+        from app.models.solicitacao import Solicitacao, SolicitacaoEmpenho
+
+        solicitacoes = Solicitacao.query.filter_by(
+            codigo_contrato=str(codigo_contrato)
+        ).order_by(Solicitacao.data_solicitacao.desc()).all()
+
+        resultado = []
+        for sol in solicitacoes:
+            # Buscar empenho vinculado
+            empenho = SolicitacaoEmpenho.query.filter_by(
+                id_solicitacao=sol.id
+            ).first()
+
+            resultado.append({
+                'id': sol.id,
+                'protocolo': sol.protocolo_gerado_sei,
+                'link_sei': sol.link_processo_sei,
+                'etapa_nome': sol.etapa.nome if sol.etapa else 'Sem etapa',
+                'etapa_cor': sol.etapa.cor_hex if sol.etapa and sol.etapa.cor_hex else '#6c757d',
+                'valor': float(empenho.valor) if empenho and empenho.valor else 0,
+                'ne': empenho.ne if empenho else None,
+                'ano': sol.data_solicitacao.year if sol.data_solicitacao else None,
+                'data': sol.data_solicitacao
+            })
+
+        return resultado
+
     # ===== CENTRO DE CUSTO E TIPO DE EXECUÇÃO =====
 
     @staticmethod

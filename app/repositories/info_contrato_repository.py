@@ -93,26 +93,30 @@ class InfoContratoRepository(BaseRepository[Contrato]):
         # Naturezas a excluir (estornos/cancelamentos)
         EXCLUDE_NATUREZA = {'339092', '449092'}
 
-        # Filtro por Sub-Item da Despesa (via empenho_itens)
+        # Filtro por Sub-Item da Despesa (via empenho_itens) — aceita string ou lista
         if subitem_despesa:
+            items = subitem_despesa if isinstance(subitem_despesa, list) else [subitem_despesa]
+            sub_conditions = [EmpenhoItem.SubItemDespesa.contains(s) for s in items]
             query = query.filter(
                 Contrato.codigo.in_(
                     db.session.query(EmpenhoItem.CodContrato)
                     .filter(
-                        EmpenhoItem.SubItemDespesa.contains(subitem_despesa),
+                        db.or_(*sub_conditions),
                         EmpenhoItem.Natureza.notin_(EXCLUDE_NATUREZA)
                     )
                     .distinct()
                 )
             )
 
-        # Filtro por Tipo Patrimonial (via empenho_itens)
+        # Filtro por Tipo Patrimonial (via empenho_itens) — aceita string ou lista
         if tipo_patrimonial:
+            items = tipo_patrimonial if isinstance(tipo_patrimonial, list) else [tipo_patrimonial]
+            tp_conditions = [EmpenhoItem.TipoPatrimonial.contains(t) for t in items]
             query = query.filter(
                 Contrato.codigo.in_(
                     db.session.query(EmpenhoItem.CodContrato)
                     .filter(
-                        EmpenhoItem.TipoPatrimonial.contains(tipo_patrimonial),
+                        db.or_(*tp_conditions),
                         EmpenhoItem.Natureza.notin_(EXCLUDE_NATUREZA)
                     )
                     .distinct()

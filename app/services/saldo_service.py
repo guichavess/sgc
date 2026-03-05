@@ -87,12 +87,18 @@ class SaldoService:
     def registrar_e_atualizar_saldo(
         solicitacao: Solicitacao,
         usuario_id: int,
-        valor_solicitado: float = 0.0
+        valor_solicitado: float = 0.0,
+        validar_saldo: bool = True
     ) -> Dict[str, Any]:
         """
         Calcula saldo e registra solicitação de empenho.
 
-        Validação: verifica se valor_solicitado <= saldo_disponivel
+        Args:
+            solicitacao: Objeto Solicitacao
+            usuario_id: ID do usuário solicitante
+            valor_solicitado: Valor do empenho solicitado
+            validar_saldo: Se True, bloqueia quando valor > saldo disponível.
+                           Se False, registra mesmo sem saldo suficiente (ex: solicitação).
         """
         try:
             # Calcula saldo disponível (Empenhado - Liquidado)
@@ -101,8 +107,8 @@ class SaldoService:
                 competencia=solicitacao.competencia
             )
 
-            # Verifica se há saldo suficiente
-            if valor_solicitado > saldo_disponivel:
+            # Verifica se há saldo suficiente (quando validação ativa)
+            if validar_saldo and valor_solicitado > saldo_disponivel:
                 return {
                     'sucesso': False,
                     'msg': f'Saldo insuficiente. Disponível: R$ {saldo_disponivel:,.2f}',

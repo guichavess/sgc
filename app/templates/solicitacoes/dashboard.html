@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-
+{% block container_class %}container-fluid px-4 px-xl-5{% endblock %}
 
 {% set ns = namespace(maior_data=none) %}
 {% for sol in solicitacoes %}
@@ -27,18 +27,18 @@
             <small class="text-muted mb-1" style="font-size: 0.85rem;">--</small>
         {% endif %}
 
-        <div>
+        <div class="d-flex flex-nowrap gap-2">
             {% if current_user.is_admin %}
-            <button id="btnSyncUnificado" class="btn btn-primary btn-lg shadow-sm px-4 fw-bold me-2" onclick="iniciarSincronizacaoUnificada()">
+            <button id="btnSyncUnificado" class="btn btn-primary shadow-sm px-3 fw-bold" onclick="iniciarSincronizacaoUnificada()">
                 <i class="bi bi-arrow-repeat me-2"></i> Sincronizar Tudo (SEI + Saldos)
             </button>
             {% endif %}
 
             {% if current_user.tem_permissao('solicitacoes', 'criar') %}
-            <a href="{{ url_for('solicitacoes.vincular_solicitacao') }}" class="btn btn-outline-primary btn-lg shadow-sm px-4 fw-bold me-2">
+            <a href="{{ url_for('solicitacoes.vincular_solicitacao') }}" class="btn btn-outline-primary shadow-sm px-3 fw-bold">
                 <i class="bi bi-link-45deg me-2"></i> Vincular Processo
             </a>
-            <a href="{{ url_for('solicitacoes.nova_solicitacao') }}" class="btn btn-success btn-lg shadow-sm px-4 fw-bold">
+            <a href="{{ url_for('solicitacoes.nova_solicitacao') }}" class="btn btn-success shadow-sm px-3 fw-bold">
                 <i class="bi bi-plus-lg me-2"></i> Nova Solicitação
             </a>
             {% endif %}
@@ -255,7 +255,7 @@
 <div class="card border-0 shadow-sm overflow-hidden">
     <div class="card-body p-0">
         <div class="table-responsive table-rounded">
-            <table class="table table-custom table-hover align-middle mb-0">
+            <table class="table table-custom table-compact table-hover align-middle mb-0">
                 <thead>
                     <tr>
                         <th class="ps-4">Cód. Contrato</th>
@@ -265,7 +265,7 @@
                         <th>Status Atual</th>
                         <th class="text-center">Tempo Total</th>
                         <th class="text-center">Saldo Empenho</th>
-                        <th style="width: 200px;">Solicitar Empenho</th>
+                        <th style="min-width: 180px;">Solicitar Empenho</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -277,7 +277,7 @@
                             </span>
                         </td>
                         <td>
-                            <div class="fw-bold text-dark">{{ sol.contrato.nomeContratado }}</div>
+                            <div class="fw-bold text-dark" style="max-width: 280px; word-break: break-word;">{{ sol.contrato.nomeContratado }}</div>
                         </td>
                         <td>
                             <span class="badge bg-light text-dark border border-secondary">
@@ -436,8 +436,26 @@
 </div>
 
 
+<div class="modal fade" id="modalConfirmacao" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title" id="modalConfirmacaoTitulo">Confirmar</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalConfirmacaoMsg"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnConfirmarAcao">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .cursor-pointer { cursor: pointer; }
+    .table-custom.table-compact thead th { padding: 0.75rem 0.75rem; }
+    .table-custom.table-compact tbody td { padding: 0.75rem 0.75rem; }
 </style>
 
 <div class="modal fade" id="modalProgresso" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
@@ -493,49 +511,70 @@
         }
     });
 
+    // Modal de Confirmação Genérico
+    function confirmarAcao(titulo, mensagem, callback) {
+        document.getElementById('modalConfirmacaoTitulo').textContent = titulo;
+        document.getElementById('modalConfirmacaoMsg').innerHTML = mensagem;
+        const btnConfirmar = document.getElementById('btnConfirmarAcao');
+        const novoBtnConfirmar = btnConfirmar.cloneNode(true);
+        btnConfirmar.parentNode.replaceChild(novoBtnConfirmar, btnConfirmar);
+        novoBtnConfirmar.addEventListener('click', function() {
+            bootstrap.Modal.getInstance(document.getElementById('modalConfirmacao')).hide();
+            callback();
+        });
+        new bootstrap.Modal(document.getElementById('modalConfirmacao')).show();
+    }
+
     // Função Salvar Empenho (Para os botões da tabela)
     function salvarEmpenho(idSolicitacao) {
         const input = document.getElementById(`input_empenho_${idSolicitacao}`);
         if (!input) return;
 
         const valor = input.value;
-        
+
         if (!valor || valor === '0,00' || valor === '') {
-            alert('Por favor, digite um valor válido.');
-            setTimeout(() => input.focus(), 100); 
+            mostrarToast('Atenção', 'Por favor, digite um valor válido.', 'alerta');
+            setTimeout(() => input.focus(), 100);
             return;
         }
 
-        if(!confirm(`Confirma a solicitação de empenho no valor de R$ ${valor}?`)) {
-            return;
-        }
+        confirmarAcao(
+            'Solicitar Empenho',
+            `Confirma a solicitação de empenho no valor de <strong>R$ ${valor}</strong>?`,
+            function() {
+                input.disabled = true;
+                const btn = input.nextElementSibling;
+                if(btn) btn.disabled = true;
 
-        input.disabled = true; 
-        const btn = input.nextElementSibling; 
-        if(btn) btn.disabled = true;
-
-        fetch('/solicitacoes/api/solicitar-empenho', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ id_solicitacao: idSolicitacao, valor: valor })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if(data.sucesso) {
-                const td = input.parentElement.parentElement;
-                td.innerHTML = `<span class="badge bg-warning text-dark w-100 py-2">Empenho Solicitado</span>`;
-            } else {
-                alert('Erro: ' + data.msg);
-                input.disabled = false;
-                if(btn) btn.disabled = false;
+                fetch('/solicitacoes/api/solicitar-empenho', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ solicitacao_id: idSolicitacao, valor: valor })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if(data.sucesso) {
+                        const td = input.parentElement.parentElement;
+                        td.innerHTML = `
+                            <div class="text-center">
+                                <div class="fw-bold text-dark small mb-1">R$ ${valor}</div>
+                                <span class="badge bg-warning py-1 px-2" style="font-size: 0.7rem;">Empenho Solicitado</span>
+                            </div>`;
+                        mostrarToast('Sucesso', 'Solicitação de empenho registrada com sucesso.', 'lembrete');
+                    } else {
+                        mostrarToast('Erro', data.msg, 'alerta');
+                        input.disabled = false;
+                        if(btn) btn.disabled = false;
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    mostrarToast('Erro', 'Erro de comunicação com o servidor.', 'alerta');
+                    input.disabled = false;
+                    if(btn) btn.disabled = false;
+                });
             }
-        })
-        .catch(err => {
-            console.error(err);
-            alert('Erro de comunicação.');
-            input.disabled = false;
-            if(btn) btn.disabled = false;
-        });
+        );
     }
 
     /* ==========================================================================

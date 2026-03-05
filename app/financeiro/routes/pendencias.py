@@ -106,6 +106,12 @@ def inserir_ne(solicitacao_id):
 
     # Atualiza a NE
     sol_empenho.ne = ne
+
+    # Atualiza status do empenho para "Atendido" (id=2)
+    solicitacao = Solicitacao.query.get(solicitacao_id)
+    if solicitacao:
+        solicitacao.status_empenho_id = 2  # Atendido
+
     db.session.commit()
 
     flash(f'NE {ne} inserida com sucesso!', 'success')

@@ -126,26 +126,10 @@
                     </div>
                 </div>
 
-                <hr class="my-4">
-
-                <!-- Step 5: Senha SEI -->
-                <div class="mb-4">
-                    <label for="senhaSei" class="step-label">
-                        <span class="step-badge">5</span> Senha do SEI (Assinatura)
-                    </label>
-                    <div class="row">
-                        <div class="col-md-5">
-                            <input type="password" class="form-control form-control-lg" id="senhaSei"
-                                   placeholder="Sua senha do SEI" required>
-                            <div class="form-text">Os documentos serão criados e assinados automaticamente.</div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Botão de criar -->
                 <div class="d-flex justify-content-end pt-3 border-top mt-4">
                     <button type="button" class="btn btn-success btn-lg px-5 shadow fw-bold" id="btn-criar-lote" disabled onclick="iniciarCriacaoLote()">
-                        <i class="bi bi-rocket-takeoff me-2"></i> Criar e Assinar em Lote
+                        <i class="bi bi-rocket-takeoff me-2"></i> Criar em Lote
                     </button>
                 </div>
             </div>
@@ -403,7 +387,6 @@ function iniciarCriacaoLote() {
     let competencia = document.getElementById('competencia').value.trim();
     let tipo = document.getElementById('id_tipo_pagamento').value;
     let unidade = document.getElementById('unidade_procedimento').value;
-    let senha = document.getElementById('senhaSei').value.trim();
     let codigos = Object.keys(contratosSelecionados);
 
     // Validações
@@ -411,10 +394,9 @@ function iniciarCriacaoLote() {
     if (!tipo) { alert('Selecione o tipo de pagamento.'); return; }
     if (!unidade) { alert('Selecione a unidade geradora.'); return; }
     if (codigos.length === 0) { alert('Selecione pelo menos um contrato.'); return; }
-    if (!senha) { alert('Informe sua senha do SEI para assinatura.'); document.getElementById('senhaSei').focus(); return; }
 
     // Confirmação
-    if (!confirm(`Criar e assinar ${codigos.length} processo(s) no SEI?\n\nCompetência: ${competencia}\nContratos: ${codigos.length}`)) {
+    if (!confirm(`Criar ${codigos.length} processo(s) no SEI?\n\nCompetência: ${competencia}\nContratos: ${codigos.length}`)) {
         return;
     }
 
@@ -423,7 +405,6 @@ function iniciarCriacaoLote() {
     document.getElementById('btn-criar-lote').innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando...';
     document.getElementById('btn-buscar').disabled = true;
     document.getElementById('btn-selecionar-todos').disabled = true;
-    document.getElementById('senhaSei').disabled = true;
 
     // Limpa dados de execução anterior
     processosCriados = [];
@@ -438,13 +419,12 @@ function iniciarCriacaoLote() {
     let logContainer = document.getElementById('log-container');
     logContainer.innerHTML = '';
 
-    // Payload unificado: criação + assinatura
+    // Payload
     let payload = {
         contratos: codigos,
         competencia: competencia,
         id_tipo_pagamento: parseInt(tipo),
-        unidade_id: unidade,
-        senha: senha
+        unidade_id: unidade
     };
 
     fetch("{{ url_for('solicitacoes.api_criar_lote') }}", {
@@ -555,10 +535,9 @@ function processarEvento(data) {
 
 function reabilitarFormulario() {
     document.getElementById('btn-criar-lote').disabled = false;
-    document.getElementById('btn-criar-lote').innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i> Criar e Assinar em Lote';
+    document.getElementById('btn-criar-lote').innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i> Criar em Lote';
     document.getElementById('btn-buscar').disabled = false;
     document.getElementById('btn-selecionar-todos').disabled = false;
-    document.getElementById('senhaSei').disabled = false;
 }
 
 // ===================================================================

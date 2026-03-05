@@ -79,24 +79,35 @@
                             {# CORREÇÃO: Exibe os links apenas se chegou na fase financeira #}
                             {% if item.concluida or item.atual %}
                                 <div class="mt-2 text-start small border-top pt-1">
-                                    {% if solicitacao.num_nl %}
+                                    {% if mov_ne %}
+                                    <a href="{{ mov_ne.link_acesso }}" target="_blank" class="text-decoration-none d-block mb-1">
+                                        <div class="text-nowrap" title="Nota de Empenho">
+                                            <i class="fas fa-file-alt text-info me-1"></i> <strong>NE:</strong> {{ mov_ne.numero }}
+                                        </div>
+                                    </a>
+                                    {% elif ultimo_empenho and ultimo_empenho.ne %}
+                                    <div class="text-nowrap d-block mb-1">
+                                        <i class="fas fa-file-alt text-info me-1"></i> <strong>NE:</strong> {{ ultimo_empenho.ne }}
+                                    </div>
+                                    {% endif %}
+                                    {% if mov_nl or solicitacao.num_nl %}
                                     <a href="{{ mov_nl.link_acesso if mov_nl else '#' }}" target="_blank" class="text-decoration-none d-block mb-1">
                                         <div class="text-nowrap" title="Nota de Liquidação">
-                                            <i class="fas fa-file-invoice-dollar text-primary me-1"></i> <strong>NL:</strong> {{ mov_nl.numero if mov_nl else '-' }}
+                                            <i class="fas fa-file-invoice-dollar text-primary me-1"></i> <strong>NL:</strong> {{ mov_nl.numero if mov_nl else solicitacao.num_nl }}
                                         </div>
                                     </a>
                                     {% endif %}
-                                    {% if solicitacao.num_pd %}
+                                    {% if mov_pd or solicitacao.num_pd %}
                                     <a href="{{ mov_pd.link_acesso if mov_pd else '#' }}" target="_blank" class="text-decoration-none d-block mb-1">
                                         <div class="text-nowrap" title="Programação de Desembolso">
-                                            <i class="fas fa-calendar-check text-warning me-1"></i> <strong>PD:</strong> {{ mov_pd.numero if mov_pd else '-' }}
+                                            <i class="fas fa-calendar-check text-warning me-1"></i> <strong>PD:</strong> {{ mov_pd.numero if mov_pd else solicitacao.num_pd }}
                                         </div>
                                     </a>
                                     {% endif %}
-                                    {% if solicitacao.num_ob %}
+                                    {% if mov_ob or solicitacao.num_ob %}
                                     <a href="{{ mov_ob.link_acesso if mov_ob else '#' }}" target="_blank" class="text-decoration-none d-block">
                                         <div class="text-nowrap text-success fw-bold" title="Ordem Bancária">
-                                            <i class="fas fa-money-check-alt me-1"></i> <strong>OB:</strong> {{ mov_ob.numero if mov_ob else '-' }}
+                                            <i class="fas fa-money-check-alt me-1"></i> <strong>OB:</strong> {{ mov_ob.numero if mov_ob else solicitacao.num_ob }}
                                         </div>
                                     </a>
                                     {% endif %}

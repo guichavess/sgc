@@ -260,7 +260,8 @@ def vincular_solicitacao():
                     )
                     if valor_float > 0:
                         SaldoService.registrar_e_atualizar_saldo(
-                            nova_sol, current_user.id, valor_float
+                            nova_sol, current_user.id, valor_float,
+                            validar_saldo=False
                         )
                 except (ValueError, TypeError):
                     pass  # Valor inválido — ignora silenciosamente
@@ -358,7 +359,8 @@ def detalhes_solicitacao(id_solicitacao):
             resultado = SaldoService.registrar_e_atualizar_saldo(
                 solicitacao,
                 current_user.id,
-                valor
+                valor,
+                validar_saldo=False
             )
 
             if resultado['sucesso']:
@@ -383,7 +385,8 @@ def detalhes_solicitacao(id_solicitacao):
         solicitacao.competencia
     )
 
-    # Busca documentos financeiros do SEI (NL, PD, OB)
+    # Busca documentos financeiros do SEI (NE, NL, PD, OB)
+    mov_ne = None
     mov_nl = None
     mov_pd = None
     mov_ob = None
@@ -391,6 +394,7 @@ def detalhes_solicitacao(id_solicitacao):
         docs_sei = SeiMovimentacao.query.filter_by(
             protocolo_procedimento=solicitacao.protocolo_gerado_sei
         ).all()
+        mov_ne = next((d for d in docs_sei if str(d.id_serie) == SerieDocumentoSEI.NOTA_EMPENHO), None)
         mov_nl = next((d for d in docs_sei if str(d.id_serie) == SerieDocumentoSEI.LIQUIDACAO), None)
         mov_pd = next((d for d in docs_sei if str(d.id_serie) == SerieDocumentoSEI.PD), None)
         mov_ob = next((d for d in docs_sei if str(d.id_serie) == SerieDocumentoSEI.OB), None)
@@ -407,6 +411,7 @@ def detalhes_solicitacao(id_solicitacao):
         timeline_data=timeline_data,
         historico=historico,
         saldo_info=saldo_info,
+        mov_ne=mov_ne,
         mov_nl=mov_nl,
         mov_pd=mov_pd,
         mov_ob=mov_ob,
