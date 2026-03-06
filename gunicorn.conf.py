@@ -4,8 +4,10 @@ import multiprocessing
 bind = "0.0.0.0:8081"
 
 # Workers
-workers = 4
-worker_class = "sync"
+# 1 worker + 4 threads para compartilhar estado em memória (ex: SIAFE status)
+workers = 1
+threads = 4
+worker_class = "gthread"
 timeout = 3600
 
 # Logging
