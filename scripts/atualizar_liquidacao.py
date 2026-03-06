@@ -54,7 +54,7 @@ UG_SINGLE = "210101"
 UG_PAD_SIZE = 6
 
 MAX_WORKERS_CAP = 16
-CHUNKSIZE_SQL = 2000
+CHUNKSIZE_SQL = 100
 
 # Colunas que serão gravadas na tabela
 COLUMNS = [

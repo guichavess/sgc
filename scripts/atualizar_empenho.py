@@ -98,7 +98,7 @@ DELETE_DATE_FIELD = "dataEmissao"
 
 # Performance
 MAX_WORKERS_CAP = 16
-CHUNKSIZE_SQL = 2000
+CHUNKSIZE_SQL = 100
 
 # =========================
 # 4. COLUNAS
