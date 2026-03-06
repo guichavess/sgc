@@ -182,10 +182,26 @@
 
                     {% include 'components/notification_bell.html' %}
 
-                    <li class="nav-item">
-                        <a class="btn btn-danger btn-sm px-3 fw-bold rounded-pill d-inline-flex align-items-center" href="{{ url_for('auth.logout') }}">
-                            <i class="bi bi-box-arrow-right me-1"></i> Sair
+                    <li class="nav-item dropdown">
+                        <a class="btn btn-danger btn-sm px-3 fw-bold rounded-pill d-inline-flex align-items-center dropdown-toggle"
+                           href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle me-1"></i> {{ nome_curto }}
                         </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li>
+                                <a class="dropdown-item text-danger d-flex align-items-center" href="{{ url_for('auth.logout') }}">
+                                    <i class="bi bi-box-arrow-right me-2"></i> Sair
+                                </a>
+                            </li>
+                            {% if current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper() %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item text-primary d-flex align-items-center" href="#" id="btn-atualizar-siafe-hub">
+                                    <i class="bi bi-arrow-repeat me-2"></i> Atualizar SIAFE
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
                     </li>
                 </ul>
             {% endif %}
@@ -352,5 +368,9 @@
 
     {# Notificacoes: Polling, dropdown, tab title #}
     {% include 'components/notification_scripts.html' %}
+
+    {% if current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper() %}
+    {% include 'components/siafe_modal.html' %}
+    {% endif %}
 </body>
 </html>

@@ -49,6 +49,11 @@
     {# Notificacoes: Polling, dropdown, tab title #}
     {% include 'components/notification_scripts.html' %}
 
+    {# Modal SIAFE - apenas Pedro Alexandre (precisa estar após Bootstrap JS) #}
+    {% if current_user is defined and current_user.is_authenticated and current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper() %}
+    {% include 'components/siafe_modal.html' %}
+    {% endif %}
+
     {# Scripts específicos da página #}
     {% block extra_js %}{% endblock %}
 </body>

@@ -217,3 +217,123 @@ def upload_cotacao(id):
         flash(f'Erro ao processar upload: {str(e)}', 'danger')
 
     return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+
+# ── Escolha de Passagens ────────────────────────────────────────────────────
+
+@diarias_bp.route('/administracao/<int:id>/escolha-passagens', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def escolha_passagens(id):
+    """Salva escolha de passagens (IDA + VOLTA) e gera documento SEI."""
+    from app.models.diaria import DiariasCotacaoVoo
+    from app.services.diarias_sei_integration import (
+        gerar_token_sei_admin, gerar_escolha_passagens,
+    )
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guard: só para Nacional/Internacional com passagens
+    if itinerario.tipo_itinerario not in [2, 3]:
+        flash('Escolha de passagens só se aplica a viagens nacionais/internacionais.', 'warning')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    # Guard: não pode resubmeter
+    if itinerario.escolha_voo_ida_id:
+        flash('A escolha de passagens já foi realizada para esta solicitação.', 'warning')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    # Parse form
+    voo_ida_id = request.form.get('escolha_voo_ida', type=int)
+    voo_volta_id = request.form.get('escolha_voo_volta', type=int)
+
+    if not voo_ida_id or not voo_volta_id:
+        flash('Selecione um voo de IDA e um voo de VOLTA.', 'danger')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    # Valida que os IDs pertencem a este itinerário
+    voo_ida = DiariasCotacaoVoo.query.get(voo_ida_id)
+    voo_volta = DiariasCotacaoVoo.query.get(voo_volta_id)
+
+    if not voo_ida or voo_ida.itinerario_id != id or voo_ida.tipo_trecho != 'ida':
+        flash('Voo de IDA inválido.', 'danger')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    if not voo_volta or voo_volta.itinerario_id != id or voo_volta.tipo_trecho != 'volta':
+        flash('Voo de VOLTA inválido.', 'danger')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    # Detecta se o mais barato foi selecionado (server-side)
+    all_ida = DiariasCotacaoVoo.query.filter_by(
+        itinerario_id=id, tipo_trecho='ida'
+    ).order_by(DiariasCotacaoVoo.valor.asc()).all()
+
+    all_volta = DiariasCotacaoVoo.query.filter_by(
+        itinerario_id=id, tipo_trecho='volta'
+    ).order_by(DiariasCotacaoVoo.valor.asc()).all()
+
+    menor_ida = all_ida[0].valor if all_ida else None
+    menor_volta = all_volta[0].valor if all_volta else None
+
+    is_cheapest = (voo_ida.valor <= menor_ida and voo_volta.valor <= menor_volta)
+
+    # Parse justificativa (só se NÃO é o mais barato)
+    justificativa_codigos = []
+    justificativa_outros = None
+
+    if not is_cheapest:
+        for code in ['J1', 'J2', 'J3', 'J4', 'J5']:
+            if request.form.get(f'justificativa_{code}'):
+                justificativa_codigos.append(code)
+        justificativa_outros = request.form.get('justificativa_outros_texto', '').strip() or None
+
+    declaracao = bool(request.form.get('declaracao_responsabilidade'))
+
+    # Salva no banco
+    itinerario.escolha_voo_ida_id = voo_ida_id
+    itinerario.escolha_voo_volta_id = voo_volta_id
+    itinerario.escolha_menor_valor = is_cheapest
+    itinerario.escolha_justificativa_codigos = ','.join(justificativa_codigos) if justificativa_codigos else None
+    itinerario.escolha_justificativa_outros = justificativa_outros
+    itinerario.escolha_declaracao_responsabilidade = declaracao
+
+    # Gera documento SEI
+    sei_ok = False
+    if itinerario.sei_id_procedimento:
+        try:
+            token = gerar_token_sei_admin()
+            if token:
+                retorno = gerar_escolha_passagens(
+                    token=token,
+                    id_procedimento=itinerario.sei_id_procedimento,
+                    dados_escolha={
+                        'voos_ida': all_ida,
+                        'voos_volta': all_volta,
+                        'escolha_ida_id': voo_ida_id,
+                        'escolha_volta_id': voo_volta_id,
+                        'menor_valor': is_cheapest,
+                        'justificativa_codigos': justificativa_codigos,
+                        'justificativa_outros_texto': justificativa_outros,
+                        'declaracao': declaracao,
+                    },
+                    sei_protocolo=itinerario.sei_protocolo or itinerario.n_processo or '',
+                )
+                if retorno:
+                    itinerario.sei_id_escolha_passagens = str(retorno.get('IdDocumento', ''))
+                    itinerario.sei_escolha_passagens_formatado = retorno.get('DocumentoFormatado', '')
+                    sei_ok = True
+                else:
+                    flash('Aviso: Escolha salva, mas geração do documento SEI falhou.', 'warning')
+            else:
+                flash('Aviso: Escolha salva, mas não foi possível autenticar no SEI.', 'warning')
+        except Exception as e:
+            flash(f'Aviso: Escolha salva, mas erro na integração SEI: {e}', 'warning')
+
+    db.session.commit()
+
+    if sei_ok:
+        flash('Escolha de passagens registrada e documento gerado no SEI com sucesso!', 'success')
+    elif not itinerario.sei_id_procedimento:
+        flash('Escolha de passagens registrada com sucesso!', 'success')
+
+    return redirect(url_for('diarias.administracao_detalhe', id=id))

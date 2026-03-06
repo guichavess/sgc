@@ -16,17 +16,54 @@
     </h5>
 </div>
 
+{# Filtros #}
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-3">
+        <div class="row g-2 align-items-center">
+            <div class="col-auto">
+                <span class="text-muted fw-semibold small"><i class="bi bi-funnel me-1"></i>Filtros</span>
+            </div>
+            <div class="col-md-4">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="bi bi-person-badge text-muted"></i></span>
+                    <select id="filtro-cargo" class="form-select form-select-sm" onchange="filtrarTabela()">
+                        <option value="">Todos os Cargos</option>
+                        {% for c in cargos %}
+                        <option value="{{ c.nome }}">{{ c.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="bi bi-signpost-2 text-muted"></i></span>
+                    <select id="filtro-tipo" class="form-select form-select-sm" onchange="filtrarTabela()">
+                        <option value="">Todos os Tipos</option>
+                        <option value="1">Estadual</option>
+                        <option value="2">Nacional</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-auto ms-auto">
+                <button class="btn btn-outline-secondary btn-sm" onclick="limparFiltros()" id="btn-limpar-filtros" style="display:none;">
+                    <i class="bi bi-x-circle me-1"></i>Limpar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {# Tabela de valores #}
 <div class="card border-0 shadow-sm overflow-hidden mb-4">
     <div class="card-header bg-white border-bottom py-3">
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold">Valores por Cargo e Tipo</h5>
-            <span class="badge bg-secondary">{{ valores|length }} registro(s)</span>
+            <span class="badge bg-secondary" id="count-valores">{{ valores|length }} registro(s)</span>
         </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive table-rounded">
-            <table class="table table-custom table-hover align-middle mb-0">
+            <table class="table table-custom table-hover align-middle mb-0" id="tabela-valores">
                 <thead>
                     <tr>
                         <th class="ps-4">Cargo</th>
@@ -37,7 +74,7 @@
                 </thead>
                 <tbody>
                     {% for vc in valores %}
-                    <tr>
+                    <tr data-cargo="{{ vc.cargo.nome if vc.cargo else '' }}" data-tipo="{{ vc.tipo_itinerario_id }}">
                         <td class="ps-4 fw-semibold">{{ vc.cargo.nome if vc.cargo else '-' }}</td>
                         <td>
                             {% if vc.tipo_itinerario_id == 1 %}
@@ -119,6 +156,36 @@ function editarValor(id, cargoId, tipoId, valor) {
     document.getElementById('valor-tipo').value = tipoId;
     document.getElementById('valor-valor').value = valor;
     new bootstrap.Modal(document.getElementById('modalValor')).show();
+}
+
+function filtrarTabela() {
+    var filtroCargo = document.getElementById('filtro-cargo').value;
+    var filtroTipo = document.getElementById('filtro-tipo').value;
+    var rows = document.querySelectorAll('#tabela-valores tbody tr[data-cargo]');
+    var visivel = 0;
+
+    rows.forEach(function(row) {
+        var cargo = row.getAttribute('data-cargo');
+        var tipo = row.getAttribute('data-tipo');
+        var mostrar = true;
+
+        if (filtroCargo && cargo !== filtroCargo) mostrar = false;
+        if (filtroTipo && tipo !== filtroTipo) mostrar = false;
+
+        row.style.display = mostrar ? '' : 'none';
+        if (mostrar) visivel++;
+    });
+
+    document.getElementById('count-valores').textContent = visivel + ' registro(s)';
+
+    var btnLimpar = document.getElementById('btn-limpar-filtros');
+    btnLimpar.style.display = (filtroCargo || filtroTipo) ? '' : 'none';
+}
+
+function limparFiltros() {
+    document.getElementById('filtro-cargo').value = '';
+    document.getElementById('filtro-tipo').value = '';
+    filtrarTabela();
 }
 </script>
 {% endblock %}

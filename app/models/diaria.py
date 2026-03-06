@@ -228,6 +228,16 @@ class DiariasItinerario(db.Model):
     sei_id_quadro_orcamentario = db.Column(db.String(50), nullable=True)
     sei_quadro_orcamentario_formatado = db.Column(db.String(50), nullable=True)
 
+    # Escolha de Passagens (administração)
+    escolha_voo_ida_id = db.Column(db.BigInteger, db.ForeignKey('diarias_cotacoes_voos.id'), nullable=True)
+    escolha_voo_volta_id = db.Column(db.BigInteger, db.ForeignKey('diarias_cotacoes_voos.id'), nullable=True)
+    escolha_menor_valor = db.Column(db.Boolean, nullable=True)
+    escolha_justificativa_codigos = db.Column(db.String(500), nullable=True)
+    escolha_justificativa_outros = db.Column(db.Text, nullable=True)
+    escolha_declaracao_responsabilidade = db.Column(db.Boolean, default=False)
+    sei_id_escolha_passagens = db.Column(db.String(50), nullable=True)
+    sei_escolha_passagens_formatado = db.Column(db.String(50), nullable=True)
+
     # Timeline / Etapa atual
     etapa_atual_id = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), default=1)
 
@@ -240,6 +250,8 @@ class DiariasItinerario(db.Model):
     status = db.relationship('DiariasStatusViagem', lazy='joined')
     tipo = db.relationship('DiariasTipoItinerario', lazy='joined')
     etapa_atual = db.relationship('DiariasEtapa', foreign_keys=[etapa_atual_id], lazy='joined')
+    escolha_voo_ida = db.relationship('DiariasCotacaoVoo', foreign_keys=[escolha_voo_ida_id], lazy='joined')
+    escolha_voo_volta = db.relationship('DiariasCotacaoVoo', foreign_keys=[escolha_voo_volta_id], lazy='joined')
     itens = db.relationship('DiariasItemItinerario', backref='itinerario', lazy='dynamic',
                             cascade='all, delete-orphan')
     paradas = db.relationship('DiariasParada', backref='itinerario', lazy='dynamic',

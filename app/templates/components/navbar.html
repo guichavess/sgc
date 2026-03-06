@@ -49,6 +49,14 @@
                                     <i class="bi bi-box-arrow-right me-2"></i> Sair
                                 </a>
                             </li>
+                            {% if current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper() %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item text-primary d-flex align-items-center" href="#" id="btn-atualizar-siafe">
+                                    <i class="bi bi-arrow-repeat me-2"></i> Atualizar SIAFE
+                                </a>
+                            </li>
+                            {% endif %}
                         </ul>
                     </li>
                 </ul>

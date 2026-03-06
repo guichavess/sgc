@@ -3,9 +3,12 @@ Factory da aplicação Flask.
 Configura e inicializa todas as extensões e blueprints.
 """
 import os
+import sys
 import logging
+import subprocess
+import threading
 from logging.handlers import RotatingFileHandler
-from flask import Flask, redirect, url_for, render_template
+from flask import Flask, redirect, url_for, render_template, jsonify
 from flask_login import current_user, login_required
 
 from app.config import get_config
@@ -52,6 +55,70 @@ def create_app(config_class=None):
     @login_required
     def hub():
         return render_template('hub.html')
+
+    # Rota para atualizar SIAFE (apenas Pedro Alexandre)
+    SIAFE_SCRIPTS = [
+        {'arquivo': 'atualizar_contratos.py', 'nome': 'Contratos'},
+        {'arquivo': 'atualizar_empenho.py', 'nome': 'Empenhos'},
+        {'arquivo': 'atualizar_pd.py', 'nome': 'PDs'},
+        {'arquivo': 'atualizar_ob.py', 'nome': 'OBs'},
+        {'arquivo': 'atualizar_liquidacao.py', 'nome': 'Liquidações'},
+    ]
+    _siafe_status = {'running': False, 'atual': -1, 'scripts': []}
+
+    def _executar_scripts_siafe():
+        """Executa os 5 scripts de atualização SIAFE em background."""
+        scripts_dir = os.path.join(app.root_path, '..', 'scripts')
+        for i, s in enumerate(SIAFE_SCRIPTS):
+            _siafe_status['atual'] = i
+            _siafe_status['scripts'][i]['status'] = 'running'
+            script_path = os.path.join(scripts_dir, s['arquivo'])
+            try:
+                result = subprocess.run(
+                    [sys.executable, script_path],
+                    capture_output=True, text=True, timeout=600,
+                    cwd=scripts_dir
+                )
+                ok = result.returncode == 0
+                _siafe_status['scripts'][i]['status'] = 'ok' if ok else 'erro'
+                if not ok and result.stderr:
+                    _siafe_status['scripts'][i]['erro'] = result.stderr[-300:]
+            except subprocess.TimeoutExpired:
+                _siafe_status['scripts'][i]['status'] = 'erro'
+                _siafe_status['scripts'][i]['erro'] = 'Timeout (10min)'
+            except Exception as e:
+                _siafe_status['scripts'][i]['status'] = 'erro'
+                _siafe_status['scripts'][i]['erro'] = str(e)
+        _siafe_status['running'] = False
+        _siafe_status['atual'] = -1
+
+    @app.route('/api/atualizar-siafe', methods=['POST'])
+    @login_required
+    def atualizar_siafe():
+        if not current_user.nome or 'PEDRO ALEXANDRE' not in current_user.nome.upper():
+            return jsonify({'erro': 'Acesso negado'}), 403
+        if _siafe_status['running']:
+            return jsonify({'erro': 'Atualização já em andamento'}), 409
+        _siafe_status['running'] = True
+        _siafe_status['atual'] = -1
+        _siafe_status['scripts'] = [
+            {'nome': s['nome'], 'status': 'pendente', 'erro': None}
+            for s in SIAFE_SCRIPTS
+        ]
+        thread = threading.Thread(target=_executar_scripts_siafe, daemon=True)
+        thread.start()
+        return jsonify({'ok': True})
+
+    @app.route('/api/atualizar-siafe/status')
+    @login_required
+    def atualizar_siafe_status():
+        if not current_user.nome or 'PEDRO ALEXANDRE' not in current_user.nome.upper():
+            return jsonify({'erro': 'Acesso negado'}), 403
+        return jsonify({
+            'running': _siafe_status['running'],
+            'atual': _siafe_status['atual'],
+            'scripts': _siafe_status['scripts']
+        })
 
     # Registra filtros Jinja2
     from app.constants import normalizar_competencia

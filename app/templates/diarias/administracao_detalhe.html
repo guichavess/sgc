@@ -78,6 +78,19 @@
         font-size: 0.7rem;
         padding: 1px 6px;
     }
+    .escolha-option {
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .escolha-option:hover {
+        background-color: #f8f9fa !important;
+        border-color: #6c757d !important;
+    }
+    .escolha-option:has(input:checked) {
+        border-color: #0d6efd !important;
+        background-color: #e7f1ff !important;
+        box-shadow: 0 0 0 2px rgba(13,110,253,0.25);
+    }
 </style>
 {% endblock %}
 
@@ -527,6 +540,230 @@
             </section>
             {% endif %}
 
+            {# --- ESCOLHA DE PASSAGENS --- #}
+            {% if itinerario.tipo_itinerario in [2, 3] %}
+            {% set voos_ida_sorted = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'ida')|sort(attribute='valor')|list %}
+            {% set voos_volta_sorted = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'volta')|sort(attribute='valor')|list %}
+
+            {% if voos_ida_sorted|length > 0 and voos_volta_sorted|length > 0 %}
+            <section class="mb-4">
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-header py-2" style="background-color: #343990; color: #fff;">
+                        <h6 class="mb-0"><i class="bi bi-check2-square me-1"></i>Escolha de Passagens</h6>
+                    </div>
+                    <div class="card-body">
+
+                        {% if itinerario.escolha_voo_ida_id %}
+                        {# === MODO VISUALIZACAO (ja registrada) === #}
+                        <div class="alert alert-success d-flex align-items-center mb-3" role="alert">
+                            <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                            <div>
+                                <strong>Escolha de passagens ja registrada!</strong>
+                                {% if itinerario.sei_escolha_passagens_formatado %}
+                                <br><small>Documento SEI: {{ itinerario.sei_escolha_passagens_formatado }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;">
+                                    <i class="bi bi-arrow-right-circle me-1"></i>VOO IDA SELECIONADO
+                                </h6>
+                                {% if itinerario.escolha_voo_ida %}
+                                {% set vi = itinerario.escolha_voo_ida %}
+                                <div class="border rounded p-2 bg-light">
+                                    <strong>{{ vi.cia }} - {{ vi.voo }}</strong><br>
+                                    <small class="text-muted">{{ vi.origem }} <i class="bi bi-arrow-right"></i> {{ vi.destino }}</small><br>
+                                    <small class="text-muted">{{ vi.saida.strftime('%d/%m/%Y %H:%M') }} <i class="bi bi-arrow-right"></i> {{ vi.chegada.strftime('%d/%m/%Y %H:%M') }}</small><br>
+                                    {% if vi.nome_agencia %}<small class="text-muted">Agencia: {{ vi.nome_agencia }}</small><br>{% endif %}
+                                    <span class="fw-bold text-success">{{ vi.valor_formatado }}</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="fw-bold text-info mb-2" style="font-size: 0.8rem;">
+                                    <i class="bi bi-arrow-left-circle me-1"></i>VOO VOLTA SELECIONADO
+                                </h6>
+                                {% if itinerario.escolha_voo_volta %}
+                                {% set vv = itinerario.escolha_voo_volta %}
+                                <div class="border rounded p-2 bg-light">
+                                    <strong>{{ vv.cia }} - {{ vv.voo }}</strong><br>
+                                    <small class="text-muted">{{ vv.origem }} <i class="bi bi-arrow-right"></i> {{ vv.destino }}</small><br>
+                                    <small class="text-muted">{{ vv.saida.strftime('%d/%m/%Y %H:%M') }} <i class="bi bi-arrow-right"></i> {{ vv.chegada.strftime('%d/%m/%Y %H:%M') }}</small><br>
+                                    {% if vv.nome_agencia %}<small class="text-muted">Agencia: {{ vv.nome_agencia }}</small><br>{% endif %}
+                                    <span class="fw-bold text-success">{{ vv.valor_formatado }}</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if not itinerario.escolha_menor_valor %}
+                        <div class="mt-3 p-2 border rounded bg-warning bg-opacity-10">
+                            <small class="fw-bold text-warning">
+                                <i class="bi bi-exclamation-triangle me-1"></i>Nao foi escolhido o menor valor
+                            </small>
+                            {% if itinerario.escolha_justificativa_codigos %}
+                            <br><small class="text-muted">Justificativa(s): {{ itinerario.escolha_justificativa_codigos }}</small>
+                            {% endif %}
+                            {% if itinerario.escolha_justificativa_outros %}
+                            <br><small class="text-muted">Outros: {{ itinerario.escolha_justificativa_outros }}</small>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        {% else %}
+                        {# === MODO FORMULARIO === #}
+                        <form action="{{ url_for('diarias.escolha_passagens', id=itinerario.id) }}"
+                              method="post" id="form-escolha-passagens">
+
+                            {# --- IDA --- #}
+                            <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;">
+                                <i class="bi bi-arrow-right-circle me-1"></i>SELECIONE O VOO DE IDA
+                            </h6>
+                            <div class="mb-3">
+                                {% for c in voos_ida_sorted %}
+                                <div class="form-check border rounded p-2 ps-4 mb-2 escolha-option {{ 'bg-success bg-opacity-10 border-success' if loop.first else '' }}">
+                                    <input class="form-check-input mt-2" type="radio"
+                                           name="escolha_voo_ida" id="ida_{{ c.id }}"
+                                           value="{{ c.id }}" data-valor="{{ c.valor }}"
+                                           onchange="checkCheapestSelection()" required>
+                                    <label class="form-check-label w-100" for="ida_{{ c.id }}">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong>OPCAO {{ loop.index }}</strong>
+                                                {% if loop.first %}<span class="badge bg-success ms-1">MENOR VALOR</span>{% endif %}
+                                                <span class="ms-2 text-muted" style="font-size: 0.8rem;">
+                                                    {{ c.cia }} {{ c.voo }} |
+                                                    {{ c.origem }} <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino }}
+                                                    {% if c.tem_conexao %}
+                                                    <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino_conexao }}
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            <span class="fw-bold text-success fs-6">{{ c.valor_formatado }}</span>
+                                        </div>
+                                        <small class="text-muted">
+                                            Saida: {{ c.saida.strftime('%d/%m/%Y %H:%M') }} |
+                                            Chegada: {{ c.chegada.strftime('%d/%m/%Y %H:%M') }}
+                                            {% if c.nome_agencia %}| Agencia: {{ c.nome_agencia }}{% endif %}
+                                            {% if c.bagagem %}| {{ c.bagagem }}{% endif %}
+                                        </small>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            {# --- VOLTA --- #}
+                            <h6 class="fw-bold text-info mb-2" style="font-size: 0.8rem;">
+                                <i class="bi bi-arrow-left-circle me-1"></i>SELECIONE O VOO DE VOLTA
+                            </h6>
+                            <div class="mb-3">
+                                {% for c in voos_volta_sorted %}
+                                <div class="form-check border rounded p-2 ps-4 mb-2 escolha-option {{ 'bg-info bg-opacity-10 border-info' if loop.first else '' }}">
+                                    <input class="form-check-input mt-2" type="radio"
+                                           name="escolha_voo_volta" id="volta_{{ c.id }}"
+                                           value="{{ c.id }}" data-valor="{{ c.valor }}"
+                                           onchange="checkCheapestSelection()" required>
+                                    <label class="form-check-label w-100" for="volta_{{ c.id }}">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong>OPCAO {{ loop.index }}</strong>
+                                                {% if loop.first %}<span class="badge bg-info">MENOR VALOR</span>{% endif %}
+                                                <span class="ms-2 text-muted" style="font-size: 0.8rem;">
+                                                    {{ c.cia }} {{ c.voo }} |
+                                                    {{ c.origem }} <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino }}
+                                                    {% if c.tem_conexao %}
+                                                    <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino_conexao }}
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            <span class="fw-bold text-success fs-6">{{ c.valor_formatado }}</span>
+                                        </div>
+                                        <small class="text-muted">
+                                            Saida: {{ c.saida.strftime('%d/%m/%Y %H:%M') }} |
+                                            Chegada: {{ c.chegada.strftime('%d/%m/%Y %H:%M') }}
+                                            {% if c.nome_agencia %}| Agencia: {{ c.nome_agencia }}{% endif %}
+                                            {% if c.bagagem %}| {{ c.bagagem }}{% endif %}
+                                        </small>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            {# --- JUSTIFICATIVA (oculta por padrao) --- #}
+                            <div id="justificativa-section" style="display: none;">
+                                <div class="alert alert-warning mb-3">
+                                    <h6 class="alert-heading fw-bold" style="font-size: 0.85rem;">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>
+                                        Justificativa (passagem selecionada NAO e a de menor valor)
+                                    </h6>
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" name="justificativa_J1" id="just_J1">
+                                        <label class="form-check-label small" for="just_J1">
+                                            O valor de diarias ultrapassa o beneficio economico do menor valor
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" name="justificativa_J2" id="just_J2">
+                                        <label class="form-check-label small" for="just_J2">
+                                            Recomendacao medica com CID
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" name="justificativa_J3" id="just_J3">
+                                        <label class="form-check-label small" for="just_J3">
+                                            Disposicoes do art. 6 do Decreto n 14.891/2012
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" name="justificativa_J4" id="just_J4">
+                                        <label class="form-check-label small" for="just_J4">
+                                            Autorizacao do Governador ou dirigente maximo
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="justificativa_J5" id="just_J5"
+                                               onchange="toggleOutrosInput()">
+                                        <label class="form-check-label small" for="just_J5">
+                                            Outros
+                                        </label>
+                                    </div>
+                                    <div id="outros-input-container" style="display: none;" class="ms-4">
+                                        <input type="text" class="form-control form-control-sm"
+                                               name="justificativa_outros_texto"
+                                               id="justificativa_outros_texto"
+                                               placeholder="Descreva a justificativa...">
+                                    </div>
+                                </div>
+                            </div>
+
+                            {# --- DECLARACAO --- #}
+                            <div class="form-check mb-3 border rounded p-3 bg-light">
+                                <input class="form-check-input" type="checkbox"
+                                       name="declaracao_responsabilidade"
+                                       id="declaracao_responsabilidade" required>
+                                <label class="form-check-label small" for="declaracao_responsabilidade">
+                                    <strong>Declaro</strong> que as informacoes acima sao verdadeiras e assumo
+                                    a responsabilidade pela escolha da passagem aerea, estando ciente das
+                                    normas vigentes.
+                                </label>
+                            </div>
+
+                            <div class="d-flex justify-content-end">
+                                <button type="submit" class="btn btn-primary" id="btn-registrar-escolha">
+                                    <i class="bi bi-check2-square me-1"></i>Registrar Escolha de Passagens
+                                </button>
+                            </div>
+                        </form>
+                        {% endif %}
+
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+            {% endif %}
+
             {# --- NOTA DE RESERVA (FINANCEIRO) --- #}
             <section class="mb-4">
                 <h6 class="section-title mb-2"><i class="bi bi-journal-bookmark me-1"></i>Nota de Reserva (Financeiro)</h6>
@@ -679,6 +916,55 @@ async function adicionarCotacaoVoo() {
         btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i> Adicionar';
     }
 }
+
+// ── Escolha de Passagens ──────────────────────────────────────
+function checkCheapestSelection() {
+    var justSection = document.getElementById('justificativa-section');
+    if (!justSection) return;
+
+    var selectedIda = document.querySelector('input[name="escolha_voo_ida"]:checked');
+    var selectedVolta = document.querySelector('input[name="escolha_voo_volta"]:checked');
+
+    if (!selectedIda || !selectedVolta) {
+        justSection.style.display = 'none';
+        return;
+    }
+
+    // O primeiro radio de cada grupo e o menor valor (sorted por valor ASC)
+    var menorIda = parseFloat(document.querySelector('input[name="escolha_voo_ida"]').dataset.valor);
+    var menorVolta = parseFloat(document.querySelector('input[name="escolha_voo_volta"]').dataset.valor);
+
+    var valorIda = parseFloat(selectedIda.dataset.valor);
+    var valorVolta = parseFloat(selectedVolta.dataset.valor);
+
+    if (valorIda <= menorIda && valorVolta <= menorVolta) {
+        justSection.style.display = 'none';
+    } else {
+        justSection.style.display = 'block';
+    }
+}
+
+function toggleOutrosInput() {
+    var chk = document.getElementById('just_J5');
+    var container = document.getElementById('outros-input-container');
+    if (chk && container) {
+        container.style.display = chk.checked ? 'block' : 'none';
+    }
+}
+
+// Prevenir duplo-clique no formulario de escolha
+(function() {
+    var formEscolha = document.getElementById('form-escolha-passagens');
+    if (formEscolha) {
+        formEscolha.addEventListener('submit', function() {
+            var btn = document.getElementById('btn-registrar-escolha');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Registrando...';
+            }
+        });
+    }
+})();
 
 async function excluirCotacaoVoo(id, btnEl) {
     if (!confirm('Excluir esta cotacao?')) return;

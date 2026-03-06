@@ -25,6 +25,7 @@ ID_SERIE_DOCUMENTO_EXTERNO = "264"    # "Documento" (Aplicabilidade: E - Externo
 ID_SERIE_AUTORIZACAO_SECRETARIO = "574"  # "SEAD_AUTORIZAÇÃO_DO_SECRETÁRIO"
 ID_SERIE_QUADRO_ORCAMENTARIO = "723"   # "SEAD_QUADRO_ORCAMENTARIO"
 ID_SERIE_DESPACHO = "754"              # "SEAD_DESPACHO"
+ID_SERIE_ESCOLHA_PASSAGENS = "2977"    # "SEAD_ESCOLHA_PASSAGENS"
 ID_HIPOTESE_LEGAL_INFO_PESSOAL = "4"  # "Informação Pessoal" - Art. 31 da Lei nº 12.527/2011
 
 # Unidade destino pós-autorização (Diretoria de Planejamento e Finanças)
@@ -1397,4 +1398,173 @@ def gerar_quadro_orcamentario(token, id_procedimento, dados_quadro, sei_protocol
 
     except Exception as e:
         current_app.logger.error(f"SEI Diárias: Erro ao gerar quadro orçamentário: {e}")
+        return None
+
+
+# ── Escolha de Passagens ─────────────────────────────────────────────────────
+
+JUSTIFICATIVAS_ESCOLHA = {
+    'J1': 'o valor de diárias previstas ultrapassa o benefício econômico proporcionado pela escolha da passagem de menor valor',
+    'J2': 'recomendação médica devidamente atestada, com a indicação do respectivo Código Internacional de Doenças (CID)',
+    'J3': 'para atender as disposições das alíneas do inciso III do art. 6° do Decreto nº 14.891, de 11 de julho de 2012',
+    'J4': 'autorização do Governador ou do dirigente máximo do órgão ou entidade',
+    'J5': 'Outros:',
+}
+
+
+def gerar_escolha_passagens(token, id_procedimento, dados_escolha, sei_protocolo):
+    """
+    Gera o documento SEAD_ESCOLHA_PASSAGENS (série 2977) vinculado ao processo SEI.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        dados_escolha: dict com {
+            voos_ida: list de DiariasCotacaoVoo (todas as opções IDA),
+            voos_volta: list de DiariasCotacaoVoo (todas as opções VOLTA),
+            escolha_ida_id: int (ID do voo IDA selecionado),
+            escolha_volta_id: int (ID do voo VOLTA selecionado),
+            menor_valor: bool,
+            justificativa_codigos: list de str (ex: ['J1', 'J4']),
+            justificativa_outros_texto: str ou None,
+            declaracao: bool,
+        }
+        sei_protocolo: Protocolo formatado do processo
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para escolha de passagens.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+
+    voos_ida = dados_escolha.get('voos_ida', [])
+    voos_volta = dados_escolha.get('voos_volta', [])
+    escolha_ida_id = dados_escolha.get('escolha_ida_id')
+    escolha_volta_id = dados_escolha.get('escolha_volta_id')
+    menor_valor = dados_escolha.get('menor_valor', False)
+    justificativa_codigos = dados_escolha.get('justificativa_codigos', [])
+    justificativa_outros_texto = dados_escolha.get('justificativa_outros_texto', '')
+    declaracao = dados_escolha.get('declaracao', False)
+
+    # Monta linhas de opções IDA
+    linhas_ida = []
+    for i, voo in enumerate(voos_ida, 1):
+        marcador = '(x)' if voo.id == escolha_ida_id else '( )'
+        saida_fmt = voo.saida.strftime('%d/%m/%Y - %H:%M') if voo.saida else ''
+        rota = voo.resumo_trecho if hasattr(voo, 'resumo_trecho') else f'{voo.origem} > {voo.destino}'
+        if voo.tem_conexao:
+            rota = f'{rota} (por {voo.destino_conexao})'
+        detalhes = f'voo {voo.cia} {voo.voo}, {saida_fmt}'
+        if voo.tem_conexao:
+            detalhes += f' (por {voo.destino_conexao})'
+        linhas_ida.append(f'{marcador} OPÇÃO {i} - {detalhes}')
+
+    # Monta linhas de opções VOLTA
+    linhas_volta = []
+    for i, voo in enumerate(voos_volta, 1):
+        marcador = '(x)' if voo.id == escolha_volta_id else '( )'
+        saida_fmt = voo.saida.strftime('%d/%m/%Y - %H:%M') if voo.saida else ''
+        detalhes = f'voo {voo.cia} {voo.voo}, {saida_fmt}'
+        if voo.tem_conexao:
+            detalhes += f' (por {voo.destino_conexao})'
+        linhas_volta.append(f'{marcador} OPÇÃO {i} - {detalhes}')
+
+    texto_ida = '<br>'.join(linhas_ida) if linhas_ida else '(sem opções)'
+    texto_volta = '<br>'.join(linhas_volta) if linhas_volta else '(sem opções)'
+
+    # Menor valor
+    x_sim = 'x' if menor_valor else ' '
+    x_nao = ' ' if menor_valor else 'x'
+
+    # Justificativas
+    html_justificativas = ''
+    if not menor_valor:
+        html_justificativas = """
+        <p><b>JUSTIFICATIVA POR NÃO OPTAR PELO BILHETE DE MENOR VALOR</b>
+        <i>(Conforme art.9, § 2º da Instrução Normativa Conjunta SEADPREV/CGE nº 01/2021):</i></p>
+        """
+        for code, texto in JUSTIFICATIVAS_ESCOLHA.items():
+            marcador = '(x)' if code in justificativa_codigos else '( )'
+            if code == 'J5' and justificativa_outros_texto:
+                html_justificativas += f'<p>{marcador} {texto} {justificativa_outros_texto}</p>\n'
+            else:
+                html_justificativas += f'<p>{marcador} {texto}</p>\n'
+
+    # Declaração
+    x_decl = 'X' if declaracao else ' '
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 11pt;">
+        <p style="text-align: center;"><b>JUSTIFICATIVA DE ESCOLHA DE PASSAGENS</b></p>
+        <br>
+        <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="width: 30%; vertical-align: top;"><b>VOO ESCOLHIDO:</b></td>
+                <td>
+                    <p><b>IDA:</b> {texto_ida}</p>
+                    <p><b>VOLTA:</b> {texto_volta}</p>
+                </td>
+            </tr>
+            <tr>
+                <td><b>FOI ESCOLHIDO O BILHETE DE MENOR VALOR?</b></td>
+                <td>({x_sim}) SIM &nbsp;&nbsp;&nbsp;&nbsp; ({x_nao}) NÃO - <i>JUSTIFICAR ABAIXO</i></td>
+            </tr>
+        </table>
+        <br>
+        {html_justificativas}
+        <br>
+        <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td>
+                    <b>( {x_decl} )</b> <i>Declaro ter ciência de que alterações de percurso, data ou horário de
+                    deslocamentos serão de minha inteira responsabilidade, caso não sejam formalmente
+                    autorizadas ou determinadas pela Secretaria de Administração.
+                    (Conforme art. 6º, § único, do Decreto nº 14.891/2012).</i>
+                </td>
+            </tr>
+        </table>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_ESCOLHA_PASSAGENS,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Escolha de Passagens - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando escolha de passagens para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar escolha de passagens ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Escolha de passagens gerada - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar escolha de passagens: {e}")
         return None
