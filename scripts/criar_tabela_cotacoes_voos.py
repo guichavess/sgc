@@ -42,8 +42,8 @@ def run_migration():
     print("\n[1/1] Criando tabela diarias_cotacoes_voos...")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS diarias_cotacoes_voos (
-            id BIGINT AUTO_INCREMENT PRIMARY KEY,
-            itinerario_id BIGINT NOT NULL,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            itinerario_id INT NOT NULL,
             contrato_codigo VARCHAR(20) NULL,
             tipo_trecho VARCHAR(10) NOT NULL COMMENT 'ida ou volta',
             -- Trecho 1 (obrigatorio)
