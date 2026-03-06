@@ -1,264 +1,195 @@
 {% extends 'diarias/base_diarias.html' %}
-{% block title %}SGC - Analisar Solicitação{% endblock %}
+{% block title %}SGC - Analisar Solicitacao{% endblock %}
+
+{% block extra_css %}
+<style>
+    .info-card {
+        border: 2px solid #e0e0e0 !important;
+        border-left-width: 5px !important;
+        transition: all 0.15s ease;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        background: #fff;
+    }
+    .info-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.14);
+        transform: translateY(-1px);
+    }
+    .info-card-label {
+        font-size: 0.65rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 700;
+    }
+    .info-card-value {
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+    .section-title {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 700;
+        color: #343990;
+    }
+    .voo-rota {
+        font-size: 0.78rem;
+        color: #495057;
+    }
+    .voo-rota i {
+        color: #6c757d;
+        font-size: 0.6rem;
+        vertical-align: middle;
+    }
+    .conexao-fields {
+        display: none;
+        border-top: 1px dashed #dee2e6;
+        padding-top: 10px;
+        margin-top: 10px;
+    }
+    .conexao-fields.show { display: block; }
+    #form-cotacao-voo .form-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-bottom: 2px;
+    }
+    #form-cotacao-voo .form-control,
+    #form-cotacao-voo .form-select {
+        font-size: 0.85rem;
+    }
+    .btn-excluir-cotacao {
+        font-size: 0.7rem;
+        padding: 1px 6px;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-    <a href="{{ url_for('diarias.administracao') }}" class="btn btn-outline-secondary btn-sm mb-3">
+<div class="mb-3">
+    <a href="{{ url_for('diarias.administracao') }}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
 </div>
 
 <div class="card shadow-sm mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center py-3" style="background-color: #343990;">
-        <h5 class="text-white mb-0">
-            <i class="bi bi-clipboard-check me-2"></i>Analisar: {% if itinerario.sei_id_procedimento %}<a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank" class="text-white text-decoration-none">{{ itinerario.n_processo }} <i class="bi bi-box-arrow-up-right small"></i></a>{% else %}{{ itinerario.n_processo or 'Sem processo' }}{% endif %}
-        </h5>
-        <span class="badge bg-secondary fs-6">{{ itinerario.status.nome }}</span>
-    </div>
-    <div class="card-body">
-        {# Info resumida #}
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <table class="table table-bordered table-sm">
-                    <tr>
-                        <th class="bg-light" style="width:40%">Tipo</th>
-                        <td>
-                            <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else 'bg-warning text-dark' }}">
-                                {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
-                            </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Nº Processo</th>
-                        <td>{% if itinerario.sei_id_procedimento %}<a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank">{{ itinerario.n_processo }} <i class="bi bi-box-arrow-up-right small"></i></a>{% else %}{{ itinerario.n_processo or '-' }}{% endif %}</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Solicitante</th>
-                        <td>{{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() }}</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Qtd. Diárias</th>
-                        <td>{{ itinerario.qtd_diarias_solicitadas }}</td>
-                    </tr>
-                </table>
-            </div>
-            <div class="col-md-6">
-                <table class="table table-bordered table-sm">
-                    <tr>
-                        <th class="bg-light" style="width:40%">Data Viagem</th>
-                        <td>{{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Data Retorno</th>
-                        <td>{{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Destino</th>
-                        <td>{{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Origem</th>
-                        <td>{{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else (itinerario.estado_origem_obj.nome if itinerario.estado_origem_obj else '-') }}</td>
-                    </tr>
-                </table>
-            </div>
+    <div class="card-body p-0">
+
+        {# --- CABECALHO ESTILO PAGAMENTOS --- #}
+        <div class="bg-light p-3 border-bottom">
+            <h4 class="fw-bold text-dark mb-1">
+                Analisar:
+                {% if itinerario.sei_id_procedimento %}
+                <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}"
+                   target="_blank" class="text-decoration-none">
+                    {{ itinerario.sei_protocolo or itinerario.n_processo }}
+                    <i class="bi bi-box-arrow-up-right" style="font-size: 0.85rem;"></i>
+                </a>
+                {% else %}
+                {{ itinerario.n_processo or 'Sem processo' }}
+                {% endif %}
+            </h4>
+            <h5 class="text-muted mb-2">
+                {{ itinerario.tipo.nome if itinerario.tipo else '-' }} |
+                {{ itinerario.qtd_diarias_solicitadas }} diaria(s)
+            </h5>
+            <p class="text-secondary mb-0 small">
+                <strong>Solicitante:</strong> {{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() }} |
+                Periodo: {{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}
+                a {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }} |
+                Destino: {{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}
+            </p>
         </div>
 
-        {# Pessoas #}
-        <section class="mb-4">
-            <div class="card border-0 shadow-sm overflow-hidden">
-                <div class="card-header bg-white border-bottom py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-people me-2"></i>Pessoas</h5>
-                        <span class="badge bg-secondary">{{ itens|length }} pessoa(s)</span>
+        <div class="p-3">
+            {# --- CARDS RESUMO --- #}
+            <div class="row g-2 mb-4">
+                <div class="col-md-2">
+                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #0d6efd !important;">
+                        <span class="info-card-label d-block mb-1">Tipo</span>
+                        <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else 'bg-warning text-dark' }}">
+                            {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
+                        </span>
                     </div>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive table-rounded">
-                        <table class="table table-custom table-hover align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th class="ps-4">Nome</th>
-                                    <th>CPF / Mat.</th>
-                                    <th>Cargo (Folha)</th>
-                                    <th>Setor / Orgao</th>
-                                    <th>Vinculo</th>
-                                    <th>Cargo Diaria</th>
-                                    <th>Assessorando</th>
-                                    <th class="text-end">Valor Diaria</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in itens %}
-                                <tr>
-                                    <td class="ps-4 fw-semibold">{{ item.nome_pessoa or item.cpf_pessoa }}</td>
-                                    <td>
-                                        <small>{{ item.cpf_pessoa }}</small>
-                                        {% if item.matricula_pessoa %}<br><small class="text-muted">Mat: {{ item.matricula_pessoa }}</small>{% endif %}
-                                    </td>
-                                    <td><small>{{ item.cargo_folha or '-' }}</small></td>
-                                    <td>
-                                        {% if item.setor or item.orgao %}
-                                        <small>{{ item.orgao or '' }}{% if item.setor and item.orgao %} / {% endif %}{{ item.setor or '' }}</small>
-                                        {% else %}<span class="text-muted small">-</span>{% endif %}
-                                    </td>
-                                    <td><small>{{ item.vinculo or '-' }}</small></td>
-                                    <td>{{ item.cargo.nome if item.cargo else '-' }}</td>
-                                    <td>
-                                        {% if item.cargo_assessorado %}
-                                        <span class="badge rounded-pill bg-success">{{ item.cargo_assessorado.nome }}</span>
-                                        {% else %}<span class="text-muted small">---</span>{% endif %}
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(item.valor_cargo).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {# Paradas #}
-        {% if paradas %}
-        <section class="mb-4">
-            <div class="card border-0 shadow-sm overflow-hidden">
-                <div class="card-header bg-white border-bottom py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-geo-alt me-2"></i>Paradas</h5>
-                        <span class="badge bg-secondary">{{ paradas|length }} parada(s)</span>
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive table-rounded">
-                        <table class="table table-custom table-hover align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th class="ps-4">Municipio</th>
-                                    <th>Codigo IBGE</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for p in paradas %}
-                                <tr>
-                                    <td class="ps-4 fw-semibold">{{ p.municipio.nome if p.municipio else '-' }}</td>
-                                    <td>{{ p.municipio_id }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </section>
-        {% endif %}
-
-        {# Justificativa #}
-        {% if itinerario.justificativa %}
-        <section class="mb-4">
-            <h5 class="fw-bold"><i class="bi bi-chat-left-text me-2"></i>Justificativa</h5>
-            <div class="p-3 border rounded bg-light">
-                <p class="mb-0">{{ itinerario.justificativa.descricao }}</p>
-            </div>
-        </section>
-        {% endif %}
-
-        {# Seção de Cotações (Nacional) #}
-        {% if itinerario.tipo_itinerario == 2 %}
-        <section class="border rounded p-4 mb-4 bg-light">
-            <h5 class="fw-bold mb-3"><i class="bi bi-currency-dollar me-2"></i>Cotações</h5>
-
-            {# Formulário para adicionar cotação #}
-            <form id="form-cotacao" class="row g-3 mb-4 align-items-end">
-                <input type="hidden" name="itinerario_id" value="{{ itinerario.id }}">
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold">Agência</label>
-                    <select name="contrato_codigo" id="contrato_codigo" class="form-select" required>
-                        <option value="">Selecione</option>
-                        {% for ag in agencias %}
-                        <option value="{{ ag.codigo }}">{{ ag.nomeContratadoResumido or ag.nomeContratado }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold">Valor (R$)</label>
-                    <input type="number" name="valor" id="cotacao_valor" class="form-control" step="0.01" min="0" required>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold">Data/Hora</label>
-                    <input type="datetime-local" name="data_hora" id="cotacao_data" class="form-control" required>
                 </div>
                 <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-plus-circle me-1"></i> Cotar
-                    </button>
+                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #198754 !important;">
+                        <span class="info-card-label d-block mb-1">Diarias</span>
+                        <span class="info-card-value">{{ itinerario.qtd_diarias_solicitadas }}</span>
+                    </div>
                 </div>
-            </form>
-
-            {# Cotacoes existentes #}
-            <div id="cotacoes-lista">
-                <div class="card border-0 shadow-sm overflow-hidden">
-                    <div class="card-body p-0">
-                        <div class="table-responsive table-rounded">
-                            <table class="table table-custom table-hover align-middle mb-0" id="tabela-cotacoes">
-                                <thead>
-                                    <tr>
-                                        <th class="ps-4">Agencia</th>
-                                        <th>Valor</th>
-                                        <th>Data/Hora</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="cotacoes-tbody">
-                                    {% for c in cotacoes %}
-                                    <tr>
-                                        <td class="ps-4 fw-semibold">{{ c.nome_agencia or '-' }}</td>
-                                        <td><span class="fw-bold text-success">R$ {{ "%.2f"|format(c.valor) }}</span></td>
-                                        <td>{{ c.data_hora.strftime('%d/%m/%Y %H:%M') if c.data_hora else '-' }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
+                <div class="col-md-3">
+                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #fd7e14 !important;">
+                        <span class="info-card-label d-block mb-1">Viagem</span>
+                        <span class="info-card-value" style="font-size: 0.85rem;">
+                            {{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}
+                        </span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #dc3545 !important;">
+                        <span class="info-card-label d-block mb-1">Retorno</span>
+                        <span class="info-card-value" style="font-size: 0.85rem;">
+                            {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}
+                        </span>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #6f42c1 !important;">
+                        <span class="info-card-label d-block mb-1">Origem</span>
+                        <span class="info-card-value" style="font-size: 0.8rem;">
+                            {{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else (itinerario.estado_origem_obj.nome if itinerario.estado_origem_obj else '-') }}
+                        </span>
                     </div>
                 </div>
             </div>
-        </section>
-        {% endif %}
 
-        <hr>
-
-        {# Formulário de Aprovação #}
-        <section class="card shadow-sm p-4">
-            <h5 class="fw-bold mb-3 text-primary"><i class="bi bi-check2-square me-2"></i>Aprovação</h5>
-            <form action="{{ url_for('diarias.update_atendimento', id=itinerario.id) }}" method="post" id="form-aprovacao">
-
-                {# Selecionar cotações por pessoa (Nacional) #}
-                {% if itinerario.tipo_itinerario == 2 %}
-                <div class="card border-0 shadow-sm overflow-hidden mb-4">
+            {# --- PESSOAS --- #}
+            <section class="mb-4">
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-header bg-white border-bottom py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0 section-title"><i class="bi bi-people me-1"></i>Pessoas</h6>
+                            <span class="badge bg-secondary">{{ itens|length }}</span>
+                        </div>
+                    </div>
                     <div class="card-body p-0">
                         <div class="table-responsive table-rounded">
-                            <table class="table table-custom align-middle mb-0">
+                            <table class="table table-custom table-hover align-middle mb-0" style="font-size: 0.85rem;">
                                 <thead>
                                     <tr>
-                                        <th class="ps-4">Pessoa (CPF)</th>
-                                        <th>Cargo</th>
-                                        <th>Cotacao</th>
+                                        <th class="ps-3">Nome</th>
+                                        <th>CPF / Mat.</th>
+                                        <th>Cargo (Folha)</th>
+                                        <th>Setor / Orgao</th>
+                                        <th>Vinculo</th>
+                                        <th>Cargo Diaria</th>
+                                        <th>Assessorando</th>
+                                        <th class="text-end pe-3">Valor Diaria</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for item in itens %}
                                     <tr>
-                                        <td class="ps-4 fw-semibold">{{ item.cpf_pessoa }}</td>
+                                        <td class="ps-3 fw-semibold">{{ item.nome_pessoa or item.cpf_pessoa }}</td>
+                                        <td>
+                                            <small>{{ item.cpf_pessoa }}</small>
+                                            {% if item.matricula_pessoa %}<br><small class="text-muted">Mat: {{ item.matricula_pessoa }}</small>{% endif %}
+                                        </td>
+                                        <td><small>{{ item.cargo_folha or '-' }}</small></td>
+                                        <td>
+                                            {% if item.setor or item.orgao %}
+                                            <small>{{ item.orgao or '' }}{% if item.setor and item.orgao %} / {% endif %}{{ item.setor or '' }}</small>
+                                            {% else %}<span class="text-muted small">-</span>{% endif %}
+                                        </td>
+                                        <td><small>{{ item.vinculo or '-' }}</small></td>
                                         <td>{{ item.cargo.nome if item.cargo else '-' }}</td>
                                         <td>
-                                            <select name="cotacoes_pessoas[{{ item.id }}]" class="form-select form-select-sm cotacao-pessoa-select" required>
-                                                <option value="" disabled selected>Selecione</option>
-                                                {% for c in cotacoes %}
-                                                <option value="{{ c.id }}">{{ c.nome_agencia }} - R$ {{ "%.2f"|format(c.valor) }}</option>
-                                                {% endfor %}
-                                            </select>
+                                            {% if item.cargo_assessorado %}
+                                            <span class="badge rounded-pill bg-success">{{ item.cargo_assessorado.nome }}</span>
+                                            {% else %}<span class="text-muted small">---</span>{% endif %}
+                                        </td>
+                                        <td class="text-end pe-3">
+                                            <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(item.valor_cargo).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -267,85 +198,491 @@
                         </div>
                     </div>
                 </div>
-                {% endif %}
+            </section>
 
-                <div class="mb-3">
-                    <label for="conclusao" class="form-label fw-semibold">Conclusão <span class="text-danger">*</span></label>
-                    <select name="conclusao" id="conclusao" class="form-select" required>
-                        <option value="" disabled selected>Selecione</option>
-                        <option value="2">Aceitar Itinerário</option>
-                        <option value="3">Rejeitar Itinerário</option>
-                        <option value="4">Cancelar Processo</option>
-                    </select>
+            {# --- PARADAS --- #}
+            {% if paradas %}
+            <section class="mb-4">
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-header bg-white border-bottom py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0 section-title"><i class="bi bi-geo-alt me-1"></i>Paradas</h6>
+                            <span class="badge bg-secondary">{{ paradas|length }}</span>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive table-rounded">
+                            <table class="table table-custom table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                                <thead>
+                                    <tr>
+                                        <th class="ps-3">Municipio</th>
+                                        <th>Codigo IBGE</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for p in paradas %}
+                                    <tr>
+                                        <td class="ps-3 fw-semibold">{{ p.municipio.nome if p.municipio else '-' }}</td>
+                                        <td>{{ p.municipio_id }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
+            </section>
+            {% endif %}
 
-                <div class="d-flex justify-content-end mt-4">
-                    <button type="submit" class="btn btn-primary btn-lg">
-                        <i class="bi bi-check-circle me-2"></i>Finalizar
-                    </button>
+            {# --- JUSTIFICATIVA --- #}
+            {% if itinerario.justificativa %}
+            <section class="mb-4">
+                <h6 class="section-title mb-2"><i class="bi bi-chat-left-text me-1"></i>Justificativa</h6>
+                <div class="p-2 border rounded bg-light">
+                    <p class="mb-0 small">{{ itinerario.justificativa.descricao }}</p>
                 </div>
-            </form>
-        </section>
+            </section>
+            {% endif %}
+
+            {# ===== SECAO DE COTACOES DE VOOS (Nacional / Passagens) ===== #}
+            {% if itinerario.tipo_itinerario in [2, 3] %}
+            <section class="mb-4">
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-header bg-white border-bottom py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0 section-title"><i class="bi bi-airplane me-1"></i>Cotacoes de Voos</h6>
+                        </div>
+                    </div>
+                    <div class="card-body">
+
+                        {# --- FORMULARIO CADASTRAR COTACAO --- #}
+                        <div class="border rounded p-3 mb-4 bg-light" id="form-cotacao-voo">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold mb-0" style="font-size: 0.85rem;">
+                                    <i class="bi bi-plus-circle me-1"></i>Cadastrar Opcao de Voo
+                                </h6>
+                                {# Tabs ida/volta #}
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <input type="radio" class="btn-check" name="tipo_trecho_tab" id="tab-ida" value="ida" checked>
+                                    <label class="btn btn-outline-primary" for="tab-ida">
+                                        <i class="bi bi-arrow-right me-1"></i>Ida
+                                    </label>
+                                    <input type="radio" class="btn-check" name="tipo_trecho_tab" id="tab-volta" value="volta">
+                                    <label class="btn btn-outline-info" for="tab-volta">
+                                        <i class="bi bi-arrow-left me-1"></i>Volta
+                                    </label>
+                                </div>
+                            </div>
+
+                            <input type="hidden" id="cotacao_itinerario_id" value="{{ itinerario.id }}">
+
+                            {# Agencia #}
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label">Agencia</label>
+                                    <select id="cotacao_contrato" class="form-select form-select-sm">
+                                        <option value="">Selecione (opcional)</option>
+                                        {% for ag in agencias %}
+                                        <option value="{{ ag.codigo }}">{{ ag.nomeContratadoResumido or ag.nomeContratado }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Bagagem</label>
+                                    <select id="cotacao_bagagem" class="form-select form-select-sm">
+                                        <option value="">Selecione</option>
+                                        <option value="1 mala despachada">1 mala despachada</option>
+                                        <option value="Apenas mao">Apenas mao</option>
+                                        <option value="2 malas despachadas">2 malas despachadas</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Valor Total (R$) <span class="text-danger">*</span></label>
+                                    <input type="number" id="cotacao_valor" class="form-control form-control-sm" step="0.01" min="0" placeholder="0,00" required>
+                                </div>
+                            </div>
+
+                            {# Trecho 1 #}
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-2">
+                                    <label class="form-label">CIA <span class="text-danger">*</span></label>
+                                    <input type="text" id="cotacao_cia" class="form-control form-control-sm" placeholder="LATAM">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Voo <span class="text-danger">*</span></label>
+                                    <input type="text" id="cotacao_voo" class="form-control form-control-sm" placeholder="LA 3853">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Saida <span class="text-danger">*</span></label>
+                                    <input type="datetime-local" id="cotacao_saida" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Chegada <span class="text-danger">*</span></label>
+                                    <input type="datetime-local" id="cotacao_chegada" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Origem <span class="text-danger">*</span></label>
+                                    <input type="text" id="cotacao_origem" class="form-control form-control-sm" placeholder="Teresina">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Destino <span class="text-danger">*</span></label>
+                                    <input type="text" id="cotacao_destino" class="form-control form-control-sm" placeholder="Brasilia">
+                                </div>
+                            </div>
+
+                            {# Checkbox conexao #}
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="chk-conexao" onchange="toggleConexao()">
+                                <label class="form-check-label small" for="chk-conexao">Tem conexao (2o trecho)</label>
+                            </div>
+
+                            {# Trecho 2 (conexao) #}
+                            <div class="conexao-fields" id="conexao-fields">
+                                <small class="text-muted fw-bold d-block mb-2">Trecho 2 (Conexao)</small>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-2">
+                                        <label class="form-label">CIA</label>
+                                        <input type="text" id="cotacao_cia_cx" class="form-control form-control-sm" placeholder="LATAM">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">Voo</label>
+                                        <input type="text" id="cotacao_voo_cx" class="form-control form-control-sm" placeholder="LA 4737">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">Saida</label>
+                                        <input type="datetime-local" id="cotacao_saida_cx" class="form-control form-control-sm">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">Chegada</label>
+                                        <input type="datetime-local" id="cotacao_chegada_cx" class="form-control form-control-sm">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">Origem</label>
+                                        <input type="text" id="cotacao_origem_cx" class="form-control form-control-sm" placeholder="Brasilia">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">Destino</label>
+                                        <input type="text" id="cotacao_destino_cx" class="form-control form-control-sm" placeholder="Congonhas">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-end mt-2">
+                                <button type="button" class="btn btn-primary btn-sm" id="btn-adicionar-cotacao" onclick="adicionarCotacaoVoo()">
+                                    <i class="bi bi-plus-circle me-1"></i> Adicionar
+                                </button>
+                            </div>
+                        </div>
+
+                        {# --- TABELA DE COTACOES REGISTRADAS --- #}
+                        <div id="cotacoes-voos-container">
+                            {% set voos_ida = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'ida')|list %}
+                            {% set voos_volta = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'volta')|list %}
+
+                            {# IDA #}
+                            <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;">
+                                <i class="bi bi-arrow-right-circle me-1"></i>OPCOES DE VOOS IDA
+                                <span class="badge bg-primary ms-1" id="count-ida">{{ voos_ida|length }}</span>
+                            </h6>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.8rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Agencia</th>
+                                            <th>CIA</th>
+                                            <th>Voo</th>
+                                            <th>Saida</th>
+                                            <th>Chegada</th>
+                                            <th>Rota</th>
+                                            <th>Bagagem</th>
+                                            <th class="text-end">Total</th>
+                                            <th style="width:50px"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-ida">
+                                        {% for c in voos_ida %}
+                                        <tr data-id="{{ c.id }}">
+                                            <td>{{ c.nome_agencia or '-' }}</td>
+                                            <td class="fw-semibold">{{ c.cia }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.cia_conexao }}</small>{% endif %}</td>
+                                            <td><strong>{{ c.voo }}</strong>{% if c.tem_conexao %}<br><small class="text-muted">{{ c.voo_conexao }}</small>{% endif %}</td>
+                                            <td>{{ c.saida.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.saida_conexao.strftime('%d/%m/%Y - %H:%M') if c.saida_conexao else '' }}</small>{% endif %}</td>
+                                            <td>{{ c.chegada.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.chegada_conexao.strftime('%d/%m/%Y - %H:%M') if c.chegada_conexao else '' }}</small>{% endif %}</td>
+                                            <td class="voo-rota">
+                                                {{ c.origem }} <i class="bi bi-arrow-right"></i> {{ c.destino }}
+                                                {% if c.tem_conexao %}
+                                                <br>{{ c.origem_conexao }} <i class="bi bi-arrow-right"></i> {{ c.destino_conexao }}
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ c.bagagem or '-' }}</td>
+                                            <td class="text-end fw-bold text-success">{{ c.valor_formatado }}</td>
+                                            <td class="text-center">
+                                                <button class="btn btn-outline-danger btn-excluir-cotacao" onclick="excluirCotacaoVoo({{ c.id }}, this)">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {# VOLTA #}
+                            <h6 class="fw-bold text-info mb-2" style="font-size: 0.8rem;">
+                                <i class="bi bi-arrow-left-circle me-1"></i>OPCOES DE VOOS VOLTA
+                                <span class="badge bg-info ms-1" id="count-volta">{{ voos_volta|length }}</span>
+                            </h6>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.8rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Agencia</th>
+                                            <th>CIA</th>
+                                            <th>Voo</th>
+                                            <th>Saida</th>
+                                            <th>Chegada</th>
+                                            <th>Rota</th>
+                                            <th>Bagagem</th>
+                                            <th class="text-end">Total</th>
+                                            <th style="width:50px"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-volta">
+                                        {% for c in voos_volta %}
+                                        <tr data-id="{{ c.id }}">
+                                            <td>{{ c.nome_agencia or '-' }}</td>
+                                            <td class="fw-semibold">{{ c.cia }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.cia_conexao }}</small>{% endif %}</td>
+                                            <td><strong>{{ c.voo }}</strong>{% if c.tem_conexao %}<br><small class="text-muted">{{ c.voo_conexao }}</small>{% endif %}</td>
+                                            <td>{{ c.saida.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.saida_conexao.strftime('%d/%m/%Y - %H:%M') if c.saida_conexao else '' }}</small>{% endif %}</td>
+                                            <td>{{ c.chegada.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.chegada_conexao.strftime('%d/%m/%Y - %H:%M') if c.chegada_conexao else '' }}</small>{% endif %}</td>
+                                            <td class="voo-rota">
+                                                {{ c.origem }} <i class="bi bi-arrow-right"></i> {{ c.destino }}
+                                                {% if c.tem_conexao %}
+                                                <br>{{ c.origem_conexao }} <i class="bi bi-arrow-right"></i> {{ c.destino_conexao }}
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ c.bagagem or '-' }}</td>
+                                            <td class="text-end fw-bold text-success">{{ c.valor_formatado }}</td>
+                                            <td class="text-center">
+                                                <button class="btn btn-outline-danger btn-excluir-cotacao" onclick="excluirCotacaoVoo({{ c.id }}, this)">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+
+            <hr>
+
+            {# ===== FORMULARIO DE APROVACAO ===== #}
+            <section class="card shadow-sm p-3">
+                <h6 class="section-title mb-3"><i class="bi bi-check2-square me-1"></i>Aprovacao</h6>
+                <form action="{{ url_for('diarias.update_atendimento', id=itinerario.id) }}" method="post" id="form-aprovacao">
+
+                    {# Selecionar cotacoes por pessoa (Nacional) #}
+                    {% if itinerario.tipo_itinerario == 2 and cotacoes_voos %}
+                    <div class="card border-0 shadow-sm overflow-hidden mb-3">
+                        <div class="card-body p-0">
+                            <div class="table-responsive table-rounded">
+                                <table class="table table-custom align-middle mb-0" style="font-size: 0.85rem;">
+                                    <thead>
+                                        <tr>
+                                            <th class="ps-3">Pessoa (CPF)</th>
+                                            <th>Cargo</th>
+                                            <th>Cotacao Ida</th>
+                                            <th>Cotacao Volta</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% set voos_ida = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'ida')|list %}
+                                        {% set voos_volta = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'volta')|list %}
+                                        {% for item in itens %}
+                                        <tr>
+                                            <td class="ps-3 fw-semibold">{{ item.nome_pessoa or item.cpf_pessoa }}</td>
+                                            <td>{{ item.cargo.nome if item.cargo else '-' }}</td>
+                                            <td>
+                                                <select name="cotacoes_voos_ida[{{ item.id }}]" class="form-select form-select-sm cotacao-voo-select">
+                                                    <option value="" disabled selected>Selecione ida</option>
+                                                    {% for c in voos_ida %}
+                                                    <option value="{{ c.id }}">{{ c.cia }} {{ c.voo }} - {{ c.resumo_trecho }} - {{ c.valor_formatado }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </td>
+                                            <td>
+                                                <select name="cotacoes_voos_volta[{{ item.id }}]" class="form-select form-select-sm cotacao-voo-select">
+                                                    <option value="" disabled selected>Selecione volta</option>
+                                                    {% for c in voos_volta %}
+                                                    <option value="{{ c.id }}">{{ c.cia }} {{ c.voo }} - {{ c.resumo_trecho }} - {{ c.valor_formatado }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="conclusao" class="form-label fw-semibold small">Conclusao <span class="text-danger">*</span></label>
+                        <select name="conclusao" id="conclusao" class="form-select form-select-sm" required>
+                            <option value="" disabled selected>Selecione</option>
+                            <option value="2">Aceitar Itinerario</option>
+                            <option value="3">Rejeitar Itinerario</option>
+                            <option value="4">Cancelar Processo</option>
+                        </select>
+                    </div>
+
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle me-1"></i>Finalizar
+                        </button>
+                    </div>
+                </form>
+            </section>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // ── Formulário de cotação (AJAX) ────────────────────────────────
-    const formCotacao = document.getElementById('form-cotacao');
-    if (formCotacao) {
-        formCotacao.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            const data = Object.fromEntries(formData);
-
-            if (!data.contrato_codigo || !data.valor || !data.data_hora) {
-                alert('Preencha todos os campos.');
-                return;
-            }
-
-            try {
-                const response = await fetch('{{ url_for("diarias.api_criar_cotacao") }}', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    // Recarrega página para atualizar cotações
-                    location.reload();
-                } else {
-                    alert(result.error || 'Erro ao criar cotação.');
-                }
-            } catch(err) {
-                alert('Erro ao criar cotação.');
-            }
+function toggleConexao() {
+    var chk = document.getElementById('chk-conexao');
+    var fields = document.getElementById('conexao-fields');
+    if (chk.checked) {
+        fields.classList.add('show');
+    } else {
+        fields.classList.remove('show');
+        // Limpa campos de conexao
+        ['cotacao_cia_cx','cotacao_voo_cx','cotacao_saida_cx','cotacao_chegada_cx','cotacao_origem_cx','cotacao_destino_cx'].forEach(function(id) {
+            document.getElementById(id).value = '';
         });
     }
+}
 
-    // ── Validação aprovação ─────────────────────────────────────────
-    document.getElementById('form-aprovacao').addEventListener('submit', function(e) {
-        const conclusao = document.getElementById('conclusao').value;
-        if (conclusao === '2') {
-            // Aprovação: validar cotações (nacional)
-            const cotacoesSelects = document.querySelectorAll('.cotacao-pessoa-select');
-            let ok = true;
-            cotacoesSelects.forEach(sel => {
-                if (!sel.value) {
-                    ok = false;
-                    sel.classList.add('is-invalid');
-                } else {
-                    sel.classList.remove('is-invalid');
-                }
-            });
-            if (!ok) {
-                e.preventDefault();
-                alert('Selecione uma cotação para cada pessoa.');
-            }
+async function adicionarCotacaoVoo() {
+    var tipoTrecho = document.querySelector('input[name="tipo_trecho_tab"]:checked').value;
+    var cia = document.getElementById('cotacao_cia').value.trim();
+    var voo = document.getElementById('cotacao_voo').value.trim();
+    var saida = document.getElementById('cotacao_saida').value;
+    var chegada = document.getElementById('cotacao_chegada').value;
+    var origem = document.getElementById('cotacao_origem').value.trim();
+    var destino = document.getElementById('cotacao_destino').value.trim();
+    var valor = document.getElementById('cotacao_valor').value;
+    var bagagem = document.getElementById('cotacao_bagagem').value;
+    var contrato = document.getElementById('cotacao_contrato').value;
+
+    // Validacao
+    if (!cia || !voo || !saida || !chegada || !origem || !destino || !valor) {
+        alert('Preencha todos os campos obrigatorios (CIA, Voo, Saida, Chegada, Origem, Destino, Valor).');
+        return;
+    }
+
+    var payload = {
+        itinerario_id: document.getElementById('cotacao_itinerario_id').value,
+        tipo_trecho: tipoTrecho,
+        contrato_codigo: contrato || null,
+        cia: cia,
+        voo: voo,
+        saida: saida,
+        chegada: chegada,
+        origem: origem,
+        destino: destino,
+        valor: parseFloat(valor),
+        bagagem: bagagem || null,
+    };
+
+    // Conexao
+    if (document.getElementById('chk-conexao').checked) {
+        payload.cia_conexao = document.getElementById('cotacao_cia_cx').value.trim();
+        payload.voo_conexao = document.getElementById('cotacao_voo_cx').value.trim();
+        payload.saida_conexao = document.getElementById('cotacao_saida_cx').value;
+        payload.chegada_conexao = document.getElementById('cotacao_chegada_cx').value;
+        payload.origem_conexao = document.getElementById('cotacao_origem_cx').value.trim();
+        payload.destino_conexao = document.getElementById('cotacao_destino_cx').value.trim();
+    }
+
+    var btn = document.getElementById('btn-adicionar-cotacao');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Salvando...';
+
+    try {
+        var resp = await fetch('{{ url_for("diarias.api_criar_cotacao_voo") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        var data = await resp.json();
+
+        if (resp.ok) {
+            // Recarrega para atualizar tabelas e selects de aprovacao
+            location.reload();
+        } else {
+            alert(data.error || 'Erro ao criar cotacao.');
         }
-    });
+    } catch (err) {
+        alert('Erro de conexao.');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i> Adicionar';
+    }
+}
+
+async function excluirCotacaoVoo(id, btnEl) {
+    if (!confirm('Excluir esta cotacao?')) return;
+
+    btnEl.disabled = true;
+    try {
+        var resp = await fetch('/diarias/api/cotacoes-voos/' + id, { method: 'DELETE' });
+        var data = await resp.json();
+        if (resp.ok && data.sucesso) {
+            // Remove a linha da tabela
+            var tr = btnEl.closest('tr');
+            var tbody = tr.parentElement;
+            tr.remove();
+            // Atualiza contadores
+            var countIda = document.getElementById('tbody-ida').children.length;
+            var countVolta = document.getElementById('tbody-volta').children.length;
+            document.getElementById('count-ida').textContent = countIda;
+            document.getElementById('count-volta').textContent = countVolta;
+        } else {
+            alert(data.error || 'Erro ao excluir.');
+            btnEl.disabled = false;
+        }
+    } catch (err) {
+        alert('Erro de conexao.');
+        btnEl.disabled = false;
+    }
+}
+
+// Validacao aprovacao
+document.getElementById('form-aprovacao').addEventListener('submit', function(e) {
+    var conclusao = document.getElementById('conclusao').value;
+    if (conclusao === '2') {
+        var selects = document.querySelectorAll('.cotacao-voo-select');
+        var ok = true;
+        selects.forEach(function(sel) {
+            if (!sel.value) {
+                ok = false;
+                sel.classList.add('is-invalid');
+            } else {
+                sel.classList.remove('is-invalid');
+            }
+        });
+        if (!ok) {
+            e.preventDefault();
+            alert('Selecione cotacoes de ida e volta para cada pessoa.');
+        }
+    }
 });
 </script>
 {% endblock %}

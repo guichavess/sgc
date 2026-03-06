@@ -103,45 +103,6 @@
         </div>
         {% endif %}
 
-        {# Integração SEI #}
-        {% if itinerario.sei_protocolo %}
-        <div class="row mb-4">
-            <div class="col-md-12">
-                <h5 class="fw-bold mb-3"><i class="bi bi-link-45deg me-2"></i>Processo SEI</h5>
-                <div class="p-3 border rounded bg-light">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <small class="text-muted d-block">Protocolo</small>
-                            <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank" class="fw-bold fs-6 text-decoration-none">{{ itinerario.sei_protocolo }} <i class="bi bi-box-arrow-up-right small"></i></a>
-                        </div>
-                        <div class="col-md-4">
-                            <small class="text-muted d-block">Memorando SGA</small>
-                            <span>{{ itinerario.sei_memorando_formatado or itinerario.sei_id_memorando or '-' }}</span>
-                        </div>
-                        {% if itinerario.sei_requisicao_formatado or itinerario.sei_id_requisicao %}
-                        <div class="col-md-4">
-                            <small class="text-muted d-block">Requisição de Diárias</small>
-                            <span>{{ itinerario.sei_requisicao_formatado or itinerario.sei_id_requisicao }}</span>
-                        </div>
-                        {% endif %}
-                        {% if itinerario.sei_requisicao_passagens_formatado or itinerario.sei_id_requisicao_passagens %}
-                        <div class="col-md-4">
-                            <small class="text-muted d-block">Requisição de Passagens</small>
-                            <span><i class="bi bi-airplane me-1"></i>{{ itinerario.sei_requisicao_passagens_formatado or itinerario.sei_id_requisicao_passagens }}</span>
-                        </div>
-                        {% endif %}
-                        {% if itinerario.sei_doc_externo_formatado %}
-                        <div class="col-md-4">
-                            <small class="text-muted d-block">Documento Externo (Anexo)</small>
-                            <span><i class="bi bi-paperclip me-1"></i>{{ itinerario.sei_doc_externo_formatado }}</span>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
         {# Pessoas #}
         <section class="mb-4">
             <div class="card border-0 shadow-sm overflow-hidden">

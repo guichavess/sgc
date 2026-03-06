@@ -303,14 +303,220 @@
     </div>
 </div>
 
+{# Seção Quadro Orçamentário — visível apenas após NR inserida #}
+{% if itinerario.nota_reserva %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-3" style="background-color: #2E7D32;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-table me-2"></i>Quadro Orçamentário / Financeiro
+        </h5>
+    </div>
+    <div class="card-body">
+
+        {% if itinerario.quadro_ug %}
+            {# Quadro já inserido - modo visualização #}
+            <div class="alert alert-success d-flex align-items-center mb-3" role="alert">
+                <i class="fas fa-check-circle fs-4 me-3"></i>
+                <div>
+                    <strong>Quadro Orçamentário inserido!</strong>
+                    {% if itinerario.sei_quadro_orcamentario_formatado %}
+                        <br><small class="text-muted">Documento SEI: {{ itinerario.sei_quadro_orcamentario_formatado }}</small>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm">
+                    <tr>
+                        <th class="bg-light" style="width:50%">UG</th>
+                        <td class="text-end">{{ itinerario.quadro_ug }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Função</th>
+                        <td class="text-end">{{ itinerario.quadro_funcao or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Subfunção</th>
+                        <td class="text-end">{{ itinerario.quadro_subfuncao or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Programa</th>
+                        <td class="text-end">{{ itinerario.quadro_programa or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Plano Interno</th>
+                        <td class="text-end">{{ itinerario.quadro_plano_interno or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Fonte de Recursos</th>
+                        <td class="text-end">{{ itinerario.quadro_fonte_recursos or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Natureza da Despesa</th>
+                        <td class="text-end">{{ itinerario.quadro_natureza_despesa }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Valor Inicial da NR</th>
+                        <td class="text-end">{{ "R$ {:,.2f}".format(itinerario.quadro_valor_inicial_nr).replace(',', 'X').replace('.', ',').replace('X', '.') if itinerario.quadro_valor_inicial_nr else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Saldo da NR</th>
+                        <td class="text-end">{{ "R$ {:,.2f}".format(itinerario.quadro_saldo_nr).replace(',', 'X').replace('.', ',').replace('X', '.') if itinerario.quadro_saldo_nr else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Valor da Despesa</th>
+                        <td class="text-end fw-bold">{{ "R$ {:,.2f}".format(itinerario.quadro_valor_despesa).replace(',', 'X').replace('.', ',').replace('X', '.') if itinerario.quadro_valor_despesa else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">Saldo Atual da NR</th>
+                        <td class="text-end fw-bold">{{ "R$ {:,.2f}".format(itinerario.quadro_saldo_atual_nr).replace(',', 'X').replace('.', ',').replace('X', '.') if itinerario.quadro_saldo_atual_nr else '-' }}</td>
+                    </tr>
+                </table>
+            </div>
+
+        {% elif current_user.tem_permissao('financeiro', 'criar') %}
+            {# Formulário de inserção #}
+            <form method="POST" action="{{ url_for('financeiro.inserir_quadro_orcamentario', id=itinerario.id) }}" id="formQuadro">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="quadro_ug" class="form-label fw-bold">UG <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="quadro_ug" name="quadro_ug" placeholder="Ex: 210101" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="quadro_funcao" class="form-label fw-bold">Função</label>
+                        <input type="text" class="form-control" id="quadro_funcao" name="quadro_funcao" placeholder="Ex: 04">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="quadro_subfuncao" class="form-label fw-bold">Subfunção</label>
+                        <input type="text" class="form-control" id="quadro_subfuncao" name="quadro_subfuncao" placeholder="Ex: 122">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="quadro_programa" class="form-label fw-bold">Programa</label>
+                        <input type="text" class="form-control" id="quadro_programa" name="quadro_programa" placeholder="Ex: 0109">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="quadro_plano_interno" class="form-label fw-bold">Plano Interno</label>
+                        <input type="text" class="form-control" id="quadro_plano_interno" name="quadro_plano_interno" placeholder="Ex: 2000">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="quadro_fonte_recursos" class="form-label fw-bold">Fonte de Recursos</label>
+                        <input type="text" class="form-control" id="quadro_fonte_recursos" name="quadro_fonte_recursos" placeholder="Ex: 5000000000">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="quadro_natureza_despesa" class="form-label fw-bold">Natureza da Despesa <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="quadro_natureza_despesa" name="quadro_natureza_despesa" placeholder="Ex: 3.3.9.0.14" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="quadro_valor_despesa" class="form-label fw-bold">Valor da Despesa <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="text" class="form-control" id="quadro_valor_despesa" name="quadro_valor_despesa"
+                                   placeholder="0,00" required
+                                   value="{{ '{:,.2f}'.format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') if itinerario.valor_total else '' }}">
+                        </div>
+                        <div class="form-text">Pré-preenchido com o valor total da diária.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="quadro_valor_inicial_nr" class="form-label fw-bold">Valor Inicial da NR</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="text" class="form-control" id="quadro_valor_inicial_nr" name="quadro_valor_inicial_nr" placeholder="0,00">
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="quadro_saldo_nr" class="form-label fw-bold">Saldo da NR</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="text" class="form-control" id="quadro_saldo_nr" name="quadro_saldo_nr" placeholder="0,00">
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="quadro_saldo_atual_nr" class="form-label fw-bold">Saldo Atual da NR</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="text" class="form-control" id="quadro_saldo_atual_nr" name="quadro_saldo_atual_nr" placeholder="0,00">
+                        </div>
+                        <div class="form-text">Saldo da NR menos o Valor da Despesa.</div>
+                    </div>
+                </div>
+
+                {% if itinerario.sei_id_procedimento %}
+                <div class="alert alert-info mt-3 py-2 small">
+                    <i class="bi bi-info-circle me-1"></i>
+                    O documento SEAD_QUADRO_ORCAMENTARIO será gerado automaticamente no processo SEI.
+                </div>
+                {% endif %}
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-success fw-bold px-4" id="btnInserirQuadro">
+                        <i class="bi bi-save me-1"></i> Inserir Quadro Orçamentário
+                    </button>
+                    <a href="{{ url_for('financeiro.diarias_lista') }}" class="btn btn-outline-secondary ms-2">
+                        Cancelar
+                    </a>
+                </div>
+            </form>
+
+        {% else %}
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="fas fa-info-circle fs-4 me-3"></i>
+                <div>
+                    <strong>Aguardando inserção do Quadro Orçamentário.</strong>
+                    <p class="mb-0 mt-1 small text-muted">
+                        O Quadro Orçamentário será inserido por um usuário com permissão.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
 {% block extra_js %}
 <script>
-    // Previne duplo-clique no submit
+    // Previne duplo-clique no submit da NR
     document.getElementById('formNR')?.addEventListener('submit', function() {
         const btn = document.getElementById('btnInserirNR');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando...';
     });
+
+    // Previne duplo-clique no submit do Quadro
+    document.getElementById('formQuadro')?.addEventListener('submit', function() {
+        const btn = document.getElementById('btnInserirQuadro');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando...';
+    });
+
+    // Calcula Saldo Atual automaticamente
+    (function() {
+        const saldoNr = document.getElementById('quadro_saldo_nr');
+        const valorDespesa = document.getElementById('quadro_valor_despesa');
+        const saldoAtual = document.getElementById('quadro_saldo_atual_nr');
+
+        if (!saldoNr || !valorDespesa || !saldoAtual) return;
+
+        function parseBrl(str) {
+            if (!str) return 0;
+            return parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
+        }
+
+        function formatBrl(num) {
+            return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function calcular() {
+            const s = parseBrl(saldoNr.value);
+            const d = parseBrl(valorDespesa.value);
+            if (s > 0) {
+                saldoAtual.value = formatBrl(s - d);
+            }
+        }
+
+        saldoNr.addEventListener('input', calcular);
+        valorDespesa.addEventListener('input', calcular);
+    })();
 </script>
 {% endblock %}
 {% endblock %}

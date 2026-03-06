@@ -1,7 +1,9 @@
 """
 Rotas de Diárias - Módulo Financeiro.
-Lista solicitações de diárias despachadas para DFIN e permite inserção de Nota de Reserva.
+Lista solicitações de diárias despachadas para DFIN e permite inserção de Nota de Reserva
+e Quadro Orçamentário.
 """
+from decimal import Decimal, InvalidOperation
 from flask import render_template, request, flash, redirect, url_for, abort
 from flask_login import login_required, current_user
 
@@ -10,7 +12,9 @@ from app.models.diaria import DiariasItinerario, DiariasItemItinerario
 from app.extensions import db
 from app.constants import DiariasEtapaID
 from app.services.diaria_service import DiariaService
-from app.services.diarias_sei_integration import gerar_token_sei_admin, adicionar_documento_externo
+from app.services.diarias_sei_integration import (
+    gerar_token_sei_admin, adicionar_documento_externo, gerar_quadro_orcamentario,
+)
 from app.utils.permissions import requires_permission
 
 
@@ -160,3 +164,113 @@ def inserir_nr(id):
         flash(f'Nota de Reserva {nr_code} inserida com sucesso!', 'success')
 
     return redirect(url_for('financeiro.diarias_lista'))
+
+
+def _parse_valor_brl(valor_str):
+    """Converte string de valor BR (1.234,56 ou 1234.56) para Decimal."""
+    if not valor_str:
+        return None
+    valor_str = valor_str.strip().replace('R$', '').strip()
+    # Formato brasileiro: 1.234,56 → 1234.56
+    if ',' in valor_str:
+        valor_str = valor_str.replace('.', '').replace(',', '.')
+    try:
+        return Decimal(valor_str)
+    except (InvalidOperation, ValueError):
+        return None
+
+
+@financeiro_bp.route('/diarias/<int:id>/inserir-quadro-orcamentario', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def inserir_quadro_orcamentario(id):
+    """Insere Quadro Orçamentário em uma solicitação de diária (após NR)."""
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guard: NR deve estar inserida (etapa >= 3) e quadro ainda não preenchido
+    if not itinerario.nota_reserva:
+        flash('A Nota de Reserva deve ser inserida antes do Quadro Orçamentário.', 'warning')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    if itinerario.quadro_ug:
+        flash('O Quadro Orçamentário já foi inserido para esta solicitação.', 'warning')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    # Coleta campos do formulário
+    ug = request.form.get('quadro_ug', '').strip()
+    funcao = request.form.get('quadro_funcao', '').strip()
+    subfuncao = request.form.get('quadro_subfuncao', '').strip()
+    programa = request.form.get('quadro_programa', '').strip()
+    plano_interno = request.form.get('quadro_plano_interno', '').strip()
+    fonte_recursos = request.form.get('quadro_fonte_recursos', '').strip()
+    natureza_despesa = request.form.get('quadro_natureza_despesa', '').strip()
+    valor_inicial_nr = _parse_valor_brl(request.form.get('quadro_valor_inicial_nr', ''))
+    saldo_nr = _parse_valor_brl(request.form.get('quadro_saldo_nr', ''))
+    valor_despesa = _parse_valor_brl(request.form.get('quadro_valor_despesa', ''))
+    saldo_atual_nr = _parse_valor_brl(request.form.get('quadro_saldo_atual_nr', ''))
+
+    # Validação básica
+    if not ug or not natureza_despesa:
+        flash('UG e Natureza da Despesa são obrigatórios.', 'danger')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    if valor_despesa is None:
+        flash('Valor da Despesa é obrigatório.', 'danger')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    # Salva no banco
+    itinerario.quadro_ug = ug
+    itinerario.quadro_funcao = funcao
+    itinerario.quadro_subfuncao = subfuncao
+    itinerario.quadro_programa = programa
+    itinerario.quadro_plano_interno = plano_interno
+    itinerario.quadro_fonte_recursos = fonte_recursos
+    itinerario.quadro_natureza_despesa = natureza_despesa
+    itinerario.quadro_valor_inicial_nr = valor_inicial_nr
+    itinerario.quadro_saldo_nr = saldo_nr
+    itinerario.quadro_valor_despesa = valor_despesa
+    itinerario.quadro_saldo_atual_nr = saldo_atual_nr
+
+    # Gera documento no SEI (se processo SEI existe)
+    sei_ok = False
+    if itinerario.sei_id_procedimento:
+        try:
+            token = gerar_token_sei_admin()
+            if token:
+                retorno = gerar_quadro_orcamentario(
+                    token=token,
+                    id_procedimento=itinerario.sei_id_procedimento,
+                    dados_quadro={
+                        'ug': ug,
+                        'funcao': funcao,
+                        'subfuncao': subfuncao,
+                        'programa': programa,
+                        'plano_interno': plano_interno,
+                        'fonte_recursos': fonte_recursos,
+                        'natureza_despesa': natureza_despesa,
+                        'valor_inicial_nr': valor_inicial_nr,
+                        'saldo_nr': saldo_nr,
+                        'valor_despesa': valor_despesa,
+                        'saldo_atual_nr': saldo_atual_nr,
+                    },
+                    sei_protocolo=itinerario.sei_protocolo or itinerario.n_processo or '',
+                )
+                if retorno:
+                    itinerario.sei_id_quadro_orcamentario = str(retorno.get('IdDocumento', ''))
+                    itinerario.sei_quadro_orcamentario_formatado = retorno.get('DocumentoFormatado', '')
+                    sei_ok = True
+                else:
+                    flash('Aviso: Quadro salvo, mas a geração do documento no SEI falhou.', 'warning')
+            else:
+                flash('Aviso: Quadro salvo, mas não foi possível autenticar no SEI.', 'warning')
+        except Exception as e:
+            flash(f'Aviso: Quadro salvo, mas erro ao gerar documento no SEI: {e}', 'warning')
+
+    db.session.commit()
+
+    if sei_ok:
+        flash('Quadro Orçamentário inserido e documento gerado no SEI com sucesso!', 'success')
+    elif not itinerario.sei_id_procedimento:
+        flash('Quadro Orçamentário inserido com sucesso!', 'success')
+
+    return redirect(url_for('financeiro.diarias_detalhe', id=id))

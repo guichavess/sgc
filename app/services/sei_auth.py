@@ -1,7 +1,10 @@
 import requests
 import json
 import os
+import urllib3
 from flask import current_app
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def gerar_token_sei_admin():
     """
@@ -31,7 +34,7 @@ def gerar_token_sei_admin():
     }
 
     try:
-        response = requests.post(url_auth, json=payload, headers=headers, timeout=15)
+        response = requests.post(url_auth, json=payload, headers=headers, timeout=15, verify=False)
         
         if response.status_code == 200:
             dados = response.json()

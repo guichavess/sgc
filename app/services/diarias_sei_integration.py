@@ -23,6 +23,8 @@ ID_SERIE_REQUISICAO_PASSAGENS = "2975"  # "SEAD_REQUISIÇÃO_DE_PASSAGENS_AÉREA
 ID_SERIE_COTACAO = "272"               # "Cotação" (Aplicabilidade: E - Externo)
 ID_SERIE_DOCUMENTO_EXTERNO = "264"    # "Documento" (Aplicabilidade: E - Externo)
 ID_SERIE_AUTORIZACAO_SECRETARIO = "574"  # "SEAD_AUTORIZAÇÃO_DO_SECRETÁRIO"
+ID_SERIE_QUADRO_ORCAMENTARIO = "723"   # "SEAD_QUADRO_ORCAMENTARIO"
+ID_SERIE_DESPACHO = "754"              # "SEAD_DESPACHO"
 ID_HIPOTESE_LEGAL_INFO_PESSOAL = "4"  # "Informação Pessoal" - Art. 31 da Lei nº 12.527/2011
 
 # Unidade destino pós-autorização (Diretoria de Planejamento e Finanças)
@@ -128,9 +130,13 @@ def criar_procedimento_diarias(token, dados_servidor, tipo_itinerario_nome):
         return None
 
 
-def gerar_memorando_diarias(token, id_procedimento, dados_memorando):
+def gerar_memorando_diarias(token, id_procedimento, dados_memorando,
+                            doc_req_diarias=None, doc_req_passagens=None):
     """
-    Etapa 2: Gera o documento SEAD_MEMORANDO_SGA vinculado ao processo.
+    Gera o documento SEAD_MEMORANDO_SGA vinculado ao processo.
+
+    IMPORTANTE: Este documento deve ser criado APÓS as requisições de diárias
+    e passagens, para que seus IDs possam ser referenciados no corpo do texto.
 
     Args:
         token: Token de autenticação SEI
@@ -141,6 +147,8 @@ def gerar_memorando_diarias(token, id_procedimento, dados_memorando):
             data_retorno: date ou str 'YYYY-MM-DD',
             tipo_solicitacao_nome: nome do tipo (ex: 'Diárias + Passagens Aéreas'),
         }
+        doc_req_diarias: dict retorno do SEI da requisição de diárias (ou None)
+        doc_req_passagens: dict retorno do SEI da requisição de passagens (ou None)
 
     Returns:
         dict com resposta do SEI (contém IdDocumento, DocumentoFormatado, etc.)
@@ -160,16 +168,37 @@ def gerar_memorando_diarias(token, id_procedimento, dados_memorando):
     data_viagem_extenso = _formatar_data_extenso(data_viagem) if data_viagem else ''
     data_retorno_extenso = _formatar_data_extenso(data_retorno) if data_retorno else ''
 
-    # Monta o corpo do memorando
-    # "(id.Documentos Póstumos)" é placeholder para documentos futuros
+    # Monta referências dos documentos criados anteriormente
+    ref_diarias = ''
+    if doc_req_diarias:
+        doc_fmt = doc_req_diarias.get('DocumentoFormatado', '')
+        ref_diarias = f'<i>({doc_fmt})</i>' if doc_fmt else ''
+
+    ref_passagens = ''
+    if doc_req_passagens:
+        doc_fmt = doc_req_passagens.get('DocumentoFormatado', '')
+        ref_passagens = f'<i>({doc_fmt})</i>' if doc_fmt else ''
+
+    # Monta o texto de solicitação conforme os documentos disponíveis
+    if ref_diarias and ref_passagens:
+        texto_solicitacao = (
+            f'Solicito autorização para a concessão de diárias {ref_diarias} '
+            f'e passagens {ref_passagens}'
+        )
+    elif ref_diarias:
+        texto_solicitacao = f'Solicito autorização para a concessão de diárias {ref_diarias}'
+    elif ref_passagens:
+        texto_solicitacao = f'Solicito autorização para a concessão de passagens {ref_passagens}'
+    else:
+        texto_solicitacao = 'Solicito autorização para a concessão de diárias e passagens'
+
     conteudo_html = f"""
     <div style="font-family: Arial, sans-serif; font-size: 12pt;">
         <p><b>PARA:</b> GABINETE DO SECRETÁRIO DE ADMINISTRAÇÃO</p>
         <br>
         <p>Senhor Secretário,</p>
         <br>
-        <p>Solicito autorização para a concessão de diárias <i>(id.Documentos Póstumos)</i>
-        e passagens <i>(id.Documentos Póstumos)</i>, no período de
+        <p>{texto_solicitacao}, no período de
         <b>{data_viagem_extenso}</b> a <b>{data_retorno_extenso}</b>.</p>
         <br>
         <p>{justificativa}</p>
@@ -714,22 +743,9 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
         protocolo_formatado = proc.get('ProcedimentoFormatado', '')
         resultado['protocolo'] = protocolo_formatado
 
-        # 3. Gerar memorando
-        dados_memorando = {
-            'justificativa': justificativa_texto or '',
-            'data_viagem': dados_itinerario.get('data_viagem'),
-            'data_retorno': dados_itinerario.get('data_retorno'),
-            'tipo_solicitacao_nome': dados_itinerario.get('tipo_solicitacao_nome', 'Diárias + Passagens Aéreas'),
-        }
-
-        memo = gerar_memorando_diarias(token, id_procedimento, dados_memorando)
-        if not memo:
-            resultado['erro'] = 'Procedimento criado, mas falha ao gerar memorando no SEI.'
-            return resultado
-
-        resultado['memorando'] = memo
-
-        # 4. Gerar requisição de diárias (se aplicável)
+        # 3. Gerar requisição de diárias (se aplicável)
+        #    Criada ANTES do memorando para que o ID possa ser referenciado no texto.
+        doc_req_diarias = None
         if dados_requisicao and gerar_req_diarias:
             dados_requisicao['data_viagem'] = dados_itinerario.get('data_viagem')
             dados_requisicao['data_retorno'] = dados_itinerario.get('data_retorno')
@@ -737,13 +753,15 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
 
             req = gerar_requisicao_diarias(token, id_procedimento, dados_requisicao)
             if not req:
-                current_app.logger.warning("SEI Diárias: Requisição de diárias falhou, mas memorando OK.")
+                current_app.logger.warning("SEI Diárias: Requisição de diárias falhou.")
             else:
                 resultado['requisicao'] = req
+                doc_req_diarias = req
 
-        # 5. Gerar requisição de passagens aéreas (se aplicável)
+        # 4. Gerar requisição de passagens aéreas (se aplicável)
+        #    Criada ANTES do memorando para que o ID possa ser referenciado no texto.
+        doc_req_passagens = None
         if dados_requisicao and gerar_req_passagens:
-            # Garante que as datas estão no dados_requisicao
             dados_requisicao['data_viagem'] = dados_itinerario.get('data_viagem')
             dados_requisicao['data_retorno'] = dados_itinerario.get('data_retorno')
             print(f"[DEBUG SEI] Chamando gerar_requisicao_passagens com id_proc={id_procedimento}")
@@ -753,6 +771,27 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
                 current_app.logger.warning("SEI Diárias: Requisição de passagens falhou.")
             else:
                 resultado['requisicao_passagens'] = req_pass
+                doc_req_passagens = req_pass
+
+        # 5. Gerar memorando (POR ÚLTIMO dos 3 documentos internos)
+        #    Agora pode referenciar os IDs das requisições criadas acima.
+        dados_memorando = {
+            'justificativa': justificativa_texto or '',
+            'data_viagem': dados_itinerario.get('data_viagem'),
+            'data_retorno': dados_itinerario.get('data_retorno'),
+            'tipo_solicitacao_nome': dados_itinerario.get('tipo_solicitacao_nome', 'Diárias + Passagens Aéreas'),
+        }
+
+        memo = gerar_memorando_diarias(
+            token, id_procedimento, dados_memorando,
+            doc_req_diarias=doc_req_diarias,
+            doc_req_passagens=doc_req_passagens,
+        )
+        if not memo:
+            resultado['erro'] = 'Procedimento criado, mas falha ao gerar memorando no SEI.'
+            return resultado
+
+        resultado['memorando'] = memo
 
         # 6. Adicionar documento externo (se houver arquivo)
         if arquivo_externo and arquivo_externo.get('bytes'):
@@ -1054,6 +1093,46 @@ def verificar_autorizacao_diaria(itinerario):
                         f"SEI Diarias: Procedimento {protocolo_proc} encaminhado "
                         f"para DFIN/APOIO ({UNIDADE_DFIN_APOIO})."
                     )
+
+                    # Gera despacho DFIN automaticamente após encaminhamento
+                    try:
+                        from app.models.diaria import DiariasItemItinerario
+                        itens = DiariasItemItinerario.query.filter_by(
+                            id_itinerario=itinerario.id
+                        ).all()
+                        nomes_interessados = [
+                            item.nome_pessoa for item in itens
+                            if item.nome_pessoa
+                        ]
+
+                        despacho_ret = gerar_despacho_dfin(
+                            token=token,
+                            id_procedimento=itinerario.sei_id_procedimento,
+                            sei_protocolo=protocolo_proc,
+                            interessados=nomes_interessados,
+                        )
+                        if despacho_ret:
+                            itinerario.sei_id_despacho_dfin = str(
+                                despacho_ret.get('IdDocumento', '')
+                            )
+                            itinerario.sei_despacho_dfin_formatado = despacho_ret.get(
+                                'DocumentoFormatado', ''
+                            )
+                            from app.extensions import db
+                            db.session.commit()
+                            resultado['despacho_dfin'] = despacho_ret
+                            current_app.logger.info(
+                                f"SEI Diarias: Despacho DFIN gerado - "
+                                f"{despacho_ret.get('DocumentoFormatado', '')}"
+                            )
+                        else:
+                            current_app.logger.warning(
+                                "SEI Diarias: Falha ao gerar despacho DFIN."
+                            )
+                    except Exception as e:
+                        current_app.logger.error(
+                            f"SEI Diarias: Erro ao gerar despacho DFIN: {e}"
+                        )
                 else:
                     current_app.logger.warning(
                         f"SEI Diarias: Falha ao encaminhar procedimento: {envio['erro']}"
@@ -1079,3 +1158,243 @@ def verificar_autorizacao_diaria(itinerario):
                 break
 
     return resultado
+
+
+# ── Despacho DFIN ────────────────────────────────────────────────────────────
+
+
+def gerar_despacho_dfin(token, id_procedimento, sei_protocolo, interessados):
+    """
+    Gera o documento SEAD_DESPACHO (série 754) vinculado ao processo SEI.
+
+    Despacho padrão do DFIN/APOIO encaminhando o processo para análise
+    orçamentária, emissão de NR e quadro orçamentário.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        sei_protocolo: Protocolo formatado do processo (ex: 00002.009305/2025-23)
+        interessados: lista de nomes das pessoas do itinerário
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para despacho DFIN.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_DFIN_APOIO}/documentos"
+
+    interessados_texto = ', '.join(interessados) if interessados else '@interessados_virgula_espaco@'
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Interessados: {interessados_texto}</p>
+        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
+        <br>
+        <p style="text-align: center;"><b>DESPACHO</b></p>
+        <br>
+        <p style="text-indent: 2em; text-align: justify;">
+            Encaminho o processo à <b>Gerência de Execução Orçamentária</b> para
+            conhecimento e envio para a <b>Coordenação de Controle de Diárias e Passagens</b> para
+            verificação do quantitativo de diárias recebidas, assim como a emissão de relatório de análise
+            quanto a aprovação/reprovação da prestação de contas anterior e à <b>Gerência de
+            Planejamento e Orçamento</b> para análise da disponibilidade orçamentária, emissão de nota de
+            reserva e quadro de informação orçamentária, devendo ser observados os procedimentos
+            legais.
+        </p>
+        <br>
+        <p style="text-indent: 2em; text-align: justify;">
+            Após, remetam-se os autos à <b>SGA</b> para deliberação.
+        </p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_DESPACHO,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Despacho DFIN - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando despacho DFIN para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar despacho DFIN ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Despacho DFIN gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho DFIN: {e}")
+        return None
+
+
+# ── Quadro Orçamentário ─────────────────────────────────────────────────────
+
+
+def gerar_quadro_orcamentario(token, id_procedimento, dados_quadro, sei_protocolo):
+    """
+    Gera o documento SEAD_QUADRO_ORCAMENTARIO (série 723) vinculado ao processo SEI.
+
+    Cria uma tabela HTML no formato oficial com os dados orçamentários da diária.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        dados_quadro: dict com {
+            ug, funcao, subfuncao, programa, plano_interno,
+            fonte_recursos, natureza_despesa,
+            valor_inicial_nr, saldo_nr, valor_despesa, saldo_atual_nr
+        }
+        sei_protocolo: Protocolo formatado do processo (ex: 00002.009305/2025-23)
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para quadro orçamentário.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+
+    hoje = date.today()
+    data_formatada = f"{hoje.day} de {MESES_EXTENSO[hoje.month]} de {hoje.year}"
+
+    ug = dados_quadro.get('ug', '')
+    funcao = dados_quadro.get('funcao', '')
+    subfuncao = dados_quadro.get('subfuncao', '')
+    programa = dados_quadro.get('programa', '')
+    plano_interno = dados_quadro.get('plano_interno', '')
+    fonte_recursos = dados_quadro.get('fonte_recursos', '')
+    natureza_despesa = dados_quadro.get('natureza_despesa', '')
+    valor_inicial_nr = _formatar_valor_brl(dados_quadro.get('valor_inicial_nr'))
+    saldo_nr = _formatar_valor_brl(dados_quadro.get('saldo_nr'))
+    valor_despesa = _formatar_valor_brl(dados_quadro.get('valor_despesa'))
+    saldo_atual_nr = _formatar_valor_brl(dados_quadro.get('saldo_atual_nr'))
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p style="text-align: center;"><b>GERÊNCIA DE PLANEJAMENTO E ORÇAMENTO - GPO</b></p>
+        <br>
+        <p>Processo SEI nº <b>{sei_protocolo}</b></p>
+        <br>
+        <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="width: 50%;"><b>UG:</b></td>
+                <td style="text-align: right;">{ug}</td>
+            </tr>
+            <tr>
+                <td><b>FUNÇÃO:</b></td>
+                <td style="text-align: right;">{funcao}</td>
+            </tr>
+            <tr>
+                <td><b>SUBFUNÇÃO:</b></td>
+                <td style="text-align: right;">{subfuncao}</td>
+            </tr>
+            <tr>
+                <td><b>PROGRAMA:</b></td>
+                <td style="text-align: right;">{programa}</td>
+            </tr>
+            <tr>
+                <td><b>PLANO INTERNO:</b></td>
+                <td style="text-align: right;">{plano_interno}</td>
+            </tr>
+            <tr>
+                <td><b>FONTE DE RECURSOS:</b></td>
+                <td style="text-align: right;">{fonte_recursos}</td>
+            </tr>
+            <tr>
+                <td><b>NATUREZA DA DESPESA:</b></td>
+                <td style="text-align: right;">{natureza_despesa}</td>
+            </tr>
+            <tr>
+                <td><b>VALOR INICIAL DA NOTA DE RESERVA:</b></td>
+                <td style="text-align: right;">{valor_inicial_nr}</td>
+            </tr>
+            <tr>
+                <td><b>SALDO DA NOTA DE RESERVA:</b></td>
+                <td style="text-align: right;">{saldo_nr}</td>
+            </tr>
+            <tr>
+                <td><b>VALOR DA DESPESA:</b></td>
+                <td style="text-align: right;"><b>{valor_despesa}</b></td>
+            </tr>
+        </table>
+        <br>
+        <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="width: 50%;"><b>UG:</b></td>
+                <td style="text-align: right;">{ug}</td>
+            </tr>
+            <tr>
+                <td><b>SALDO ATUAL DA NOTA DE RESERVA:</b></td>
+                <td style="text-align: right;"><b>{saldo_atual_nr}</b></td>
+            </tr>
+        </table>
+        <br>
+        <p style="text-align: center;">Gerência de Planejamento e Orçamento da SEAD-PI</p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_QUADRO_ORCAMENTARIO,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Quadro Orçamentário - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Financeiro"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando quadro orçamentário para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar quadro orçamentário ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Quadro orçamentário gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar quadro orçamentário: {e}")
+        return None

@@ -1,7 +1,10 @@
 import requests
 import json
 import re
-import os 
+import os
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class SeiService:
     def __init__(self):
@@ -36,19 +39,19 @@ class SeiService:
         
         try:
             # Timeout aumentado para segurança
-            response = requests.get(endpoint, headers=headers, params=params, timeout=30)
-            
-            if response.status_code == 200: 
+            response = requests.get(endpoint, headers=headers, params=params, timeout=30, verify=False)
+
+            if response.status_code == 200:
                 dados = response.json()
-                
+
                 vazio = False
                 if isinstance(dados, list) and len(dados) == 0: vazio = True
                 if isinstance(dados, dict) and not dados.get('Documentos'): vazio = True
-                
+
                 if vazio:
                     # Retry com o protocolo original se o limpo falhar
                     params['protocolo_procedimento'] = protocolo_procedimento
-                    retry = requests.get(endpoint, headers=headers, params=params, timeout=30)
+                    retry = requests.get(endpoint, headers=headers, params=params, timeout=30, verify=False)
                     return retry.json()
                 
                 return dados

@@ -201,6 +201,126 @@ def api_orgaos():
     ])
 
 
+@diarias_bp.route('/api/cotacoes-voos', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def api_criar_cotacao_voo():
+    """Cria uma nova cotacao de voo detalhada."""
+    from datetime import datetime as dt
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Dados invalidos.'}), 400
+
+    campos_obrigatorios = ['itinerario_id', 'tipo_trecho', 'cia', 'voo',
+                           'saida', 'chegada', 'origem', 'destino', 'valor']
+    for campo in campos_obrigatorios:
+        if not data.get(campo):
+            return jsonify({'error': f'Campo obrigatorio ausente: {campo}'}), 400
+
+    if data['tipo_trecho'] not in ('ida', 'volta'):
+        return jsonify({'error': 'tipo_trecho deve ser "ida" ou "volta".'}), 400
+
+    try:
+        saida = dt.strptime(data['saida'], '%Y-%m-%dT%H:%M')
+        chegada = dt.strptime(data['chegada'], '%Y-%m-%dT%H:%M')
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Formato de data invalido. Use YYYY-MM-DDTHH:MM.'}), 400
+
+    saida_conexao = None
+    chegada_conexao = None
+    if data.get('voo_conexao'):
+        try:
+            if data.get('saida_conexao'):
+                saida_conexao = dt.strptime(data['saida_conexao'], '%Y-%m-%dT%H:%M')
+            if data.get('chegada_conexao'):
+                chegada_conexao = dt.strptime(data['chegada_conexao'], '%Y-%m-%dT%H:%M')
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Formato de data da conexao invalido.'}), 400
+
+    try:
+        cotacao = DiariaService.criar_cotacao_voo(
+            itinerario_id=int(data['itinerario_id']),
+            contrato_codigo=data.get('contrato_codigo') or None,
+            tipo_trecho=data['tipo_trecho'],
+            cia=data['cia'].strip(),
+            voo=data['voo'].strip(),
+            saida=saida,
+            chegada=chegada,
+            origem=data['origem'].strip(),
+            destino=data['destino'].strip(),
+            valor=data['valor'],
+            bagagem=data.get('bagagem', '').strip() or None,
+            cia_conexao=data.get('cia_conexao', '').strip() or None,
+            voo_conexao=data.get('voo_conexao', '').strip() or None,
+            saida_conexao=saida_conexao,
+            chegada_conexao=chegada_conexao,
+            origem_conexao=data.get('origem_conexao', '').strip() or None,
+            destino_conexao=data.get('destino_conexao', '').strip() or None,
+        )
+        return jsonify({
+            'id': cotacao.id,
+            'tipo_trecho': cotacao.tipo_trecho,
+            'cia': cotacao.cia,
+            'voo': cotacao.voo,
+            'rota': cotacao.resumo_trecho,
+            'valor': float(cotacao.valor),
+            'valor_formatado': cotacao.valor_formatado,
+            'nome_agencia': cotacao.nome_agencia,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@diarias_bp.route('/api/cotacoes-voos/<int:itinerario_id>')
+@login_required
+@requires_permission('diarias.aprovar')
+def api_listar_cotacoes_voos(itinerario_id):
+    """Retorna cotacoes de voos de um itinerario, agrupadas por tipo."""
+    dados = DiariaService.get_cotacoes_voos_itinerario(itinerario_id)
+
+    def serializar(c):
+        return {
+            'id': c.id,
+            'tipo_trecho': c.tipo_trecho,
+            'contrato_codigo': c.contrato_codigo,
+            'nome_agencia': c.nome_agencia,
+            'cia': c.cia,
+            'voo': c.voo,
+            'saida': c.saida.strftime('%d/%m/%Y %H:%M') if c.saida else '',
+            'chegada': c.chegada.strftime('%d/%m/%Y %H:%M') if c.chegada else '',
+            'origem': c.origem,
+            'destino': c.destino,
+            'tem_conexao': c.tem_conexao,
+            'cia_conexao': c.cia_conexao,
+            'voo_conexao': c.voo_conexao,
+            'saida_conexao': c.saida_conexao.strftime('%d/%m/%Y %H:%M') if c.saida_conexao else '',
+            'chegada_conexao': c.chegada_conexao.strftime('%d/%m/%Y %H:%M') if c.chegada_conexao else '',
+            'origem_conexao': c.origem_conexao,
+            'destino_conexao': c.destino_conexao,
+            'bagagem': c.bagagem,
+            'valor': float(c.valor),
+            'valor_formatado': c.valor_formatado,
+            'rota': c.resumo_trecho,
+        }
+
+    return jsonify({
+        'ida': [serializar(c) for c in dados['ida']],
+        'volta': [serializar(c) for c in dados['volta']],
+    })
+
+
+@diarias_bp.route('/api/cotacoes-voos/<int:cotacao_id>', methods=['DELETE'])
+@login_required
+@requires_permission('diarias.aprovar')
+def api_excluir_cotacao_voo(cotacao_id):
+    """Exclui uma cotacao de voo."""
+    ok = DiariaService.excluir_cotacao_voo(cotacao_id)
+    if ok:
+        return jsonify({'sucesso': True})
+    return jsonify({'error': 'Cotacao nao encontrada.'}), 404
+
+
 @diarias_bp.route('/api/verificar-autorizacao/<int:itinerario_id>')
 @login_required
 @requires_permission('diarias.visualizar')

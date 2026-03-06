@@ -298,6 +298,7 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
     """
     Baixa documentos da API SEI para um protocolo e popula a tabela seimovimentacao.
     Executa em thread separada com contexto Flask próprio.
+    Possui retry automático para erros transientes de SSL/rede.
     """
     with app_obj.app_context():
         start_time = time.time()
@@ -311,8 +312,30 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
             "sinal_completo": "N"
         }
 
+        max_tentativas = 3
+        resp = None
+        for tentativa in range(1, max_tentativas + 1):
+            try:
+                resp = http_requests.get(base_url, headers=headers, params=params, timeout=120, verify=False)
+                break  # sucesso, sai do loop
+            except (http_requests.exceptions.SSLError,
+                    http_requests.exceptions.ConnectionError) as e_retry:
+                if tentativa < max_tentativas:
+                    wait_secs = tentativa * 5
+                    app_obj.logger.warning(
+                        f"[Tentativa {tentativa}/{max_tentativas}] Erro SSL/conexão para {protocolo}: {e_retry}. "
+                        f"Aguardando {wait_secs}s..."
+                    )
+                    time.sleep(wait_secs)
+                else:
+                    db.session.rollback()
+                    app_obj.logger.error(
+                        f"ERRO DOWNLOAD SEI (Protocolo {protocolo}): Falhou após {max_tentativas} tentativas. Último erro: {e_retry}",
+                        exc_info=True
+                    )
+                    return (False, f"Erro SSL {protocolo}: {str(e_retry)}")
+
         try:
-            resp = http_requests.get(base_url, headers=headers, params=params, timeout=120)
             tempo_total = round(time.time() - start_time, 3)
 
             if resp.status_code == 200:

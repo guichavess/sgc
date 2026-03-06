@@ -1,6 +1,9 @@
 import requests
 import json
+import urllib3
 from datetime import datetime
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # URL Base
 BASE_URL = "https://api.sei.pi.gov.br"
@@ -69,8 +72,8 @@ def criar_procedimento_pagamento(token, unidade_id, dados_contrato, competencia)
     
     try:
         print(f"📡 Enviando requisição SEI (Criar Procedimento) para unidade {unidade_id}...")
-        response = requests.post(url, json=payload, headers=headers)
-        
+        response = requests.post(url, json=payload, headers=headers, verify=False)
+
         if response.status_code not in [200, 201]:
             print(f"❌ Erro SEI ao criar procedimento ({response.status_code}): {response.text}")
             
@@ -137,8 +140,8 @@ def gerar_documento_pagamento(token, unidade_id, id_procedimento, dados_ctx):
         # Debug opcional: verifique o que está sendo enviado
         # print(json.dumps(payload, indent=2)) 
 
-        response = requests.post(url, json=payload, headers=headers)
-        
+        response = requests.post(url, json=payload, headers=headers, verify=False)
+
         if response.status_code not in [200, 201]:
             print(f"❌ Erro SEI ao gerar documento ({response.status_code}): {response.text}")
 
@@ -184,7 +187,7 @@ def assinar_documento(token, unidade_id, dados_assinatura):
 
     try:
         print(f"✍️ Tentando assinar documento {dados_assinatura['protocolo_doc']}...")
-        response = requests.patch(url, json=payload, headers=headers)
+        response = requests.patch(url, json=payload, headers=headers, verify=False)
 
         if response.status_code == 204:
             return {"sucesso": True}
@@ -243,7 +246,7 @@ def consultar_procedimento_sei(token, protocolo):
 
     try:
         print(f"📡 Consultando procedimento SEI: {protocolo_limpo}...")
-        response = requests.get(url, params=params, headers=headers, timeout=60)
+        response = requests.get(url, params=params, headers=headers, timeout=60, verify=False)
 
         if response.status_code != 200:
             resultado['erro'] = f'Processo não encontrado no SEI (HTTP {response.status_code}).'
@@ -301,7 +304,7 @@ def listar_documentos_procedimento_sei(token, protocolo):
     }
 
     try:
-        response = requests.get(url, params=params, headers=headers, timeout=60)
+        response = requests.get(url, params=params, headers=headers, timeout=60, verify=False)
 
         if response.status_code != 200:
             return []

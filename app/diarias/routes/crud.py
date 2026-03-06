@@ -329,6 +329,7 @@ def atender(id):
         itens=dados['itens'],
         paradas=dados['paradas'],
         cotacoes=dados['cotacoes'],
+        cotacoes_voos=dados.get('cotacoes_voos', []),
         agencias=DiariaService.get_agencias(),
     )
 

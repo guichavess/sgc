@@ -204,10 +204,29 @@ class DiariasItinerario(db.Model):
     sei_id_doc_externo = db.Column(db.String(50), nullable=True)     # ID do documento externo (anexo)
     sei_doc_externo_formatado = db.Column(db.String(50), nullable=True)  # Número formatado do doc externo
 
+    # Despacho DFIN (gerado automaticamente após autorização)
+    sei_id_despacho_dfin = db.Column(db.String(50), nullable=True)
+    sei_despacho_dfin_formatado = db.Column(db.String(50), nullable=True)
+
     # Nota de Reserva (inserida pelo Financeiro)
     nota_reserva = db.Column(db.String(50), nullable=True)
     sei_id_nota_reserva = db.Column(db.String(50), nullable=True)
     sei_nota_reserva_formatado = db.Column(db.String(50), nullable=True)
+
+    # Quadro Orçamentário (inserido pelo Financeiro após NR)
+    quadro_ug = db.Column(db.String(20), nullable=True)
+    quadro_funcao = db.Column(db.String(10), nullable=True)
+    quadro_subfuncao = db.Column(db.String(10), nullable=True)
+    quadro_programa = db.Column(db.String(10), nullable=True)
+    quadro_plano_interno = db.Column(db.String(10), nullable=True)
+    quadro_fonte_recursos = db.Column(db.String(20), nullable=True)
+    quadro_natureza_despesa = db.Column(db.String(20), nullable=True)
+    quadro_valor_inicial_nr = db.Column(db.Numeric(14, 2), nullable=True)
+    quadro_saldo_nr = db.Column(db.Numeric(14, 2), nullable=True)
+    quadro_valor_despesa = db.Column(db.Numeric(14, 2), nullable=True)
+    quadro_saldo_atual_nr = db.Column(db.Numeric(14, 2), nullable=True)
+    sei_id_quadro_orcamentario = db.Column(db.String(50), nullable=True)
+    sei_quadro_orcamentario_formatado = db.Column(db.String(50), nullable=True)
 
     # Timeline / Etapa atual
     etapa_atual_id = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), default=1)
@@ -231,6 +250,10 @@ class DiariasItinerario(db.Model):
                                cascade='all, delete-orphan',
                                primaryjoin='DiariasItinerario.id == foreign(DiariasCotacao.itinerario_id)',
                                backref=db.backref('itinerario', lazy='joined'))
+    cotacoes_voos = db.relationship('DiariasCotacaoVoo', lazy='dynamic',
+                                    cascade='all, delete-orphan',
+                                    primaryjoin='DiariasItinerario.id == foreign(DiariasCotacaoVoo.itinerario_id)',
+                                    backref=db.backref('itinerario_ref', lazy='joined'))
 
     def __repr__(self):
         return f'<DiariasItinerario {self.id} - {self.usuario_gerador}>'
@@ -398,3 +421,64 @@ class DiariasCotacao(db.Model):
         if self.valor is None:
             return 'R$ 0,00'
         return f'R$ {self.valor:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+class DiariasCotacaoVoo(db.Model):
+    """Cotacoes detalhadas de voos (ida/volta, com suporte a conexao)."""
+    __tablename__ = 'diarias_cotacoes_voos'
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    itinerario_id = db.Column(db.BigInteger, nullable=False, index=True)
+    contrato_codigo = db.Column(db.String(20), nullable=True, index=True)
+    tipo_trecho = db.Column(db.String(10), nullable=False)  # 'ida' ou 'volta'
+
+    # Trecho 1 (obrigatorio)
+    cia = db.Column(db.String(50), nullable=False)
+    voo = db.Column(db.String(20), nullable=False)
+    saida = db.Column(db.DateTime, nullable=False)
+    chegada = db.Column(db.DateTime, nullable=False)
+    origem = db.Column(db.String(100), nullable=False)
+    destino = db.Column(db.String(100), nullable=False)
+
+    # Trecho 2 — conexao (opcional)
+    cia_conexao = db.Column(db.String(50), nullable=True)
+    voo_conexao = db.Column(db.String(20), nullable=True)
+    saida_conexao = db.Column(db.DateTime, nullable=True)
+    chegada_conexao = db.Column(db.DateTime, nullable=True)
+    origem_conexao = db.Column(db.String(100), nullable=True)
+    destino_conexao = db.Column(db.String(100), nullable=True)
+
+    # Dados gerais da opcao
+    bagagem = db.Column(db.String(50), nullable=True)
+    valor = db.Column(db.Numeric(10, 2), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    contrato = db.relationship('Contrato', lazy='joined',
+                               primaryjoin='foreign(DiariasCotacaoVoo.contrato_codigo) == Contrato.codigo')
+
+    def __repr__(self):
+        return f'<DiariasCotacaoVoo {self.id} - {self.tipo_trecho} {self.cia} {self.voo} R${self.valor}>'
+
+    @property
+    def nome_agencia(self):
+        if self.contrato:
+            return self.contrato.nomeContratadoResumido or self.contrato.nomeContratado or ''
+        return ''
+
+    @property
+    def valor_formatado(self):
+        if self.valor is None:
+            return 'R$ 0,00'
+        return f'R$ {self.valor:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    @property
+    def tem_conexao(self):
+        return bool(self.voo_conexao)
+
+    @property
+    def resumo_trecho(self):
+        """Retorna resumo da rota, ex: 'Teresina > Brasilia > Congonhas'."""
+        rota = f'{self.origem} > {self.destino}'
+        if self.tem_conexao and self.destino_conexao:
+            rota += f' > {self.destino_conexao}'
+        return rota

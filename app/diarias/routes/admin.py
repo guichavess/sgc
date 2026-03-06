@@ -152,7 +152,9 @@ def administracao_detalhe(id):
         itens=dados['itens'],
         paradas=dados['paradas'],
         cotacoes=dados['cotacoes'],
+        cotacoes_voos=dados.get('cotacoes_voos', []),
         timeline_data=timeline_data,
+        agencias=DiariaService.get_agencias(),
     )
 
 

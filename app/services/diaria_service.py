@@ -9,7 +9,8 @@ from sqlalchemy import func
 from app.extensions import db
 from app.models.diaria import (
     DiariasItinerario, DiariasItemItinerario, DiariasParada,
-    DiariasJustificativa, DiariasCotacao, DiariasValorCargo,
+    DiariasJustificativa, DiariasCotacao, DiariasCotacaoVoo,
+    DiariasValorCargo,
     DiariasStatusViagem, DiariasTipoSolicitacao, DiariasCargo,
     DiariasNatureza, Municipio, Estado, Setor, Orgao,
     DiariasEtapa, DiariasHistoricoMovimentacao,
@@ -312,12 +313,16 @@ class DiariaService:
         itens = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario_id).all()
         paradas = DiariasParada.query.filter_by(itinerario_id=itinerario_id).all()
         cotacoes = DiariasCotacao.query.filter_by(itinerario_id=itinerario_id).all()
+        cotacoes_voos = DiariasCotacaoVoo.query.filter_by(
+            itinerario_id=itinerario_id
+        ).order_by(DiariasCotacaoVoo.tipo_trecho, DiariasCotacaoVoo.valor).all()
 
         return {
             'itinerario': itinerario,
             'itens': itens,
             'paradas': paradas,
             'cotacoes': cotacoes,
+            'cotacoes_voos': cotacoes_voos,
         }
 
     # ── Cotações ─────────────────────────────────────────────────────────
@@ -339,6 +344,57 @@ class DiariaService:
     def get_cotacoes_itinerario(itinerario_id):
         """Retorna cotações de um itinerário."""
         return DiariasCotacao.query.filter_by(itinerario_id=itinerario_id).all()
+
+    # ── Cotações de Voos (detalhadas) ────────────────────────────────────
+
+    @staticmethod
+    def criar_cotacao_voo(itinerario_id, contrato_codigo, tipo_trecho, cia, voo,
+                          saida, chegada, origem, destino, valor, bagagem=None,
+                          cia_conexao=None, voo_conexao=None, saida_conexao=None,
+                          chegada_conexao=None, origem_conexao=None, destino_conexao=None):
+        """Cria uma cotacao de voo detalhada (com suporte a conexao)."""
+        cotacao = DiariasCotacaoVoo(
+            itinerario_id=itinerario_id,
+            contrato_codigo=contrato_codigo or None,
+            tipo_trecho=tipo_trecho,
+            cia=cia,
+            voo=voo,
+            saida=saida,
+            chegada=chegada,
+            origem=origem,
+            destino=destino,
+            bagagem=bagagem,
+            valor=Decimal(str(valor)),
+            cia_conexao=cia_conexao or None,
+            voo_conexao=voo_conexao or None,
+            saida_conexao=saida_conexao,
+            chegada_conexao=chegada_conexao,
+            origem_conexao=origem_conexao or None,
+            destino_conexao=destino_conexao or None,
+        )
+        db.session.add(cotacao)
+        db.session.commit()
+        return cotacao
+
+    @staticmethod
+    def get_cotacoes_voos_itinerario(itinerario_id):
+        """Retorna cotacoes de voos agrupadas por tipo_trecho."""
+        todas = DiariasCotacaoVoo.query.filter_by(
+            itinerario_id=itinerario_id
+        ).order_by(DiariasCotacaoVoo.tipo_trecho, DiariasCotacaoVoo.valor).all()
+        ida = [c for c in todas if c.tipo_trecho == 'ida']
+        volta = [c for c in todas if c.tipo_trecho == 'volta']
+        return {'ida': ida, 'volta': volta, 'todas': todas}
+
+    @staticmethod
+    def excluir_cotacao_voo(cotacao_id):
+        """Exclui uma cotacao de voo pelo ID."""
+        cotacao = DiariasCotacaoVoo.query.get(cotacao_id)
+        if not cotacao:
+            return False
+        db.session.delete(cotacao)
+        db.session.commit()
+        return True
 
     # ── Timeline / Movimentações ──────────────────────────────────────────
 
