@@ -10,16 +10,10 @@
     <li>
         <a class="sidebar-link {{ 'active' if request.endpoint == 'financeiro.orcamentaria' }}"
            href="{{ url_for('financeiro.orcamentaria') }}">
-            <i class="bi bi-wallet2"></i> Gerenciamento Orçamentário
+            <i class="bi bi-wallet2"></i> Orçamento
         </a>
     </li>
     {% endif %}
-    <li>
-        <a class="sidebar-link {{ 'active' if request.endpoint == 'financeiro.dashboard' }}"
-           href="{{ url_for('financeiro.dashboard') }}">
-            <i class="bi bi-bar-chart-line"></i> Saldos
-        </a>
-    </li>
     <li>
         <a class="sidebar-link {{ 'active' if request.endpoint == 'financeiro.pendencias_ne' }}"
            href="{{ url_for('financeiro.pendencias_ne') }}">

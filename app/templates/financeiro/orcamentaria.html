@@ -187,6 +187,10 @@
     .loading-row td { text-align: center; padding: 10px; color: #888; }
     .loading-row .spinner-border { width: 1rem; height: 1rem; border-width: 2px; }
 
+    /* ===== Card de filtros — overflow visível para dropdowns ===== */
+    .card-filtros { overflow: visible !important; }
+    .card-filtros .card-body { overflow: visible !important; }
+
     /* ===== Filter Dropdown com pesquisa + checkbox ===== */
     .filter-dropdown { position: relative; }
     .filter-dropdown-toggle {
@@ -206,6 +210,7 @@
     .filter-dropdown-menu {
         border: 1px solid #dee2e6;
         border-radius: 8px;
+        z-index: 1050;
     }
     .filter-dropdown-menu .filter-search {
         border-radius: 6px;
@@ -248,24 +253,24 @@
 </div>
 
 {# Filtros #}
-<div class="card border-0 shadow-sm mb-3">
+<div class="card border-0 shadow-sm mb-3 card-filtros">
     <div class="card-body py-3 px-3">
         <form method="get" id="formFiltrosOrc">
-            <div class="row g-3 align-items-start">
+            <div class="row g-2 align-items-end">
                 {# Ano - select simples #}
-                <div class="col-md-2 col-lg-1">
+                <div class="col-6 col-md-2 col-lg-1">
                     <label class="form-label fw-semibold small text-muted mb-1">Ano</label>
-                    <select name="ano" class="form-select form-select-sm">
+                    <select name="ano" id="filtroAno" class="form-select form-select-sm">
                         {% for a in [2023, 2024, 2025, 2026] %}
                         <option value="{{ a }}" {{ 'selected' if a == ano }}>{{ a }}</option>
                         {% endfor %}
                     </select>
                 </div>
 
-                {# Mês - dropdown com pesquisa e checkbox #}
-                <div class="col-md-3 col-lg-2">
+                {# Mês #}
+                <div class="col-6 col-md-2 col-lg-2">
                     <label class="form-label fw-semibold small text-muted mb-1">Mês</label>
-                    <div class="filter-dropdown" data-name="mes">
+                    <div class="filter-dropdown" data-name="mes" data-default="Todos">
                         <button type="button" class="form-select form-select-sm text-start filter-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                             <span class="filter-placeholder">Todos</span>
                         </button>
@@ -283,10 +288,31 @@
                     </div>
                 </div>
 
-                {# Natureza - dropdown com pesquisa e checkbox #}
-                <div class="col-md-4 col-lg-3">
+                {# Ação #}
+                <div class="col-12 col-md-3 col-lg-2">
+                    <label class="form-label fw-semibold small text-muted mb-1">Ação</label>
+                    <div class="filter-dropdown" data-name="acao" data-default="Todas">
+                        <button type="button" class="form-select form-select-sm text-start filter-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                            <span class="filter-placeholder">Todas</span>
+                        </button>
+                        <div class="dropdown-menu filter-dropdown-menu shadow-sm p-2" style="min-width: 320px;">
+                            <input type="text" class="form-control form-control-sm mb-2 filter-search" placeholder="Pesquisar ação...">
+                            <div class="filter-options" style="max-height: 240px; overflow-y: auto;">
+                                {% for a in acoes_disponiveis %}
+                                <label class="dropdown-item d-flex align-items-center gap-2 py-1 px-2 rounded filter-option" data-value="{{ a.codigo }}">
+                                    <input type="checkbox" class="form-check-input m-0 filter-check" name="acao" value="{{ a.codigo }}" {{ 'checked' if a.codigo|string == acao_filtro }}>
+                                    <span class="small text-truncate">{{ a.codigo }} - {{ a.descricao }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# Natureza #}
+                <div class="col-12 col-md-3 col-lg-2">
                     <label class="form-label fw-semibold small text-muted mb-1">Natureza</label>
-                    <div class="filter-dropdown" data-name="natureza">
+                    <div class="filter-dropdown" data-name="natureza" data-default="Todas">
                         <button type="button" class="form-select form-select-sm text-start filter-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                             <span class="filter-placeholder">Todas</span>
                         </button>
@@ -304,10 +330,10 @@
                     </div>
                 </div>
 
-                {# Fonte - dropdown com pesquisa e checkbox #}
-                <div class="col-md-3 col-lg-3">
+                {# Fonte #}
+                <div class="col-12 col-md-3 col-lg-2">
                     <label class="form-label fw-semibold small text-muted mb-1">Fonte</label>
-                    <div class="filter-dropdown" data-name="fonte">
+                    <div class="filter-dropdown" data-name="fonte" data-default="Todas">
                         <button type="button" class="form-select form-select-sm text-start filter-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                             <span class="filter-placeholder">Todas</span>
                         </button>
@@ -326,7 +352,7 @@
                 </div>
 
                 {# Botões #}
-                <div class="col-md-12 col-lg-3 d-flex align-items-end gap-2">
+                <div class="col-auto d-flex gap-2">
                     <button type="submit" class="btn btn-sm btn-dark px-3">
                         <i class="bi bi-funnel-fill me-1"></i>Filtrar
                     </button>
@@ -455,8 +481,6 @@
                         <th class="text-end">Liquidado</th>
                         <th class="text-end">PD</th>
                         <th class="text-end">Pago</th>
-                        <th class="text-end">Análise</th>
-                        <th class="text-end" style="min-width: 120px; white-space: nowrap;">% Exec</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -509,22 +533,6 @@
                                 </div>
                             </div>
                         </td>
-                        <td class="text-end">{{ format_brl(item.analise) }}</td>
-                        <td class="text-end">
-                            <div class="pct-bar-wrap">
-                                <span>{{ item.pct_exec }}%</span>
-                                <div class="pct-bar">
-                                    {% set pct_val = item.pct_exec|float %}
-                                    {% if pct_val >= 70 %}
-                                    <div class="pct-bar-fill pct-green" style="width: {{ [pct_val, 100]|min }}%"></div>
-                                    {% elif pct_val >= 40 %}
-                                    <div class="pct-bar-fill pct-yellow" style="width: {{ [pct_val, 100]|min }}%"></div>
-                                    {% else %}
-                                    <div class="pct-bar-fill pct-red" style="width: {{ [pct_val, 100]|min }}%"></div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -567,15 +575,6 @@
                                 <small>{{ acoes.totais.pct_pago }}%</small>
                                 <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
                                     <div class="pct-bar-fill" style="width: {{ [acoes.totais.pct_pago|float, 100]|min }}%; background: #fff;"></div>
-                                </div>
-                            </div>
-                        </td>
-                        <td class="text-end">{{ format_brl(acoes.totais.analise) }}</td>
-                        <td class="text-end">
-                            <div class="pct-bar-wrap">
-                                <span>{{ acoes.totais.pct_exec }}%</span>
-                                <div class="pct-bar" style="background: rgba(255,255,255,0.2);">
-                                    <div class="pct-bar-fill" style="width: {{ [acoes.totais.pct_exec|float, 100]|min }}%; background: #fff;"></div>
                                 </div>
                             </div>
                         </td>
@@ -649,7 +648,7 @@ function toggleAcao(rowEl, acao) {
     if (!data.length) {
         const empty = document.createElement('tr');
         empty.className = `row-natureza child-acao-${acao}`;
-        empty.innerHTML = `<td colspan="10" class="text-center text-muted py-2" style="padding-left:36px;">Nenhuma natureza encontrada</td>`;
+        empty.innerHTML = `<td colspan="8" class="text-center text-muted py-2" style="padding-left:36px;">Nenhuma natureza encontrada</td>`;
         rowEl.after(empty);
         return;
     }
@@ -669,8 +668,6 @@ function toggleAcao(rowEl, acao) {
             <td class="text-end">${formatBRL(nat.liquidado)}${miniPctHtml(nat.pct_liq)}</td>
             <td class="text-end">${formatBRL(nat.pd)}${miniPctHtml(nat.pct_pd)}</td>
             <td class="text-end">${formatBRL(nat.pago)}${miniPctHtml(nat.pct_pago)}</td>
-            <td class="text-end">${formatBRL(nat.analise)}</td>
-            <td class="text-end">${pctBarHtml(nat.pct_exec)}</td>
         `;
         rowEl.after(tr);
     });
@@ -693,7 +690,7 @@ function toggleNatureza(rowEl, acao, natureza) {
 
     const loadingRow = document.createElement('tr');
     loadingRow.className = `loading-row child-nat-${acao}-${natureza}`;
-    loadingRow.innerHTML = `<td colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Carregando contratos...</td>`;
+    loadingRow.innerHTML = `<td colspan="8"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Carregando contratos...</td>`;
     rowEl.after(loadingRow);
 
     fetch(`/financeiro/api/orcamentaria/contratos/${acao}/${natureza}?${buildQueryParams()}`)
@@ -704,7 +701,7 @@ function toggleNatureza(rowEl, acao, natureza) {
             if (!data.length) {
                 const empty = document.createElement('tr');
                 empty.className = `row-contrato child-nat-${acao}-${natureza}`;
-                empty.innerHTML = `<td colspan="10" class="text-center text-muted py-2" style="padding-left:56px;">Nenhum contrato encontrado</td>`;
+                empty.innerHTML = `<td colspan="8" class="text-center text-muted py-2" style="padding-left:56px;">Nenhum contrato encontrado</td>`;
                 rowEl.after(empty);
                 return;
             }
@@ -725,14 +722,12 @@ function toggleNatureza(rowEl, acao, natureza) {
                     <td class="text-end">${formatBRL(c.liquidado)}</td>
                     <td class="text-end">${formatBRL(c.pd)}</td>
                     <td class="text-end">${formatBRL(c.pago)}</td>
-                    <td class="text-end"><span class="badge bg-light text-dark border" style="font-size:0.65rem;">${c.qtdReservas} NR</span></td>
-                    <td class="text-end"></td>
                 `;
                 rowEl.after(tr);
             });
         })
         .catch(() => {
-            loadingRow.innerHTML = `<td colspan="10" class="text-center text-danger py-2">Erro ao carregar contratos</td>`;
+            loadingRow.innerHTML = `<td colspan="8" class="text-center text-danger py-2">Erro ao carregar contratos</td>`;
         });
 }
 
@@ -785,6 +780,83 @@ document.querySelectorAll('.filter-dropdown').forEach(dropdown => {
 
     // Init label on page load
     updateToggleLabel();
+});
+
+// ========================
+// Ano change → recarrega opções dos filtros via AJAX
+// ========================
+document.getElementById('filtroAno').addEventListener('change', function() {
+    const ano = this.value;
+    fetch(`/financeiro/api/orcamentaria/filtros/${ano}`)
+        .then(r => r.json())
+        .then(data => {
+            // Rebuild each filter dropdown
+            const NOMES_MESES = {{ nomes_meses|tojson }};
+
+            const configs = {
+                mes: { items: data.meses, labelFn: m => m.label, valueFn: m => m.valor },
+                acao: { items: data.acoes, labelFn: a => `${a.codigo} - ${a.descricao}`, valueFn: a => a.codigo },
+                natureza: { items: data.naturezas, labelFn: n => `${n.codigo} - ${n.descricao}`, valueFn: n => n.codigo },
+                fonte: { items: data.fontes, labelFn: f => `${f.codigo} - ${f.descricao}`, valueFn: f => f.codigo },
+            };
+
+            Object.entries(configs).forEach(([name, cfg]) => {
+                const dropdown = document.querySelector(`.filter-dropdown[data-name="${name}"]`);
+                if (!dropdown) return;
+                const optionsContainer = dropdown.querySelector('.filter-options');
+                const toggle = dropdown.querySelector('.filter-dropdown-toggle');
+                const placeholder = toggle.querySelector('.filter-placeholder');
+                const defaultText = dropdown.dataset.default || 'Todos';
+
+                // Clear and rebuild options
+                optionsContainer.innerHTML = '';
+                cfg.items.forEach(item => {
+                    const val = cfg.valueFn(item);
+                    const label = cfg.labelFn(item);
+                    const lbl = document.createElement('label');
+                    lbl.className = 'dropdown-item d-flex align-items-center gap-2 py-1 px-2 rounded filter-option';
+                    lbl.dataset.value = val;
+                    lbl.innerHTML = `<input type="checkbox" class="form-check-input m-0 filter-check" name="${name}" value="${val}"><span class="small text-truncate">${label}</span>`;
+                    optionsContainer.appendChild(lbl);
+
+                    // Wire checkbox change
+                    lbl.querySelector('.filter-check').addEventListener('change', () => {
+                        const selected = optionsContainer.querySelectorAll('.filter-check:checked');
+                        if (selected.length === 0) {
+                            placeholder.textContent = defaultText;
+                            toggle.classList.remove('has-selection');
+                        } else if (selected.length === 1) {
+                            const txt = selected[0].closest('.filter-option').querySelector('span').textContent.trim();
+                            placeholder.innerHTML = txt.length > 25 ? txt.substring(0, 25) + '...' : txt;
+                            toggle.classList.add('has-selection');
+                        } else {
+                            placeholder.innerHTML = selected.length + ' selecionados';
+                            toggle.classList.add('has-selection');
+                        }
+                    });
+                });
+
+                // Reset label
+                placeholder.textContent = defaultText;
+                toggle.classList.remove('has-selection');
+
+                // Rewire search
+                const searchInput = dropdown.querySelector('.filter-search');
+                if (searchInput) {
+                    searchInput.value = '';
+                    const newSearch = searchInput.cloneNode(true);
+                    searchInput.parentNode.replaceChild(newSearch, searchInput);
+                    newSearch.addEventListener('input', function() {
+                        const term = this.value.toLowerCase();
+                        optionsContainer.querySelectorAll('.filter-option').forEach(opt => {
+                            const text = opt.querySelector('span').textContent.toLowerCase();
+                            opt.style.display = text.includes(term) ? '' : 'none';
+                        });
+                    });
+                }
+            });
+        })
+        .catch(err => console.error('Erro ao carregar filtros:', err));
 });
 </script>
 {% endblock %}

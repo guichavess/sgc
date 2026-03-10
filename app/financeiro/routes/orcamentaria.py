@@ -81,20 +81,22 @@ def orcamentaria():
     mes = request.args.get('mes', type=int)
     fonte_filtro = request.args.get('fonte', '')
     natureza_filtro = request.args.get('natureza', '')
+    acao_filtro = request.args.get('acao', '')
 
-    # --- KPI Cards: totais gerais ---
-    kpi = _calcular_kpis(ano, mes, fonte_filtro)
+    # --- KPI Cards: totais gerais (respeitam todos os filtros) ---
+    kpi = _calcular_kpis(ano, mes, fonte_filtro, natureza_filtro, acao_filtro)
 
     # --- Tabela: Execução por Ação ---
-    acoes = _calcular_acoes(ano, mes, fonte_filtro, natureza_filtro)
+    acoes = _calcular_acoes(ano, mes, fonte_filtro, natureza_filtro, acao_filtro)
 
     # --- Pré-carrega naturezas de todas as ações (evita AJAX lento) ---
-    naturezas_por_acao = _calcular_todas_naturezas(ano, mes, fonte_filtro, natureza_filtro)
+    naturezas_por_acao = _calcular_todas_naturezas(ano, mes, fonte_filtro, natureza_filtro, acao_filtro)
 
     # --- Listas para filtros ---
     fontes = _listar_fontes(ano)
     meses_disponiveis = _listar_meses(ano)
     naturezas_disponiveis = _listar_naturezas(ano)
+    acoes_disponiveis = _listar_acoes(ano)
 
     return render_template(
         'financeiro/orcamentaria.html',
@@ -102,21 +104,25 @@ def orcamentaria():
         mes=mes,
         fonte_filtro=fonte_filtro,
         natureza_filtro=natureza_filtro,
+        acao_filtro=acao_filtro,
         kpi=kpi,
         acoes=acoes,
         naturezas_json=naturezas_por_acao,
         fontes=fontes,
         meses_disponiveis=meses_disponiveis,
         naturezas_disponiveis=naturezas_disponiveis,
+        acoes_disponiveis=acoes_disponiveis,
         nomes_meses=NOMES_MESES,
         format_brl=_format_brl,
     )
 
 
-def _calcular_kpis(ano, mes, fonte):
+def _calcular_kpis(ano, mes, fonte, natureza='', acao=''):
     """Calcula valores dos KPI cards."""
     filtro_mes = "AND mes = :mes" if mes else ""
     filtro_fonte = ""
+    filtro_natureza = ""
+    filtro_acao = ""
     params = {"ano": ano}
     if mes:
         params["mes"] = mes
@@ -125,6 +131,12 @@ def _calcular_kpis(ano, mes, fonte):
     if fonte:
         filtro_fonte = "AND codFonte = :fonte"
         params["fonte"] = fonte
+    if natureza:
+        filtro_natureza = "AND codNatureza = :natureza"
+        params["natureza"] = natureza
+    if acao:
+        filtro_acao = "AND codAcao = :acao"
+        params["acao"] = acao
 
     # Range de datas para usar índices (evita YEAR() que impede index seek)
     data_inicio = f"{ano}-01-01"
@@ -134,7 +146,7 @@ def _calcular_kpis(ano, mes, fonte):
     # Crédito Disponível (LOA)
     sql_credito = text(f"""
         SELECT COALESCE(SUM(saldo), 0) FROM loa_2026
-        WHERE ano = :ano AND id = :conta {filtro_mes} {filtro_fonte}
+        WHERE ano = :ano AND id = :conta {filtro_mes} {filtro_fonte} {filtro_natureza} {filtro_acao}
     """)
     credito_disp = db.session.execute(
         sql_credito, {**params, "conta": CONTA_CREDITO_DISPONIVEL}
@@ -191,7 +203,7 @@ def _calcular_kpis(ano, mes, fonte):
     # Dotação Atualizada total (para % execução)
     sql_dotacao = text(f"""
         SELECT id, COALESCE(SUM(saldo), 0) as total FROM loa_2026
-        WHERE ano = :ano {filtro_mes} {filtro_fonte}
+        WHERE ano = :ano {filtro_mes} {filtro_fonte} {filtro_natureza} {filtro_acao}
         GROUP BY id
     """)
     rows = db.session.execute(sql_dotacao, params).fetchall()
@@ -221,11 +233,12 @@ def _calcular_kpis(ano, mes, fonte):
     }
 
 
-def _calcular_acoes(ano, mes, fonte, natureza=''):
+def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
     """Calcula dados da tabela Execução por Ação."""
     filtro_mes = "AND mes = :mes" if mes else ""
     filtro_fonte = ""
     filtro_natureza = ""
+    filtro_acao = ""
     params = {"ano": ano}
     if mes:
         params["mes"] = mes
@@ -235,6 +248,9 @@ def _calcular_acoes(ano, mes, fonte, natureza=''):
     if natureza:
         filtro_natureza = "AND codNatureza = :natureza"
         params["natureza"] = natureza
+    if acao:
+        filtro_acao = "AND codAcao = :acao"
+        params["acao"] = acao
 
     sql = text(f"""
         SELECT
@@ -242,7 +258,7 @@ def _calcular_acoes(ano, mes, fonte, natureza=''):
             id as conta,
             COALESCE(SUM(saldo), 0) as total
         FROM loa_2026
-        WHERE ano = :ano {filtro_mes} {filtro_fonte} {filtro_natureza}
+        WHERE ano = :ano {filtro_mes} {filtro_fonte} {filtro_natureza} {filtro_acao}
         GROUP BY acao, conta
         ORDER BY acao
     """)
@@ -409,12 +425,13 @@ def _carregar_descricoes():
     return nat_map, fonte_map
 
 
-def _calcular_todas_naturezas(ano, mes, fonte, natureza=''):
+def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
     """Pré-carrega naturezas de TODAS as ações em uma única query.
     Retorna dict {acao: [{natureza, desc_natureza, dot_inicial, ...}]} para embutir como JSON."""
     filtro_mes = "AND mes = :mes" if mes else ""
     filtro_fonte = ""
     filtro_natureza = ""
+    filtro_acao = ""
     params = {"ano": ano}
     if mes:
         params["mes"] = mes
@@ -424,12 +441,15 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza=''):
     if natureza:
         filtro_natureza = "AND codNatureza = :natureza"
         params["natureza"] = natureza
+    if acao:
+        filtro_acao = "AND codAcao = :acao"
+        params["acao"] = acao
 
     sql = text(f"""
         SELECT codAcao, codNatureza, id as conta, COALESCE(SUM(saldo), 0) as total
         FROM loa_2026
         WHERE ano = :ano AND codNatureza IS NOT NULL
-          {filtro_mes} {filtro_fonte} {filtro_natureza}
+          {filtro_mes} {filtro_fonte} {filtro_natureza} {filtro_acao}
         GROUP BY codAcao, codNatureza, conta
         ORDER BY codAcao, codNatureza
     """)
@@ -540,6 +560,46 @@ def _listar_meses(ano):
     """)
     rows = db.session.execute(sql, {"ano": ano}).fetchall()
     return [r[0] for r in rows]
+
+
+def _listar_acoes(ano):
+    """Lista ações distintas para filtro, com descrição."""
+    sql = text("""
+        SELECT DISTINCT codAcao as acao
+        FROM loa_2026
+        WHERE ano = :ano AND codAcao IS NOT NULL
+        ORDER BY acao
+    """)
+    rows = db.session.execute(sql, {"ano": ano}).fetchall()
+    codigos = [r[0] for r in rows if r[0]]
+
+    # Busca descrições da tabela acao
+    sql_desc = text("SELECT codigo, titulo FROM acao")
+    desc_rows = db.session.execute(sql_desc).fetchall()
+    desc_map = {str(r[0]): r[1] for r in desc_rows if r[0] and r[1]}
+
+    return [{'codigo': c, 'descricao': desc_map.get(str(c), '')} for c in codigos]
+
+
+# =============================================================================
+# API: Filtros dinâmicos por ano
+# =============================================================================
+@financeiro_bp.route('/api/orcamentaria/filtros/<int:ano>')
+@login_required
+@requires_admin_or_pedro
+def api_orcamentaria_filtros(ano):
+    """Retorna opções de filtro disponíveis para um dado ano."""
+    meses = _listar_meses(ano)
+    naturezas = _listar_naturezas(ano)
+    fontes = _listar_fontes(ano)
+    acoes = _listar_acoes(ano)
+
+    return jsonify({
+        'meses': [{'valor': m, 'label': NOMES_MESES.get(m, str(m))} for m in meses],
+        'naturezas': [{'codigo': n['codigo'], 'descricao': n['descricao']} for n in naturezas],
+        'fontes': [{'codigo': f['codigo'], 'descricao': f['descricao']} for f in fontes],
+        'acoes': [{'codigo': a['codigo'], 'descricao': a['descricao']} for a in acoes],
+    })
 
 
 # =============================================================================
