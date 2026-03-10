@@ -759,10 +759,14 @@ class PrestacaoContratoService:
         return PrestacaoRepository.listar_com_detalhes()
 
     @staticmethod
-    def listar_prestacoes_paginado(page=1, per_page=20):
-        """Lista execuções paginadas com detalhes."""
+    def listar_prestacoes_paginado(page=1, per_page=20, filtro_contrato=None,
+                                    filtro_competencia=None, filtro_item=None):
+        """Lista execuções paginadas com detalhes e filtros opcionais."""
         return PrestacaoRepository.listar_com_detalhes_paginado(
-            page=page, per_page=per_page
+            page=page, per_page=per_page,
+            filtro_contrato=filtro_contrato,
+            filtro_competencia=filtro_competencia,
+            filtro_item=filtro_item
         )
 
     @staticmethod

@@ -1,7 +1,7 @@
 {% extends 'diarias/base_diarias.html' %}
 {% block title %}SGC - Administracao - Solicitacao{% endblock %}
 
-{% block extra_css %}
+{% block diarias_css %}
 <style>
     .upload-cotacao-area {
         border: 2px dashed #ccc;
@@ -836,7 +836,7 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block diarias_js %}
 {% if itinerario.tipo_itinerario in [2, 3] %}
 <script>
 function toggleConexao() {

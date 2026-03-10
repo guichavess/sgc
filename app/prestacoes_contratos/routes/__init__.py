@@ -11,3 +11,4 @@ prestacoes_contratos_bp = Blueprint('prestacoes_contratos', __name__)
 from app.prestacoes_contratos.routes import contratos
 from app.prestacoes_contratos.routes import prestacoes
 from app.prestacoes_contratos.routes import api
+from app.prestacoes_contratos.routes import exec_orcamentaria

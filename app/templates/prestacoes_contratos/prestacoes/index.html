@@ -2,56 +2,126 @@
 
 {% block title %}Execuções Realizadas{% endblock %}
 
+{% set tem_filtro = filtro_contrato or filtro_competencia or filtro_item %}
+
 {% block content %}
 <div class="mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="mb-0">Execuções Realizadas</h2>
+        <div>
+            <h2 class="fw-bold text-dark mb-1">Execuções Realizadas</h2>
+            <p class="text-muted mb-0 small">Registro de execuções de contratos por item, competência e valor.</p>
+        </div>
         {% if pagination.total > 0 %}
-        <span class="badge bg-primary fs-6 px-3 py-2">Total: {{ pagination.total }} execuções</span>
+        <span class="badge bg-primary fs-6 px-3 py-2">{{ pagination.total }} execuções</span>
         {% endif %}
     </div>
 
+    {# Filtros #}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body py-3">
+            <form method="get">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold text-muted mb-1">Contrato</label>
+                        <select class="form-select form-select-sm" name="filtro_contrato">
+                            <option value="">Todos</option>
+                            {% for c in contratos_distintos %}
+                            <option value="{{ c }}" {{ 'selected' if filtro_contrato == c }}>{{ c }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold text-muted mb-1">Competência</label>
+                        <select class="form-select form-select-sm" name="filtro_competencia">
+                            <option value="">Todas</option>
+                            {% for cp in competencias_distintas %}
+                            <option value="{{ cp }}" {{ 'selected' if filtro_competencia == cp }}>{{ cp }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold text-muted mb-1">Item</label>
+                        <select class="form-select form-select-sm" name="filtro_item">
+                            <option value="">Todos</option>
+                            {% for it in itens_distintos %}
+                            <option value="{{ it.id }}" {{ 'selected' if filtro_item == it.id|string }}>{{ it.descricao[:60] }}{{ '...' if it.descricao|length > 60 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                            <i class="bi bi-funnel me-1"></i> Filtrar
+                        </button>
+                        {% if tem_filtro %}
+                        <a href="{{ url_for('prestacoes_contratos.prestacoes_index') }}"
+                           class="btn btn-outline-danger btn-sm" title="Limpar filtros">
+                            <i class="bi bi-x-lg"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# Tabela #}
     <div class="card border-0 shadow-sm">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped table-hover mb-0">
-                    <thead>
+                <table class="table table-hover align-middle mb-0" style="font-size: 0.875rem;">
+                    <thead class="table-light">
                         <tr>
-                            <th>Contrato</th>
-                            <th>Tipo</th>
-                            <th>Item</th>
-                            <th>Data</th>
-                            <th>Quantidade</th>
-                            <th>Valor Unitário</th>
-                            <th>Valor Total</th>
-                            <th>Registrado Por</th>
+                            <th class="ps-3 py-2">Contrato</th>
+                            <th class="py-2">Tipo</th>
+                            <th class="py-2" style="min-width: 220px;">Item</th>
+                            <th class="py-2">Data</th>
+                            <th class="text-end py-2">Qtd</th>
+                            <th class="text-end py-2">Valor Unitário</th>
+                            <th class="text-end py-2">Valor Total</th>
+                            <th class="py-2">Registrado Por</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% if execucoes %}
                             {% for exec in execucoes %}
                             <tr>
-                                <td><strong>{{ exec.codigo_contrato }}</strong></td>
+                                <td class="ps-3">
+                                    <span class="fw-semibold">{{ exec.codigo_contrato }}</span>
+                                </td>
                                 <td>
                                     {% if exec.tipo == 'S' %}
-                                        <span class="badge bg-success">Serviço</span>
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Serviço</span>
                                     {% else %}
-                                        <span class="badge bg-info text-dark">Material</span>
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Material</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ exec.item_descricao }}</td>
-                                <td>{{ exec.data.strftime('%d/%m/%Y') if exec.data else '' }}</td>
-                                <td>{{ exec.quantidade }}</td>
-                                <td class="text-success">{{ exec.valor_formatado }}</td>
-                                <td class="text-success fw-semibold">{{ exec.valor_total_formatado }}</td>
-                                <td>{{ exec.nome_criador }}</td>
+                                <td>
+                                    <span class="text-truncate d-inline-block" style="max-width: 280px;" title="{{ exec.item_descricao }}">
+                                        {{ exec.item_descricao }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if exec.data %}
+                                    <span class="badge bg-light text-dark border">{{ exec.data.strftime('%d/%m/%Y') }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <span class="fw-medium">{{ exec.quantidade }}</span>
+                                </td>
+                                <td class="text-end text-success">{{ exec.valor_formatado }}</td>
+                                <td class="text-end text-success fw-semibold">{{ exec.valor_total_formatado }}</td>
+                                <td>
+                                    <span class="text-muted small">{{ exec.nome_criador }}</span>
+                                </td>
                             </tr>
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="8" class="text-center text-muted py-4">
-                                    <i class="bi bi-inbox fs-3 d-block mb-2"></i>
-                                    Nenhuma execução encontrada
+                                <td colspan="8" class="text-center py-5">
+                                    <div class="text-muted">
+                                        <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                                        <p class="mb-0 mt-2">Nenhuma execução encontrada.</p>
+                                    </div>
                                 </td>
                             </tr>
                         {% endif %}
@@ -60,39 +130,36 @@
             </div>
         </div>
 
-        {# ===== PAGINAÇÃO ===== #}
+        {# Paginação #}
         {% if pagination.pages > 1 %}
         <div class="card-footer bg-white border-top py-3">
             <div class="d-flex justify-content-between align-items-center">
                 <div class="text-muted small">
                     Mostrando <strong>{{ execucoes|length }}</strong> de <strong>{{ pagination.total }}</strong> execuções
                 </div>
-
                 <nav aria-label="Navegação de páginas">
                     <ul class="pagination pagination-sm mb-0">
                         <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
                             <a class="page-link"
-                               href="{{ url_for('prestacoes_contratos.prestacoes_index', page=pagination.prev_num) if pagination.has_prev else '#' }}">
+                               href="{{ url_for('prestacoes_contratos.prestacoes_index', page=pagination.prev_num, filtro_contrato=filtro_contrato, filtro_competencia=filtro_competencia, filtro_item=filtro_item) if pagination.has_prev else '#' }}">
                                 <i class="bi bi-chevron-left"></i>
                             </a>
                         </li>
-
                         {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                             {% if page_num %}
-                                <li class="page-item {{ 'active' if page_num == pagination.page }}">
-                                    <a class="page-link"
-                                       href="{{ url_for('prestacoes_contratos.prestacoes_index', page=page_num) }}">
-                                        {{ page_num }}
-                                    </a>
-                                </li>
+                            <li class="page-item {{ 'active' if page_num == pagination.page }}">
+                                <a class="page-link"
+                                   href="{{ url_for('prestacoes_contratos.prestacoes_index', page=page_num, filtro_contrato=filtro_contrato, filtro_competencia=filtro_competencia, filtro_item=filtro_item) }}">
+                                    {{ page_num }}
+                                </a>
+                            </li>
                             {% else %}
-                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
                             {% endif %}
                         {% endfor %}
-
                         <li class="page-item {{ 'disabled' if not pagination.has_next }}">
                             <a class="page-link"
-                               href="{{ url_for('prestacoes_contratos.prestacoes_index', page=pagination.next_num) if pagination.has_next else '#' }}">
+                               href="{{ url_for('prestacoes_contratos.prestacoes_index', page=pagination.next_num, filtro_contrato=filtro_contrato, filtro_competencia=filtro_competencia, filtro_item=filtro_item) if pagination.has_next else '#' }}">
                                 <i class="bi bi-chevron-right"></i>
                             </a>
                         </li>

@@ -1,0 +1,627 @@
+{% extends "prestacoes_contratos/base_prestacoes.html" %}
+{% block title %}SGC - Execução Financeira{% endblock %}
+
+{% block extra_css %}
+<style>
+    .nav-tabs .nav-link {
+        font-weight: 600;
+        color: #6c757d;
+        border: none;
+        padding: 0.75rem 1.25rem;
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s;
+    }
+    .nav-tabs .nav-link:hover {
+        color: #003399;
+        border-bottom-color: #dee2e6;
+    }
+    .nav-tabs .nav-link.active {
+        color: #003399;
+        border-bottom-color: #003399;
+        background: transparent;
+    }
+    .nav-tabs .nav-link .badge {
+        font-size: 0.7rem;
+        vertical-align: middle;
+    }
+    .tab-content {
+        padding-top: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">
+            <i class="bi bi-wallet2 me-2"></i>Execução Financeira
+        </h3>
+        <p class="text-muted mb-0">Fornecedores sem contrato e suas execuções financeiras.</p>
+    </div>
+</div>
+
+{# Sub-abas #}
+<ul class="nav nav-tabs mb-0" id="execOrcTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {{ 'active' if aba == 'fornecedores' }}" id="tab-fornecedores"
+                data-bs-toggle="tab" data-bs-target="#pane-fornecedores" type="button"
+                role="tab" aria-selected="{{ 'true' if aba == 'fornecedores' else 'false' }}">
+            <i class="bi bi-building me-1"></i> Fornecedores
+            <span class="badge bg-secondary ms-1">{{ pag_fornecedores.total }}</span>
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {{ 'active' if aba == 'execucoes' }}" id="tab-execucoes"
+                data-bs-toggle="tab" data-bs-target="#pane-execucoes" type="button"
+                role="tab" aria-selected="{{ 'true' if aba == 'execucoes' else 'false' }}">
+            <i class="bi bi-clipboard-data me-1"></i> Execuções Financeiras
+            <span class="badge bg-secondary ms-1">{{ pag_execucoes.total }}</span>
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="execOrcTabContent">
+
+    {# ============================== ABA FORNECEDORES ============================== #}
+    <div class="tab-pane fade {{ 'show active' if aba == 'fornecedores' }}" id="pane-fornecedores"
+         role="tabpanel" aria-labelledby="tab-fornecedores">
+
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div></div>
+            {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
+            <button class="btn btn-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCadastroFornecedor">
+                <i class="bi bi-plus-lg me-1"></i> Novo Fornecedor
+            </button>
+            {% endif %}
+        </div>
+
+        {# Busca #}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body py-3">
+                <form method="get" class="row g-3 align-items-end">
+                    <input type="hidden" name="aba" value="fornecedores">
+                    <div class="col-md-8">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <input type="text" class="form-control border-start-0 ps-0" name="busca_f"
+                                   value="{{ busca_f }}" placeholder="Buscar por nome ou CNPJ...">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                            <i class="bi bi-search me-1"></i> Buscar
+                        </button>
+                    </div>
+                    <div class="col-md-2">
+                        <a href="{{ url_for('prestacoes_contratos.exec_orcamentaria', aba='fornecedores') }}" class="btn btn-outline-secondary btn-sm w-100">
+                            <i class="bi bi-x-circle me-1"></i> Limpar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {# Tabela #}
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-custom table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th class="ps-4">Descricao</th>
+                                <th>CNPJ</th>
+                                <th>Telefone</th>
+                                <th class="text-center">Contratos</th>
+                                <th class="text-center">Acoes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for f in fornecedores %}
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold text-dark">{{ f.descricao }}</div>
+                                    <div class="small text-muted">
+                                        <i class="bi bi-file-earmark-text me-1"></i>
+                                        {{ f.qtd_contratos }} contrato{{ 's' if f.qtd_contratos != 1 else '' }}
+                                    </div>
+                                    {% if f.contratos %}
+                                    <div class="mt-1">
+                                        {% for c in f.contratos %}
+                                        <span class="badge bg-light text-dark border me-1">
+                                            {{ c.cod_contrato }}
+                                            {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
+                                            <form method="post" action="{{ url_for('prestacoes_contratos.eo_fornecedor_remover_contrato', id=c.id) }}" class="d-inline" onsubmit="return confirm('Remover vinculo com contrato {{ c.cod_contrato }}?');">
+                                                <button type="submit" class="btn-close btn-close-sm ms-1" style="font-size: 0.5rem;" title="Remover vinculo"></button>
+                                            </form>
+                                            {% endif %}
+                                        </span>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td><code>{{ f.cnpj_formatado }}</code></td>
+                                <td>{{ f.telefone or '-' }}</td>
+                                <td class="text-center">
+                                    <span class="badge {{ 'bg-success' if f.qtd_contratos > 0 else 'bg-secondary' }}">
+                                        {{ f.qtd_contratos }}
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
+                                    <button class="btn btn-outline-primary btn-sm"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modalVincularForn{{ f.id }}"
+                                            title="Vincular Contrato">
+                                        <i class="bi bi-link-45deg me-1"></i> Vincular
+                                    </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center py-5 text-muted">
+                                    Nenhum fornecedor cadastrado.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if pag_fornecedores.pages > 1 %}
+            <div class="card-footer bg-white border-top py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="text-muted small">
+                        Mostrando <strong>{{ fornecedores|length }}</strong> de <strong>{{ pag_fornecedores.total }}</strong>
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item {{ 'disabled' if not pag_fornecedores.has_prev }}">
+                                <a class="page-link" href="{{ url_for('prestacoes_contratos.exec_orcamentaria', aba='fornecedores', page_f=pag_fornecedores.prev_num, busca_f=busca_f) if pag_fornecedores.has_prev else '#' }}">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                            {% for pn in pag_fornecedores.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                                {% if pn %}
+                                <li class="page-item {{ 'active' if pn == pag_fornecedores.page }}">
+                                    <a class="page-link" href="{{ url_for('prestacoes_contratos.exec_orcamentaria', aba='fornecedores', page_f=pn, busca_f=busca_f) }}">{{ pn }}</a>
+                                </li>
+                                {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                                {% endif %}
+                            {% endfor %}
+                            <li class="page-item {{ 'disabled' if not pag_fornecedores.has_next }}">
+                                <a class="page-link" href="{{ url_for('prestacoes_contratos.exec_orcamentaria', aba='fornecedores', page_f=pag_fornecedores.next_num, busca_f=busca_f) if pag_fornecedores.has_next else '#' }}">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ============================== ABA EXECUCOES ============================== #}
+    <div class="tab-pane fade {{ 'show active' if aba == 'execucoes' }}" id="pane-execucoes"
+         role="tabpanel" aria-labelledby="tab-execucoes">
+
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div></div>
+            {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
+            <button class="btn btn-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCadastroExecucao">
+                <i class="bi bi-plus-lg me-1"></i> Nova Execucao
+            </button>
+            {% endif %}
+        </div>
+
+        {# Filtros #}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body py-3">
+                <form method="get" id="formFiltrosExec">
+                    <input type="hidden" name="aba" value="execucoes">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-muted mb-1">Busca</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-white border-end-0 text-muted">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" class="form-control border-start-0 ps-0" name="busca_e"
+                                       value="{{ busca_e }}" placeholder="Descricao, item ou fornecedor...">
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold text-muted mb-1">Contrato</label>
+                            <select class="form-select form-select-sm" name="filtro_contrato">
+                                <option value="">Todos</option>
+                                <option value="__pendente__" {{ 'selected' if filtro_contrato == '__pendente__' }}>Pendentes</option>
+                                {% for c in contratos_distintos %}
+                                <option value="{{ c }}" {{ 'selected' if filtro_contrato == c }}>{{ c }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold text-muted mb-1">Competencia</label>
+                            <select class="form-select form-select-sm" name="filtro_competencia">
+                                <option value="">Todas</option>
+                                {% for cp in competencias_distintas %}
+                                <option value="{{ cp }}" {{ 'selected' if filtro_competencia == cp }}>{{ cp }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold text-muted mb-1">Item</label>
+                            <select class="form-select form-select-sm" name="filtro_item">
+                                <option value="">Todos</option>
+                                {% for it in itens_distintos %}
+                                <option value="{{ it }}" {{ 'selected' if filtro_item == it }}>{{ it }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex gap-2">
+                            <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                                <i class="bi bi-funnel me-1"></i> Filtrar
+                            </button>
+                            {% if busca_e or filtro_contrato or filtro_competencia or filtro_item %}
+                            <a href="{{ url_for('prestacoes_contratos.exec_orcamentaria', aba='execucoes') }}"
+                               class="btn btn-outline-danger btn-sm" title="Limpar filtros">
+                                <i class="bi bi-x-lg"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {# Tabela #}
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.875rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3 py-2" style="min-width: 240px;">Descricao</th>
+                                <th class="py-2" style="min-width: 180px;">Fornecedor</th>
+                                <th class="py-2">Item</th>
+                                <th class="text-end py-2">Qtd</th>
+                                <th class="text-center py-2">Competencia</th>
+                                <th class="py-2">Acao</th>
+                                <th class="py-2">Natureza</th>
+                                <th class="py-2">Fonte</th>
+                                <th class="text-center py-2">Contrato</th>
+                                <th class="text-center py-2" style="width: 60px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for e in execucoes %}
+                            <tr>
+                                <td class="ps-3">
+                                    <div class="fw-semibold text-dark" title="{{ e.descricao }}">
+                                        {{ e.descricao[:90] }}{{ '...' if e.descricao|length > 90 else '' }}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="fw-medium text-truncate" style="max-width: 200px;" title="{{ e.fornecedor.descricao }}">
+                                        {{ e.fornecedor.descricao }}
+                                    </div>
+                                    <div class="text-muted" style="font-size: 0.75rem;">{{ e.fornecedor.cnpj_formatado }}</div>
+                                </td>
+                                <td>
+                                    {% if e.item %}
+                                    <code class="text-dark bg-light px-1 rounded" style="font-size: 0.8rem;">{{ e.item }}</code>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if e.quantidade %}
+                                    <span class="fw-medium">{{ e.quantidade }}</span>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if e.competencia %}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                                        {{ e.competencia }}
+                                    </span>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted">{{ e.acao or '—' }}</td>
+                                <td class="text-muted">{{ e.natureza or '—' }}</td>
+                                <td class="text-muted">{{ e.fonte or '—' }}</td>
+                                <td class="text-center">
+                                    {% if e.vinculada %}
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                                            <i class="bi bi-link-45deg me-1"></i>{{ e.cod_contrato }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">
+                                            <i class="bi bi-exclamation-circle me-1"></i>Pendente
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if current_user.tem_permissao('prestacoes_contratos', 'criar') and not e.vinculada %}
+                                    <button class="btn btn-outline-primary btn-sm py-0 px-2"
+                                            onclick="abrirModalVincularExec({{ e.id }}, {{ e.fornecedor_id }}, '{{ e.fornecedor.descricao }}')"
+                                            title="Vincular Contrato" style="font-size: 0.8rem;">
+                                        <i class="bi bi-link-45deg"></i>
+                                    </button>
+                                    {% elif e.vinculada %}
+                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="10" class="text-center py-5">
+                                    <div class="text-muted">
+                                        <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                                        <p class="mb-0 mt-2">Nenhuma execucao encontrada.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if pag_execucoes.pages > 1 %}
+            <div class="card-footer bg-white border-top py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="text-muted small">
+                        Mostrando <strong>{{ execucoes|length }}</strong> de <strong>{{ pag_execucoes.total }}</strong>
+                    </div>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item {{ 'disabled' if not pag_execucoes.has_prev }}">
+                                <a class="page-link" href="{{ url_for('prestacoes_contratos.exec_orcamentaria', aba='execucoes', page_e=pag_execucoes.prev_num, busca_e=busca_e, filtro_contrato=filtro_contrato, filtro_competencia=filtro_competencia, filtro_item=filtro_item) if pag_execucoes.has_prev else '#' }}">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                            {% for pn in pag_execucoes.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                                {% if pn %}
+                                <li class="page-item {{ 'active' if pn == pag_execucoes.page }}">
+                                    <a class="page-link" href="{{ url_for('prestacoes_contratos.exec_orcamentaria', aba='execucoes', page_e=pn, busca_e=busca_e, filtro_contrato=filtro_contrato, filtro_competencia=filtro_competencia, filtro_item=filtro_item) }}">{{ pn }}</a>
+                                </li>
+                                {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                                {% endif %}
+                            {% endfor %}
+                            <li class="page-item {{ 'disabled' if not pag_execucoes.has_next }}">
+                                <a class="page-link" href="{{ url_for('prestacoes_contratos.exec_orcamentaria', aba='execucoes', page_e=pag_execucoes.next_num, busca_e=busca_e, filtro_contrato=filtro_contrato, filtro_competencia=filtro_competencia, filtro_item=filtro_item) if pag_execucoes.has_next else '#' }}">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+{# ===== Modal: Cadastrar Fornecedor ===== #}
+<div class="modal fade" id="modalCadastroFornecedor" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" action="{{ url_for('prestacoes_contratos.eo_fornecedor_cadastrar') }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Novo Fornecedor</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Descricao <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="descricao" required placeholder="Nome/razao social do fornecedor">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">CNPJ <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="cnpj" id="inputCnpj" required placeholder="00.000.000/0000-00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Telefone</label>
+                        <input type="text" class="form-control" name="telefone" id="inputTelefone" placeholder="(00) 00000-0000">
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Cadastrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# ===== Modais: Vincular Contrato a Fornecedor ===== #}
+{% for f in fornecedores %}
+<div class="modal fade" id="modalVincularForn{{ f.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" action="{{ url_for('prestacoes_contratos.eo_fornecedor_vincular_contrato', id=f.id) }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Vincular Contrato</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">Fornecedor: <strong>{{ f.descricao }}</strong></p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Codigo do Contrato <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="cod_contrato" required placeholder="Ex: 001/2025-SEAD">
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-link-45deg me-1"></i> Vincular
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{# ===== Modal: Cadastrar Execucao ===== #}
+<div class="modal fade" id="modalCadastroExecucao" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" action="{{ url_for('prestacoes_contratos.eo_execucao_cadastrar') }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Nova Execução Financeira</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Fornecedor <span class="text-danger">*</span></label>
+                            <select class="form-select" name="fornecedor_id" required>
+                                <option value="">Selecione um fornecedor...</option>
+                                {% for f in fornecedores_select %}
+                                <option value="{{ f.id }}">{{ f.descricao }} ({{ f.cnpj_formatado }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Descricao da Execucao <span class="text-danger">*</span></label>
+                            <textarea class="form-control" name="descricao" rows="2" required placeholder="Descricao detalhada da execucao"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Item</label>
+                            <input type="text" class="form-control" name="item" placeholder="Item da execucao">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Quantidade</label>
+                            <input type="text" class="form-control" name="quantidade" placeholder="0,00">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Competencia</label>
+                            <input type="text" class="form-control" name="competencia" id="inputCompetencia" placeholder="MM/AAAA">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Acao</label>
+                            <input type="text" class="form-control" name="acao" placeholder="Codigo da acao">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Natureza</label>
+                            <input type="text" class="form-control" name="natureza" placeholder="Natureza de despesa">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Fonte</label>
+                            <input type="text" class="form-control" name="fonte" placeholder="Fonte de recurso">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Cadastrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# ===== Modal: Vincular Contrato a Execucao (dinamico) ===== #}
+<div class="modal fade" id="modalVincularExec" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" id="formVincularExec">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Vincular Contrato</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">Fornecedor: <strong id="vincularExecFornecedorNome"></strong></p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Selecione o Contrato <span class="text-danger">*</span></label>
+                        <div id="contratosExecContainer">
+                            <div class="text-center py-3 text-muted">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                Carregando contratos...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnVincularExec" disabled>
+                        <i class="bi bi-link-45deg me-1"></i> Vincular
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+$(document).ready(function() {
+    $('#inputCnpj').mask('00.000.000/0000-00');
+    $('#inputTelefone').mask('(00) 00000-0000');
+    $('#inputCompetencia').mask('00/0000');
+});
+
+function abrirModalVincularExec(execucaoId, fornecedorId, fornecedorNome) {
+    const form = document.getElementById('formVincularExec');
+    const container = document.getElementById('contratosExecContainer');
+    const btnVincular = document.getElementById('btnVincularExec');
+
+    form.action = '{{ url_for("prestacoes_contratos.exec_orcamentaria") }}'.replace(
+        '/exec-orcamentaria', '/exec-orcamentaria/execucoes/' + execucaoId + '/vincular-contrato'
+    );
+    document.getElementById('vincularExecFornecedorNome').textContent = fornecedorNome;
+
+    container.innerHTML = '<div class="text-center py-3 text-muted"><div class="spinner-border spinner-border-sm" role="status"></div> Carregando contratos...</div>';
+    btnVincular.disabled = true;
+
+    fetch(`/prestacoes-contratos/api/fornecedores/${fornecedorId}/contratos`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.length) {
+                container.innerHTML = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle me-1"></i> Nenhum contrato vinculado a este fornecedor. Vincule um contrato primeiro na aba Fornecedores.</div>';
+                return;
+            }
+            let html = '';
+            data.forEach(c => {
+                html += `
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="cod_contrato"
+                               value="${c.cod_contrato}" id="contrato_exec_${c.id}"
+                               onchange="document.getElementById('btnVincularExec').disabled = false;">
+                        <label class="form-check-label" for="contrato_exec_${c.id}">
+                            <strong>${c.cod_contrato}</strong>
+                        </label>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        })
+        .catch(err => {
+            container.innerHTML = '<div class="alert alert-danger mb-0">Erro ao carregar contratos.</div>';
+        });
+
+    new bootstrap.Modal(document.getElementById('modalVincularExec')).show();
+}
+</script>
+{% endblock %}

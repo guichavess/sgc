@@ -6,6 +6,7 @@ from flask_login import login_required, current_user
 
 from app.prestacoes_contratos.routes import prestacoes_contratos_bp
 from app.services.prestacao_contrato_service import PrestacaoContratoService
+from app.repositories.prestacao_repository import PrestacaoRepository
 from app.utils.permissions import requires_permission
 
 
@@ -13,12 +14,18 @@ from app.utils.permissions import requires_permission
 @login_required
 @requires_permission('prestacoes_contratos.visualizar')
 def prestacoes_index():
-    """Lista todas as execuções realizadas com paginação."""
+    """Lista todas as execuções realizadas com paginação e filtros."""
     page = request.args.get('page', 1, type=int)
     per_page = 20
+    filtro_contrato = request.args.get('filtro_contrato', '').strip()
+    filtro_competencia = request.args.get('filtro_competencia', '').strip()
+    filtro_item = request.args.get('filtro_item', '', type=str).strip()
 
     pagination = PrestacaoContratoService.listar_prestacoes_paginado(
-        page=page, per_page=per_page
+        page=page, per_page=per_page,
+        filtro_contrato=filtro_contrato or None,
+        filtro_competencia=filtro_competencia or None,
+        filtro_item=filtro_item or None
     )
 
     execucoes = []
@@ -37,10 +44,21 @@ def prestacoes_index():
             'nome_criador': nome_criador or 'N/A'
         })
 
+    # Valores distintos para os dropdowns de filtro
+    contratos_distintos = PrestacaoRepository.contratos_distintos()
+    competencias_distintas = PrestacaoRepository.competencias_distintas()
+    itens_distintos = PrestacaoRepository.itens_contrato_distintos()
+
     return render_template(
         'prestacoes_contratos/prestacoes/index.html',
         execucoes=execucoes,
-        pagination=pagination
+        pagination=pagination,
+        filtro_contrato=filtro_contrato,
+        filtro_competencia=filtro_competencia,
+        filtro_item=filtro_item,
+        contratos_distintos=contratos_distintos,
+        competencias_distintas=competencias_distintas,
+        itens_distintos=itens_distintos,
     )
 
 
