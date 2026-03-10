@@ -15,6 +15,7 @@ class ExecucaoOrcamentaria(db.Model):
     descricao = db.Column(db.Text, nullable=False)
     item = db.Column(db.String(255))
     quantidade = db.Column(db.Numeric(15, 2))
+    valor = db.Column(db.Numeric(15, 2))
     competencia = db.Column(db.String(7))  # MM/YYYY
     cod_contrato = db.Column(db.String(20))  # NULL até vincular
     acao = db.Column(db.String(50))

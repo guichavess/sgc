@@ -2,7 +2,13 @@
 {% block title %}SGC - Execução Financeira{% endblock %}
 
 {% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet">
 <style>
+    /* Select2 dentro de modais */
+    .select2-container--bootstrap-5 .select2-selection { min-height: 38px; }
+    .select2-container { z-index: 1060 !important; }
+
     .nav-tabs .nav-link {
         font-weight: 600;
         color: #6c757d;
@@ -111,11 +117,11 @@
                     <table class="table table-custom table-hover align-middle mb-0">
                         <thead>
                             <tr>
-                                <th class="ps-4">Descricao</th>
+                                <th class="ps-4">Descrição</th>
                                 <th>CNPJ</th>
                                 <th>Telefone</th>
                                 <th class="text-center">Contratos</th>
-                                <th class="text-center">Acoes</th>
+                                <th class="text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -133,8 +139,8 @@
                                         <span class="badge bg-light text-dark border me-1">
                                             {{ c.cod_contrato }}
                                             {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
-                                            <form method="post" action="{{ url_for('prestacoes_contratos.eo_fornecedor_remover_contrato', id=c.id) }}" class="d-inline" onsubmit="return confirm('Remover vinculo com contrato {{ c.cod_contrato }}?');">
-                                                <button type="submit" class="btn-close btn-close-sm ms-1" style="font-size: 0.5rem;" title="Remover vinculo"></button>
+                                            <form method="post" action="{{ url_for('prestacoes_contratos.eo_fornecedor_remover_contrato', id=c.id) }}" class="d-inline" onsubmit="return confirm('Remover vínculo com contrato {{ c.cod_contrato }}?');">
+                                                <button type="submit" class="btn-close btn-close-sm ms-1" style="font-size: 0.5rem;" title="Remover vínculo"></button>
                                             </form>
                                             {% endif %}
                                         </span>
@@ -150,14 +156,21 @@
                                     </span>
                                 </td>
                                 <td class="text-center">
-                                    {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
-                                    <button class="btn btn-outline-primary btn-sm"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#modalVincularForn{{ f.id }}"
-                                            title="Vincular Contrato">
-                                        <i class="bi bi-link-45deg me-1"></i> Vincular
-                                    </button>
-                                    {% endif %}
+                                    <div class="d-flex gap-1 justify-content-center">
+                                        {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
+                                        <button class="btn btn-outline-secondary btn-sm"
+                                                onclick="abrirModalEditarFornecedor({{ f.id }}, '{{ f.descricao|e }}', '{{ f.cnpj|e }}', '{{ f.telefone or '' }}')"
+                                                title="Editar">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-outline-primary btn-sm"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#modalVincularForn{{ f.id }}"
+                                                title="Vincular Contrato">
+                                            <i class="bi bi-link-45deg"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             {% else %}
@@ -216,7 +229,7 @@
             <div></div>
             {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
             <button class="btn btn-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCadastroExecucao">
-                <i class="bi bi-plus-lg me-1"></i> Nova Execucao
+                <i class="bi bi-plus-lg me-1"></i> Nova Execução
             </button>
             {% endif %}
         </div>
@@ -234,7 +247,7 @@
                                     <i class="bi bi-search"></i>
                                 </span>
                                 <input type="text" class="form-control border-start-0 ps-0" name="busca_e"
-                                       value="{{ busca_e }}" placeholder="Descricao, item ou fornecedor...">
+                                       value="{{ busca_e }}" placeholder="Descrição, item ou fornecedor...">
                             </div>
                         </div>
                         <div class="col-md-2">
@@ -248,7 +261,7 @@
                             </select>
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label small fw-semibold text-muted mb-1">Competencia</label>
+                            <label class="form-label small fw-semibold text-muted mb-1">Competência</label>
                             <select class="form-select form-select-sm" name="filtro_competencia">
                                 <option value="">Todas</option>
                                 {% for cp in competencias_distintas %}
@@ -288,16 +301,17 @@
                     <table class="table table-hover align-middle mb-0" style="font-size: 0.875rem;">
                         <thead class="table-light">
                             <tr>
-                                <th class="ps-3 py-2" style="min-width: 240px;">Descricao</th>
+                                <th class="ps-3 py-2" style="min-width: 240px;">Descrição</th>
                                 <th class="py-2" style="min-width: 180px;">Fornecedor</th>
                                 <th class="py-2">Item</th>
                                 <th class="text-end py-2">Qtd</th>
-                                <th class="text-center py-2">Competencia</th>
-                                <th class="py-2">Acao</th>
+                                <th class="text-end py-2">Valor</th>
+                                <th class="text-center py-2">Competência</th>
+                                <th class="py-2">Ação</th>
                                 <th class="py-2">Natureza</th>
                                 <th class="py-2">Fonte</th>
                                 <th class="text-center py-2">Contrato</th>
-                                <th class="text-center py-2" style="width: 60px;"></th>
+                                <th class="text-center py-2" style="width: 80px;"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -328,6 +342,13 @@
                                     <span class="text-muted">—</span>
                                     {% endif %}
                                 </td>
+                                <td class="text-end">
+                                    {% if e.valor %}
+                                    <span class="fw-medium">R$ {{ '{:,.2f}'.format(e.valor).replace(',','X').replace('.',',').replace('X','.') }}</span>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-center">
                                     {% if e.competencia %}
                                     <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
@@ -352,23 +373,32 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-center">
-                                    {% if current_user.tem_permissao('prestacoes_contratos', 'criar') and not e.vinculada %}
-                                    <button class="btn btn-outline-primary btn-sm py-0 px-2"
-                                            onclick="abrirModalVincularExec({{ e.id }}, {{ e.fornecedor_id }}, '{{ e.fornecedor.descricao }}')"
-                                            title="Vincular Contrato" style="font-size: 0.8rem;">
-                                        <i class="bi bi-link-45deg"></i>
-                                    </button>
-                                    {% elif e.vinculada %}
-                                    <i class="bi bi-check-circle-fill text-success"></i>
-                                    {% endif %}
+                                    <div class="d-flex gap-1 justify-content-center">
+                                        {% if current_user.tem_permissao('prestacoes_contratos', 'criar') %}
+                                        <button class="btn btn-outline-secondary btn-sm py-0 px-2"
+                                                onclick="abrirModalEditarExecucao({{ e.id }}, {{ e.fornecedor_id }}, '{{ e.descricao|replace("'", "\\'")|e }}', '{{ e.item or '' }}', '{{ e.quantidade or '' }}', '{{ e.valor or '' }}', '{{ e.competencia or '' }}', '{{ e.acao or '' }}', '{{ e.natureza or '' }}', '{{ e.fonte or '' }}')"
+                                                title="Editar" style="font-size: 0.8rem;">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        {% endif %}
+                                        {% if current_user.tem_permissao('prestacoes_contratos', 'criar') and not e.vinculada %}
+                                        <button class="btn btn-outline-primary btn-sm py-0 px-2"
+                                                onclick="abrirModalVincularExec({{ e.id }}, {{ e.fornecedor_id }}, '{{ e.fornecedor.descricao }}')"
+                                                title="Vincular Contrato" style="font-size: 0.8rem;">
+                                            <i class="bi bi-link-45deg"></i>
+                                        </button>
+                                        {% elif e.vinculada %}
+                                        <i class="bi bi-check-circle-fill text-success"></i>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="10" class="text-center py-5">
+                                <td colspan="11" class="text-center py-5">
                                     <div class="text-muted">
                                         <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-                                        <p class="mb-0 mt-2">Nenhuma execucao encontrada.</p>
+                                        <p class="mb-0 mt-2">Nenhuma execução encontrada.</p>
                                     </div>
                                 </td>
                             </tr>
@@ -426,8 +456,8 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Descricao <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="descricao" required placeholder="Nome/razao social do fornecedor">
+                        <label class="form-label fw-semibold">Descrição <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="descricao" required placeholder="Nome/razão social do fornecedor">
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">CNPJ <span class="text-danger">*</span></label>
@@ -449,6 +479,40 @@
     </div>
 </div>
 
+{# ===== Modal: Editar Fornecedor (dinâmico) ===== #}
+<div class="modal fade" id="modalEditarFornecedor" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" id="formEditarFornecedor">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Editar Fornecedor</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Descrição <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="descricao" id="editFornDescricao" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">CNPJ <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="cnpj" id="editFornCnpj" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Telefone</label>
+                        <input type="text" class="form-control" name="telefone" id="editFornTelefone">
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {# ===== Modais: Vincular Contrato a Fornecedor ===== #}
 {% for f in fornecedores %}
 <div class="modal fade" id="modalVincularForn{{ f.id }}" tabindex="-1">
@@ -462,7 +526,7 @@
                 <div class="modal-body">
                     <p class="text-muted mb-3">Fornecedor: <strong>{{ f.descricao }}</strong></p>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Codigo do Contrato <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">Código do Contrato <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="cod_contrato" required placeholder="Ex: 001/2025-SEAD">
                     </div>
                 </div>
@@ -478,7 +542,7 @@
 </div>
 {% endfor %}
 
-{# ===== Modal: Cadastrar Execucao ===== #}
+{# ===== Modal: Cadastrar Execução ===== #}
 <div class="modal fade" id="modalCadastroExecucao" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
@@ -491,40 +555,59 @@
                     <div class="row g-3">
                         <div class="col-md-12">
                             <label class="form-label fw-semibold">Fornecedor <span class="text-danger">*</span></label>
-                            <select class="form-select" name="fornecedor_id" required>
-                                <option value="">Selecione um fornecedor...</option>
+                            <select class="form-select select2-search" name="fornecedor_id" required data-placeholder="Selecione um fornecedor...">
+                                <option value=""></option>
                                 {% for f in fornecedores_select %}
                                 <option value="{{ f.id }}">{{ f.descricao }} ({{ f.cnpj_formatado }})</option>
                                 {% endfor %}
                             </select>
                         </div>
                         <div class="col-md-12">
-                            <label class="form-label fw-semibold">Descricao da Execucao <span class="text-danger">*</span></label>
-                            <textarea class="form-control" name="descricao" rows="2" required placeholder="Descricao detalhada da execucao"></textarea>
+                            <label class="form-label fw-semibold">Descrição da Execução <span class="text-danger">*</span></label>
+                            <textarea class="form-control" name="descricao" rows="2" required placeholder="Descrição detalhada da execução"></textarea>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">Item</label>
-                            <input type="text" class="form-control" name="item" placeholder="Item da execucao">
+                            <input type="text" class="form-control" name="item" placeholder="Item da execução">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <label class="form-label fw-semibold">Quantidade</label>
                             <input type="text" class="form-control" name="quantidade" placeholder="0,00">
                         </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Valor (R$)</label>
+                            <input type="text" class="form-control input-valor" name="valor" placeholder="0,00">
+                        </div>
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold">Competencia</label>
-                            <input type="text" class="form-control" name="competencia" id="inputCompetencia" placeholder="MM/AAAA">
+                            <label class="form-label fw-semibold">Competência</label>
+                            <input type="text" class="form-control input-competencia" name="competencia" placeholder="MM/AAAA">
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">Acao</label>
-                            <input type="text" class="form-control" name="acao" placeholder="Codigo da acao">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Ação</label>
+                            <select class="form-select select2-search" name="acao" data-placeholder="Selecione...">
+                                <option value=""></option>
+                                {% for a in lista_acoes %}
+                                <option value="{{ a.codigo }}">{{ a.codigo }} - {{ a.descricao }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label fw-semibold">Natureza</label>
-                            <input type="text" class="form-control" name="natureza" placeholder="Natureza de despesa">
+                            <select class="form-select select2-search" name="natureza" data-placeholder="Selecione...">
+                                <option value=""></option>
+                                {% for n in lista_naturezas %}
+                                <option value="{{ n.codigo }}">{{ n.codigo }} - {{ n.descricao }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label fw-semibold">Fonte</label>
-                            <input type="text" class="form-control" name="fonte" placeholder="Fonte de recurso">
+                            <select class="form-select select2-search" name="fonte" data-placeholder="Selecione...">
+                                <option value=""></option>
+                                {% for ft in lista_fontes %}
+                                <option value="{{ ft.codigo }}">{{ ft.codigo }} - {{ ft.descricao }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -539,7 +622,87 @@
     </div>
 </div>
 
-{# ===== Modal: Vincular Contrato a Execucao (dinamico) ===== #}
+{# ===== Modal: Editar Execução (dinâmico) ===== #}
+<div class="modal fade" id="modalEditarExecucao" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" id="formEditarExecucao">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Editar Execução Financeira</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Fornecedor <span class="text-danger">*</span></label>
+                            <select class="form-select select2-search" name="fornecedor_id" id="editExecFornecedor" required data-placeholder="Selecione um fornecedor...">
+                                <option value=""></option>
+                                {% for f in fornecedores_select %}
+                                <option value="{{ f.id }}">{{ f.descricao }} ({{ f.cnpj_formatado }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Descrição da Execução <span class="text-danger">*</span></label>
+                            <textarea class="form-control" name="descricao" id="editExecDescricao" rows="2" required></textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Item</label>
+                            <input type="text" class="form-control" name="item" id="editExecItem">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Quantidade</label>
+                            <input type="text" class="form-control" name="quantidade" id="editExecQuantidade">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Valor (R$)</label>
+                            <input type="text" class="form-control input-valor" name="valor" id="editExecValor">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Competência</label>
+                            <input type="text" class="form-control input-competencia" name="competencia" id="editExecCompetencia">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Ação</label>
+                            <select class="form-select select2-search" name="acao" id="editExecAcao" data-placeholder="Selecione...">
+                                <option value=""></option>
+                                {% for a in lista_acoes %}
+                                <option value="{{ a.codigo }}">{{ a.codigo }} - {{ a.descricao }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Natureza</label>
+                            <select class="form-select select2-search" name="natureza" id="editExecNatureza" data-placeholder="Selecione...">
+                                <option value=""></option>
+                                {% for n in lista_naturezas %}
+                                <option value="{{ n.codigo }}">{{ n.codigo }} - {{ n.descricao }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Fonte</label>
+                            <select class="form-select select2-search" name="fonte" id="editExecFonte" data-placeholder="Selecione...">
+                                <option value=""></option>
+                                {% for ft in lista_fontes %}
+                                <option value="{{ ft.codigo }}">{{ ft.codigo }} - {{ ft.descricao }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# ===== Modal: Vincular Contrato a Execução (dinâmico) ===== #}
 <div class="modal fade" id="modalVincularExec" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
@@ -575,12 +738,138 @@
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/i18n/pt-BR.js"></script>
 <script>
 $(document).ready(function() {
-    $('#inputCnpj').mask('00.000.000/0000-00');
-    $('#inputTelefone').mask('(00) 00000-0000');
-    $('#inputCompetencia').mask('00/0000');
+    $('#inputCnpj, #editFornCnpj').mask('00.000.000/0000-00');
+    $('#inputTelefone, #editFornTelefone').mask('(00) 00000-0000');
+    $('.input-competencia').mask('00/0000');
+
+    // Máscara de valor monetário
+    $('.input-valor').mask('#.##0,00', {reverse: true});
+
+    // Select2 - Modal Cadastro
+    $('#modalCadastroExecucao .select2-search').select2({
+        theme: 'bootstrap-5',
+        language: 'pt-BR',
+        allowClear: true,
+        width: '100%',
+        dropdownParent: $('#modalCadastroExecucao')
+    });
+
+    // Cascata: Ação → Natureza → Fonte (Modal Cadastro)
+    var $cadAcao = $('#modalCadastroExecucao select[name="acao"]');
+    var $cadNat = $('#modalCadastroExecucao select[name="natureza"]');
+    var $cadFonte = $('#modalCadastroExecucao select[name="fonte"]');
+
+    $cadAcao.on('change', function() {
+        var acao = $(this).val();
+        // Limpa natureza e fonte
+        $cadNat.val(null).trigger('change').prop('disabled', true);
+        $cadFonte.val(null).trigger('change').prop('disabled', true);
+        if (!acao) {
+            // Restaura todas as opções de natureza
+            $cadNat.prop('disabled', false);
+            $cadFonte.prop('disabled', false);
+            return;
+        }
+        fetch('/prestacoes-contratos/api/naturezas-por-acao/' + encodeURIComponent(acao))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                $cadNat.find('option:not(:first)').remove();
+                data.forEach(function(n) {
+                    $cadNat.append(new Option(n.codigo + ' - ' + n.descricao, n.codigo, false, false));
+                });
+                $cadNat.prop('disabled', false).trigger('change.select2');
+            });
+    });
+
+    $cadNat.on('change', function() {
+        var acao = $cadAcao.val();
+        var natureza = $(this).val();
+        $cadFonte.val(null).trigger('change').prop('disabled', true);
+        if (!acao || !natureza) {
+            $cadFonte.prop('disabled', false);
+            return;
+        }
+        fetch('/prestacoes-contratos/api/fontes-por-acao-natureza/' + encodeURIComponent(acao) + '/' + encodeURIComponent(natureza))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                $cadFonte.find('option:not(:first)').remove();
+                data.forEach(function(f) {
+                    $cadFonte.append(new Option(f.codigo + ' - ' + f.descricao, f.codigo, false, false));
+                });
+                $cadFonte.prop('disabled', false).trigger('change.select2');
+            });
+    });
+
+    // Select2 - Modal Editar (inicializa ao abrir e seta valores pendentes)
+    $('#modalEditarExecucao').on('shown.bs.modal', function() {
+        var $modal = $(this);
+        $modal.find('.select2-search').each(function() {
+            if (!$(this).hasClass('select2-hidden-accessible')) {
+                $(this).select2({
+                    theme: 'bootstrap-5',
+                    language: 'pt-BR',
+                    allowClear: true,
+                    width: '100%',
+                    dropdownParent: $modal
+                });
+            }
+        });
+        // Aplicar valores pendentes (setados por abrirModalEditarExecucao)
+        var pending = $modal.data('pendingValues');
+        if (pending) {
+            $('#editExecFornecedor').val(pending.fornecedorId).trigger('change');
+            $('#editExecAcao').val(pending.acao).trigger('change');
+            $('#editExecNatureza').val(pending.natureza).trigger('change');
+            $('#editExecFonte').val(pending.fonte).trigger('change');
+            $modal.removeData('pendingValues');
+        }
+    });
 });
+
+function abrirModalEditarFornecedor(id, descricao, cnpj, telefone) {
+    var form = document.getElementById('formEditarFornecedor');
+    form.action = '/prestacoes-contratos/exec-orcamentaria/fornecedores/' + id + '/editar';
+    document.getElementById('editFornDescricao').value = descricao;
+    document.getElementById('editFornCnpj').value = cnpj;
+    document.getElementById('editFornTelefone').value = telefone;
+    $('#editFornCnpj').mask('00.000.000/0000-00');
+    $('#editFornTelefone').mask('(00) 00000-0000');
+    new bootstrap.Modal(document.getElementById('modalEditarFornecedor')).show();
+}
+
+function abrirModalEditarExecucao(id, fornecedorId, descricao, item, quantidade, valor, competencia, acao, natureza, fonte) {
+    var form = document.getElementById('formEditarExecucao');
+    form.action = '/prestacoes-contratos/exec-orcamentaria/execucoes/' + id + '/editar';
+    document.getElementById('editExecDescricao').value = descricao;
+    document.getElementById('editExecItem').value = item;
+    document.getElementById('editExecQuantidade').value = quantidade ? quantidade.toString().replace('.', ',') : '';
+    document.getElementById('editExecCompetencia').value = competencia;
+
+    // Formatar valor para o campo
+    var valField = document.getElementById('editExecValor');
+    if (valor && valor !== 'None' && valor !== '') {
+        var v = parseFloat(valor.toString().replace(',', '.'));
+        valField.value = v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    } else {
+        valField.value = '';
+    }
+    $('.input-valor').mask('#.##0,00', {reverse: true});
+    $('.input-competencia').mask('00/0000');
+
+    // Guardar valores pendentes para o handler shown.bs.modal aplicar
+    $('#modalEditarExecucao').data('pendingValues', {
+        fornecedorId: fornecedorId,
+        acao: acao,
+        natureza: natureza,
+        fonte: fonte
+    });
+
+    new bootstrap.Modal(document.getElementById('modalEditarExecucao')).show();
+}
 
 function abrirModalVincularExec(execucaoId, fornecedorId, fornecedorNome) {
     const form = document.getElementById('formVincularExec');

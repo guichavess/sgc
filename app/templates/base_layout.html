@@ -18,6 +18,14 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body class="has-layout sidebar-collapsed">
+    <script>
+    // Sincroniza estado da sidebar ANTES do primeiro paint (evita piscada)
+    (function(){
+        if (window.innerWidth >= 992 && localStorage.getItem('sgc_sidebar_collapsed') === 'false') {
+            document.body.classList.remove('sidebar-collapsed');
+        }
+    })();
+    </script>
 
     {# ===== Top Navbar ===== #}
     <header class="top-navbar">
@@ -129,14 +137,6 @@
         const overlay = document.getElementById('sidebarOverlay');
         const sidebar = document.getElementById('sidebar');
         const isMobile = () => window.innerWidth < 992;
-
-        // Restore state from localStorage (desktop only)
-        if (!isMobile()) {
-            const saved = localStorage.getItem(KEY);
-            if (saved === 'false') {
-                body.classList.remove('sidebar-collapsed');
-            }
-        }
 
         // Enable transitions after initial paint to avoid flash
         requestAnimationFrame(() => {

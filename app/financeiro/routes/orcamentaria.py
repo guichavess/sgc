@@ -285,12 +285,16 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
     # Execução financeira por ação (empenho/liquidação/PD/OB)
     exec_por_acao = _calcular_execucao(ano, nivel='acao')
 
+    # Execução Gerencial (soma de execucoes_orcamentarias por ação)
+    exec_gerencial_por_acao = _calcular_exec_gerencial(nivel='acao')
+
     resultado = []
     totais = {
         'dot_inicial': ZERO, 'dot_suplementar': ZERO, 'dot_especial': ZERO,
         'dot_extraordinaria': ZERO, 'contingenciado': ZERO, 'dot_anulada': ZERO,
         'dot_atualizada': ZERO, 'credito_disponivel': ZERO, 'analise': ZERO,
-        'empenhado': ZERO, 'liquidado': ZERO, 'pd': ZERO, 'pago': ZERO,
+        'reservado': ZERO, 'empenhado': ZERO, 'liquidado': ZERO, 'pd': ZERO, 'pago': ZERO,
+        'exec_gerencial': ZERO,
     }
 
     for acao_cod in sorted(acoes_dict.keys()):
@@ -310,10 +314,14 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
 
         # Dados de execução financeira
         ex = exec_por_acao.get(str(acao_cod), {})
+        reservado = _decimal(ex.get('res', 0))
         empenhado = _decimal(ex.get('emp', 0))
         liquidado = _decimal(ex.get('liq', 0))
         pd_val = _decimal(ex.get('pd', 0))
         pago = _decimal(ex.get('ob', 0))
+
+        # Execução Gerencial
+        exec_ger = _decimal(exec_gerencial_por_acao.get(str(acao_cod), 0))
 
         item = {
             'codigo': acao_cod,
@@ -329,6 +337,8 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
             'credito_disponivel': credito_disp,
             'analise': analise,
             'pct_exec': pct_exec,
+            'reservado': reservado,
+            'pct_res': _pct(reservado, dot_atualizada),
             'empenhado': empenhado,
             'pct_emp': _pct(empenhado, dot_atualizada),
             'liquidado': liquidado,
@@ -337,6 +347,7 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
             'pct_pd': _pct(pd_val, dot_atualizada),
             'pago': pago,
             'pct_pago': _pct(pago, dot_atualizada),
+            'exec_gerencial': exec_ger,
         }
         resultado.append(item)
 
@@ -344,6 +355,7 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
             totais[key] += item.get(key, ZERO)
 
     totais['pct_exec'] = _pct(totais['analise'], totais['dot_atualizada'])
+    totais['pct_res'] = _pct(totais['reservado'], totais['dot_atualizada'])
     totais['pct_emp'] = _pct(totais['empenhado'], totais['dot_atualizada'])
     totais['pct_liq'] = _pct(totais['liquidado'], totais['dot_atualizada'])
     totais['pct_pd'] = _pct(totais['pd'], totais['dot_atualizada'])
@@ -353,7 +365,10 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
 
 
 # Expressão SQL para extrair codAcao de codClassificacao (segmento 8 após remover espaços)
+# liquidacao/pd/ob: formato "1.21.101.1.04.122.0010.2000..." → ação = segmento 8
 _SQL_ACAO_FROM_CLASS = "SUBSTRING_INDEX(SUBSTRING_INDEX(REPLACE(codClassificacao, ' ', ''), '.', 8), '.', -1)"
+# reserva: formato "21.101.1.04.122.0010.2000..." (sem prefixo) → ação = segmento 7
+_SQL_ACAO_FROM_CLASS_RESERVA = "SUBSTRING_INDEX(SUBSTRING_INDEX(REPLACE(codClassificacao, ' ', ''), '.', 7), '.', -1)"
 
 
 def _calcular_execucao(ano, nivel='acao'):
@@ -373,6 +388,26 @@ def _calcular_execucao(ano, nivel='acao'):
 
     resultado = {}
 
+    # --- Reservado (extrair ação do codClassificacao, ANULACAO * -1) ---
+    sql_res = text(f"""
+        SELECT {_SQL_ACAO_FROM_CLASS_RESERVA} as acao {select_nat},
+               COALESCE(SUM(
+                   CASE WHEN tipoAlteracao = 'ANULACAO' THEN -valor ELSE valor END
+               ), 0) as total
+        FROM reserva
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+        GROUP BY acao {group_nat}
+    """)
+    try:
+        for r in db.session.execute(sql_res, params).fetchall():
+            key = (str(r[0]), str(r[1])) if nivel == 'natureza' else str(r[0])
+            val = float(r[-1])
+            resultado.setdefault(key, {'res': 0, 'emp': 0, 'liq': 0, 'pd': 0, 'ob': 0})
+            resultado[key]['res'] += val
+    except Exception:
+        pass
+
     # --- Empenho (tem codAcao direto) ---
     sql_emp = text(f"""
         SELECT codAcao as acao {select_nat}, COALESCE(SUM(valor), 0) as total
@@ -384,7 +419,7 @@ def _calcular_execucao(ano, nivel='acao'):
     for r in db.session.execute(sql_emp, params).fetchall():
         key = (str(r[0]), str(r[1])) if nivel == 'natureza' else str(r[0])
         val = float(r[-1])
-        resultado.setdefault(key, {'emp': 0, 'liq': 0, 'pd': 0, 'ob': 0})
+        resultado.setdefault(key, {'res': 0, 'emp': 0, 'liq': 0, 'pd': 0, 'ob': 0})
         resultado[key]['emp'] += val
 
     # --- Liquidação, PD, OB (extrair ação do codClassificacao) ---
@@ -402,11 +437,40 @@ def _calcular_execucao(ano, nivel='acao'):
             for r in db.session.execute(sql, params).fetchall():
                 key = (str(r[0]), str(r[1])) if nivel == 'natureza' else str(r[0])
                 val = float(r[-1])
-                resultado.setdefault(key, {'emp': 0, 'liq': 0, 'pd': 0, 'ob': 0})
+                resultado.setdefault(key, {'res': 0, 'emp': 0, 'liq': 0, 'pd': 0, 'ob': 0})
                 resultado[key][campo] += val
         except Exception:
             pass  # Tabela pode não existir
 
+    return resultado
+
+
+def _calcular_exec_gerencial(nivel='acao'):
+    """Calcula soma de execucoes_orcamentarias agrupado por ação (ou ação+natureza).
+
+    Args:
+        nivel: 'acao' retorna {acao: total}, 'natureza' retorna {(acao,nat): total}.
+    """
+    group_nat = ", e.natureza" if nivel == 'natureza' else ""
+    select_nat = ", e.natureza" if nivel == 'natureza' else ""
+
+    sql = text(f"""
+        SELECT e.acao {select_nat}, COALESCE(SUM(e.valor), 0) as total
+        FROM execucoes_orcamentarias e
+        WHERE e.acao IS NOT NULL AND e.acao != ''
+        GROUP BY e.acao {group_nat}
+    """)
+
+    resultado = {}
+    try:
+        for r in db.session.execute(sql).fetchall():
+            if nivel == 'natureza':
+                key = (str(r[0]), str(r[1]))
+            else:
+                key = str(r[0])
+            resultado[key] = float(r[-1])
+    except Exception:
+        pass
     return resultado
 
 
@@ -461,6 +525,9 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
     # Execução financeira por ação+natureza (empenho/liquidação/PD/OB)
     exec_por_nat = _calcular_execucao(ano, nivel='natureza')
 
+    # Execução Gerencial por ação+natureza
+    exec_ger_por_nat = _calcular_exec_gerencial(nivel='natureza')
+
     # Agrupa: acao -> natureza -> conta -> total
     tree = {}
     for acao, nat, conta, total in rows:
@@ -488,10 +555,14 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
 
             # Dados de execução financeira para esta ação+natureza
             ex = exec_por_nat.get((str(acao), str(nat)), {})
+            res = float(ex.get('res', 0))
             emp = float(ex.get('emp', 0))
             liq = float(ex.get('liq', 0))
             pd_val = float(ex.get('pd', 0))
             ob = float(ex.get('ob', 0))
+
+            # Execução Gerencial
+            exec_ger = exec_ger_por_nat.get((str(acao), str(nat)), 0)
 
             desc = nat_map.get(str(nat), '')
             lista.append({
@@ -507,6 +578,8 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
                 'credito_disponivel': credito_disp,
                 'analise': analise,
                 'pct_exec': pct_exec,
+                'reservado': res,
+                'pct_res': round((res / dot_atualizada * 100), 2) if dot_atualizada else 0,
                 'empenhado': emp,
                 'pct_emp': round((emp / dot_atualizada * 100), 2) if dot_atualizada else 0,
                 'liquidado': liq,
@@ -515,6 +588,7 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
                 'pct_pd': round((pd_val / dot_atualizada * 100), 2) if dot_atualizada else 0,
                 'pago': ob,
                 'pct_pago': round((ob / dot_atualizada * 100), 2) if dot_atualizada else 0,
+                'exec_gerencial': exec_ger,
             })
         resultado[acao] = lista
 
@@ -534,7 +608,9 @@ def _listar_fontes(ano):
 
     # Busca descrições da tabela class_fonte
     _, fonte_map = _carregar_descricoes()
-    return [{'codigo': c, 'descricao': fonte_map.get(str(c), '')} for c in codigos]
+    resultado = [{'codigo': c, 'descricao': fonte_map.get(str(c), '')} for c in codigos]
+    resultado.sort(key=lambda x: x['descricao'].lower())
+    return resultado
 
 
 def _listar_naturezas(ano):
@@ -549,7 +625,9 @@ def _listar_naturezas(ano):
     codigos = [r[0] for r in rows if r[0]]
 
     nat_map, _ = _carregar_descricoes()
-    return [{'codigo': c, 'descricao': nat_map.get(str(c), '')} for c in codigos]
+    resultado = [{'codigo': c, 'descricao': nat_map.get(str(c), '')} for c in codigos]
+    resultado.sort(key=lambda x: x['descricao'].lower())
+    return resultado
 
 
 def _listar_meses(ano):
@@ -578,7 +656,9 @@ def _listar_acoes(ano):
     desc_rows = db.session.execute(sql_desc).fetchall()
     desc_map = {str(r[0]): r[1] for r in desc_rows if r[0] and r[1]}
 
-    return [{'codigo': c, 'descricao': desc_map.get(str(c), '')} for c in codigos]
+    resultado = [{'codigo': c, 'descricao': desc_map.get(str(c), '')} for c in codigos]
+    resultado.sort(key=lambda x: x['descricao'].lower())
+    return resultado
 
 
 # =============================================================================
@@ -758,5 +838,44 @@ def api_orcamentaria_contratos(acao, natureza):
             'pd': exec_maps['pd'].get(key, 0),
             'pago': exec_maps['ob'].get(key, 0),
         })
+
+    # --- Execuções financeiras sem contrato (fornecedores cadastrados) ---
+    sql_exec = text("""
+        SELECT
+            f.cnpj,
+            f.descricao as fornecedor_desc,
+            COALESCE(SUM(e.valor), 0) as total_valor,
+            COUNT(*) as qtd
+        FROM execucoes_orcamentarias e
+        JOIN fornecedores_sem_contrato f ON f.id = e.fornecedor_id
+        WHERE e.acao = :acao_param
+          AND e.natureza = :natureza
+          AND (e.cod_contrato IS NULL OR e.cod_contrato = '')
+        GROUP BY f.id, f.cnpj, f.descricao
+        ORDER BY f.descricao
+    """)
+    try:
+        exec_rows = db.session.execute(sql_exec, {
+            "acao_param": acao, "natureza": natureza
+        }).fetchall()
+        for cnpj, desc, total_val, qtd_exec in exec_rows:
+            # Formatar CNPJ
+            digitos = ''.join(c for c in (cnpj or '') if c.isdigit())
+            cnpj_fmt = f'{digitos[:2]}.{digitos[2:5]}.{digitos[5:8]}/{digitos[8:12]}-{digitos[12:14]}' if len(digitos) == 14 else cnpj
+            resultado.append({
+                'codContrato': None,
+                'nomeContratado': desc or '',
+                'cnpj': cnpj_fmt,
+                'totalReservado': 0,
+                'totalValor': float(total_val),
+                'qtdExecucoes': qtd_exec,
+                'empenhado': 0,
+                'liquidado': 0,
+                'pd': 0,
+                'pago': 0,
+                'semContrato': True,
+            })
+    except Exception:
+        pass  # Tabela pode não existir
 
     return jsonify(resultado)

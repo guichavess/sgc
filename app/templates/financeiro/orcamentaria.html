@@ -122,6 +122,12 @@
     .row-contrato td:first-child { padding-left: 56px !important; white-space: normal !important; word-break: break-word; }
     .row-contrato td { font-size: 0.73rem; color: #444; }
 
+    /* Linhas sem contrato (execuções financeiras) */
+    .row-sem-contrato { background: #fef2f2; }
+    .row-sem-contrato:hover { background: #fee2e2 !important; }
+    .row-sem-contrato td:first-child { padding-left: 56px !important; white-space: normal !important; word-break: break-word; }
+    .row-sem-contrato td { font-size: 0.73rem; color: #dc3545 !important; font-weight: 500; }
+
     /* Linha total */
     .row-total {
         font-weight: var(--font-weight-bold);
@@ -188,7 +194,7 @@
     .loading-row .spinner-border { width: 1rem; height: 1rem; border-width: 2px; }
 
     /* ===== Card de filtros — overflow visível para dropdowns ===== */
-    .card-filtros { overflow: visible !important; }
+    .card-filtros { overflow: visible !important; position: relative; z-index: 10; }
     .card-filtros .card-body { overflow: visible !important; }
 
     /* ===== Filter Dropdown com pesquisa + checkbox ===== */
@@ -477,6 +483,8 @@
                         <th class="text-end">Dotação<br>Inicial</th>
                         <th class="text-end">Dotação<br>Atualizada</th>
                         <th class="text-end">Créd.<br>Disponível</th>
+                        <th class="text-end">Reservado</th>
+                        <th class="text-end">Exec.<br>Gerencial</th>
                         <th class="text-end">Empenhado</th>
                         <th class="text-end">Liquidado</th>
                         <th class="text-end">PD</th>
@@ -493,6 +501,17 @@
                         <td class="text-end">{{ format_brl(item.dot_inicial) }}</td>
                         <td class="text-end fw-bold">{{ format_brl(item.dot_atualizada) }}</td>
                         <td class="text-end">{{ format_brl(item.credito_disponivel) }}</td>
+                        <td class="text-end">
+                            {{ format_brl(item.reservado) }}
+                            <div class="pct-mini-wrap">
+                                <small class="text-muted">{{ item.pct_res }}%</small>
+                                <div class="pct-mini-bar">
+                                    {% set p = item.pct_res|float %}
+                                    <div class="pct-bar-fill {{ 'pct-green' if p >= 70 else ('pct-yellow' if p >= 40 else 'pct-red') }}" style="width: {{ [p, 100]|min }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-end">{{ format_brl(item.exec_gerencial) }}</td>
                         <td class="text-end">
                             {{ format_brl(item.empenhado) }}
                             <div class="pct-mini-wrap">
@@ -542,6 +561,16 @@
                         <td class="text-end">{{ format_brl(acoes.totais.dot_inicial) }}</td>
                         <td class="text-end">{{ format_brl(acoes.totais.dot_atualizada) }}</td>
                         <td class="text-end">{{ format_brl(acoes.totais.credito_disponivel) }}</td>
+                        <td class="text-end">
+                            {{ format_brl(acoes.totais.reservado) }}
+                            <div class="pct-mini-wrap">
+                                <small>{{ acoes.totais.pct_res }}%</small>
+                                <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
+                                    <div class="pct-bar-fill" style="width: {{ [acoes.totais.pct_res|float, 100]|min }}%; background: #fff;"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-end">{{ format_brl(acoes.totais.exec_gerencial) }}</td>
                         <td class="text-end">
                             {{ format_brl(acoes.totais.empenhado) }}
                             <div class="pct-mini-wrap">
@@ -648,7 +677,7 @@ function toggleAcao(rowEl, acao) {
     if (!data.length) {
         const empty = document.createElement('tr');
         empty.className = `row-natureza child-acao-${acao}`;
-        empty.innerHTML = `<td colspan="8" class="text-center text-muted py-2" style="padding-left:36px;">Nenhuma natureza encontrada</td>`;
+        empty.innerHTML = `<td colspan="10" class="text-center text-muted py-2" style="padding-left:36px;">Nenhuma natureza encontrada</td>`;
         rowEl.after(empty);
         return;
     }
@@ -664,6 +693,8 @@ function toggleAcao(rowEl, acao) {
             <td class="text-end">${formatBRL(nat.dot_inicial)}</td>
             <td class="text-end fw-bold">${formatBRL(nat.dot_atualizada)}</td>
             <td class="text-end">${formatBRL(nat.credito_disponivel)}</td>
+            <td class="text-end">${formatBRL(nat.reservado || 0)}${miniPctHtml(nat.pct_res || 0)}</td>
+            <td class="text-end">${formatBRL(nat.exec_gerencial || 0)}</td>
             <td class="text-end">${formatBRL(nat.empenhado)}${miniPctHtml(nat.pct_emp)}</td>
             <td class="text-end">${formatBRL(nat.liquidado)}${miniPctHtml(nat.pct_liq)}</td>
             <td class="text-end">${formatBRL(nat.pd)}${miniPctHtml(nat.pct_pd)}</td>
@@ -690,7 +721,7 @@ function toggleNatureza(rowEl, acao, natureza) {
 
     const loadingRow = document.createElement('tr');
     loadingRow.className = `loading-row child-nat-${acao}-${natureza}`;
-    loadingRow.innerHTML = `<td colspan="8"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Carregando contratos...</td>`;
+    loadingRow.innerHTML = `<td colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Carregando contratos...</td>`;
     rowEl.after(loadingRow);
 
     fetch(`/financeiro/api/orcamentaria/contratos/${acao}/${natureza}?${buildQueryParams()}`)
@@ -701,33 +732,51 @@ function toggleNatureza(rowEl, acao, natureza) {
             if (!data.length) {
                 const empty = document.createElement('tr');
                 empty.className = `row-contrato child-nat-${acao}-${natureza}`;
-                empty.innerHTML = `<td colspan="8" class="text-center text-muted py-2" style="padding-left:56px;">Nenhum contrato encontrado</td>`;
+                empty.innerHTML = `<td colspan="10" class="text-center text-muted py-2" style="padding-left:56px;">Nenhum contrato encontrado</td>`;
                 rowEl.after(empty);
                 return;
             }
 
             data.reverse().forEach(c => {
                 const tr = document.createElement('tr');
-                tr.className = `row-contrato child-nat-${acao}-${natureza}`;
-                tr.style.cursor = 'pointer';
-                tr.onclick = function() {
-                    window.open(`/prestacoes-contratos/contratos/${encodeURIComponent(c.codContrato)}/gerenciar`, '_blank');
-                };
-                tr.innerHTML = `
-                    <td><i class="bi bi-box-arrow-up-right me-1" style="font-size:0.65rem;"></i>${c.codContrato} - ${c.nomeContratado}</td>
-                    <td class="text-end"></td>
-                    <td class="text-end"></td>
-                    <td class="text-end fw-semibold">${formatBRL(c.totalReservado)}</td>
-                    <td class="text-end">${formatBRL(c.empenhado)}</td>
-                    <td class="text-end">${formatBRL(c.liquidado)}</td>
-                    <td class="text-end">${formatBRL(c.pd)}</td>
-                    <td class="text-end">${formatBRL(c.pago)}</td>
-                `;
+                if (c.semContrato) {
+                    tr.className = `row-sem-contrato child-nat-${acao}-${natureza}`;
+                    tr.innerHTML = `
+                        <td><i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Sem contrato</strong> - ${c.cnpj} - ${c.nomeContratado}</td>
+                        <td class="text-end"></td>
+                        <td class="text-end"></td>
+                        <td class="text-end"></td>
+                        <td class="text-end"></td>
+                        <td class="text-end">${formatBRL(c.totalValor)}</td>
+                        <td class="text-end">—</td>
+                        <td class="text-end">—</td>
+                        <td class="text-end">—</td>
+                        <td class="text-end">—</td>
+                    `;
+                } else {
+                    tr.className = `row-contrato child-nat-${acao}-${natureza}`;
+                    tr.style.cursor = 'pointer';
+                    tr.onclick = function() {
+                        window.open(`/prestacoes-contratos/contratos/${encodeURIComponent(c.codContrato)}/gerenciar`, '_blank');
+                    };
+                    tr.innerHTML = `
+                        <td><i class="bi bi-box-arrow-up-right me-1" style="font-size:0.65rem;"></i>${c.codContrato} - ${c.nomeContratado}</td>
+                        <td class="text-end"></td>
+                        <td class="text-end"></td>
+                        <td class="text-end"></td>
+                        <td class="text-end fw-semibold">${formatBRL(c.totalReservado)}</td>
+                        <td class="text-end"></td>
+                        <td class="text-end">${formatBRL(c.empenhado)}</td>
+                        <td class="text-end">${formatBRL(c.liquidado)}</td>
+                        <td class="text-end">${formatBRL(c.pd)}</td>
+                        <td class="text-end">${formatBRL(c.pago)}</td>
+                    `;
+                }
                 rowEl.after(tr);
             });
         })
         .catch(() => {
-            loadingRow.innerHTML = `<td colspan="8" class="text-center text-danger py-2">Erro ao carregar contratos</td>`;
+            loadingRow.innerHTML = `<td colspan="10" class="text-center text-danger py-2">Erro ao carregar contratos</td>`;
         });
 }
 
