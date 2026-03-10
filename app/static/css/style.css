@@ -30,7 +30,257 @@ body {
     border-color: #343990 !important;
 }
 
-/* --- Navbar --- */
+/* ========================================
+   LAYOUT: Top Navbar + Sidebar
+   ======================================== */
+:root {
+    --navbar-height: 56px;
+    --sidebar-width: 240px;
+}
+
+body.has-layout {
+    overflow-x: hidden;
+}
+
+/* ---------- Top Navbar ---------- */
+.top-navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--navbar-height);
+    background-color: #003399;
+    z-index: 1050;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.top-navbar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+    padding: 0 1rem;
+}
+
+.top-navbar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.top-navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: #fff;
+}
+
+.top-navbar-brand:hover {
+    color: #fff;
+}
+
+.top-navbar-logo {
+    height: 32px;
+    width: auto;
+}
+
+.top-navbar-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.top-navbar-right {
+    display: flex;
+    align-items: center;
+}
+
+.top-navbar-user {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    font-size: 0.9rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+}
+
+.top-navbar-user:hover,
+.top-navbar-user.show {
+    color: #fff;
+    background-color: #002266;
+}
+
+.top-navbar-user i {
+    font-size: 1.25rem;
+}
+
+.sidebar-toggle-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.4rem;
+    padding: 0.25rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.sidebar-toggle-btn:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+    position: fixed;
+    top: var(--navbar-height);
+    left: 0;
+    width: var(--sidebar-width);
+    height: calc(100vh - var(--navbar-height));
+    background-color: #fff;
+    border-right: 1px solid #e0e0e0;
+    overflow-y: auto;
+    z-index: 1040;
+    padding-top: 0.5rem;
+}
+
+.sidebar-section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #999;
+    padding: 0.75rem 1.25rem 0.4rem;
+}
+
+.sidebar-menu {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0.6rem 1.25rem;
+    color: #555;
+    text-decoration: none;
+    font-size: 0.88rem;
+    border-left: 3px solid transparent;
+    transition: all 0.15s ease;
+}
+
+.sidebar-link:hover {
+    color: #003399;
+    background-color: #e8edf8;
+    border-left-color: #003399;
+}
+
+.sidebar-link.active {
+    color: #003399;
+    background-color: #dce3f5;
+    border-left-color: #003399;
+    font-weight: 600;
+}
+
+.sidebar-link i {
+    font-size: 1.1rem;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* Sidebar Accordion (sanfona) */
+.sidebar-accordion-toggle {
+    cursor: pointer;
+    position: relative;
+}
+.sidebar-accordion-icon {
+    font-size: 0.7rem;
+    transition: transform 0.2s ease;
+}
+.sidebar-accordion-toggle[aria-expanded="true"] .sidebar-accordion-icon {
+    transform: rotate(180deg);
+}
+.sidebar-submenu {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.sidebar-sublink {
+    padding-left: 2.5rem !important;
+    font-size: 0.84rem !important;
+}
+.sidebar-sublink i {
+    font-size: 0.95rem !important;
+}
+
+/* ---------- Main Content ---------- */
+.main-content {
+    margin-left: var(--sidebar-width);
+    margin-top: var(--navbar-height);
+    min-height: calc(100vh - var(--navbar-height));
+}
+
+/* Transicoes so ativam apos page load (evita flash) */
+body.transitions-ready .sidebar {
+    transition: transform 0.3s ease;
+}
+
+body.transitions-ready .main-content {
+    transition: margin-left 0.3s ease;
+}
+
+/* ---------- Overlay mobile ---------- */
+.sidebar-overlay {
+    position: fixed;
+    top: var(--navbar-height);
+    left: 0;
+    width: 100%;
+    height: calc(100vh - var(--navbar-height));
+    background-color: rgba(0, 0, 0, 0.45);
+    z-index: 1035;
+    display: none;
+}
+
+.sidebar-overlay.open {
+    display: block;
+}
+
+/* ---------- Responsivo ---------- */
+@media (max-width: 991.98px) {
+    .sidebar {
+        transform: translateX(-100%);
+        box-shadow: none;
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+        box-shadow: 4px 0 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .main-content {
+        margin-left: 0;
+    }
+}
+
+/* ---------- Sidebar colapsada (desktop) ---------- */
+body.sidebar-collapsed .sidebar {
+    transform: translateX(-100%);
+}
+
+body.sidebar-collapsed .main-content {
+    margin-left: 0;
+}
+
+/* ========================================
+   FIM LAYOUT
+   ======================================== */
+
+/* --- Navbar (legacy) --- */
 .navbar {
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }

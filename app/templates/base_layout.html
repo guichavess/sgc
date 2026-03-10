@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SGC - Gestao de Contratos{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/x-icon">
+
+    {# CDN - Bibliotecas externas #}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+
+    {# CSS Principal #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="has-layout sidebar-collapsed">
+
+    {# ===== Top Navbar ===== #}
+    <header class="top-navbar">
+        <div class="top-navbar-inner">
+            <div class="top-navbar-left">
+                <button class="sidebar-toggle-btn" id="sidebarToggle" title="Menu">
+                    <i class="bi bi-list"></i>
+                </button>
+                <a class="top-navbar-brand" href="{{ url_for('hub') }}">
+                    <img src="{{ url_for('static', filename='img/logo-sead-branca.png') }}" alt="SEAD" class="top-navbar-logo">
+                    <span class="top-navbar-title">SGC <span style="opacity:.5;margin:0 4px;">|</span> <span style="font-weight:400;font-size:.9rem;opacity:.8;">{% block module_name %}Gestao de Contratos{% endblock %}</span></span>
+                </a>
+            </div>
+            <div class="top-navbar-right">
+                {% if session.get('usuario_nome') %}
+                    {% set nome_completo = session.get('usuario_nome', '') %}
+                    {% set partes_nome = nome_completo.split() %}
+                    {% set nome_curto = (partes_nome[:2]|join(' ')) if partes_nome|length >= 2 else nome_completo %}
+
+                    {# Notification bell #}
+                    <div style="margin-right: 8px;">
+                        {% include 'components/notification_bell_topbar.html' ignore missing %}
+                    </div>
+
+                    {# User dropdown #}
+                    <div class="dropdown">
+                        <a class="top-navbar-user dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle"></i>
+                            <span class="d-none d-md-inline">{{ nome_curto }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            {% if current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper() %}
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center" href="#" id="btn-atualizar-siafe">
+                                    <i class="bi bi-arrow-repeat me-2 text-primary"></i> Atualizar SIAFE
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
+                            <li>
+                                <a class="dropdown-item text-danger d-flex align-items-center" href="{{ url_for('auth.logout') }}">
+                                    <i class="bi bi-box-arrow-right me-2"></i> Sair
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    {# ===== Sidebar ===== #}
+    <nav class="sidebar" id="sidebar">
+        {# Hub link #}
+        <div class="sidebar-section-label">Navegacao</div>
+        <ul class="sidebar-menu">
+            <li>
+                <a class="sidebar-link" href="{{ url_for('hub') }}">
+                    <i class="bi bi-grid-1x2"></i> Módulos
+                </a>
+            </li>
+        </ul>
+
+        {# Module-specific links - filled by child templates #}
+        {% block sidebar_links %}{% endblock %}
+    </nav>
+
+    {# Overlay mobile #}
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    {# ===== Main Content ===== #}
+    <main class="main-content">
+        <div class="{% block container_class %}container-fluid px-4{% endblock %} py-4">
+            {# Flash messages #}
+            {% include 'components/flash_messages.html' %}
+
+            {# Page content #}
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    {# Notifications #}
+    {% include 'components/notification_toasts.html' %}
+    {% include 'components/notification_critical_overlay.html' %}
+    {% include 'components/contact_collection_modal.html' %}
+
+    {# Scripts Bootstrap #}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    {# Vite #}
+    {% if vite_dev_mode %}
+        <script type="module" src="{{ vite_asset('main') }}"></script>
+    {% endif %}
+
+    {# Notifications polling #}
+    {% include 'components/notification_scripts.html' %}
+
+    {# SIAFE Modal #}
+    {% if current_user is defined and current_user.is_authenticated and current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper() %}
+    {% include 'components/siafe_modal.html' %}
+    {% endif %}
+
+    {# Sidebar toggle script #}
+    <script>
+    (function() {
+        const KEY = 'sgc_sidebar_collapsed';
+        const body = document.body;
+        const toggle = document.getElementById('sidebarToggle');
+        const overlay = document.getElementById('sidebarOverlay');
+        const sidebar = document.getElementById('sidebar');
+        const isMobile = () => window.innerWidth < 992;
+
+        // Restore state from localStorage (desktop only)
+        if (!isMobile()) {
+            const saved = localStorage.getItem(KEY);
+            if (saved === 'false') {
+                body.classList.remove('sidebar-collapsed');
+            }
+        }
+
+        // Enable transitions after initial paint to avoid flash
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                body.classList.add('transitions-ready');
+            });
+        });
+
+        toggle.addEventListener('click', function() {
+            if (isMobile()) {
+                sidebar.classList.toggle('open');
+                overlay.classList.toggle('open');
+            } else {
+                body.classList.toggle('sidebar-collapsed');
+                localStorage.setItem(KEY, body.classList.contains('sidebar-collapsed'));
+            }
+        });
+
+        overlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+        });
+
+        // Close sidebar links on mobile
+        sidebar.querySelectorAll('.sidebar-link').forEach(link => {
+            link.addEventListener('click', () => {
+                if (isMobile()) {
+                    sidebar.classList.remove('open');
+                    overlay.classList.remove('open');
+                }
+            });
+        });
+    })();
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -54,6 +54,15 @@ consulta-pessoa-sga-gestor.txt
 consultaProcedimento.json
 listagem de documentos.json
 
+# Rascunhos e arquivos temporarios na raiz
+/_*.py.txt
+/_*.py
+/_*.png
+/acao.json
+/report.css
+/style.css
+/fx_reserva_2026.py.txt
+
 # Deploy local (nao vai pro servidor)
 deploy-prod.bat
 

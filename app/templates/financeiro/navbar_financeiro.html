@@ -16,12 +16,14 @@
 
             {% if session.get('usuario_nome') %}
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-4">
+                    {% if current_user.is_admin or (current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper()) %}
                     <li class="nav-item">
-                        <a class="nav-link px-3 d-inline-flex align-items-center {{ 'active' if request.endpoint == 'financeiro.dashboard' }}"
-                           href="{{ url_for('financeiro.dashboard') }}">
-                            <i class="bi bi-bar-chart-line me-1"></i> Saldos
+                        <a class="nav-link px-3 d-inline-flex align-items-center {{ 'active' if request.endpoint == 'financeiro.orcamentaria' }}"
+                           href="{{ url_for('financeiro.orcamentaria') }}">
+                            <i class="bi bi-wallet2 me-1"></i> Orçamento
                         </a>
                     </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link px-3 d-inline-flex align-items-center {{ 'active' if request.endpoint == 'financeiro.pendencias_ne' }}"
                            href="{{ url_for('financeiro.pendencias_ne') }}">
@@ -32,6 +34,18 @@
                         <a class="nav-link px-3 d-inline-flex align-items-center {{ 'active' if request.endpoint and request.endpoint.startswith('financeiro.diarias') }}"
                            href="{{ url_for('financeiro.diarias_lista') }}">
                             <i class="bi bi-airplane me-1"></i> Diárias
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link px-3 d-inline-flex align-items-center {{ 'active' if request.endpoint == 'financeiro.fornecedores_lista' }}"
+                           href="{{ url_for('financeiro.fornecedores_lista') }}">
+                            <i class="bi bi-building me-1"></i> Fornecedores
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link px-3 d-inline-flex align-items-center {{ 'active' if request.endpoint and request.endpoint.startswith('financeiro.execucoes') }}"
+                           href="{{ url_for('financeiro.execucoes_lista') }}">
+                            <i class="bi bi-clipboard-data me-1"></i> Execuções
                         </a>
                     </li>
                 </ul>

@@ -1,53 +1,52 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}SGC - Prestações de Contratos{% endblock %}</title>
-    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/x-icon">
+{% extends "base_layout.html" %}
 
-    {# CDN - Bibliotecas externas #}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+{% block title %}SGC - Execucoes de Contratos{% endblock %}
+{% block module_name %}Execucoes de Contratos{% endblock %}
 
-    {# CSS Principal #}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+{% block sidebar_links %}
+<div class="sidebar-section-label">Contratos</div>
+<ul class="sidebar-menu">
+    <li>
+        <a class="sidebar-link {{ 'active' if request.endpoint == 'prestacoes_contratos.dashboard' }}"
+           href="{{ url_for('prestacoes_contratos.dashboard') }}">
+            <i class="bi bi-file-earmark-text"></i> Contratos
+        </a>
+    </li>
+    <li>
+        <a class="sidebar-link {{ 'active' if request.endpoint and request.endpoint.startswith('prestacoes_contratos.prestacoes') }}"
+           href="{{ url_for('prestacoes_contratos.prestacoes_index') }}">
+            <i class="bi bi-journal-check"></i> Execucoes
+        </a>
+    </li>
+</ul>
 
-    {# CSS específico da página #}
-    {% block extra_css %}{% endblock %}
-</head>
-<body>
-
-    {# Navbar do módulo Prestações de Contratos #}
-    {% include 'prestacoes_contratos/navbar_prestacoes.html' %}
-
-    <div class="container pb-5">
-        {# Mensagens Flash #}
-        {% include 'components/flash_messages.html' %}
-
-        {# Conteúdo da página #}
-        {% block content %}{% endblock %}
-    </div>
-
-    {# Notificacoes: Toasts, Overlay Critico, Modal Contato #}
-    {% include 'components/notification_toasts.html' %}
-    {% include 'components/notification_critical_overlay.html' %}
-    {% include 'components/contact_collection_modal.html' %}
-
-    {# Scripts Bootstrap #}
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-    {# Script Principal (Vite em dev ou build em prod) #}
-    {% if vite_dev_mode %}
-        <script type="module" src="{{ vite_asset('main') }}"></script>
-    {% endif %}
-
-    {# Notificacoes: Polling, dropdown, tab title #}
-    {% include 'components/notification_scripts.html' %}
-
-    {# Scripts específicos da página #}
-    {% block extra_js %}{% endblock %}
-</body>
-</html>
+{% set is_cadastro_active = (request.endpoint and (request.endpoint.startswith('prestacoes_contratos.exec_orcamentaria') or request.endpoint.startswith('prestacoes_contratos.eo_'))) %}
+<div class="sidebar-section-label">Cadastro</div>
+<ul class="sidebar-menu">
+    <li>
+        <a class="sidebar-link sidebar-accordion-toggle {{ 'active' if is_cadastro_active }}"
+           data-bs-toggle="collapse" href="#sidebarCadastro" role="button"
+           aria-expanded="{{ 'true' if is_cadastro_active else 'false' }}"
+           aria-controls="sidebarCadastro">
+            <i class="bi bi-folder-plus"></i> Cadastro
+            <i class="bi bi-chevron-down sidebar-accordion-icon ms-auto"></i>
+        </a>
+        <div class="collapse {{ 'show' if is_cadastro_active }}" id="sidebarCadastro">
+            <ul class="sidebar-submenu">
+                <li>
+                    <a class="sidebar-link sidebar-sublink {{ 'active' if request.endpoint and (request.endpoint.startswith('prestacoes_contratos.exec_orcamentaria') or request.endpoint.startswith('prestacoes_contratos.eo_')) and (request.args.get('aba', 'fornecedores') == 'execucoes') }}"
+                       href="{{ url_for('prestacoes_contratos.exec_orcamentaria', aba='execucoes') }}">
+                        <i class="bi bi-wallet2"></i> Execuções Financeiras
+                    </a>
+                </li>
+                <li>
+                    <a class="sidebar-link sidebar-sublink {{ 'active' if request.endpoint and (request.endpoint.startswith('prestacoes_contratos.exec_orcamentaria') or request.endpoint.startswith('prestacoes_contratos.eo_')) and (request.args.get('aba', 'fornecedores') == 'fornecedores') }}"
+                       href="{{ url_for('prestacoes_contratos.exec_orcamentaria', aba='fornecedores') }}">
+                        <i class="bi bi-building"></i> Fornecedores
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </li>
+</ul>
+{% endblock %}
