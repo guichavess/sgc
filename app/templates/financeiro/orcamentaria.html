@@ -86,6 +86,13 @@
     .bar-pds       { background: #1abc9c; }
     .bar-pago      { background: #e74c3c; }
 
+    /* ===== Ordenação de colunas ===== */
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { background: rgba(0,0,0,0.08); }
+    .sort-icon { font-size: 0.55rem; opacity: 0.35; margin-left: 2px; }
+    .sortable.sort-asc .sort-icon,
+    .sortable.sort-desc .sort-icon { opacity: 1; }
+
     /* ===== Tabela orçamentária — sobrescreve table-custom para layout compacto ===== */
     .table-orcamento.table-custom thead th {
         padding: 10px 8px;
@@ -479,16 +486,16 @@
             <table class="table table-custom table-hover table-orcamento align-middle mb-0" id="tabelaOrcamento">
                 <thead>
                     <tr>
-                        <th class="ps-3" style="min-width: 250px;">Ação</th>
-                        <th class="text-end">Dotação<br>Inicial</th>
-                        <th class="text-end">Dotação<br>Atualizada</th>
-                        <th class="text-end">Créd.<br>Disponível</th>
-                        <th class="text-end">Reservado</th>
-                        <th class="text-end">Exec.<br>Gerencial</th>
-                        <th class="text-end">Empenhado</th>
-                        <th class="text-end">Liquidado</th>
-                        <th class="text-end">PD</th>
-                        <th class="text-end">Pago</th>
+                        <th class="ps-3 sortable" data-col="0" data-type="text" style="min-width: 250px;">Ação <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="1" data-type="num">Dotação<br>Inicial <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="2" data-type="num">Dotação<br>Atualizada <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="3" data-type="num">Créd.<br>Disponível <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="4" data-type="num">Exec.<br>Gerencial <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="5" data-type="num">Reservado <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="6" data-type="num">Empenhado <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="7" data-type="num">Liquidado <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="8" data-type="num">PD <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="9" data-type="num">Pago <i class="bi bi-arrow-down-up sort-icon"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -498,11 +505,12 @@
                             <span class="expand-icon"><i class="bi bi-chevron-right"></i></span>
                             {{ item.desc_acao }}
                         </td>
-                        <td class="text-end">{{ format_brl(item.dot_inicial) }}</td>
-                        <td class="text-end fw-bold">{{ format_brl(item.dot_atualizada) }}</td>
-                        <td class="text-end">{{ format_brl(item.credito_disponivel) }}</td>
+                        <td class="text-end">{{ format_num(item.dot_inicial) }}</td>
+                        <td class="text-end fw-bold">{{ format_num(item.dot_atualizada) }}</td>
+                        <td class="text-end">{{ format_num(item.credito_disponivel) }}</td>
+                        <td class="text-end">{{ format_num(item.exec_gerencial) }}</td>
                         <td class="text-end">
-                            {{ format_brl(item.reservado) }}
+                            {{ format_num(item.reservado) }}
                             <div class="pct-mini-wrap">
                                 <small class="text-muted">{{ item.pct_res }}%</small>
                                 <div class="pct-mini-bar">
@@ -511,9 +519,8 @@
                                 </div>
                             </div>
                         </td>
-                        <td class="text-end">{{ format_brl(item.exec_gerencial) }}</td>
                         <td class="text-end">
-                            {{ format_brl(item.empenhado) }}
+                            {{ format_num(item.empenhado) }}
                             <div class="pct-mini-wrap">
                                 <small class="text-muted">{{ item.pct_emp }}%</small>
                                 <div class="pct-mini-bar">
@@ -523,7 +530,7 @@
                             </div>
                         </td>
                         <td class="text-end">
-                            {{ format_brl(item.liquidado) }}
+                            {{ format_num(item.liquidado) }}
                             <div class="pct-mini-wrap">
                                 <small class="text-muted">{{ item.pct_liq }}%</small>
                                 <div class="pct-mini-bar">
@@ -533,7 +540,7 @@
                             </div>
                         </td>
                         <td class="text-end">
-                            {{ format_brl(item.pd) }}
+                            {{ format_num(item.pd) }}
                             <div class="pct-mini-wrap">
                                 <small class="text-muted">{{ item.pct_pd }}%</small>
                                 <div class="pct-mini-bar">
@@ -543,7 +550,7 @@
                             </div>
                         </td>
                         <td class="text-end">
-                            {{ format_brl(item.pago) }}
+                            {{ format_num(item.pago) }}
                             <div class="pct-mini-wrap">
                                 <small class="text-muted">{{ item.pct_pago }}%</small>
                                 <div class="pct-mini-bar">
@@ -558,11 +565,12 @@
                 <tfoot>
                     <tr class="row-total">
                         <td class="ps-3">TOTAL</td>
-                        <td class="text-end">{{ format_brl(acoes.totais.dot_inicial) }}</td>
-                        <td class="text-end">{{ format_brl(acoes.totais.dot_atualizada) }}</td>
-                        <td class="text-end">{{ format_brl(acoes.totais.credito_disponivel) }}</td>
+                        <td class="text-end">{{ format_num(acoes.totais.dot_inicial) }}</td>
+                        <td class="text-end">{{ format_num(acoes.totais.dot_atualizada) }}</td>
+                        <td class="text-end">{{ format_num(acoes.totais.credito_disponivel) }}</td>
+                        <td class="text-end">{{ format_num(acoes.totais.exec_gerencial) }}</td>
                         <td class="text-end">
-                            {{ format_brl(acoes.totais.reservado) }}
+                            {{ format_num(acoes.totais.reservado) }}
                             <div class="pct-mini-wrap">
                                 <small>{{ acoes.totais.pct_res }}%</small>
                                 <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
@@ -570,9 +578,8 @@
                                 </div>
                             </div>
                         </td>
-                        <td class="text-end">{{ format_brl(acoes.totais.exec_gerencial) }}</td>
                         <td class="text-end">
-                            {{ format_brl(acoes.totais.empenhado) }}
+                            {{ format_num(acoes.totais.empenhado) }}
                             <div class="pct-mini-wrap">
                                 <small>{{ acoes.totais.pct_emp }}%</small>
                                 <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
@@ -581,7 +588,7 @@
                             </div>
                         </td>
                         <td class="text-end">
-                            {{ format_brl(acoes.totais.liquidado) }}
+                            {{ format_num(acoes.totais.liquidado) }}
                             <div class="pct-mini-wrap">
                                 <small>{{ acoes.totais.pct_liq }}%</small>
                                 <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
@@ -590,7 +597,7 @@
                             </div>
                         </td>
                         <td class="text-end">
-                            {{ format_brl(acoes.totais.pd) }}
+                            {{ format_num(acoes.totais.pd) }}
                             <div class="pct-mini-wrap">
                                 <small>{{ acoes.totais.pct_pd }}%</small>
                                 <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
@@ -599,7 +606,7 @@
                             </div>
                         </td>
                         <td class="text-end">
-                            {{ format_brl(acoes.totais.pago) }}
+                            {{ format_num(acoes.totais.pago) }}
                             <div class="pct-mini-wrap">
                                 <small>{{ acoes.totais.pct_pago }}%</small>
                                 <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
@@ -625,8 +632,8 @@ const currentFonte = '{{ fonte_filtro }}';
 const NATUREZAS = {{ naturezas_json|tojson }};
 
 function formatBRL(val) {
-    if (val == null || isNaN(val)) return 'R$ 0,00';
-    return 'R$ ' + Number(val).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (val == null || isNaN(val)) return '0,00';
+    return Number(val).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
 function buildQueryParams() {
@@ -693,8 +700,8 @@ function toggleAcao(rowEl, acao) {
             <td class="text-end">${formatBRL(nat.dot_inicial)}</td>
             <td class="text-end fw-bold">${formatBRL(nat.dot_atualizada)}</td>
             <td class="text-end">${formatBRL(nat.credito_disponivel)}</td>
-            <td class="text-end">${formatBRL(nat.reservado || 0)}${miniPctHtml(nat.pct_res || 0)}</td>
             <td class="text-end">${formatBRL(nat.exec_gerencial || 0)}</td>
+            <td class="text-end">${formatBRL(nat.reservado || 0)}${miniPctHtml(nat.pct_res || 0)}</td>
             <td class="text-end">${formatBRL(nat.empenhado)}${miniPctHtml(nat.pct_emp)}</td>
             <td class="text-end">${formatBRL(nat.liquidado)}${miniPctHtml(nat.pct_liq)}</td>
             <td class="text-end">${formatBRL(nat.pd)}${miniPctHtml(nat.pct_pd)}</td>
@@ -746,8 +753,8 @@ function toggleNatureza(rowEl, acao, natureza) {
                         <td class="text-end"></td>
                         <td class="text-end"></td>
                         <td class="text-end"></td>
-                        <td class="text-end"></td>
                         <td class="text-end">${formatBRL(c.totalValor)}</td>
+                        <td class="text-end"></td>
                         <td class="text-end">—</td>
                         <td class="text-end">—</td>
                         <td class="text-end">—</td>
@@ -764,8 +771,8 @@ function toggleNatureza(rowEl, acao, natureza) {
                         <td class="text-end"></td>
                         <td class="text-end"></td>
                         <td class="text-end"></td>
-                        <td class="text-end fw-semibold">${formatBRL(c.totalReservado)}</td>
                         <td class="text-end"></td>
+                        <td class="text-end fw-semibold">${formatBRL(c.totalReservado)}</td>
                         <td class="text-end">${formatBRL(c.empenhado)}</td>
                         <td class="text-end">${formatBRL(c.liquidado)}</td>
                         <td class="text-end">${formatBRL(c.pd)}</td>
@@ -812,14 +819,19 @@ document.querySelectorAll('.filter-dropdown').forEach(dropdown => {
             const term = this.value.toLowerCase();
             options.forEach(opt => {
                 const text = opt.querySelector('span').textContent.toLowerCase();
-                opt.style.display = text.includes(term) ? '' : 'none';
+                opt.classList.toggle('d-none', !text.includes(term));
             });
         });
     }
 
-    // Update label on check change
+    // Update label on check change + cascata de filtros dependentes
+    const filterName = dropdown.dataset.name;
     checks.forEach(check => {
-        check.addEventListener('change', updateToggleLabel);
+        check.addEventListener('change', function() {
+            console.log(`[filtros-dep] change em ${filterName}: ${this.value} checked=${this.checked}`);
+            updateToggleLabel();
+            atualizarFiltrosDependentes(filterName);
+        });
     });
 
     // Focus search on dropdown open
@@ -832,80 +844,171 @@ document.querySelectorAll('.filter-dropdown').forEach(dropdown => {
 });
 
 // ========================
-// Ano change → recarrega opções dos filtros via AJAX
+// Filtros dependentes (cascata)
 // ========================
-document.getElementById('filtroAno').addEventListener('change', function() {
-    const ano = this.value;
-    fetch(`/financeiro/api/orcamentaria/filtros/${ano}`)
-        .then(r => r.json())
-        .then(data => {
-            // Rebuild each filter dropdown
-            const NOMES_MESES = {{ nomes_meses|tojson }};
+function getSelectedValues(name) {
+    const dd = document.querySelector(`.filter-dropdown[data-name="${name}"]`);
+    if (!dd) return [];
+    return [...dd.querySelectorAll('.filter-check:checked')].map(c => c.value);
+}
 
-            const configs = {
-                mes: { items: data.meses, labelFn: m => m.label, valueFn: m => m.valor },
-                acao: { items: data.acoes, labelFn: a => `${a.codigo} - ${a.descricao}`, valueFn: a => a.codigo },
-                natureza: { items: data.naturezas, labelFn: n => `${n.codigo} - ${n.descricao}`, valueFn: n => n.codigo },
-                fonte: { items: data.fontes, labelFn: f => `${f.codigo} - ${f.descricao}`, valueFn: f => f.codigo },
+function refreshDropdownLabel(dropdown) {
+    const toggle = dropdown.querySelector('.filter-dropdown-toggle');
+    const placeholder = toggle.querySelector('.filter-placeholder');
+    const defaultText = dropdown.dataset.default || 'Todos';
+    const allChecks = dropdown.querySelectorAll('.filter-check');
+    const visibleChecked = [...allChecks].filter(c => c.checked && !c.closest('.filter-option').classList.contains('d-none'));
+    if (visibleChecked.length === 0) {
+        placeholder.textContent = defaultText;
+        toggle.classList.remove('has-selection');
+    } else if (visibleChecked.length === 1) {
+        const txt = visibleChecked[0].closest('.filter-option').querySelector('span').textContent.trim();
+        placeholder.innerHTML = txt.length > 25 ? txt.substring(0, 25) + '...' : txt;
+        toggle.classList.add('has-selection');
+    } else {
+        placeholder.innerHTML = visibleChecked.length + ' selecionados';
+        toggle.classList.add('has-selection');
+    }
+}
+
+function atualizarFiltrosDependentes(changedFilter) {
+    const ano = document.getElementById('filtroAno').value;
+    const mes = getSelectedValues('mes');
+    const acao = getSelectedValues('acao');
+    const natureza = getSelectedValues('natureza');
+    const fonte = getSelectedValues('fonte');
+
+    const params = new URLSearchParams({ano});
+    if (mes.length) params.set('mes', mes.join(','));
+    if (acao.length) params.set('acao', acao.join(','));
+    if (natureza.length) params.set('natureza', natureza.join(','));
+    if (fonte.length) params.set('fonte', fonte.join(','));
+
+    const url = `{{ url_for('financeiro.api_filtros_dependentes') }}?${params}`;
+    console.log('[filtros-dep] chamando:', url);
+
+    fetch(url)
+        .then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        })
+        .then(data => {
+            if (data.error) { console.error('[filtros-dep] erro servidor:', data.error); return; }
+            console.log('[filtros-dep] resposta:', {
+                meses: data.meses.length,
+                acoes: data.acoes.length,
+                naturezas: data.naturezas.length,
+                fontes: data.fontes.length
+            });
+
+            const validSets = {
+                mes: new Set(data.meses.map(m => String(m.valor))),
+                acao: new Set(data.acoes.map(a => String(a.codigo))),
+                natureza: new Set(data.naturezas.map(n => String(n.codigo))),
+                fonte: new Set(data.fontes.map(f => String(f.codigo))),
             };
 
-            Object.entries(configs).forEach(([name, cfg]) => {
-                const dropdown = document.querySelector(`.filter-dropdown[data-name="${name}"]`);
-                if (!dropdown) return;
-                const optionsContainer = dropdown.querySelector('.filter-options');
-                const toggle = dropdown.querySelector('.filter-dropdown-toggle');
-                const placeholder = toggle.querySelector('.filter-placeholder');
-                const defaultText = dropdown.dataset.default || 'Todos';
+            Object.entries(validSets).forEach(([name, validValues]) => {
+                if (name === changedFilter) return;
+                const dd = document.querySelector(`.filter-dropdown[data-name="${name}"]`);
+                if (!dd) return;
 
-                // Clear and rebuild options
-                optionsContainer.innerHTML = '';
-                cfg.items.forEach(item => {
-                    const val = cfg.valueFn(item);
-                    const label = cfg.labelFn(item);
-                    const lbl = document.createElement('label');
-                    lbl.className = 'dropdown-item d-flex align-items-center gap-2 py-1 px-2 rounded filter-option';
-                    lbl.dataset.value = val;
-                    lbl.innerHTML = `<input type="checkbox" class="form-check-input m-0 filter-check" name="${name}" value="${val}"><span class="small text-truncate">${label}</span>`;
-                    optionsContainer.appendChild(lbl);
-
-                    // Wire checkbox change
-                    lbl.querySelector('.filter-check').addEventListener('change', () => {
-                        const selected = optionsContainer.querySelectorAll('.filter-check:checked');
-                        if (selected.length === 0) {
-                            placeholder.textContent = defaultText;
-                            toggle.classList.remove('has-selection');
-                        } else if (selected.length === 1) {
-                            const txt = selected[0].closest('.filter-option').querySelector('span').textContent.trim();
-                            placeholder.innerHTML = txt.length > 25 ? txt.substring(0, 25) + '...' : txt;
-                            toggle.classList.add('has-selection');
-                        } else {
-                            placeholder.innerHTML = selected.length + ' selecionados';
-                            toggle.classList.add('has-selection');
-                        }
-                    });
+                let hidden = 0;
+                dd.querySelectorAll('.filter-option').forEach(opt => {
+                    const val = String(opt.dataset.value);
+                    const available = validValues.has(val);
+                    opt.classList.toggle('d-none', !available);
+                    if (!available) {
+                        hidden++;
+                        const chk = opt.querySelector('.filter-check');
+                        if (chk && chk.checked) chk.checked = false;
+                    }
                 });
+                console.log(`[filtros-dep] ${name}: ${validValues.size} válidos, ${hidden} ocultos`);
 
-                // Reset label
-                placeholder.textContent = defaultText;
-                toggle.classList.remove('has-selection');
-
-                // Rewire search
-                const searchInput = dropdown.querySelector('.filter-search');
-                if (searchInput) {
-                    searchInput.value = '';
-                    const newSearch = searchInput.cloneNode(true);
-                    searchInput.parentNode.replaceChild(newSearch, searchInput);
-                    newSearch.addEventListener('input', function() {
-                        const term = this.value.toLowerCase();
-                        optionsContainer.querySelectorAll('.filter-option').forEach(opt => {
-                            const text = opt.querySelector('span').textContent.toLowerCase();
-                            opt.style.display = text.includes(term) ? '' : 'none';
-                        });
-                    });
-                }
+                refreshDropdownLabel(dd);
             });
         })
-        .catch(err => console.error('Erro ao carregar filtros:', err));
+        .catch(err => console.error('[filtros-dep] erro fetch:', err));
+}
+
+// Ano change → limpa seleções e recarrega filtros
+document.getElementById('filtroAno').addEventListener('change', function() {
+    document.querySelectorAll('.filter-dropdown .filter-check:checked').forEach(c => { c.checked = false; });
+    document.querySelectorAll('.filter-dropdown .filter-option').forEach(opt => { opt.classList.remove('d-none'); });
+    document.querySelectorAll('.filter-dropdown').forEach(dd => refreshDropdownLabel(dd));
+    atualizarFiltrosDependentes(null);
 });
+
+// Page load: se algum filtro já está selecionado, aplica cascata
+(function() {
+    const hasSelection = document.querySelector('.filter-dropdown .filter-check:checked');
+    if (hasSelection) {
+        atualizarFiltrosDependentes(null);
+    }
+})();
+
+// ========================
+// Ordenação de colunas da tabela
+// ========================
+(function() {
+    const table = document.getElementById('tabelaOrcamento');
+    if (!table) return;
+    const headers = table.querySelectorAll('thead th.sortable');
+
+    function parseNum(txt) {
+        // Remove tudo exceto dígitos, vírgula e sinal negativo
+        const clean = txt.replace(/[^\d,\-]/g, '').replace(',', '.');
+        return parseFloat(clean) || 0;
+    }
+
+    function getCellValue(row, col, type) {
+        const cell = row.children[col];
+        if (!cell) return type === 'num' ? 0 : '';
+        const txt = cell.textContent.trim();
+        return type === 'num' ? parseNum(txt) : txt.toLowerCase();
+    }
+
+    headers.forEach(th => {
+        th.addEventListener('click', function() {
+            const col = parseInt(this.dataset.col);
+            const type = this.dataset.type;
+            const tbody = table.querySelector('tbody');
+
+            // Recolhe todas as linhas expandidas (natureza/contrato)
+            tbody.querySelectorAll('.row-natureza, .row-contrato, .row-sem-contrato').forEach(r => r.remove());
+            tbody.querySelectorAll('.row-acao.expanded').forEach(r => r.classList.remove('expanded'));
+
+            // Determina direção: primeira vez = desc, alterna depois
+            let dir = 'desc';
+            if (this.classList.contains('sort-desc')) dir = 'asc';
+
+            // Limpa indicadores de todas as colunas
+            headers.forEach(h => { h.classList.remove('sort-asc', 'sort-desc'); });
+            this.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+
+            // Atualiza ícone
+            headers.forEach(h => {
+                const icon = h.querySelector('.sort-icon');
+                icon.className = 'bi bi-arrow-down-up sort-icon';
+            });
+            const icon = this.querySelector('.sort-icon');
+            icon.className = dir === 'desc' ? 'bi bi-sort-down sort-icon' : 'bi bi-sort-up sort-icon';
+
+            // Ordena apenas as row-acao
+            const rows = Array.from(tbody.querySelectorAll('.row-acao'));
+            rows.sort((a, b) => {
+                const va = getCellValue(a, col, type);
+                const vb = getCellValue(b, col, type);
+                if (type === 'num') {
+                    return dir === 'desc' ? vb - va : va - vb;
+                }
+                return dir === 'desc' ? vb.toString().localeCompare(va.toString(), 'pt-BR') : va.toString().localeCompare(vb.toString(), 'pt-BR');
+            });
+
+            rows.forEach(row => tbody.appendChild(row));
+        });
+    });
+})();
 </script>
 {% endblock %}

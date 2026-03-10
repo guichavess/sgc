@@ -57,10 +57,17 @@ def _decimal(val):
 
 
 def _format_brl(val):
-    """Formata valor para padrão BRL."""
+    """Formata valor para padrão BRL com R$."""
     if val is None:
         val = ZERO
     return f'R$ {val:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+def _format_num(val):
+    """Formata valor numérico sem R$ (para tabelas)."""
+    if val is None:
+        val = ZERO
+    return f'{val:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
 
 
 def _pct(parte, total):
@@ -92,11 +99,11 @@ def orcamentaria():
     # --- Pré-carrega naturezas de todas as ações (evita AJAX lento) ---
     naturezas_por_acao = _calcular_todas_naturezas(ano, mes, fonte_filtro, natureza_filtro, acao_filtro)
 
-    # --- Listas para filtros ---
-    fontes = _listar_fontes(ano)
-    meses_disponiveis = _listar_meses(ano)
-    naturezas_disponiveis = _listar_naturezas(ano)
-    acoes_disponiveis = _listar_acoes(ano)
+    # --- Listas para filtros (dependentes dos outros filtros selecionados) ---
+    fontes = _listar_fontes_filtradas(ano, mes, acao_filtro, natureza_filtro, '')
+    meses_disponiveis = _listar_meses_filtrados(ano, '', acao_filtro, natureza_filtro, fonte_filtro)
+    naturezas_disponiveis = _listar_naturezas_filtradas(ano, mes, acao_filtro, '', fonte_filtro)
+    acoes_disponiveis = _listar_acoes_filtradas(ano, mes, '', natureza_filtro, fonte_filtro)
 
     return render_template(
         'financeiro/orcamentaria.html',
@@ -114,6 +121,7 @@ def orcamentaria():
         acoes_disponiveis=acoes_disponiveis,
         nomes_meses=NOMES_MESES,
         format_brl=_format_brl,
+        format_num=_format_num,
     )
 
 
@@ -139,9 +147,37 @@ def _calcular_kpis(ano, mes, fonte, natureza='', acao=''):
         params["acao"] = acao
 
     # Range de datas para usar índices (evita YEAR() que impede index seek)
-    data_inicio = f"{ano}-01-01"
-    data_fim = f"{ano + 1}-01-01"
+    # Se mes informado, filtra apenas aquele mês
+    if mes:
+        data_inicio = f"{ano}-{mes:02d}-01"
+        if mes == 12:
+            data_fim = f"{ano + 1}-01-01"
+        else:
+            data_fim = f"{ano}-{mes + 1:02d}-01"
+    else:
+        data_inicio = f"{ano}-01-01"
+        data_fim = f"{ano + 1}-01-01"
     params_data = {"dt_ini": data_inicio, "dt_fim": data_fim}
+
+    # Filtros para tabelas de execução (reserva, empenho, liquidacao, pd, ob)
+    filtro_exec_fonte = ""
+    filtro_exec_natureza = ""
+    if fonte:
+        filtro_exec_fonte = "AND codFonte = :fonte"
+        params_data["fonte"] = fonte
+    if natureza:
+        filtro_exec_natureza = "AND codNatureza = :natureza"
+        params_data["natureza"] = natureza
+
+    # Filtro de ação: reserva usa extração de codClassificacao, empenho usa codAcao
+    filtro_exec_acao_reserva = ""
+    filtro_exec_acao_empenho = ""
+    filtro_exec_acao_class = ""
+    if acao:
+        filtro_exec_acao_reserva = f"AND {_SQL_ACAO_FROM_CLASS_RESERVA} = :acao"
+        filtro_exec_acao_empenho = "AND codAcao = :acao"
+        filtro_exec_acao_class = f"AND {_SQL_ACAO_FROM_CLASS} = :acao"
+        params_data["acao"] = acao
 
     # Crédito Disponível (LOA)
     sql_credito = text(f"""
@@ -152,55 +188,91 @@ def _calcular_kpis(ano, mes, fonte, natureza='', acao=''):
         sql_credito, {**params, "conta": CONTA_CREDITO_DISPONIVEL}
     ).scalar() or 0
 
-    # Reservado
-    sql_reservado = text("""
-        SELECT COALESCE(SUM(valor), 0) FROM reserva
-        WHERE dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+    # Reservado (só CONTABILIZADO; ANULACAO inverte sinal)
+    sql_reservado = text(f"""
+        SELECT COALESCE(SUM(
+            CASE WHEN tipoAlteracao = 'ANULACAO' THEN -valor ELSE valor END
+        ), 0) FROM reserva
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+          {filtro_exec_fonte} {filtro_exec_natureza} {filtro_exec_acao_reserva}
     """)
     reservado = db.session.execute(sql_reservado, params_data).scalar() or 0
 
-    # Empenhado (tabela empenho existente)
-    sql_empenhado = text("""
-        SELECT COALESCE(SUM(valor), 0) FROM empenho
-        WHERE dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+    # Empenhado (CONTABILIZADO; tipoAlteracaoNE = ANULACAO inverte sinal)
+    sql_empenhado = text(f"""
+        SELECT COALESCE(SUM(
+            CASE WHEN tipoAlteracaoNE = 'ANULACAO' THEN -valor ELSE valor END
+        ), 0) FROM empenho
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
           AND codigoUG = '210101'
+          {filtro_exec_fonte} {filtro_exec_natureza} {filtro_exec_acao_empenho}
     """)
     empenhado = db.session.execute(sql_empenhado, params_data).scalar() or 0
 
-    # Liquidado
-    sql_liquidado = text("""
-        SELECT COALESCE(SUM(valor), 0) FROM liquidacao
-        WHERE dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+    # Liquidado (CONTABILIZADO; tipoAlteracao = ANULACAO inverte sinal)
+    sql_liquidado = text(f"""
+        SELECT COALESCE(SUM(
+            CASE WHEN tipoAlteracao = 'ANULACAO' THEN -valor ELSE valor END
+        ), 0) FROM liquidacao
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
           AND codigoUG = '210101'
+          {filtro_exec_fonte} {filtro_exec_natureza} {filtro_exec_acao_class}
     """)
     try:
         liquidado = db.session.execute(sql_liquidado, params_data).scalar() or 0
     except Exception:
         liquidado = 0
 
-    # PDs a Pagar
-    sql_pd = text("""
+    # PDs a Pagar (CONTABILIZADO)
+    sql_pd = text(f"""
         SELECT COALESCE(SUM(valor), 0) FROM pd
-        WHERE dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
           AND codigoUG = '210101'
+          {filtro_exec_fonte} {filtro_exec_natureza} {filtro_exec_acao_class}
     """)
     try:
         pd_val = db.session.execute(sql_pd, params_data).scalar() or 0
     except Exception:
         pd_val = 0
 
-    # Pago (OB)
-    sql_pago = text("""
+    # Pago (OB) (CONTABILIZADO)
+    sql_pago = text(f"""
         SELECT COALESCE(SUM(valor), 0) FROM ob
-        WHERE dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
           AND codigoUG = '210101'
+          {filtro_exec_fonte} {filtro_exec_natureza} {filtro_exec_acao_class}
     """)
     try:
         pago = db.session.execute(sql_pago, params_data).scalar() or 0
     except Exception:
         pago = 0
 
-    # Dotação Atualizada total (para % execução)
+    # Dotação Inicial — sempre fixa em janeiro, sem filtro de mês
+    params_dot_ini = {"ano": ano}
+    filtros_dot_ini = ""
+    if fonte:
+        filtros_dot_ini += " AND codFonte = :fonte"
+        params_dot_ini["fonte"] = fonte
+    if natureza:
+        filtros_dot_ini += " AND codNatureza = :natureza"
+        params_dot_ini["natureza"] = natureza
+    if acao:
+        filtros_dot_ini += " AND codAcao = :acao"
+        params_dot_ini["acao"] = acao
+    sql_dot_ini = text(f"""
+        SELECT COALESCE(SUM(saldo), 0) FROM loa_2026
+        WHERE ano = :ano AND id = :conta AND mes = 1 {filtros_dot_ini}
+    """)
+    dot_inicial = _decimal(
+        db.session.execute(sql_dot_ini, {**params_dot_ini, "conta": CONTA_INICIAL}).scalar() or 0
+    )
+
+    # Demais contas LOA (respeitam filtro de mês)
     sql_dotacao = text(f"""
         SELECT id, COALESCE(SUM(saldo), 0) as total FROM loa_2026
         WHERE ano = :ano {filtro_mes} {filtro_fonte} {filtro_natureza} {filtro_acao}
@@ -208,8 +280,6 @@ def _calcular_kpis(ano, mes, fonte, natureza='', acao=''):
     """)
     rows = db.session.execute(sql_dotacao, params).fetchall()
     totais_conta = {r[0]: _decimal(r[1]) for r in rows}
-
-    dot_inicial = totais_conta.get(CONTA_INICIAL, ZERO)
     dot_suplementar = totais_conta.get(CONTA_SUPLEMENTAR, ZERO)
     dot_especial = sum(totais_conta.get(c, ZERO) for c in CONTAS_ESPECIAL)
     dot_extra = sum(totais_conta.get(c, ZERO) for c in CONTAS_EXTRAORDINARIA)
@@ -252,6 +322,28 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
         filtro_acao = "AND codAcao = :acao"
         params["acao"] = acao
 
+    # Dotação Inicial — sempre fixa em janeiro (mes=1), sem filtro de mês
+    params_dot_ini = {"ano": ano}
+    filtros_dot_ini = ""
+    if fonte:
+        filtros_dot_ini += " AND codFonte = :fonte"
+        params_dot_ini["fonte"] = fonte
+    if natureza:
+        filtros_dot_ini += " AND codNatureza = :natureza"
+        params_dot_ini["natureza"] = natureza
+    if acao:
+        filtros_dot_ini += " AND codAcao = :acao"
+        params_dot_ini["acao"] = acao
+    sql_dot_ini = text(f"""
+        SELECT codAcao as acao, COALESCE(SUM(saldo), 0) as total
+        FROM loa_2026
+        WHERE ano = :ano AND id = :conta AND mes = 1 {filtros_dot_ini}
+        GROUP BY acao
+    """)
+    dot_ini_rows = db.session.execute(sql_dot_ini, {**params_dot_ini, "conta": CONTA_INICIAL}).fetchall()
+    dot_ini_por_acao = {r[0]: _decimal(r[1]) for r in dot_ini_rows if r[0]}
+
+    # Demais contas LOA (respeitam filtro de mês)
     sql = text(f"""
         SELECT
             codAcao as acao,
@@ -274,6 +366,11 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
             acoes_dict[acao_cod] = {}
         acoes_dict[acao_cod][conta] = _decimal(total)
 
+    # Garante que ações com dotação inicial apareçam mesmo sem dados no mês filtrado
+    for acao_cod in dot_ini_por_acao:
+        if acao_cod not in acoes_dict:
+            acoes_dict[acao_cod] = {}
+
     # Busca títulos das ações na tabela 'acao'
     sql_desc = text("SELECT codigo, titulo FROM acao")
     desc_rows = db.session.execute(sql_desc).fetchall()
@@ -283,7 +380,7 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
             desc_map[codigo] = titulo
 
     # Execução financeira por ação (empenho/liquidação/PD/OB)
-    exec_por_acao = _calcular_execucao(ano, nivel='acao')
+    exec_por_acao = _calcular_execucao(ano, nivel='acao', mes=mes, fonte=fonte, natureza=natureza, acao=acao)
 
     # Execução Gerencial (soma de execucoes_orcamentarias por ação)
     exec_gerencial_por_acao = _calcular_exec_gerencial(nivel='acao')
@@ -300,7 +397,7 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
     for acao_cod in sorted(acoes_dict.keys()):
         contas = acoes_dict[acao_cod]
 
-        dot_inicial = contas.get(CONTA_INICIAL, ZERO)
+        dot_inicial = dot_ini_por_acao.get(acao_cod, ZERO)
         dot_suplementar = contas.get(CONTA_SUPLEMENTAR, ZERO)
         dot_especial = sum(contas.get(c, ZERO) for c in CONTAS_ESPECIAL)
         dot_extra = sum(contas.get(c, ZERO) for c in CONTAS_EXTRAORDINARIA)
@@ -371,24 +468,56 @@ _SQL_ACAO_FROM_CLASS = "SUBSTRING_INDEX(SUBSTRING_INDEX(REPLACE(codClassificacao
 _SQL_ACAO_FROM_CLASS_RESERVA = "SUBSTRING_INDEX(SUBSTRING_INDEX(REPLACE(codClassificacao, ' ', ''), '.', 7), '.', -1)"
 
 
-def _calcular_execucao(ano, nivel='acao'):
+def _calcular_execucao(ano, nivel='acao', mes=None, fonte='', natureza='', acao=''):
     """Calcula valores de empenho/liquidação/PD/OB agrupados por ação (ou ação+natureza).
 
     Args:
         ano: Ano fiscal.
         nivel: 'acao' retorna {acao: {emp, liq, pd, ob}},
                'natureza' retorna {(acao, nat): {emp, liq, pd, ob}}.
+        mes: Mês para filtrar (opcional).
+        fonte: Código da fonte para filtrar (opcional).
+        natureza: Código da natureza para filtrar (opcional).
+        acao: Código da ação para filtrar (opcional).
     """
-    dt_ini = f"{ano}-01-01"
-    dt_fim = f"{ano + 1}-01-01"
+    # Range de datas: se mes informado, filtra apenas aquele mês
+    if mes:
+        dt_ini = f"{ano}-{mes:02d}-01"
+        if mes == 12:
+            dt_fim = f"{ano + 1}-01-01"
+        else:
+            dt_fim = f"{ano}-{mes + 1:02d}-01"
+    else:
+        dt_ini = f"{ano}-01-01"
+        dt_fim = f"{ano + 1}-01-01"
     params = {"dt_ini": dt_ini, "dt_fim": dt_fim}
+
+    # Filtros comuns de execução
+    filtro_fonte = ""
+    filtro_natureza_sql = ""
+    if fonte:
+        filtro_fonte = "AND codFonte = :fonte"
+        params["fonte"] = fonte
+    if natureza:
+        filtro_natureza_sql = "AND codNatureza = :natureza"
+        params["natureza"] = natureza
+
+    # Filtro de ação (cada tabela usa extração diferente)
+    filtro_acao_reserva = ""
+    filtro_acao_empenho = ""
+    filtro_acao_class = ""
+    if acao:
+        filtro_acao_reserva = f"AND {_SQL_ACAO_FROM_CLASS_RESERVA} = :acao"
+        filtro_acao_empenho = "AND codAcao = :acao"
+        filtro_acao_class = f"AND {_SQL_ACAO_FROM_CLASS} = :acao"
+        params["acao"] = acao
 
     group_nat = ", codNatureza" if nivel == 'natureza' else ""
     select_nat = ", codNatureza" if nivel == 'natureza' else ""
 
     resultado = {}
 
-    # --- Reservado (extrair ação do codClassificacao, ANULACAO * -1) ---
+    # --- Reservado (extrair ação do codClassificacao, só CONTABILIZADO, ANULACAO inverte sinal) ---
     sql_res = text(f"""
         SELECT {_SQL_ACAO_FROM_CLASS_RESERVA} as acao {select_nat},
                COALESCE(SUM(
@@ -397,6 +526,7 @@ def _calcular_execucao(ano, nivel='acao'):
         FROM reserva
         WHERE statusDocumento = 'CONTABILIZADO'
           AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+          {filtro_fonte} {filtro_natureza_sql} {filtro_acao_reserva}
         GROUP BY acao {group_nat}
     """)
     try:
@@ -408,12 +538,17 @@ def _calcular_execucao(ano, nivel='acao'):
     except Exception:
         pass
 
-    # --- Empenho (tem codAcao direto) ---
+    # --- Empenho (tem codAcao direto, CONTABILIZADO, ANULACAO inverte sinal) ---
     sql_emp = text(f"""
-        SELECT codAcao as acao {select_nat}, COALESCE(SUM(valor), 0) as total
+        SELECT codAcao as acao {select_nat},
+               COALESCE(SUM(
+                   CASE WHEN tipoAlteracaoNE = 'ANULACAO' THEN -valor ELSE valor END
+               ), 0) as total
         FROM empenho
-        WHERE codigoUG = '210101'
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND codigoUG = '210101'
           AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+          {filtro_fonte} {filtro_natureza_sql} {filtro_acao_empenho}
         GROUP BY acao {group_nat}
     """)
     for r in db.session.execute(sql_emp, params).fetchall():
@@ -422,15 +557,39 @@ def _calcular_execucao(ano, nivel='acao'):
         resultado.setdefault(key, {'res': 0, 'emp': 0, 'liq': 0, 'pd': 0, 'ob': 0})
         resultado[key]['emp'] += val
 
-    # --- Liquidação, PD, OB (extrair ação do codClassificacao) ---
-    tabelas = [('liquidacao', 'liq'), ('pd', 'pd'), ('ob', 'ob')]
+    # --- Liquidação (CONTABILIZADO, ANULACAO inverte sinal) ---
+    sql_liq = text(f"""
+        SELECT {_SQL_ACAO_FROM_CLASS} as acao {select_nat},
+               COALESCE(SUM(
+                   CASE WHEN tipoAlteracao = 'ANULACAO' THEN -valor ELSE valor END
+               ), 0) as total
+        FROM liquidacao
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND codigoUG = '210101'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+          {filtro_fonte} {filtro_natureza_sql} {filtro_acao_class}
+        GROUP BY acao {group_nat}
+    """)
+    try:
+        for r in db.session.execute(sql_liq, params).fetchall():
+            key = (str(r[0]), str(r[1])) if nivel == 'natureza' else str(r[0])
+            val = float(r[-1])
+            resultado.setdefault(key, {'res': 0, 'emp': 0, 'liq': 0, 'pd': 0, 'ob': 0})
+            resultado[key]['liq'] += val
+    except Exception:
+        pass
+
+    # --- PD, OB (CONTABILIZADO, sem tipoAlteracao) ---
+    tabelas = [('pd', 'pd'), ('ob', 'ob')]
     for tabela, campo in tabelas:
         sql = text(f"""
             SELECT {_SQL_ACAO_FROM_CLASS} as acao {select_nat},
                    COALESCE(SUM(valor), 0) as total
             FROM {tabela}
-            WHERE codigoUG = '210101'
+            WHERE statusDocumento = 'CONTABILIZADO'
+              AND codigoUG = '210101'
               AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+              {filtro_fonte} {filtro_natureza_sql} {filtro_acao_class}
             GROUP BY acao {group_nat}
         """)
         try:
@@ -509,6 +668,30 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
         filtro_acao = "AND codAcao = :acao"
         params["acao"] = acao
 
+    # Dotação Inicial por ação+natureza — sempre fixa em janeiro (mes=1)
+    params_dot_ini = {"ano": ano, "conta": CONTA_INICIAL}
+    filtros_dot_ini = ""
+    if fonte:
+        filtros_dot_ini += " AND codFonte = :fonte"
+        params_dot_ini["fonte"] = fonte
+    if natureza:
+        filtros_dot_ini += " AND codNatureza = :natureza"
+        params_dot_ini["natureza"] = natureza
+    if acao:
+        filtros_dot_ini += " AND codAcao = :acao"
+        params_dot_ini["acao"] = acao
+    sql_dot_ini = text(f"""
+        SELECT codAcao, codNatureza, COALESCE(SUM(saldo), 0) as total
+        FROM loa_2026
+        WHERE ano = :ano AND id = :conta AND mes = 1 AND codNatureza IS NOT NULL {filtros_dot_ini}
+        GROUP BY codAcao, codNatureza
+    """)
+    dot_ini_por_nat = {}
+    for r in db.session.execute(sql_dot_ini, params_dot_ini).fetchall():
+        if r[0] and r[1]:
+            dot_ini_por_nat[(r[0], r[1])] = float(_decimal(r[2]))
+
+    # Demais contas LOA (respeitam filtro de mês)
     sql = text(f"""
         SELECT codAcao, codNatureza, id as conta, COALESCE(SUM(saldo), 0) as total
         FROM loa_2026
@@ -523,25 +706,29 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
     nat_map, _ = _carregar_descricoes()
 
     # Execução financeira por ação+natureza (empenho/liquidação/PD/OB)
-    exec_por_nat = _calcular_execucao(ano, nivel='natureza')
+    exec_por_nat = _calcular_execucao(ano, nivel='natureza', mes=mes, fonte=fonte, natureza=natureza, acao=acao)
 
     # Execução Gerencial por ação+natureza
     exec_ger_por_nat = _calcular_exec_gerencial(nivel='natureza')
 
     # Agrupa: acao -> natureza -> conta -> total
     tree = {}
-    for acao, nat, conta, total in rows:
-        if not acao or not nat:
+    for acao_v, nat, conta, total in rows:
+        if not acao_v or not nat:
             continue
-        tree.setdefault(acao, {}).setdefault(nat, {})[conta] = float(_decimal(total))
+        tree.setdefault(acao_v, {}).setdefault(nat, {})[conta] = float(_decimal(total))
+
+    # Garante que ações+naturezas com dotação inicial apareçam
+    for (acao_v, nat) in dot_ini_por_nat:
+        tree.setdefault(acao_v, {}).setdefault(nat, {})
 
     # Calcula dotações por natureza em cada ação
     resultado = {}
-    for acao, nats in tree.items():
+    for acao_v, nats in tree.items():
         lista = []
         for nat in sorted(nats.keys()):
             contas = nats[nat]
-            dot_inicial = contas.get(CONTA_INICIAL, 0)
+            dot_inicial = dot_ini_por_nat.get((acao_v, nat), 0)
             dot_suplementar = contas.get(CONTA_SUPLEMENTAR, 0)
             dot_especial = sum(contas.get(c, 0) for c in CONTAS_ESPECIAL)
             dot_extra = sum(contas.get(c, 0) for c in CONTAS_EXTRAORDINARIA)
@@ -554,7 +741,7 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
             pct_exec = round((analise / dot_atualizada * 100), 2) if dot_atualizada else 0
 
             # Dados de execução financeira para esta ação+natureza
-            ex = exec_por_nat.get((str(acao), str(nat)), {})
+            ex = exec_por_nat.get((str(acao_v), str(nat)), {})
             res = float(ex.get('res', 0))
             emp = float(ex.get('emp', 0))
             liq = float(ex.get('liq', 0))
@@ -562,7 +749,7 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
             ob = float(ex.get('ob', 0))
 
             # Execução Gerencial
-            exec_ger = exec_ger_por_nat.get((str(acao), str(nat)), 0)
+            exec_ger = exec_ger_por_nat.get((str(acao_v), str(nat)), 0)
 
             desc = nat_map.get(str(nat), '')
             lista.append({
@@ -590,7 +777,7 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
                 'pct_pago': round((ob / dot_atualizada * 100), 2) if dot_atualizada else 0,
                 'exec_gerencial': exec_ger,
             })
-        resultado[acao] = lista
+        resultado[acao_v] = lista
 
     return resultado
 
@@ -661,6 +848,67 @@ def _listar_acoes(ano):
     return resultado
 
 
+# --- Versões filtradas (dependentes) dos listadores de filtros ---
+
+def _build_filtro_sql(ano, mes, acao, natureza, fonte, excluir):
+    """Constrói WHERE + params para listagem de filtros dependentes.
+
+    `excluir` indica qual filtro NÃO incluir (para não filtrar por si mesmo).
+    """
+    where = "WHERE ano = :ano"
+    params = {"ano": ano}
+    if mes and excluir != 'mes':
+        where += " AND mes = :mes"
+        params["mes"] = int(mes)
+    if acao and excluir != 'acao':
+        where += " AND codAcao = :acao"
+        params["acao"] = acao
+    if natureza and excluir != 'natureza':
+        where += " AND codNatureza = :natureza"
+        params["natureza"] = natureza
+    if fonte and excluir != 'fonte':
+        where += " AND codFonte = :fonte"
+        params["fonte"] = fonte
+    return where, params
+
+
+def _listar_meses_filtrados(ano, mes, acao, natureza, fonte):
+    where, params = _build_filtro_sql(ano, mes, acao, natureza, fonte, 'mes')
+    sql = text(f"SELECT DISTINCT mes FROM loa_2026 {where} ORDER BY mes")
+    return [r[0] for r in db.session.execute(sql, params).fetchall() if r[0] is not None]
+
+
+def _listar_acoes_filtradas(ano, mes, acao, natureza, fonte):
+    where, params = _build_filtro_sql(ano, mes, acao, natureza, fonte, 'acao')
+    sql = text(f"SELECT DISTINCT codAcao FROM loa_2026 {where} AND codAcao IS NOT NULL ORDER BY codAcao")
+    codigos = [r[0] for r in db.session.execute(sql, params).fetchall() if r[0]]
+    sql_desc = text("SELECT codigo, titulo FROM acao")
+    desc_map = {str(r[0]): r[1] for r in db.session.execute(sql_desc).fetchall() if r[0] and r[1]}
+    resultado = [{'codigo': c, 'descricao': desc_map.get(str(c), '')} for c in codigos]
+    resultado.sort(key=lambda x: x['descricao'].lower())
+    return resultado
+
+
+def _listar_naturezas_filtradas(ano, mes, acao, natureza, fonte):
+    where, params = _build_filtro_sql(ano, mes, acao, natureza, fonte, 'natureza')
+    sql = text(f"SELECT DISTINCT codNatureza FROM loa_2026 {where} AND codNatureza IS NOT NULL ORDER BY codNatureza")
+    codigos = [r[0] for r in db.session.execute(sql, params).fetchall() if r[0]]
+    nat_map, _ = _carregar_descricoes()
+    resultado = [{'codigo': c, 'descricao': nat_map.get(str(c), '')} for c in codigos]
+    resultado.sort(key=lambda x: x['descricao'].lower())
+    return resultado
+
+
+def _listar_fontes_filtradas(ano, mes, acao, natureza, fonte):
+    where, params = _build_filtro_sql(ano, mes, acao, natureza, fonte, 'fonte')
+    sql = text(f"SELECT DISTINCT codFonte FROM loa_2026 {where} AND codFonte IS NOT NULL ORDER BY codFonte")
+    codigos = [r[0] for r in db.session.execute(sql, params).fetchall() if r[0]]
+    _, fonte_map = _carregar_descricoes()
+    resultado = [{'codigo': c, 'descricao': fonte_map.get(str(c), '')} for c in codigos]
+    resultado.sort(key=lambda x: x['descricao'].lower())
+    return resultado
+
+
 # =============================================================================
 # API: Filtros dinâmicos por ano
 # =============================================================================
@@ -680,6 +928,90 @@ def api_orcamentaria_filtros(ano):
         'fontes': [{'codigo': f['codigo'], 'descricao': f['descricao']} for f in fontes],
         'acoes': [{'codigo': a['codigo'], 'descricao': a['descricao']} for a in acoes],
     })
+
+
+# =============================================================================
+# API: Filtros dependentes (cascata)
+# =============================================================================
+@financeiro_bp.route('/api/orcamentaria/filtros-dependentes')
+@login_required
+@requires_admin_or_pedro
+def api_filtros_dependentes():
+    """Retorna opções disponíveis para cada filtro, filtradas pelos OUTROS filtros selecionados."""
+    try:
+        ano = request.args.get('ano', 2026, type=int)
+        mes_raw = request.args.get('mes', '')
+        acao_raw = request.args.get('acao', '')
+        natureza_raw = request.args.get('natureza', '')
+        fonte_raw = request.args.get('fonte', '')
+
+        # Suporta valores múltiplos separados por vírgula
+        mes_vals = [v.strip() for v in mes_raw.split(',') if v.strip()] if mes_raw else []
+        acao_vals = [v.strip() for v in acao_raw.split(',') if v.strip()] if acao_raw else []
+        nat_vals = [v.strip() for v in natureza_raw.split(',') if v.strip()] if natureza_raw else []
+        fonte_vals = [v.strip() for v in fonte_raw.split(',') if v.strip()] if fonte_raw else []
+
+        base = "FROM loa_2026 WHERE ano = :ano"
+
+        def _build_query(select_col, excluir):
+            """Constrói SQL e params excluindo o filtro indicado."""
+            frags = ""
+            params = {"ano": ano}
+            if mes_vals and excluir != 'mes':
+                placeholders = ', '.join(f':mes_{i}' for i in range(len(mes_vals)))
+                frags += f" AND mes IN ({placeholders})"
+                for i, v in enumerate(mes_vals):
+                    params[f'mes_{i}'] = int(v)
+            if acao_vals and excluir != 'acao':
+                placeholders = ', '.join(f':acao_{i}' for i in range(len(acao_vals)))
+                frags += f" AND codAcao IN ({placeholders})"
+                for i, v in enumerate(acao_vals):
+                    params[f'acao_{i}'] = v
+            if nat_vals and excluir != 'natureza':
+                placeholders = ', '.join(f':nat_{i}' for i in range(len(nat_vals)))
+                frags += f" AND codNatureza IN ({placeholders})"
+                for i, v in enumerate(nat_vals):
+                    params[f'nat_{i}'] = v
+            if fonte_vals and excluir != 'fonte':
+                placeholders = ', '.join(f':fonte_{i}' for i in range(len(fonte_vals)))
+                frags += f" AND codFonte IN ({placeholders})"
+                for i, v in enumerate(fonte_vals):
+                    params[f'fonte_{i}'] = v
+            not_null = f" AND {select_col} IS NOT NULL" if select_col != 'mes' else ""
+            sql = f"SELECT DISTINCT {select_col} {base}{frags}{not_null} ORDER BY {select_col}"
+            return text(sql), params
+
+        # Meses disponíveis (filtrado por acao, natureza, fonte — NÃO por mes)
+        sql_m, p_m = _build_query('mes', 'mes')
+        meses = [r[0] for r in db.session.execute(sql_m, p_m).fetchall() if r[0] is not None]
+
+        # Ações disponíveis (filtrado por mes, natureza, fonte — NÃO por acao)
+        sql_a, p_a = _build_query('codAcao', 'acao')
+        acoes_vals = [r[0] for r in db.session.execute(sql_a, p_a).fetchall() if r[0]]
+
+        # Naturezas disponíveis (filtrado por mes, acao, fonte — NÃO por natureza)
+        sql_n, p_n = _build_query('codNatureza', 'natureza')
+        nats_vals = [r[0] for r in db.session.execute(sql_n, p_n).fetchall() if r[0]]
+
+        # Fontes disponíveis (filtrado por mes, acao, natureza — NÃO por fonte)
+        sql_f, p_f = _build_query('codFonte', 'fonte')
+        fontes_vals = [r[0] for r in db.session.execute(sql_f, p_f).fetchall() if r[0]]
+
+        # Descrições
+        nat_map, fonte_map = _carregar_descricoes()
+        sql_desc_acao = text("SELECT codigo, titulo FROM acao")
+        acao_map = {str(r[0]): r[1] for r in db.session.execute(sql_desc_acao).fetchall() if r[0] and r[1]}
+
+        return jsonify({
+            'meses': [{'valor': m, 'label': NOMES_MESES.get(m, str(m))} for m in meses],
+            'acoes': [{'codigo': str(a), 'descricao': acao_map.get(str(a), '')} for a in acoes_vals],
+            'naturezas': [{'codigo': str(n), 'descricao': nat_map.get(str(n), '')} for n in nats_vals],
+            'fontes': [{'codigo': str(f), 'descricao': fonte_map.get(str(f), '')} for f in fontes_vals],
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 # =============================================================================
@@ -762,27 +1094,49 @@ def api_orcamentaria_naturezas(acao):
 @login_required
 @requires_admin_or_pedro
 def api_orcamentaria_contratos(acao, natureza):
-    """Retorna contratos da tabela reserva filtrados por ação + natureza,
+    """Retorna contratos filtrados por ação + natureza + fonte,
     com valores de execução (empenho/liquidação/PD/OB)."""
     ano = request.args.get('ano', 2026, type=int)
+    mes = request.args.get('mes', type=int)
+    fonte = request.args.get('fonte', '')
 
-    dt_ini = f"{ano}-01-01"
-    dt_fim = f"{ano + 1}-01-01"
-    base_params = {"dt_ini": dt_ini, "dt_fim": dt_fim, "natureza": natureza}
+    # Date range
+    if mes:
+        dt_ini = f"{ano}-{mes:02d}-01"
+        if mes == 12:
+            dt_fim = f"{ano + 1}-01-01"
+        else:
+            dt_fim = f"{ano}-{mes + 1:02d}-01"
+    else:
+        dt_ini = f"{ano}-01-01"
+        dt_fim = f"{ano + 1}-01-01"
 
-    # --- Reservas ---
-    sql_reserva = text("""
+    # Filtros condicionais de fonte
+    filtro_fonte_reserva = "AND CAST(r.codFonte AS CHAR) = :fonte" if fonte else ""
+    filtro_fonte = "AND CAST(codFonte AS CHAR) = :fonte" if fonte else ""
+
+    base_params = {"dt_ini": dt_ini, "dt_fim": dt_fim, "natureza": natureza, "acao": acao}
+    if fonte:
+        base_params["fonte"] = fonte
+
+    # --- Reservas (ação via codClassificacao segmento 7) ---
+    sql_reserva = text(f"""
         SELECT
             r.codContrato,
             c.nomeContratado,
-            COALESCE(SUM(r.valor), 0) as total_reservado,
+            COALESCE(SUM(
+                CASE WHEN r.tipoAlteracao = 'ANULACAO' THEN -r.valor ELSE r.valor END
+            ), 0) as total_reservado,
             COUNT(*) as qtd_reservas
         FROM reserva r
         LEFT JOIN contratos c ON r.codContrato = c.codigo
-        WHERE r.dataEmissao >= :dt_ini AND r.dataEmissao < :dt_fim
+        WHERE r.statusDocumento = 'CONTABILIZADO'
+          AND r.dataEmissao >= :dt_ini AND r.dataEmissao < :dt_fim
           AND r.codContrato IS NOT NULL
           AND r.codContrato != ''
           AND CAST(r.codNatureza AS CHAR) = :natureza
+          AND {_SQL_ACAO_FROM_CLASS_RESERVA} = :acao
+          {filtro_fonte_reserva}
         GROUP BY r.codContrato, c.nomeContratado
         ORDER BY total_reservado DESC
     """)
@@ -791,14 +1145,20 @@ def api_orcamentaria_contratos(acao, natureza):
     # --- Execução por contrato (empenho, liquidação, PD, OB) ---
     exec_maps = {'emp': {}, 'liq': {}, 'pd': {}, 'ob': {}}
 
-    # Empenho (codContrato é BigInteger)
-    sql_emp = text("""
-        SELECT CAST(codContrato AS CHAR), COALESCE(SUM(valor), 0)
+    # Empenho (tem codAcao direto)
+    sql_emp = text(f"""
+        SELECT CAST(codContrato AS CHAR),
+               COALESCE(SUM(
+                   CASE WHEN tipoAlteracaoNE = 'ANULACAO' THEN -valor ELSE valor END
+               ), 0)
         FROM empenho
-        WHERE codigoUG = '210101'
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND codigoUG = '210101'
           AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
           AND CAST(codNatureza AS CHAR) = :natureza
+          AND CAST(codAcao AS CHAR) = :acao
           AND codContrato IS NOT NULL AND codContrato != 0
+          {filtro_fonte}
         GROUP BY codContrato
     """)
     try:
@@ -807,23 +1167,68 @@ def api_orcamentaria_contratos(acao, natureza):
     except Exception:
         pass
 
-    # Liquidação, PD, OB
-    for tabela, campo in [('liquidacao', 'liq'), ('pd', 'pd'), ('ob', 'ob')]:
-        sql = text(f"""
-            SELECT CAST(codContrato AS CHAR), COALESCE(SUM(valor), 0)
-            FROM {tabela}
-            WHERE codigoUG = '210101'
-              AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
-              AND CAST(codNatureza AS CHAR) = :natureza
-              AND codContrato IS NOT NULL
-              AND CAST(codContrato AS CHAR) NOT IN ('', '0')
-            GROUP BY codContrato
-        """)
-        try:
-            for r in db.session.execute(sql, base_params).fetchall():
-                exec_maps[campo][str(r[0]).strip()] = float(r[1])
-        except Exception:
-            pass
+    # Liquidação (tipoAlteracao, ação via codClassificacao segmento 8)
+    sql_liq = text(f"""
+        SELECT CAST(codContrato AS CHAR),
+               COALESCE(SUM(
+                   CASE WHEN tipoAlteracao = 'ANULACAO' THEN -valor ELSE valor END
+               ), 0)
+        FROM liquidacao
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND codigoUG = '210101'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+          AND CAST(codNatureza AS CHAR) = :natureza
+          AND {_SQL_ACAO_FROM_CLASS} = :acao
+          AND codContrato IS NOT NULL
+          AND CAST(codContrato AS CHAR) NOT IN ('', '0')
+          {filtro_fonte}
+        GROUP BY codContrato
+    """)
+    try:
+        for r in db.session.execute(sql_liq, base_params).fetchall():
+            exec_maps['liq'][str(r[0]).strip()] = float(r[1])
+    except Exception:
+        pass
+
+    # PD (sem tipoAlteracao, ação via codClassificacao segmento 8)
+    sql_pd = text(f"""
+        SELECT CAST(codContrato AS CHAR), COALESCE(SUM(valor), 0)
+        FROM pd
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND codigoUG = '210101'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+          AND CAST(codNatureza AS CHAR) = :natureza
+          AND {_SQL_ACAO_FROM_CLASS} = :acao
+          AND codContrato IS NOT NULL
+          AND CAST(codContrato AS CHAR) NOT IN ('', '0')
+          {filtro_fonte}
+        GROUP BY codContrato
+    """)
+    try:
+        for r in db.session.execute(sql_pd, base_params).fetchall():
+            exec_maps['pd'][str(r[0]).strip()] = float(r[1])
+    except Exception:
+        pass
+
+    # OB (sem tipoAlteracao, ação via codClassificacao segmento 8)
+    sql_ob = text(f"""
+        SELECT CAST(codContrato AS CHAR), COALESCE(SUM(valor), 0)
+        FROM ob
+        WHERE statusDocumento = 'CONTABILIZADO'
+          AND codigoUG = '210101'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+          AND CAST(codNatureza AS CHAR) = :natureza
+          AND {_SQL_ACAO_FROM_CLASS} = :acao
+          AND codContrato IS NOT NULL
+          AND CAST(codContrato AS CHAR) NOT IN ('', '0')
+          {filtro_fonte}
+        GROUP BY codContrato
+    """)
+    try:
+        for r in db.session.execute(sql_ob, base_params).fetchall():
+            exec_maps['ob'][str(r[0]).strip()] = float(r[1])
+    except Exception:
+        pass
 
     resultado = []
     for cod_contrato, nome_contratado, total, qtd in rows:
@@ -848,7 +1253,7 @@ def api_orcamentaria_contratos(acao, natureza):
             COUNT(*) as qtd
         FROM execucoes_orcamentarias e
         JOIN fornecedores_sem_contrato f ON f.id = e.fornecedor_id
-        WHERE e.acao = :acao_param
+        WHERE e.acao = :acao
           AND e.natureza = :natureza
           AND (e.cod_contrato IS NULL OR e.cod_contrato = '')
         GROUP BY f.id, f.cnpj, f.descricao
@@ -856,10 +1261,9 @@ def api_orcamentaria_contratos(acao, natureza):
     """)
     try:
         exec_rows = db.session.execute(sql_exec, {
-            "acao_param": acao, "natureza": natureza
+            "acao": acao, "natureza": natureza
         }).fetchall()
         for cnpj, desc, total_val, qtd_exec in exec_rows:
-            # Formatar CNPJ
             digitos = ''.join(c for c in (cnpj or '') if c.isdigit())
             cnpj_fmt = f'{digitos[:2]}.{digitos[2:5]}.{digitos[5:8]}/{digitos[8:12]}-{digitos[12:14]}' if len(digitos) == 14 else cnpj
             resultado.append({
@@ -876,6 +1280,6 @@ def api_orcamentaria_contratos(acao, natureza):
                 'semContrato': True,
             })
     except Exception:
-        pass  # Tabela pode não existir
+        pass
 
     return jsonify(resultado)

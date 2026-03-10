@@ -7,21 +7,21 @@
     "file": "js/chunks/react-vendor-C-8u0GKz.js",
     "name": "react-vendor"
   },
-  "_recharts-vendor-BKSBomDm.js": {
-    "file": "js/chunks/recharts-vendor-BKSBomDm.js",
+  "_recharts-vendor-O7NjGzxt.js": {
+    "file": "js/chunks/recharts-vendor-O7NjGzxt.js",
     "name": "recharts-vendor",
     "imports": [
       "_react-vendor-C-8u0GKz.js"
     ]
   },
   "dashboards/main.tsx": {
-    "file": "js/dashboards-app-D9_VsTjr.js",
+    "file": "js/dashboards-app-CkA2Ot3c.js",
     "name": "dashboards-app",
     "src": "dashboards/main.tsx",
     "isEntry": true,
     "imports": [
       "_react-vendor-C-8u0GKz.js",
-      "_recharts-vendor-BKSBomDm.js"
+      "_recharts-vendor-O7NjGzxt.js"
     ]
   },
   "js/components/MoneyInput.js": {
