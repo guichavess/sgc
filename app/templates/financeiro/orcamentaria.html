@@ -1,0 +1,790 @@
+{% extends "financeiro/base_financeiro.html" %}
+
+{% block extra_css %}
+<style>
+    /* ===== KPI Cards — estilo Power BI ===== */
+    .kpi-card {
+        background: #fff;
+        border: 1px solid #e8e8e8;
+        border-radius: 4px;
+        border-left: 5px solid #ccc;
+        transition: box-shadow 0.2s;
+        height: 100%;
+    }
+    .kpi-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .kpi-card .card-body { padding: 14px 16px; }
+    .kpi-card .kpi-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: #555;
+        margin-bottom: 4px;
+    }
+    .kpi-card .kpi-value {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1a1a2e;
+        line-height: 1.2;
+        margin-bottom: 6px;
+    }
+    .kpi-card .kpi-exec-label {
+        font-size: 0.6rem;
+        color: #777;
+        margin-bottom: 3px;
+    }
+    .kpi-card .kpi-bar-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .kpi-card .kpi-bar {
+        flex: 1;
+        height: 10px;
+        background: #e9ecef;
+        border-radius: 2px;
+        overflow: hidden;
+    }
+    .kpi-card .kpi-bar-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width 0.4s ease;
+    }
+    .kpi-card .kpi-bar-pct {
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #555;
+        white-space: nowrap;
+        min-width: 40px;
+        text-align: right;
+    }
+    /* Subtexto primeiro card */
+    .kpi-card .kpi-sub {
+        font-size: 0.62rem;
+        color: #777;
+        margin-bottom: 2px;
+    }
+    .kpi-card .kpi-sub-value {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #333;
+    }
+
+    /* Cores da borda esquerda — mesmas do BI */
+    .kpi-credito    { border-left-color: #27ae60; }
+    .kpi-reservado  { border-left-color: #2c3e80; }
+    .kpi-empenhado  { border-left-color: #f0a500; }
+    .kpi-liquidado  { border-left-color: #c0392b; }
+    .kpi-pds        { border-left-color: #1abc9c; }
+    .kpi-pago       { border-left-color: #e74c3c; }
+
+    /* Cores das barras — matching borda */
+    .bar-credito   { background: #27ae60; }
+    .bar-reservado { background: #2c3e80; }
+    .bar-empenhado { background: #f0a500; }
+    .bar-liquidado { background: #c0392b; }
+    .bar-pds       { background: #1abc9c; }
+    .bar-pago      { background: #e74c3c; }
+
+    /* ===== Tabela orçamentária — sobrescreve table-custom para layout compacto ===== */
+    .table-orcamento.table-custom thead th {
+        padding: 10px 8px;
+        white-space: normal;
+        line-height: 1.3;
+        font-size: 0.68rem;
+    }
+    .table-orcamento.table-custom tbody td,
+    .table-orcamento.table-custom tfoot td {
+        padding: 8px;
+        font-size: 0.78rem;
+        white-space: nowrap;
+    }
+
+    /* Linhas de ação */
+    .row-acao {
+        cursor: pointer;
+        font-weight: var(--font-weight-semibold);
+    }
+    .row-acao td:first-child { padding-left: 12px !important; white-space: normal !important; word-break: break-word; }
+
+    /* Linhas de natureza */
+    .row-natureza {
+        background: var(--color-gray-200);
+        font-weight: 500;
+        cursor: pointer;
+    }
+    .row-natureza:hover { background: #e8eaf3 !important; }
+    .row-natureza td:first-child { padding-left: 36px !important; white-space: normal !important; word-break: break-word; }
+
+    /* Linhas de contrato */
+    .row-contrato { background: #e9ebf4; }
+    .row-contrato:hover { background: #dfe1ed !important; }
+    .row-contrato td:first-child { padding-left: 56px !important; white-space: normal !important; word-break: break-word; }
+    .row-contrato td { font-size: 0.73rem; color: #444; }
+
+    /* Linha total */
+    .row-total {
+        font-weight: var(--font-weight-bold);
+        background: var(--color-primary);
+        color: #fff;
+    }
+    .row-total td { border-top: 2px solid var(--color-primary); border-bottom: none; }
+
+    /* Ícone expandir */
+    .expand-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 3px;
+        font-size: 0.6rem;
+        margin-right: 6px;
+        transition: transform 0.15s ease;
+    }
+    .row-acao .expand-icon { background: var(--color-primary); color: #fff; }
+    .row-natureza .expand-icon { background: #6c757d; color: #fff; }
+    .expanded .expand-icon { transform: rotate(90deg); }
+
+    /* Barra inline de % execução */
+    .pct-bar-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        justify-content: flex-end;
+    }
+    .pct-bar {
+        width: 50px;
+        height: 8px;
+        background: #e9ecef;
+        border-radius: 2px;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+    .pct-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s ease; }
+    .pct-green  { background: #27ae60; }
+    .pct-yellow { background: #f39c12; }
+    .pct-red    { background: #e74c3c; }
+
+    /* Mini barra de % nas colunas de execução */
+    .pct-mini-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+        margin-top: 2px;
+    }
+    .pct-mini-bar {
+        width: 36px;
+        height: 6px;
+        background: #e9ecef;
+        border-radius: 2px;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    /* Spinner loading */
+    .loading-row td { text-align: center; padding: 10px; color: #888; }
+    .loading-row .spinner-border { width: 1rem; height: 1rem; border-width: 2px; }
+
+    /* ===== Filter Dropdown com pesquisa + checkbox ===== */
+    .filter-dropdown { position: relative; }
+    .filter-dropdown-toggle {
+        background: #fff;
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .filter-dropdown-toggle::after { display: none; }
+    .filter-dropdown-toggle.has-selection {
+        border-color: var(--color-primary, #343990);
+        background: #f0f0ff;
+        font-weight: 600;
+        color: #343990;
+    }
+    .filter-dropdown-menu {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+    }
+    .filter-dropdown-menu .filter-search {
+        border-radius: 6px;
+    }
+    .filter-dropdown-menu .filter-option {
+        cursor: pointer;
+        font-size: 0.82rem;
+        transition: background 0.1s;
+    }
+    .filter-dropdown-menu .filter-option:hover {
+        background: #f0f4ff;
+    }
+    .filter-dropdown-menu .filter-option .form-check-input {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        cursor: pointer;
+    }
+    .filter-dropdown-menu .filter-option .form-check-input:checked {
+        background-color: #343990;
+        border-color: #343990;
+    }
+    .filter-badge {
+        display: inline-flex;
+        align-items: center;
+        background: #343990;
+        color: #fff;
+        font-size: 0.68rem;
+        font-weight: 600;
+        padding: 1px 6px;
+        border-radius: 10px;
+        margin-left: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="fw-bold text-dark mb-0">Orçamento</h4>
+</div>
+
+{# Filtros #}
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-3 px-3">
+        <form method="get" id="formFiltrosOrc">
+            <div class="row g-3 align-items-start">
+                {# Ano - select simples #}
+                <div class="col-md-2 col-lg-1">
+                    <label class="form-label fw-semibold small text-muted mb-1">Ano</label>
+                    <select name="ano" class="form-select form-select-sm">
+                        {% for a in [2023, 2024, 2025, 2026] %}
+                        <option value="{{ a }}" {{ 'selected' if a == ano }}>{{ a }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {# Mês - dropdown com pesquisa e checkbox #}
+                <div class="col-md-3 col-lg-2">
+                    <label class="form-label fw-semibold small text-muted mb-1">Mês</label>
+                    <div class="filter-dropdown" data-name="mes">
+                        <button type="button" class="form-select form-select-sm text-start filter-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                            <span class="filter-placeholder">Todos</span>
+                        </button>
+                        <div class="dropdown-menu filter-dropdown-menu shadow-sm p-2" style="min-width: 220px;">
+                            <input type="text" class="form-control form-control-sm mb-2 filter-search" placeholder="Pesquisar mês...">
+                            <div class="filter-options" style="max-height: 200px; overflow-y: auto;">
+                                {% for m in meses_disponiveis %}
+                                <label class="dropdown-item d-flex align-items-center gap-2 py-1 px-2 rounded filter-option" data-value="{{ m }}">
+                                    <input type="checkbox" class="form-check-input m-0 filter-check" name="mes" value="{{ m }}" {{ 'checked' if m|string == mes|string and mes }}>
+                                    <span class="small">{{ nomes_meses[m] }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# Natureza - dropdown com pesquisa e checkbox #}
+                <div class="col-md-4 col-lg-3">
+                    <label class="form-label fw-semibold small text-muted mb-1">Natureza</label>
+                    <div class="filter-dropdown" data-name="natureza">
+                        <button type="button" class="form-select form-select-sm text-start filter-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                            <span class="filter-placeholder">Todas</span>
+                        </button>
+                        <div class="dropdown-menu filter-dropdown-menu shadow-sm p-2" style="min-width: 320px;">
+                            <input type="text" class="form-control form-control-sm mb-2 filter-search" placeholder="Pesquisar natureza...">
+                            <div class="filter-options" style="max-height: 240px; overflow-y: auto;">
+                                {% for n in naturezas_disponiveis %}
+                                <label class="dropdown-item d-flex align-items-center gap-2 py-1 px-2 rounded filter-option" data-value="{{ n.codigo }}">
+                                    <input type="checkbox" class="form-check-input m-0 filter-check" name="natureza" value="{{ n.codigo }}" {{ 'checked' if n.codigo|string == natureza_filtro }}>
+                                    <span class="small text-truncate">{{ n.codigo }} - {{ n.descricao }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# Fonte - dropdown com pesquisa e checkbox #}
+                <div class="col-md-3 col-lg-3">
+                    <label class="form-label fw-semibold small text-muted mb-1">Fonte</label>
+                    <div class="filter-dropdown" data-name="fonte">
+                        <button type="button" class="form-select form-select-sm text-start filter-dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                            <span class="filter-placeholder">Todas</span>
+                        </button>
+                        <div class="dropdown-menu filter-dropdown-menu shadow-sm p-2" style="min-width: 300px;">
+                            <input type="text" class="form-control form-control-sm mb-2 filter-search" placeholder="Pesquisar fonte...">
+                            <div class="filter-options" style="max-height: 240px; overflow-y: auto;">
+                                {% for f in fontes %}
+                                <label class="dropdown-item d-flex align-items-center gap-2 py-1 px-2 rounded filter-option" data-value="{{ f.codigo }}">
+                                    <input type="checkbox" class="form-check-input m-0 filter-check" name="fonte" value="{{ f.codigo }}" {{ 'checked' if f.codigo == fonte_filtro }}>
+                                    <span class="small text-truncate">{{ f.codigo }} - {{ f.descricao }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# Botões #}
+                <div class="col-md-12 col-lg-3 d-flex align-items-end gap-2">
+                    <button type="submit" class="btn btn-sm btn-dark px-3">
+                        <i class="bi bi-funnel-fill me-1"></i>Filtrar
+                    </button>
+                    <a href="{{ url_for('financeiro.orcamentaria') }}" class="btn btn-sm btn-outline-secondary px-3">
+                        <i class="bi bi-x-lg me-1"></i>Limpar
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# KPI Cards — estilo Power BI com barra de execucao #}
+<div class="row g-2 mb-4">
+    <div class="col">
+        <div class="kpi-card kpi-credito">
+            <div class="card-body">
+                <div class="kpi-label">Credito Disponivel</div>
+                <div class="kpi-value">{{ format_brl(kpi.credito_disponivel) }}</div>
+                <div class="kpi-sub">% Disponivel:</div>
+                <div class="kpi-bar-wrap">
+                    <div class="kpi-bar">
+                        {% set pct_disp = kpi.pct_disponivel|default(0)|float %}
+                        <div class="kpi-bar-fill bar-credito" style="width: {{ [pct_disp, 100]|min }}%"></div>
+                    </div>
+                    <span class="kpi-bar-pct">{{ '%.2f'|format(pct_disp) }}%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="kpi-card kpi-reservado">
+            <div class="card-body">
+                <div class="kpi-label">Reservado</div>
+                <div class="kpi-value">{{ format_brl(kpi.reservado) }}</div>
+                <div class="kpi-exec-label">Execução sobre o Orçado:</div>
+                <div class="kpi-bar-wrap">
+                    <div class="kpi-bar">
+                        <div class="kpi-bar-fill bar-reservado" style="width: {{ [kpi.pct_reservado|float, 100]|min }}%"></div>
+                    </div>
+                    <span class="kpi-bar-pct">{{ kpi.pct_reservado }}%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="kpi-card kpi-empenhado">
+            <div class="card-body">
+                <div class="kpi-label">Empenhado</div>
+                <div class="kpi-value">{{ format_brl(kpi.empenhado) }}</div>
+                <div class="kpi-exec-label">Execução sobre o Orçado:</div>
+                <div class="kpi-bar-wrap">
+                    <div class="kpi-bar">
+                        <div class="kpi-bar-fill bar-empenhado" style="width: {{ [kpi.pct_empenhado|float, 100]|min }}%"></div>
+                    </div>
+                    <span class="kpi-bar-pct">{{ kpi.pct_empenhado }}%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="kpi-card kpi-liquidado">
+            <div class="card-body">
+                <div class="kpi-label">Liquidado</div>
+                <div class="kpi-value">{{ format_brl(kpi.liquidado) }}</div>
+                <div class="kpi-exec-label">Execução sobre o Orçado:</div>
+                <div class="kpi-bar-wrap">
+                    <div class="kpi-bar">
+                        <div class="kpi-bar-fill bar-liquidado" style="width: {{ [kpi.pct_liquidado|float, 100]|min }}%"></div>
+                    </div>
+                    <span class="kpi-bar-pct">{{ kpi.pct_liquidado }}%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="kpi-card kpi-pds">
+            <div class="card-body">
+                <div class="kpi-label">PDs a Pagar</div>
+                <div class="kpi-value">{{ format_brl(kpi.pds_pagar) }}</div>
+                <div class="kpi-exec-label">Execução sobre o Orçado:</div>
+                <div class="kpi-bar-wrap">
+                    <div class="kpi-bar">
+                        <div class="kpi-bar-fill bar-pds" style="width: {{ [kpi.pct_pds|default(0)|float, 100]|min }}%"></div>
+                    </div>
+                    <span class="kpi-bar-pct">{{ kpi.pct_pds|default('0.00') }}%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col">
+        <div class="kpi-card kpi-pago">
+            <div class="card-body">
+                <div class="kpi-label">Pago</div>
+                <div class="kpi-value">{{ format_brl(kpi.pago) }}</div>
+                <div class="kpi-exec-label">Execução sobre o Orçado:</div>
+                <div class="kpi-bar-wrap">
+                    <div class="kpi-bar">
+                        <div class="kpi-bar-fill bar-pago" style="width: {{ [kpi.pct_pago|float, 100]|min }}%"></div>
+                    </div>
+                    <span class="kpi-bar-pct">{{ kpi.pct_pago }}%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Tabela Execução por Ação #}
+<div class="card border-0 shadow-sm overflow-hidden">
+    <div class="card-header bg-white border-bottom py-2 px-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <span class="fw-bold" style="font-size: 0.85rem;">Execução por Ação</span>
+            <span class="badge bg-secondary" style="font-size: 0.65rem;">{{ acoes.itens|length }} ações</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive table-rounded">
+            <table class="table table-custom table-hover table-orcamento align-middle mb-0" id="tabelaOrcamento">
+                <thead>
+                    <tr>
+                        <th class="ps-3" style="min-width: 250px;">Ação</th>
+                        <th class="text-end">Dotação<br>Inicial</th>
+                        <th class="text-end">Dotação<br>Atualizada</th>
+                        <th class="text-end">Créd.<br>Disponível</th>
+                        <th class="text-end">Empenhado</th>
+                        <th class="text-end">Liquidado</th>
+                        <th class="text-end">PD</th>
+                        <th class="text-end">Pago</th>
+                        <th class="text-end">Análise</th>
+                        <th class="text-end" style="min-width: 120px; white-space: nowrap;">% Exec</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in acoes.itens %}
+                    <tr class="row-acao" data-acao="{{ item.codigo }}" onclick="toggleAcao(this, '{{ item.codigo }}')">
+                        <td class="ps-3">
+                            <span class="expand-icon"><i class="bi bi-chevron-right"></i></span>
+                            {{ item.desc_acao }}
+                        </td>
+                        <td class="text-end">{{ format_brl(item.dot_inicial) }}</td>
+                        <td class="text-end fw-bold">{{ format_brl(item.dot_atualizada) }}</td>
+                        <td class="text-end">{{ format_brl(item.credito_disponivel) }}</td>
+                        <td class="text-end">
+                            {{ format_brl(item.empenhado) }}
+                            <div class="pct-mini-wrap">
+                                <small class="text-muted">{{ item.pct_emp }}%</small>
+                                <div class="pct-mini-bar">
+                                    {% set p = item.pct_emp|float %}
+                                    <div class="pct-bar-fill {{ 'pct-green' if p >= 70 else ('pct-yellow' if p >= 40 else 'pct-red') }}" style="width: {{ [p, 100]|min }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            {{ format_brl(item.liquidado) }}
+                            <div class="pct-mini-wrap">
+                                <small class="text-muted">{{ item.pct_liq }}%</small>
+                                <div class="pct-mini-bar">
+                                    {% set p = item.pct_liq|float %}
+                                    <div class="pct-bar-fill {{ 'pct-green' if p >= 70 else ('pct-yellow' if p >= 40 else 'pct-red') }}" style="width: {{ [p, 100]|min }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            {{ format_brl(item.pd) }}
+                            <div class="pct-mini-wrap">
+                                <small class="text-muted">{{ item.pct_pd }}%</small>
+                                <div class="pct-mini-bar">
+                                    {% set p = item.pct_pd|float %}
+                                    <div class="pct-bar-fill {{ 'pct-green' if p >= 70 else ('pct-yellow' if p >= 40 else 'pct-red') }}" style="width: {{ [p, 100]|min }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            {{ format_brl(item.pago) }}
+                            <div class="pct-mini-wrap">
+                                <small class="text-muted">{{ item.pct_pago }}%</small>
+                                <div class="pct-mini-bar">
+                                    {% set p = item.pct_pago|float %}
+                                    <div class="pct-bar-fill {{ 'pct-green' if p >= 70 else ('pct-yellow' if p >= 40 else 'pct-red') }}" style="width: {{ [p, 100]|min }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-end">{{ format_brl(item.analise) }}</td>
+                        <td class="text-end">
+                            <div class="pct-bar-wrap">
+                                <span>{{ item.pct_exec }}%</span>
+                                <div class="pct-bar">
+                                    {% set pct_val = item.pct_exec|float %}
+                                    {% if pct_val >= 70 %}
+                                    <div class="pct-bar-fill pct-green" style="width: {{ [pct_val, 100]|min }}%"></div>
+                                    {% elif pct_val >= 40 %}
+                                    <div class="pct-bar-fill pct-yellow" style="width: {{ [pct_val, 100]|min }}%"></div>
+                                    {% else %}
+                                    <div class="pct-bar-fill pct-red" style="width: {{ [pct_val, 100]|min }}%"></div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="row-total">
+                        <td class="ps-3">TOTAL</td>
+                        <td class="text-end">{{ format_brl(acoes.totais.dot_inicial) }}</td>
+                        <td class="text-end">{{ format_brl(acoes.totais.dot_atualizada) }}</td>
+                        <td class="text-end">{{ format_brl(acoes.totais.credito_disponivel) }}</td>
+                        <td class="text-end">
+                            {{ format_brl(acoes.totais.empenhado) }}
+                            <div class="pct-mini-wrap">
+                                <small>{{ acoes.totais.pct_emp }}%</small>
+                                <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
+                                    <div class="pct-bar-fill" style="width: {{ [acoes.totais.pct_emp|float, 100]|min }}%; background: #fff;"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            {{ format_brl(acoes.totais.liquidado) }}
+                            <div class="pct-mini-wrap">
+                                <small>{{ acoes.totais.pct_liq }}%</small>
+                                <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
+                                    <div class="pct-bar-fill" style="width: {{ [acoes.totais.pct_liq|float, 100]|min }}%; background: #fff;"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            {{ format_brl(acoes.totais.pd) }}
+                            <div class="pct-mini-wrap">
+                                <small>{{ acoes.totais.pct_pd }}%</small>
+                                <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
+                                    <div class="pct-bar-fill" style="width: {{ [acoes.totais.pct_pd|float, 100]|min }}%; background: #fff;"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            {{ format_brl(acoes.totais.pago) }}
+                            <div class="pct-mini-wrap">
+                                <small>{{ acoes.totais.pct_pago }}%</small>
+                                <div class="pct-mini-bar" style="background: rgba(255,255,255,0.2);">
+                                    <div class="pct-bar-fill" style="width: {{ [acoes.totais.pct_pago|float, 100]|min }}%; background: #fff;"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-end">{{ format_brl(acoes.totais.analise) }}</td>
+                        <td class="text-end">
+                            <div class="pct-bar-wrap">
+                                <span>{{ acoes.totais.pct_exec }}%</span>
+                                <div class="pct-bar" style="background: rgba(255,255,255,0.2);">
+                                    <div class="pct-bar-fill" style="width: {{ [acoes.totais.pct_exec|float, 100]|min }}%; background: #fff;"></div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const currentAno = {{ ano }};
+const currentMes = {{ mes|tojson }};
+const currentFonte = '{{ fonte_filtro }}';
+
+{# Naturezas pre-carregadas — expansao instantanea, sem AJAX #}
+const NATUREZAS = {{ naturezas_json|tojson }};
+
+function formatBRL(val) {
+    if (val == null || isNaN(val)) return 'R$ 0,00';
+    return 'R$ ' + Number(val).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function buildQueryParams() {
+    let p = `ano=${currentAno}`;
+    if (currentMes) p += `&mes=${currentMes}`;
+    if (currentFonte) p += `&fonte=${currentFonte}`;
+    return p;
+}
+
+function pctBarHtml(pct) {
+    const v = Math.min(parseFloat(pct) || 0, 100);
+    let cls = 'pct-red';
+    if (v >= 70) cls = 'pct-green';
+    else if (v >= 40) cls = 'pct-yellow';
+    return `<div class="pct-bar-wrap">
+        <span>${Number(pct).toFixed(2)}%</span>
+        <div class="pct-bar"><div class="pct-bar-fill ${cls}" style="width:${v}%"></div></div>
+    </div>`;
+}
+
+function miniPctHtml(pct) {
+    const v = Math.min(parseFloat(pct) || 0, 100);
+    let cls = 'pct-red';
+    if (v >= 70) cls = 'pct-green';
+    else if (v >= 40) cls = 'pct-yellow';
+    return `<div class="pct-mini-wrap">
+        <small class="text-muted">${Number(pct).toFixed(2)}%</small>
+        <div class="pct-mini-bar"><div class="pct-bar-fill ${cls}" style="width:${v}%"></div></div>
+    </div>`;
+}
+
+// ========================
+// Expandir Acao -> Naturezas (dados pre-carregados)
+// ========================
+function toggleAcao(rowEl, acao) {
+    const isExpanded = rowEl.classList.contains('expanded');
+
+    document.querySelectorAll(`.child-acao-${acao}`).forEach(r => r.remove());
+
+    if (isExpanded) {
+        rowEl.classList.remove('expanded');
+        return;
+    }
+    rowEl.classList.add('expanded');
+
+    const data = NATUREZAS[acao] || [];
+
+    if (!data.length) {
+        const empty = document.createElement('tr');
+        empty.className = `row-natureza child-acao-${acao}`;
+        empty.innerHTML = `<td colspan="10" class="text-center text-muted py-2" style="padding-left:36px;">Nenhuma natureza encontrada</td>`;
+        rowEl.after(empty);
+        return;
+    }
+
+    [...data].reverse().forEach(nat => {
+        const tr = document.createElement('tr');
+        tr.className = `row-natureza child-acao-${acao}`;
+        tr.setAttribute('data-natureza', nat.natureza);
+        tr.setAttribute('data-acao', acao);
+        tr.onclick = function() { toggleNatureza(this, acao, nat.natureza); };
+        tr.innerHTML = `
+            <td><span class="expand-icon"><i class="bi bi-chevron-right"></i></span>${nat.desc_natureza || nat.natureza}</td>
+            <td class="text-end">${formatBRL(nat.dot_inicial)}</td>
+            <td class="text-end fw-bold">${formatBRL(nat.dot_atualizada)}</td>
+            <td class="text-end">${formatBRL(nat.credito_disponivel)}</td>
+            <td class="text-end">${formatBRL(nat.empenhado)}${miniPctHtml(nat.pct_emp)}</td>
+            <td class="text-end">${formatBRL(nat.liquidado)}${miniPctHtml(nat.pct_liq)}</td>
+            <td class="text-end">${formatBRL(nat.pd)}${miniPctHtml(nat.pct_pd)}</td>
+            <td class="text-end">${formatBRL(nat.pago)}${miniPctHtml(nat.pct_pago)}</td>
+            <td class="text-end">${formatBRL(nat.analise)}</td>
+            <td class="text-end">${pctBarHtml(nat.pct_exec)}</td>
+        `;
+        rowEl.after(tr);
+    });
+}
+
+// ========================
+// Expandir Natureza -> Contratos (AJAX — tabela reserva)
+// ========================
+function toggleNatureza(rowEl, acao, natureza) {
+    event.stopPropagation();
+    const isExpanded = rowEl.classList.contains('expanded');
+
+    document.querySelectorAll(`.child-nat-${acao}-${natureza}`).forEach(r => r.remove());
+
+    if (isExpanded) {
+        rowEl.classList.remove('expanded');
+        return;
+    }
+    rowEl.classList.add('expanded');
+
+    const loadingRow = document.createElement('tr');
+    loadingRow.className = `loading-row child-nat-${acao}-${natureza}`;
+    loadingRow.innerHTML = `<td colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Carregando contratos...</td>`;
+    rowEl.after(loadingRow);
+
+    fetch(`/financeiro/api/orcamentaria/contratos/${acao}/${natureza}?${buildQueryParams()}`)
+        .then(r => r.json())
+        .then(data => {
+            loadingRow.remove();
+
+            if (!data.length) {
+                const empty = document.createElement('tr');
+                empty.className = `row-contrato child-nat-${acao}-${natureza}`;
+                empty.innerHTML = `<td colspan="10" class="text-center text-muted py-2" style="padding-left:56px;">Nenhum contrato encontrado</td>`;
+                rowEl.after(empty);
+                return;
+            }
+
+            data.reverse().forEach(c => {
+                const tr = document.createElement('tr');
+                tr.className = `row-contrato child-nat-${acao}-${natureza}`;
+                tr.style.cursor = 'pointer';
+                tr.onclick = function() {
+                    window.open(`/prestacoes-contratos/contratos/${encodeURIComponent(c.codContrato)}/gerenciar`, '_blank');
+                };
+                tr.innerHTML = `
+                    <td><i class="bi bi-box-arrow-up-right me-1" style="font-size:0.65rem;"></i>${c.codContrato} - ${c.nomeContratado}</td>
+                    <td class="text-end"></td>
+                    <td class="text-end"></td>
+                    <td class="text-end fw-semibold">${formatBRL(c.totalReservado)}</td>
+                    <td class="text-end">${formatBRL(c.empenhado)}</td>
+                    <td class="text-end">${formatBRL(c.liquidado)}</td>
+                    <td class="text-end">${formatBRL(c.pd)}</td>
+                    <td class="text-end">${formatBRL(c.pago)}</td>
+                    <td class="text-end"><span class="badge bg-light text-dark border" style="font-size:0.65rem;">${c.qtdReservas} NR</span></td>
+                    <td class="text-end"></td>
+                `;
+                rowEl.after(tr);
+            });
+        })
+        .catch(() => {
+            loadingRow.innerHTML = `<td colspan="10" class="text-center text-danger py-2">Erro ao carregar contratos</td>`;
+        });
+}
+
+// ========================
+// Filter Dropdowns — pesquisa + checkbox
+// ========================
+document.querySelectorAll('.filter-dropdown').forEach(dropdown => {
+    const toggle = dropdown.querySelector('.filter-dropdown-toggle');
+    const placeholder = toggle.querySelector('.filter-placeholder');
+    const searchInput = dropdown.querySelector('.filter-search');
+    const options = dropdown.querySelectorAll('.filter-option');
+    const checks = dropdown.querySelectorAll('.filter-check');
+    const defaultText = placeholder.textContent;
+
+    function updateToggleLabel() {
+        const selected = [...checks].filter(c => c.checked);
+        if (selected.length === 0) {
+            placeholder.textContent = defaultText;
+            toggle.classList.remove('has-selection');
+        } else if (selected.length === 1) {
+            const label = selected[0].closest('.filter-option').querySelector('span').textContent.trim();
+            placeholder.innerHTML = label.length > 25 ? label.substring(0, 25) + '...' : label;
+            toggle.classList.add('has-selection');
+        } else {
+            placeholder.innerHTML = selected.length + ' selecionados';
+            toggle.classList.add('has-selection');
+        }
+    }
+
+    // Search filter
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const term = this.value.toLowerCase();
+            options.forEach(opt => {
+                const text = opt.querySelector('span').textContent.toLowerCase();
+                opt.style.display = text.includes(term) ? '' : 'none';
+            });
+        });
+    }
+
+    // Update label on check change
+    checks.forEach(check => {
+        check.addEventListener('change', updateToggleLabel);
+    });
+
+    // Focus search on dropdown open
+    toggle.addEventListener('shown.bs.dropdown', () => {
+        if (searchInput) searchInput.focus();
+    });
+
+    // Init label on page load
+    updateToggleLabel();
+});
+</script>
+{% endblock %}

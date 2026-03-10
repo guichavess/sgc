@@ -1,0 +1,306 @@
+{% extends "financeiro/base_financeiro.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Execuções Orçamentárias</h3>
+        <p class="text-muted mb-0">Cadastro e vinculação de execuções a contratos.</p>
+    </div>
+    <div>
+        {% if current_user.tem_permissao('financeiro', 'criar') %}
+        <button class="btn btn-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCadastro">
+            <i class="bi bi-plus-lg me-1"></i> Nova Execução
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+{# Busca #}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body py-3">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-8">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" class="form-control border-start-0 ps-0" name="busca"
+                           value="{{ busca }}" placeholder="Buscar por descrição, item ou fornecedor...">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-search me-1"></i> Buscar
+                </button>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('financeiro.execucoes_lista') }}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="bi bi-x-circle me-1"></i> Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# Tabela de Execuções #}
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-bottom py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Execuções Cadastradas</h5>
+            <span class="badge bg-secondary">{{ pagination.total }} execuções</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Descrição</th>
+                        <th>Fornecedor</th>
+                        <th>Item</th>
+                        <th class="text-center">Qtd</th>
+                        <th class="text-center">Competência</th>
+                        <th>Ação</th>
+                        <th>Natureza</th>
+                        <th>Fonte</th>
+                        <th class="text-center">Contrato</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in execucoes %}
+                    <tr>
+                        <td class="ps-4">
+                            <div class="fw-bold text-dark">{{ e.descricao[:80] }}{{ '...' if e.descricao|length > 80 else '' }}</div>
+                        </td>
+                        <td>
+                            <span class="text-truncate d-inline-block" style="max-width: 180px;" title="{{ e.fornecedor.descricao }}">
+                                {{ e.fornecedor.descricao }}
+                            </span>
+                            <div class="small text-muted">{{ e.fornecedor.cnpj_formatado }}</div>
+                        </td>
+                        <td>{{ e.item or '-' }}</td>
+                        <td class="text-center">{{ e.quantidade or '-' }}</td>
+                        <td class="text-center">
+                            {% if e.competencia %}
+                            <span class="badge bg-light text-dark border">{{ e.competencia }}</span>
+                            {% else %}-{% endif %}
+                        </td>
+                        <td>{{ e.acao or '-' }}</td>
+                        <td>{{ e.natureza or '-' }}</td>
+                        <td>{{ e.fonte or '-' }}</td>
+                        <td class="text-center">
+                            {% if e.vinculada %}
+                                <span class="badge bg-success">{{ e.cod_contrato }}</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Pendente</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if current_user.tem_permissao('financeiro', 'criar') and not e.vinculada %}
+                            <button class="btn btn-outline-primary btn-sm"
+                                    onclick="abrirModalVincular({{ e.id }}, {{ e.fornecedor_id }}, '{{ e.fornecedor.descricao }}')"
+                                    title="Vincular Contrato">
+                                <i class="bi bi-link-45deg"></i>
+                            </button>
+                            {% elif e.vinculada %}
+                            <span class="text-success"><i class="bi bi-check-circle-fill"></i></span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="10" class="text-center py-5 text-muted">
+                            Nenhuma execução cadastrada.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# Paginação #}
+    {% if pagination.pages > 1 %}
+    <div class="card-footer bg-white border-top py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                Mostrando <strong>{{ execucoes|length }}</strong> de <strong>{{ pagination.total }}</strong>
+            </div>
+            <nav aria-label="Navegação">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                        <a class="page-link" href="{{ url_for('financeiro.execucoes_lista', page=pagination.prev_num, busca=busca) if pagination.has_prev else '#' }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if page_num %}
+                        <li class="page-item {{ 'active' if page_num == pagination.page }}">
+                            <a class="page-link" href="{{ url_for('financeiro.execucoes_lista', page=page_num, busca=busca) }}">{{ page_num }}</a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                        <a class="page-link" href="{{ url_for('financeiro.execucoes_lista', page=pagination.next_num, busca=busca) if pagination.has_next else '#' }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{# ===== Modal: Cadastrar Execução ===== #}
+<div class="modal fade" id="modalCadastro" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" action="{{ url_for('financeiro.execucoes_cadastrar') }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Nova Execução Orçamentária</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Fornecedor <span class="text-danger">*</span></label>
+                            <select class="form-select" name="fornecedor_id" required>
+                                <option value="">Selecione um fornecedor...</option>
+                                {% for f in fornecedores %}
+                                <option value="{{ f.id }}">{{ f.descricao }} ({{ f.cnpj_formatado }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Descrição da Execução <span class="text-danger">*</span></label>
+                            <textarea class="form-control" name="descricao" rows="2" required placeholder="Descrição detalhada da execução"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Item</label>
+                            <input type="text" class="form-control" name="item" placeholder="Item da execução">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Quantidade</label>
+                            <input type="text" class="form-control" name="quantidade" placeholder="0,00">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Competência</label>
+                            <input type="text" class="form-control" name="competencia" id="inputCompetencia" placeholder="MM/AAAA">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Ação</label>
+                            <input type="text" class="form-control" name="acao" placeholder="Código da ação">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Natureza</label>
+                            <input type="text" class="form-control" name="natureza" placeholder="Natureza de despesa">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Fonte</label>
+                            <input type="text" class="form-control" name="fonte" placeholder="Fonte de recurso">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Cadastrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# ===== Modal: Vincular Contrato (dinâmico) ===== #}
+<div class="modal fade" id="modalVincular" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" id="formVincular">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Vincular Contrato</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">Fornecedor: <strong id="vincularFornecedorNome"></strong></p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Selecione o Contrato <span class="text-danger">*</span></label>
+                        <div id="contratosContainer">
+                            <div class="text-center py-3 text-muted">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                Carregando contratos...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnVincular" disabled>
+                        <i class="bi bi-link-45deg me-1"></i> Vincular
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+$(document).ready(function() {
+    $('#inputCompetencia').mask('00/0000');
+});
+
+function abrirModalVincular(execucaoId, fornecedorId, fornecedorNome) {
+    const modal = document.getElementById('modalVincular');
+    const form = document.getElementById('formVincular');
+    const container = document.getElementById('contratosContainer');
+    const btnVincular = document.getElementById('btnVincular');
+
+    // Atualiza URL do form
+    form.action = `/financeiro/execucoes/${execucaoId}/vincular-contrato`;
+    document.getElementById('vincularFornecedorNome').textContent = fornecedorNome;
+
+    // Reset
+    container.innerHTML = '<div class="text-center py-3 text-muted"><div class="spinner-border spinner-border-sm" role="status"></div> Carregando contratos...</div>';
+    btnVincular.disabled = true;
+
+    // Busca contratos do fornecedor
+    fetch(`/financeiro/api/fornecedores/${fornecedorId}/contratos`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.length) {
+                container.innerHTML = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle me-1"></i> Nenhum contrato vinculado a este fornecedor. Vincule um contrato primeiro na tela de Fornecedores.</div>';
+                return;
+            }
+
+            let html = '';
+            data.forEach(c => {
+                html += `
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="cod_contrato"
+                               value="${c.cod_contrato}" id="contrato_${c.id}"
+                               onchange="document.getElementById('btnVincular').disabled = false;">
+                        <label class="form-check-label" for="contrato_${c.id}">
+                            <strong>${c.cod_contrato}</strong>
+                        </label>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        })
+        .catch(err => {
+            container.innerHTML = '<div class="alert alert-danger mb-0">Erro ao carregar contratos.</div>';
+        });
+
+    // Abre o modal
+    new bootstrap.Modal(modal).show();
+}
+</script>
+{% endblock %}

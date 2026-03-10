@@ -1,0 +1,230 @@
+{% extends "financeiro/base_financeiro.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Fornecedores</h3>
+        <p class="text-muted mb-0">Cadastro de fornecedores e vinculação de contratos.</p>
+    </div>
+    <div>
+        {% if current_user.tem_permissao('financeiro', 'criar') %}
+        <button class="btn btn-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCadastro">
+            <i class="bi bi-plus-lg me-1"></i> Novo Fornecedor
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+{# Busca #}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body py-3">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-8">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" class="form-control border-start-0 ps-0" name="busca"
+                           value="{{ busca }}" placeholder="Buscar por nome ou CNPJ...">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-search me-1"></i> Buscar
+                </button>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('financeiro.fornecedores_lista') }}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="bi bi-x-circle me-1"></i> Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# Tabela de Fornecedores #}
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-bottom py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Fornecedores Cadastrados</h5>
+            <span class="badge bg-secondary">{{ pagination.total }} fornecedores</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Descrição</th>
+                        <th>CNPJ</th>
+                        <th>Telefone</th>
+                        <th class="text-center">Contratos</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in fornecedores %}
+                    <tr>
+                        <td class="ps-4">
+                            <div class="fw-bold text-dark">{{ f.descricao }}</div>
+                            <div class="small text-muted">
+                                <i class="bi bi-file-earmark-text me-1"></i>
+                                {{ f.qtd_contratos }} contrato{{ 's' if f.qtd_contratos != 1 else '' }} vinculado{{ 's' if f.qtd_contratos != 1 else '' }}
+                            </div>
+                            {% if f.contratos %}
+                            <div class="mt-1">
+                                {% for c in f.contratos %}
+                                <span class="badge bg-light text-dark border me-1">
+                                    {{ c.cod_contrato }}
+                                    {% if current_user.tem_permissao('financeiro', 'criar') %}
+                                    <form method="post" action="{{ url_for('financeiro.fornecedores_remover_contrato', id=c.id) }}" class="d-inline" onsubmit="return confirm('Remover vínculo com contrato {{ c.cod_contrato }}?');">
+                                        <button type="submit" class="btn-close btn-close-sm ms-1" style="font-size: 0.5rem;" title="Remover vínculo"></button>
+                                    </form>
+                                    {% endif %}
+                                </span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <code>{{ f.cnpj_formatado }}</code>
+                        </td>
+                        <td>{{ f.telefone or '-' }}</td>
+                        <td class="text-center">
+                            <span class="badge {{ 'bg-success' if f.qtd_contratos > 0 else 'bg-secondary' }}">
+                                {{ f.qtd_contratos }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            {% if current_user.tem_permissao('financeiro', 'criar') %}
+                            <button class="btn btn-outline-primary btn-sm"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#modalVincular{{ f.id }}"
+                                    title="Vincular Contrato">
+                                <i class="bi bi-link-45deg me-1"></i> Vincular
+                            </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-5 text-muted">
+                            Nenhum fornecedor cadastrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# Paginação #}
+    {% if pagination.pages > 1 %}
+    <div class="card-footer bg-white border-top py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                Mostrando <strong>{{ fornecedores|length }}</strong> de <strong>{{ pagination.total }}</strong>
+            </div>
+            <nav aria-label="Navegação">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                        <a class="page-link" href="{{ url_for('financeiro.fornecedores_lista', page=pagination.prev_num, busca=busca) if pagination.has_prev else '#' }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if page_num %}
+                        <li class="page-item {{ 'active' if page_num == pagination.page }}">
+                            <a class="page-link" href="{{ url_for('financeiro.fornecedores_lista', page=page_num, busca=busca) }}">{{ page_num }}</a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                        <a class="page-link" href="{{ url_for('financeiro.fornecedores_lista', page=pagination.next_num, busca=busca) if pagination.has_next else '#' }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{# ===== Modal: Cadastrar Fornecedor ===== #}
+<div class="modal fade" id="modalCadastro" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" action="{{ url_for('financeiro.fornecedores_cadastrar') }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Novo Fornecedor</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Descrição <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="descricao" required placeholder="Nome/razão social do fornecedor">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">CNPJ <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="cnpj" id="inputCnpj" required placeholder="00.000.000/0000-00">
+                        <div class="form-text" id="cnpjFeedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Telefone</label>
+                        <input type="text" class="form-control" name="telefone" id="inputTelefone" placeholder="(00) 00000-0000">
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Cadastrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# ===== Modais: Vincular Contrato (um por fornecedor) ===== #}
+{% for f in fornecedores %}
+<div class="modal fade" id="modalVincular{{ f.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" action="{{ url_for('financeiro.fornecedores_vincular_contrato', id=f.id) }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Vincular Contrato</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">Fornecedor: <strong>{{ f.descricao }}</strong></p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Código do Contrato <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="cod_contrato" required placeholder="Ex: 001/2025-SEAD">
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-link-45deg me-1"></i> Vincular
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+$(document).ready(function() {
+    $('#inputCnpj').mask('00.000.000/0000-00');
+    $('#inputTelefone').mask('(00) 00000-0000');
+});
+</script>
+{% endblock %}
