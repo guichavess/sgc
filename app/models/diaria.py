@@ -204,6 +204,10 @@ class DiariasItinerario(db.Model):
     sei_id_doc_externo = db.Column(db.String(50), nullable=True)     # ID do documento externo (anexo)
     sei_doc_externo_formatado = db.Column(db.String(50), nullable=True)  # Número formatado do doc externo
 
+    # Autorização do Secretário (gerada pelo sistema ou detectada via SEI)
+    sei_id_autorizacao = db.Column(db.String(50), nullable=True)
+    sei_autorizacao_formatado = db.Column(db.String(50), nullable=True)
+
     # Despacho DFIN (gerado automaticamente após autorização)
     sei_id_despacho_dfin = db.Column(db.String(50), nullable=True)
     sei_despacho_dfin_formatado = db.Column(db.String(50), nullable=True)
@@ -237,6 +241,8 @@ class DiariasItinerario(db.Model):
     escolha_declaracao_responsabilidade = db.Column(db.Boolean, default=False)
     sei_id_escolha_passagens = db.Column(db.String(50), nullable=True)
     sei_escolha_passagens_formatado = db.Column(db.String(50), nullable=True)
+    sei_id_memorando_cotacoes = db.Column(db.String(50), nullable=True)      # ID do 2º memorando (cotações)
+    sei_memorando_cotacoes_formatado = db.Column(db.String(50), nullable=True)  # Número formatado
 
     # Timeline / Etapa atual
     etapa_atual_id = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), default=1)

@@ -671,6 +671,8 @@ function miniPctHtml(pct) {
 function toggleAcao(rowEl, acao) {
     const isExpanded = rowEl.classList.contains('expanded');
 
+    // Remover contratos filhos (nível 3) antes de remover naturezas (nível 2)
+    document.querySelectorAll(`tr[class*="child-nat-${acao}-"]`).forEach(r => r.remove());
     document.querySelectorAll(`.child-acao-${acao}`).forEach(r => r.remove());
 
     if (isExpanded) {
@@ -1010,5 +1012,7 @@ document.getElementById('filtroAno').addEventListener('change', function() {
         });
     });
 })();
+
+
 </script>
 {% endblock %}

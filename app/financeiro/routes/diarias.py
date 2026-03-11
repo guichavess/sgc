@@ -22,13 +22,13 @@ from app.utils.permissions import requires_permission
 @login_required
 @requires_permission('financeiro.visualizar')
 def diarias_lista():
-    """Lista solicitações de diárias despachadas para o financeiro (etapa >= 2)."""
+    """Lista solicitações de diárias na etapa financeira ou posterior (etapa >= 2)."""
     busca = request.args.get('q', '').strip()
     filtro_status = request.args.get('status_nr', '')
     page = request.args.get('page', 1, type=int)
 
     query = DiariasItinerario.query.filter(
-        DiariasItinerario.etapa_atual_id >= DiariasEtapaID.SOLICITACAO_AUTORIZADA
+        DiariasItinerario.etapa_atual_id >= DiariasEtapaID.FINANCEIRO
     )
 
     # Filtro de busca por processo SEI ou usuário gerador
@@ -45,7 +45,7 @@ def diarias_lista():
     if filtro_status == 'pendente':
         query = query.filter(
             DiariasItinerario.nota_reserva.is_(None),
-            DiariasItinerario.etapa_atual_id == DiariasEtapaID.SOLICITACAO_AUTORIZADA,
+            DiariasItinerario.etapa_atual_id == DiariasEtapaID.FINANCEIRO,
         )
     elif filtro_status == 'inserida':
         query = query.filter(
@@ -90,7 +90,7 @@ def diarias_detalhe(id):
     itinerario = dados['itinerario']
 
     # Só mostra se já chegou no financeiro (etapa >= 2)
-    if itinerario.etapa_atual_id < DiariasEtapaID.SOLICITACAO_AUTORIZADA:
+    if itinerario.etapa_atual_id < DiariasEtapaID.FINANCEIRO:
         abort(404)
 
     return render_template(
@@ -109,8 +109,8 @@ def inserir_nr(id):
     """Insere Nota de Reserva em uma solicitação de diária."""
     itinerario = DiariasItinerario.query.get_or_404(id)
 
-    # Guard: só permite inserção se etapa == 2 (pendente de NR)
-    if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_AUTORIZADA:
+    # Guard: só permite inserção se etapa == 2 (Financeiro - pendente de NR)
+    if itinerario.etapa_atual_id != DiariasEtapaID.FINANCEIRO:
         flash('Esta solicitação já possui Nota de Reserva ou não está na etapa correta.', 'warning')
         return redirect(url_for('financeiro.diarias_detalhe', id=id))
 
@@ -150,10 +150,10 @@ def inserir_nr(id):
         except Exception as e:
             flash(f'Aviso: NR salva, mas erro ao enviar documento ao SEI: {e}', 'warning')
 
-    # Avança para etapa 3 (Financeiro)
+    # Avança para etapa 3 (Aquisição de Passagens)
     DiariaService.registrar_movimentacao(
         id_itinerario=id,
-        etapa_nova_id=DiariasEtapaID.FINANCEIRO,
+        etapa_nova_id=DiariasEtapaID.AQUISICAO_PASSAGENS,
         usuario_id=current_user.id if current_user else None,
         comentario=f'Nota de Reserva {nr_code} inserida pelo financeiro',
     )
@@ -187,7 +187,7 @@ def inserir_quadro_orcamentario(id):
     """Insere Quadro Orçamentário em uma solicitação de diária (após NR)."""
     itinerario = DiariasItinerario.query.get_or_404(id)
 
-    # Guard: NR deve estar inserida (etapa >= 3) e quadro ainda não preenchido
+    # Guard: NR deve estar inserida e quadro ainda não preenchido
     if not itinerario.nota_reserva:
         flash('A Nota de Reserva deve ser inserida antes do Quadro Orçamentário.', 'warning')
         return redirect(url_for('financeiro.diarias_detalhe', id=id))

@@ -4,9 +4,19 @@ Rotas de Contratos - Listagem, detalhes e gerenciamento de contratos.
 from flask import render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 
+from decimal import Decimal
+
 from app.prestacoes_contratos.routes import prestacoes_contratos_bp
 from app.services.prestacao_contrato_service import PrestacaoContratoService
 from app.utils.permissions import requires_permission
+
+
+SITUACAO_LABELS = {
+    'A_CONTRATAR': 'A Contratar',
+    'EM_VIGOR': 'Em Vigor',
+    'ENCERRADO': 'Encerrado',
+    'LICITADO': 'Licitado',
+}
 
 
 @prestacoes_contratos_bp.route('/')
@@ -15,15 +25,15 @@ from app.utils.permissions import requires_permission
 @requires_permission('prestacoes_contratos.visualizar')
 def dashboard():
     """Página principal - Lista de contratos com paginação e filtros."""
-    # Parâmetros de filtro
+    # Parâmetros de filtro (todos multi-select)
     filtro_codigo = request.args.get('codigo', '').strip()
     filtro_contratado = request.args.get('contratado', '').strip()
-    filtro_situacao = request.args.get('situacao', '').strip()
-    filtro_natureza = request.args.get('natureza', type=int) or None
-    filtro_tipo_execucao = request.args.get('tipo_execucao', type=int) or None
-    filtro_centro_custo = request.args.get('centro_custo', type=int) or None
-    filtro_tipo_contrato = request.args.get('tipo_contrato', '').strip()
-    filtro_pdm = request.args.get('pdm', type=int) or None
+    filtro_situacao = [v.strip() for v in request.args.getlist('situacao') if v.strip()]
+    filtro_natureza = [int(v) for v in request.args.getlist('natureza') if v.strip()]
+    filtro_tipo_execucao = [int(v) for v in request.args.getlist('tipo_execucao') if v.strip()]
+    filtro_centro_custo = [int(v) for v in request.args.getlist('centro_custo') if v.strip()]
+    filtro_tipo_contrato = [v.strip() for v in request.args.getlist('tipo_contrato') if v.strip()]
+    filtro_pdm = [int(v) for v in request.args.getlist('pdm') if v.strip()]
     filtro_subitem = [v.strip() for v in request.args.getlist('subitem_despesa') if v.strip()]
     filtro_tipo_patrimonial = [v.strip() for v in request.args.getlist('tipo_patrimonial') if v.strip()]
     page = request.args.get('page', 1, type=int)
@@ -34,11 +44,11 @@ def dashboard():
         codigo=filtro_codigo or None,
         contratado=filtro_contratado or None,
         situacao=filtro_situacao or None,
-        natureza_codigo=filtro_natureza,
-        tipo_execucao_id=filtro_tipo_execucao,
-        centro_de_custo_id=filtro_centro_custo,
+        natureza_codigo=filtro_natureza or None,
+        tipo_execucao_id=filtro_tipo_execucao or None,
+        centro_de_custo_id=filtro_centro_custo or None,
         tipo_contrato=filtro_tipo_contrato or None,
-        pdm_id=filtro_pdm,
+        pdm_id=filtro_pdm or None,
         subitem_despesa=filtro_subitem or None,
         tipo_patrimonial=filtro_tipo_patrimonial or None,
         page=page,
@@ -98,6 +108,7 @@ def dashboard():
         todas_naturezas=todas_naturezas,
         todos_subitens=todos_subitens,
         todos_tipos_patrimoniais=todos_tipos_patrimoniais,
+        situacao_labels=SITUACAO_LABELS,
         filtro_codigo=filtro_codigo,
         filtro_contratado=filtro_contratado,
         filtro_situacao=filtro_situacao,
@@ -217,6 +228,21 @@ def contrato_gerenciar(codigo):
     if aba == 'pagamentos':
         solicitacoes_pagamento = PrestacaoContratoService.listar_solicitacoes_contrato(codigo)
 
+    # Planejamento orçamentário
+    from app.models.planejamento_orcamentario import PlanejamentoOrcamentario
+    planejamento_total = Decimal('0')
+    if aba == 'planejamento':
+        planejamento_dados = PlanejamentoOrcamentario.query.filter_by(
+            cod_contrato=str(codigo)
+        ).order_by(PlanejamentoOrcamentario.competencia).all()
+        planejamento_total = sum((Decimal(str(p.valor or 0)) for p in planejamento_dados), Decimal('0'))
+    else:
+        # Check existence for tab icon
+        existe = PlanejamentoOrcamentario.query.filter_by(
+            cod_contrato=str(codigo)
+        ).first()
+        planejamento_dados = [existe] if existe else []
+
     # Vigência final efetiva (verifica aditivos)
     ultimo_aditivo = ContratoAditivo.query.filter(
         ContratoAditivo.codigo_contrato == str(codigo),
@@ -256,6 +282,8 @@ def contrato_gerenciar(codigo):
         divisao_saldo=divisao_saldo,
         itens_vinculados_saldo=itens_vinculados_saldo,
         solicitacoes_pagamento=solicitacoes_pagamento,
+        planejamento_dados=planejamento_dados,
+        planejamento_total=planejamento_total,
         vigencia_final_efetiva=vigencia_final_efetiva,
         vigencia_final_aditivo=vigencia_final_aditivo
     )

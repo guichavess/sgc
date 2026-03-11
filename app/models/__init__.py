@@ -62,6 +62,9 @@ from app.models.diaria import (
     DiariasJustificativa, DiariasCotacao,
 )
 
+# Planejamento Orçamentário
+from app.models.planejamento_orcamentario import PlanejamentoOrcamentario
+
 # Exporta db para manter compatibilidade com imports existentes
 from app.extensions import db
 
@@ -142,4 +145,6 @@ __all__ = [
     'DiariasParada',
     'DiariasJustificativa',
     'DiariasCotacao',
+    # Planejamento Orçamentário
+    'PlanejamentoOrcamentario',
 ]

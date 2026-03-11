@@ -139,6 +139,52 @@
             {# Timeline #}
             {% include 'diarias/partials/timeline_diarias.html' %}
 
+            {# --- AUTORIZAÇÃO DO SECRETÁRIO --- #}
+            {% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento %}
+            <div class="card border-warning mb-4 shadow-sm">
+                <div class="card-header bg-warning bg-opacity-10 py-2">
+                    <h6 class="mb-0 section-title" style="color: #856404;">
+                        <i class="bi bi-pen me-1"></i>Autorizacao do Secretario
+                    </h6>
+                </div>
+                <div class="card-body text-center py-4">
+                    {% if current_user.is_secretario %}
+                    <i class="bi bi-shield-lock text-warning" style="font-size: 2.5rem;"></i>
+                    <p class="text-muted mt-2 mb-3 fw-semibold">
+                        Esta solicitacao aguarda a sua autorizacao para prosseguir.
+                    </p>
+                    <button type="button" class="btn btn-warning btn-sm px-4"
+                            data-bs-toggle="modal" data-bs-target="#modalAutorizar">
+                        <i class="bi bi-pen me-1"></i> Autorizar Solicitacao
+                    </button>
+                    {% else %}
+                    <i class="bi bi-hourglass-split text-warning" style="font-size: 2.5rem;"></i>
+                    <p class="text-muted mt-2 mb-0 fw-semibold">
+                        Aguardando autorizacao do Secretario
+                    </p>
+                    <small class="text-muted">O Secretario precisa autorizar esta solicitacao para que o fluxo prossiga.</small>
+                    {% endif %}
+                </div>
+            </div>
+            {% elif itinerario.sei_autorizacao_formatado %}
+            <div class="card border-success mb-4 shadow-sm">
+                <div class="card-header bg-success bg-opacity-10 py-2">
+                    <h6 class="mb-0 section-title" style="color: #0f5132;">
+                        <i class="bi bi-check-circle me-1"></i>Autorizacao do Secretario
+                    </h6>
+                </div>
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
+                        <div>
+                            <span class="fw-bold text-success">Autorizada</span>
+                            <br><small class="text-muted">Documento SEI: {{ itinerario.sei_autorizacao_formatado }}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             {# --- CARDS RESUMO --- #}
             <div class="row g-2 mb-4">
                 <div class="col-md-3">
@@ -788,7 +834,7 @@
                         <i class="bi bi-clock-history text-warning fs-3 d-block mb-1"></i>
                         <p class="text-muted mb-0 fw-semibold small">Aguardando insercao da Nota de Reserva pelo Financeiro</p>
                         {% if itinerario.etapa_atual_id < 2 %}
-                        <small class="text-muted">A solicitacao precisa ser autorizada primeiro (Etapa 2)</small>
+                        <small class="text-muted">A solicitacao precisa ser autorizada primeiro</small>
                         {% elif itinerario.etapa_atual_id == 2 %}
                         <small class="text-muted">A solicitacao ja foi autorizada. Pendente de acao do Financeiro.</small>
                         {% endif %}
@@ -834,6 +880,56 @@
         </div>
     </div>
 </div>
+
+{# --- MODAL AUTORIZAÇÃO DO SECRETÁRIO (só para o secretário) --- #}
+{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_secretario %}
+<div class="modal fade" id="modalAutorizar" tabindex="-1" aria-labelledby="modalAutorizarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning bg-opacity-10">
+                <h5 class="modal-title" id="modalAutorizarLabel">
+                    <i class="bi bi-pen me-1"></i> Autorizar Solicitacao
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="autorizar-erro" class="alert alert-danger d-none" role="alert"></div>
+                <div id="autorizar-sucesso" class="alert alert-success d-none" role="alert"></div>
+
+                <p class="text-muted small mb-3">
+                    Informe suas credenciais do SEI para gerar e assinar o documento de autorizacao.
+                </p>
+
+                <div class="mb-3">
+                    <label for="autorizar_usuario" class="form-label fw-semibold">Usuario SEI</label>
+                    <input type="text" class="form-control" id="autorizar_usuario"
+                           placeholder="Seu login no SEI" autocomplete="off">
+                </div>
+
+                <div class="mb-3">
+                    <label for="autorizar_senha" class="form-label fw-semibold">Senha SEI</label>
+                    <input type="password" class="form-control" id="autorizar_senha"
+                           placeholder="Sua senha no SEI" autocomplete="off">
+                </div>
+
+                <div class="mb-3">
+                    <label for="autorizar_cargo" class="form-label fw-semibold">Cargo</label>
+                    <input type="text" class="form-control" id="autorizar_cargo"
+                           value="Secretario de Administracao do Estado do Piaui">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning btn-sm px-4" id="btn-autorizar"
+                        onclick="autorizarSolicitacao()">
+                    <i class="bi bi-pen me-1"></i> Autorizar e Assinar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block diarias_js %}
@@ -989,4 +1085,71 @@ async function excluirCotacaoVoo(id, btnEl) {
 }
 </script>
 {% endif %}
+
+{# --- JS Autorização do Secretário (só para o secretário) --- #}
+{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_secretario %}
+<script>
+async function autorizarSolicitacao() {
+    var erroDiv = document.getElementById('autorizar-erro');
+    var sucessoDiv = document.getElementById('autorizar-sucesso');
+    var btn = document.getElementById('btn-autorizar');
+
+    // Limpa mensagens
+    erroDiv.classList.add('d-none');
+    sucessoDiv.classList.add('d-none');
+
+    var usuario = document.getElementById('autorizar_usuario').value.trim();
+    var senha = document.getElementById('autorizar_senha').value.trim();
+    var cargo = document.getElementById('autorizar_cargo').value.trim();
+
+    if (!usuario || !senha) {
+        erroDiv.textContent = 'Informe usuario e senha do SEI.';
+        erroDiv.classList.remove('d-none');
+        return;
+    }
+
+    // Desabilita botão e mostra spinner
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Autorizando...';
+
+    try {
+        var resp = await fetch('{{ url_for("diarias.autorizar_solicitacao", id=itinerario.id) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sei_usuario: usuario,
+                sei_senha: senha,
+                cargo: cargo
+            })
+        });
+
+        var data = await resp.json();
+
+        if (resp.ok && data.sucesso) {
+            sucessoDiv.innerHTML = '<i class="bi bi-check-circle me-1"></i> Autorizacao realizada com sucesso! Documento: <b>' +
+                (data.documento_formatado || '') + '</b>. Recarregando...';
+            sucessoDiv.classList.remove('d-none');
+
+            // Fecha modal e recarrega após 1.5s
+            setTimeout(function() {
+                var modal = bootstrap.Modal.getInstance(document.getElementById('modalAutorizar'));
+                if (modal) modal.hide();
+                window.location.reload();
+            }, 1500);
+        } else {
+            erroDiv.textContent = data.erro || 'Erro desconhecido ao autorizar.';
+            erroDiv.classList.remove('d-none');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-pen me-1"></i> Autorizar e Assinar';
+        }
+    } catch (err) {
+        erroDiv.textContent = 'Erro de conexao. Tente novamente.';
+        erroDiv.classList.remove('d-none');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-pen me-1"></i> Autorizar e Assinar';
+    }
+}
+</script>
+{% endif %}
+
 {% endblock %}

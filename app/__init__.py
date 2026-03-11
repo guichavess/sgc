@@ -58,18 +58,20 @@ def create_app(config_class=None):
 
     # Rota para atualizar SIAFE (apenas Pedro Alexandre)
     SIAFE_SCRIPTS = [
-        {'arquivo': 'atualizar_contratos.py', 'nome': 'Contratos'},
-        {'arquivo': 'atualizar_empenho.py', 'nome': 'Empenhos'},
-        {'arquivo': 'atualizar_pd.py', 'nome': 'PDs'},
-        {'arquivo': 'atualizar_ob.py', 'nome': 'OBs'},
-        {'arquivo': 'atualizar_liquidacao.py', 'nome': 'Liquidações'},
+        {'id': 'reserva',     'arquivo': 'atualizar_reserva.py',     'nome': 'Reservas'},
+        {'id': 'empenho',     'arquivo': 'atualizar_empenho.py',     'nome': 'Empenhos'},
+        {'id': 'liquidacao',  'arquivo': 'atualizar_liquidacao.py',  'nome': 'Liquidações'},
+        {'id': 'pd',          'arquivo': 'atualizar_pd.py',          'nome': 'PDs'},
+        {'id': 'ob',          'arquivo': 'atualizar_ob.py',          'nome': 'OBs'},
+        {'id': 'contratos',   'arquivo': 'atualizar_contratos.py',   'nome': 'Contratos'},
     ]
+    SIAFE_SCRIPTS_MAP = {s['id']: s for s in SIAFE_SCRIPTS}
     _siafe_status = {'running': False, 'atual': -1, 'scripts': []}
 
-    def _executar_scripts_siafe():
-        """Executa os 5 scripts de atualização SIAFE em background."""
+    def _executar_scripts_siafe(selected_scripts):
+        """Executa scripts de atualização SIAFE selecionados em background."""
         scripts_dir = os.path.join(app.root_path, '..', 'scripts')
-        for i, s in enumerate(SIAFE_SCRIPTS):
+        for i, s in enumerate(selected_scripts):
             _siafe_status['atual'] = i
             _siafe_status['scripts'][i]['status'] = 'running'
             script_path = os.path.join(scripts_dir, s['arquivo'])
@@ -95,17 +97,31 @@ def create_app(config_class=None):
     @app.route('/api/atualizar-siafe', methods=['POST'])
     @login_required
     def atualizar_siafe():
+        from flask import request as req
         if not current_user.nome or 'PEDRO ALEXANDRE' not in current_user.nome.upper():
             return jsonify({'erro': 'Acesso negado'}), 403
         if _siafe_status['running']:
             return jsonify({'erro': 'Atualização já em andamento'}), 409
+
+        data = req.get_json(silent=True) or {}
+        selected_ids = data.get('scripts')
+        if selected_ids:
+            selected_scripts = [SIAFE_SCRIPTS_MAP[sid] for sid in selected_ids if sid in SIAFE_SCRIPTS_MAP]
+        else:
+            selected_scripts = list(SIAFE_SCRIPTS)
+
+        if not selected_scripts:
+            return jsonify({'erro': 'Nenhum script selecionado'}), 400
+
         _siafe_status['running'] = True
         _siafe_status['atual'] = -1
         _siafe_status['scripts'] = [
             {'nome': s['nome'], 'status': 'pendente', 'erro': None}
-            for s in SIAFE_SCRIPTS
+            for s in selected_scripts
         ]
-        thread = threading.Thread(target=_executar_scripts_siafe, daemon=True)
+        thread = threading.Thread(
+            target=_executar_scripts_siafe, args=(selected_scripts,), daemon=True
+        )
         thread.start()
         return jsonify({'ok': True})
 

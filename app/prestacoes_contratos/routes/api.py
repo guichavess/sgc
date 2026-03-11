@@ -829,3 +829,78 @@ def api_relatorio_contratos():
         as_attachment=True,
         download_name=filename
     )
+
+
+# ========================================================
+# PLANEJAMENTO ORÇAMENTÁRIO - Excel por contrato
+# ========================================================
+
+@prestacoes_contratos_bp.route('/contratos/<int:codigo>/planejamento/excel')
+@login_required
+def api_planejamento_excel(codigo):
+    """Gera Excel com planejamento orçamentário do contrato."""
+    from datetime import date
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from app.models.planejamento_orcamentario import PlanejamentoOrcamentario
+
+    dados = PlanejamentoOrcamentario.query.filter_by(
+        cod_contrato=str(codigo)
+    ).order_by(PlanejamentoOrcamentario.competencia).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Planejamento'
+
+    header_font = Font(name='Calibri', bold=True, color='FFFFFF', size=11)
+    header_fill = PatternFill(start_color='343990', end_color='343990', fill_type='solid')
+    header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin', color='D0D0D0'),
+        right=Side(style='thin', color='D0D0D0'),
+        top=Side(style='thin', color='D0D0D0'),
+        bottom=Side(style='thin', color='D0D0D0')
+    )
+    money_fmt = '#,##0.00'
+
+    headers = ['Competência', 'Valor', 'Planejamento Inicial', 'Repactuação/Prorrogação']
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+
+    for row_idx, p in enumerate(dados, 2):
+        ws.cell(row=row_idx, column=1, value=p.competencia).border = thin_border
+        c = ws.cell(row=row_idx, column=2, value=float(p.valor or 0))
+        c.number_format = money_fmt
+        c.border = thin_border
+        ws.cell(row=row_idx, column=3, value='Sim' if p.planejamento_inicial else 'Não').border = thin_border
+        ws.cell(row=row_idx, column=4, value='Sim' if p.repactuacao_prorrogacao else 'Não').border = thin_border
+
+    # Total
+    total_row = len(dados) + 2
+    c = ws.cell(row=total_row, column=1, value='Total')
+    c.font = Font(bold=True)
+    c.border = thin_border
+    total_val = sum(float(p.valor or 0) for p in dados)
+    c = ws.cell(row=total_row, column=2, value=total_val)
+    c.number_format = money_fmt
+    c.font = Font(bold=True, color='2E7D32')
+    c.border = thin_border
+
+    for col_idx in range(1, 5):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 22
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f'planejamento_{codigo}_{date.today().strftime("%Y%m%d")}.xlsx'
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )

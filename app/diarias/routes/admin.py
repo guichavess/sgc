@@ -1,7 +1,7 @@
 """
 Rotas administrativas do módulo de Diárias (gerenciar agências, cargos/valores, administração).
 """
-from flask import render_template, request, redirect, url_for, flash, abort
+from flask import render_template, request, redirect, url_for, flash, abort, current_app
 from flask_login import login_required, current_user
 
 from app.diarias.routes import diarias_bp
@@ -229,6 +229,8 @@ def escolha_passagens(id):
     from app.models.diaria import DiariasCotacaoVoo
     from app.services.diarias_sei_integration import (
         gerar_token_sei_admin, gerar_escolha_passagens,
+        gerar_memorando_cotacoes, consultar_documentos_procedimento,
+        ID_SERIE_COTACAO,
     )
 
     itinerario = DiariasItinerario.query.get_or_404(id)
@@ -297,12 +299,15 @@ def escolha_passagens(id):
     itinerario.escolha_justificativa_outros = justificativa_outros
     itinerario.escolha_declaracao_responsabilidade = declaracao
 
-    # Gera documento SEI
+    # Gera documentos SEI: SEAD_ESCOLHA_PASSAGENS + 2º SEAD_MEMORANDO_SGA
     sei_ok = False
     if itinerario.sei_id_procedimento:
         try:
             token = gerar_token_sei_admin()
             if token:
+                sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+                # 1) SEAD_ESCOLHA_PASSAGENS
                 retorno = gerar_escolha_passagens(
                     token=token,
                     id_procedimento=itinerario.sei_id_procedimento,
@@ -316,12 +321,46 @@ def escolha_passagens(id):
                         'justificativa_outros_texto': justificativa_outros,
                         'declaracao': declaracao,
                     },
-                    sei_protocolo=itinerario.sei_protocolo or itinerario.n_processo or '',
+                    sei_protocolo=sei_protocolo,
                 )
                 if retorno:
                     itinerario.sei_id_escolha_passagens = str(retorno.get('IdDocumento', ''))
                     itinerario.sei_escolha_passagens_formatado = retorno.get('DocumentoFormatado', '')
                     sei_ok = True
+
+                    # 2) 2º SEAD_MEMORANDO_SGA — Encaminhamento de Cotações
+                    # Busca IDs das cotações (IdSerie 272) no processo SEI
+                    ref_cotacoes = ''
+                    if sei_protocolo:
+                        resp_docs = consultar_documentos_procedimento(sei_protocolo)
+                        if resp_docs.get('sucesso'):
+                            ids_cotacao = [
+                                d.get('DocumentoFormatado', '')
+                                for d in resp_docs['documentos']
+                                if str(d.get('Serie', {}).get('IdSerie', '')) == ID_SERIE_COTACAO
+                            ]
+                            ref_cotacoes = ', '.join(ids_cotacao) if ids_cotacao else ''
+
+                    ref_req_passagens = itinerario.sei_requisicao_passagens_formatado or ''
+
+                    if ref_cotacoes and ref_req_passagens:
+                        ret_memo = gerar_memorando_cotacoes(
+                            token=token,
+                            id_procedimento=itinerario.sei_id_procedimento,
+                            sei_protocolo=sei_protocolo,
+                            ref_cotacoes_fmt=ref_cotacoes,
+                            ref_requisicao_passagens_fmt=ref_req_passagens,
+                        )
+                        if ret_memo:
+                            itinerario.sei_id_memorando_cotacoes = str(ret_memo.get('IdDocumento', ''))
+                            itinerario.sei_memorando_cotacoes_formatado = ret_memo.get('DocumentoFormatado', '')
+                        else:
+                            current_app.logger.warning("SEI: Escolha OK mas memorando cotações falhou.")
+                    else:
+                        current_app.logger.warning(
+                            f"SEI: Sem ref cotações ({ref_cotacoes!r}) ou req passagens ({ref_req_passagens!r}), "
+                            "memorando cotações não gerado."
+                        )
                 else:
                     flash('Aviso: Escolha salva, mas geração do documento SEI falhou.', 'warning')
             else:
@@ -337,3 +376,191 @@ def escolha_passagens(id):
         flash('Escolha de passagens registrada com sucesso!', 'success')
 
     return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+
+# ── Autorização do Secretário ─────────────────────────────────────────────
+
+@diarias_bp.route('/administracao/<int:id>/autorizar', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def autorizar_solicitacao(id):
+    """
+    Gera autorização do secretário no SEI e avança a etapa automaticamente.
+
+    Fluxo:
+    1. Autentica secretário com credenciais SEI informadas
+    2. Cria documento SEAD_AUTORIZACAO_DO_SECRETARIO no processo SEI
+    3. Assina o documento com as credenciais do secretário
+    4. Avança etapa para FINANCEIRO
+    5. Encaminha processo para DFIN/APOIO
+    6. Gera despacho DFIN
+    """
+    from flask import jsonify
+    from app.services.sei_auth import autenticar_usuario_sei
+    from app.services.diarias_sei_integration import (
+        gerar_token_sei_admin, gerar_autorizacao_secretario,
+        enviar_procedimento, gerar_despacho_dfin,
+        UNIDADE_SEAD, UNIDADE_DFIN_APOIO,
+    )
+    from app.services.sei_integration import assinar_documento
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guard: somente o secretário pode autorizar
+    if not current_user.is_secretario:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Apenas o Secretário pode autorizar solicitações.'
+        }), 403
+
+    # Guard: só permite na etapa 1 (Solicitação Iniciada)
+    if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_INICIADA:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Esta solicitação não está na etapa de autorização (etapa 1).'
+        }), 400
+
+    # Guard: precisa de processo SEI
+    if not itinerario.sei_id_procedimento:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Esta solicitação não possui processo SEI vinculado.'
+        }), 400
+
+    # Parse JSON
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados não informados.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip()
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Usuário e senha do SEI são obrigatórios.'}), 400
+
+    if not cargo:
+        cargo = 'Secretário de Administração do Estado do Piauí'
+
+    # 1. Autentica secretário no SEI
+    auth_result = autenticar_usuario_sei(sei_usuario, sei_senha)
+    if not auth_result:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Falha na autenticação no SEI. Verifique usuário e senha.'
+        }), 401
+
+    token_secretario = auth_result['token']
+    id_usuario = auth_result['id_usuario']
+    id_login = auth_result['id_login']
+
+    # 2. Obtem token admin para criar documento
+    token_admin = gerar_token_sei_admin()
+    if not token_admin:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Falha ao obter token administrativo do SEI.'
+        }), 500
+
+    sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+    # 3. Cria documento de autorização
+    retorno_doc = gerar_autorizacao_secretario(
+        token=token_admin,
+        id_procedimento=itinerario.sei_id_procedimento,
+        tipo_solicitacao_id=itinerario.tipo_solicitacao_id,
+        sei_protocolo=sei_protocolo,
+    )
+
+    if not retorno_doc:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Falha ao criar documento de autorização no SEI.'
+        }), 500
+
+    doc_formatado = retorno_doc.get('DocumentoFormatado', '')
+    id_documento = str(retorno_doc.get('IdDocumento', ''))
+
+    # 4. Assina o documento com credenciais do secretário
+    dados_assinatura = {
+        'protocolo_doc': doc_formatado,
+        'orgao': 'SEAD-PI',
+        'cargo': cargo,
+        'id_login': id_login,
+        'id_usuario': id_usuario,
+        'senha': sei_senha,
+    }
+
+    ret_assinatura = assinar_documento(
+        token=token_secretario,
+        unidade_id=UNIDADE_SEAD,
+        dados_assinatura=dados_assinatura,
+    )
+
+    if not ret_assinatura or not ret_assinatura.get('sucesso'):
+        erro_assinatura = ret_assinatura.get('erro', 'Erro desconhecido') if ret_assinatura else 'Sem resposta'
+        return jsonify({
+            'sucesso': False,
+            'erro': f'Documento criado, mas falha ao assinar: {erro_assinatura}'
+        }), 500
+
+    # 5. Salva referência no banco
+    itinerario.sei_id_autorizacao = id_documento
+    itinerario.sei_autorizacao_formatado = doc_formatado
+
+    # 6. Avança etapa para FINANCEIRO
+    DiariaService.registrar_movimentacao(
+        id_itinerario=id,
+        etapa_nova_id=DiariasEtapaID.FINANCEIRO,
+        usuario_id=current_user.id if current_user else None,
+        comentario=f'Autorização do Secretário ({doc_formatado}) gerada e assinada pelo sistema',
+    )
+
+    resultado = {
+        'sucesso': True,
+        'documento_formatado': doc_formatado,
+        'id_documento': id_documento,
+    }
+
+    # 7. Encaminha processo para DFIN/APOIO
+    try:
+        envio = enviar_procedimento(
+            token_admin,
+            sei_protocolo,
+            [UNIDADE_DFIN_APOIO],
+            manter_aberto=True,
+        )
+        resultado['envio_procedimento'] = envio
+
+        if envio.get('sucesso'):
+            # 8. Gera despacho DFIN
+            try:
+                itens = DiariasItemItinerario.query.filter_by(
+                    id_itinerario=itinerario.id
+                ).all()
+                nomes_interessados = [
+                    item.nome_pessoa for item in itens if item.nome_pessoa
+                ]
+
+                despacho_ret = gerar_despacho_dfin(
+                    token=token_admin,
+                    id_procedimento=itinerario.sei_id_procedimento,
+                    sei_protocolo=sei_protocolo,
+                    interessados=nomes_interessados,
+                )
+                if despacho_ret:
+                    itinerario.sei_id_despacho_dfin = str(despacho_ret.get('IdDocumento', ''))
+                    itinerario.sei_despacho_dfin_formatado = despacho_ret.get('DocumentoFormatado', '')
+                    resultado['despacho_dfin'] = despacho_ret.get('DocumentoFormatado', '')
+            except Exception as e:
+                current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho DFIN: {e}")
+        else:
+            current_app.logger.warning(
+                f"SEI Diárias: Falha ao encaminhar procedimento: {envio.get('erro')}"
+            )
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao encaminhar procedimento: {e}")
+
+    db.session.commit()
+
+    return jsonify(resultado)

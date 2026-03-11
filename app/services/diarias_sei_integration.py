@@ -1025,7 +1025,9 @@ def verificar_autorizacao_diaria(itinerario):
     doc_encontrado = None
 
     if apenas_diarias:
-        # Tipo 1 (Apenas Diarias): busca Requisicao de Diarias e verifica assinaturas
+        # Tipo 1 (Apenas Diarias):
+        # 1º Busca Requisicao de Diarias assinada (fluxo original via SEI)
+        # 2º Busca Autorizacao do Secretario (fluxo via sistema ou SEI direto)
         for doc in resp_docs['documentos']:
             serie = doc.get('Serie', {})
             if str(serie.get('IdSerie', '')) == ID_SERIE_REQUISICAO_DIARIAS:
@@ -1033,6 +1035,14 @@ def verificar_autorizacao_diaria(itinerario):
                 if assinaturas:
                     doc_encontrado = doc
                 break  # so existe uma requisicao, nao precisa continuar
+
+        # Se nao encontrou requisicao assinada, verifica autorizacao do secretario
+        if not doc_encontrado:
+            for doc in resp_docs['documentos']:
+                serie = doc.get('Serie', {})
+                if str(serie.get('IdSerie', '')) == ID_SERIE_AUTORIZACAO_SECRETARIO:
+                    doc_encontrado = doc
+                    break
     else:
         # Tipos 2 e 3: busca Autorizacao do Secretario (logica original)
         for doc in resp_docs['documentos']:
@@ -1069,14 +1079,14 @@ def verificar_autorizacao_diaria(itinerario):
 
             DiariaService.registrar_movimentacao(
                 itinerario.id,
-                DiariasEtapaID.SOLICITACAO_AUTORIZADA,
+                DiariasEtapaID.FINANCEIRO,
                 usuario_id=None,
                 comentario=comentario,
             )
             resultado['avancou_etapa'] = True
             current_app.logger.info(
                 f"SEI Diarias: Itinerario {itinerario.id} avancou para etapa 2 "
-                f"(Autorizada) - Documento {doc_fmt}."
+                f"(Financeiro) - Documento {doc_fmt}."
             )
 
             # Encaminha o processo para DFIN/APOIO (Diretoria de Planejamento e Financas)
@@ -1567,4 +1577,226 @@ def gerar_escolha_passagens(token, id_procedimento, dados_escolha, sei_protocolo
 
     except Exception as e:
         current_app.logger.error(f"SEI Diárias: Erro ao gerar escolha de passagens: {e}")
+        return None
+
+
+# ── 2º MEMORANDO SGA — Encaminhamento de Cotações ─────────────────────────
+
+def gerar_memorando_cotacoes(token, id_procedimento, sei_protocolo,
+                              ref_cotacoes_fmt, ref_requisicao_passagens_fmt):
+    """
+    Gera o 2º SEAD_MEMORANDO_SGA (IdSerie 2986) encaminhando as cotações
+    de passagens para escolha do bilhete.
+
+    Este documento é criado SOMENTE quando o admin registra a escolha de
+    passagens. Referencia os PDFs de cotações enviados ao SEI e a
+    requisição de passagens aéreas.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        sei_protocolo: Protocolo formatado do processo
+        ref_cotacoes_fmt: str com ID(s) das cotações (ex: "0020145484")
+                          — pode conter múltiplos separados por vírgula
+        ref_requisicao_passagens_fmt: str com ID da requisição de passagens
+                                       (ex: "SEAD-0020116597")
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado, etc.)
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para memorando cotações.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p><b>PARA:</b> SUPERINTENDÊNCIA DE GESTÃO ADMINISTRATIVA</p>
+        <br>
+        <p>Encaminhamos cotações de passagens aéreas (id. {ref_cotacoes_fmt}) de acordo com os
+        voos disponíveis para as datas de ida e volta indicados na requisição (id.{ref_requisicao_passagens_fmt}), para
+        determinação do bilhete que deverá ser emitido, <b>por meio de preenchimento do formulário
+        SEAD_ESCOLHA_PASSAGENS</b>.</p>
+        <br>
+        <p>Ressaltamos que a ordem de prioridade para escolha do voo deve seguir as
+        disposições do Decreto Estadual Nº 14.891/2012, conforme segue:</p>
+        <br>
+        <p style="margin-left: 40px;"><i>Art. 6º Para aquisição de passagens aéreas, a Secretaria de Administração observará
+        condições de aquisição semelhantes ao setor privado, devendo:</i></p>
+        <br>
+        <p style="margin-left: 40px;"><i>I - <b>solicitar a passagem pelo menor preço</b> dentre aqueles oferecidos pelas companhias
+        aéreas, inclusive os decorrentes da aplicação de tarifas promocionais ou reduzidas para
+        horários compatíveis com a programação da viagem;</i></p>
+        <br>
+        <p style="margin-left: 40px;"><i>[...]</i></p>
+        <br>
+        <p style="margin-left: 40px;"><i>III - a autorização da emissão do bilhete deverá ser realizada considerando o horário e o
+        período da participação da autoridade, servidor ou particular no evento, o tempo de
+        translado, e a otimização do trabalho, visando garantir condição laborativa produtiva,
+        preferencialmente utilizando os seguintes parâmetros:</i></p>
+        <br>
+        <p style="margin-left: 60px;"><i><b>a) a escolha do vôo deve recair prioritariamente em percursos de menor duração,
+        evitando-se, sempre que possível, trechos com escalas e conexões;</b></i></p>
+        <br>
+        <p style="margin-left: 60px;"><i><b>b) o embarque e o desembarque devem estar compreendidos no período entre sete
+        e vinte e uma horas, salvo a inexistência de vôos que atendam a estes horários;</b></i></p>
+        <br>
+        <p style="margin-left: 60px;"><i><b>em viagens nacionais, deve-se priorizar o horário do desembarque que anteceda
+        em no mínimo três horas o início previsto dos trabalhos, evento ou missão;</b> e</i></p>
+        <br>
+        <p style="margin-left: 60px;"><i><b>d) em viagens internacionais, em que a soma dos trechos da origem até o destino
+        ultrapasse oito horas, e que sejam realizadas no período noturno, o embarque,
+        prioritariamente, deverá ocorrer com um dia de antecedência.</b></i></p>
+        <br>
+        <p style="margin-left: 40px;"><i>IV - a emissão do bilhete de passagem aérea deve ser ao menor preço, prevalecendo,
+        sempre que possível, a tarifa em classe econômica, observado o disposto no inciso
+        anterior e alíneas, e no art. 8º deste Decreto</i></p>
+        <br>
+        <p style="margin-left: 40px;"><i>[...]</i></p>
+        <br>
+        <p style="margin-left: 40px;"><i>Art. 8. As passagens aéreas serão adquiridas observando-se as seguintes categorias:</i></p>
+        <br>
+        <p style="margin-left: 40px;"><i>I - primeira classe, para o Governador e vice-Governador do Estado;</i></p>
+        <br>
+        <p style="margin-left: 40px;"><i>II - classe executiva, para Secretários e dirigentes máximos de entidades da
+        administração indireta;</i></p>
+        <br>
+        <p style="margin-left: 40px;"><i>III - classe econômica, para os demais casos</i></p>
+        <br>
+        <p style="margin-left: 40px;"><i>Parágrafo único. Quando não houver primeira classe ou classe executiva, conforme o
+        caso, para o trecho desejado, será adquirida passagem, respectivamente, de classe
+        executiva e de classe econômica.</i></p>
+        <br>
+        <p>Após a viagem, solicita-se a juntada nos autos do <i><b>cartão de embarque ou
+        congênere</b></i> para a comprovação do embarque.</p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_MEMORANDO_SGA,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Memorando - Encaminhamento de Cotações - {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando memorando de cotações para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar memorando cotações ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Memorando cotações gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar memorando cotações: {e}")
+        return None
+
+
+# ── Autorização do Secretário ─────────────────────────────────────────────
+
+
+def gerar_autorizacao_secretario(token, id_procedimento, tipo_solicitacao_id, sei_protocolo):
+    """
+    Cria documento SEAD_AUTORIZACAO_DO_SECRETARIO (IdSerie 574) no processo SEI.
+
+    O texto do documento varia conforme o tipo da solicitação:
+      - Tipo 1 (Apenas Diárias): "Autorizo o pagamento de diárias..."
+      - Tipo 2 (Diárias + Passagens): "Autorizo a compra das passagens e o pagamento de diárias..."
+      - Tipo 3 (Apenas Passagens): "Autorizo a compra das passagens..."
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        tipo_solicitacao_id: 1, 2 ou 3
+        sei_protocolo: Protocolo formatado do processo
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para autorização do secretário.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+
+    # Determina texto conforme tipo de solicitação
+    tipo_id = int(tipo_solicitacao_id) if tipo_solicitacao_id else 2
+    if tipo_id == 1:
+        texto_autorizo = "Autorizo o pagamento de diárias"
+    elif tipo_id == 3:
+        texto_autorizo = "Autorizo a compra das passagens"
+    else:
+        # Tipo 2 (padrão) — Diárias + Passagens
+        texto_autorizo = "Autorizo a compra das passagens e o pagamento de diárias"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p style="text-indent: 2em; text-align: justify;">
+            <b>{texto_autorizo}</b> e encaminho os autos à Superintendência
+            de Gestão Administrativa - SGA, para conhecimento e providências
+            necessárias, devendo ser observados os procedimentos legais.
+        </p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_AUTORIZACAO_SECRETARIO,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Autorização do Secretário - {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando autorização do secretário para procedimento {id_procedimento} "
+            f"(tipo={tipo_id})..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar autorização ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Autorização do secretário gerada - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar autorização do secretário: {e}")
         return None

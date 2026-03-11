@@ -23,8 +23,41 @@
     <li>
         <a class="sidebar-link {{ 'active' if request.endpoint and request.endpoint.startswith('financeiro.diarias') }}"
            href="{{ url_for('financeiro.diarias_lista') }}">
-            <i class="bi bi-airplane"></i> Diarias
+            <i class="bi bi-airplane"></i> Diárias
         </a>
     </li>
 </ul>
+
+{# Planejamento Orçamentário — accordion colapsável #}
+{% if current_user.is_admin or (current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper()) %}
+{% set is_planejamento_active = (request.endpoint and request.endpoint.startswith('financeiro.planejamento')) %}
+<div class="sidebar-section-label">Planejamento</div>
+<ul class="sidebar-menu">
+    <li>
+        <a class="sidebar-link sidebar-accordion-toggle {{ 'active' if is_planejamento_active }}"
+           data-bs-toggle="collapse" href="#sidebarPlanejamento" role="button"
+           aria-expanded="{{ 'true' if is_planejamento_active else 'false' }}"
+           aria-controls="sidebarPlanejamento">
+            <i class="bi bi-calendar-check"></i> Planejamento Orçamentário
+            <i class="bi bi-chevron-down sidebar-accordion-icon ms-auto"></i>
+        </a>
+        <div class="collapse {{ 'show' if is_planejamento_active }}" id="sidebarPlanejamento">
+            <ul class="sidebar-submenu">
+                <li>
+                    <a class="sidebar-link sidebar-sublink {{ 'active' if request.endpoint == 'financeiro.planejamento_relatorio' }}"
+                       href="{{ url_for('financeiro.planejamento_relatorio') }}">
+                        <i class="bi bi-bar-chart-line"></i> Relatório de Execução
+                    </a>
+                </li>
+                <li>
+                    <a class="sidebar-link sidebar-sublink {{ 'active' if request.endpoint == 'financeiro.planejamento_index' }}"
+                       href="{{ url_for('financeiro.planejamento_index') }}">
+                        <i class="bi bi-pencil-square"></i> Lançar Planejamento
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </li>
+</ul>
+{% endif %}
 {% endblock %}

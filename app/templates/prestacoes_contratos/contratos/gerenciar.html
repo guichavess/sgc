@@ -250,6 +250,15 @@
                 {% endif %}
             </a>
         </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {{ 'active' if aba == 'planejamento' }}"
+               href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='planejamento') }}">
+                <i class="bi bi-calendar-check me-1"></i> Planejamento Orçamentário
+                {% if planejamento_dados %}
+                <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                {% endif %}
+            </a>
+        </li>
     </ul>
 
     {# ===== CONTEÚDO DA ABA ===== #}
@@ -1630,6 +1639,71 @@
                     <i class="bi bi-inbox fs-3 d-block mb-2"></i>
                     Nenhuma solicitacao de pagamento encontrada para este contrato.
                 </div>
+            {% endif %}
+
+            {% elif aba == 'planejamento' %}
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">
+                    <i class="bi bi-calendar-check me-1"></i> Planejamento Orçamentário
+                    <span class="badge bg-primary ms-2">{{ planejamento_dados|length }}</span>
+                </h5>
+                <div class="d-flex align-items-center gap-3">
+                    {% if planejamento_dados %}
+                    <span class="text-muted small">
+                        Total: <strong class="text-success">R$ {{ "{:,.2f}".format(planejamento_total or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</strong>
+                    </span>
+                    <a href="{{ url_for('prestacoes_contratos.api_planejamento_excel', codigo=contrato.codigo) }}"
+                       class="btn btn-success btn-sm">
+                        <i class="bi bi-file-earmark-excel me-1"></i> Exportar Excel
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if planejamento_dados %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead style="background-color: #343990; color: white;">
+                        <tr>
+                            <th>Competência</th>
+                            <th class="text-end">Valor</th>
+                            <th class="text-center">Planejamento Inicial</th>
+                            <th class="text-center">Repactuação/Prorrogação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in planejamento_dados %}
+                        <tr>
+                            <td class="fw-semibold">{{ p.competencia }}</td>
+                            <td class="text-end text-success fw-semibold">
+                                R$ {{ "{:,.2f}".format(p.valor or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                            </td>
+                            <td class="text-center">
+                                {% if p.planejamento_inicial %}
+                                <span class="badge bg-success">Sim</span>
+                                {% else %}
+                                <span class="badge bg-danger">Não</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if p.repactuacao_prorrogacao %}
+                                <span class="badge bg-success">Sim</span>
+                                {% else %}
+                                <span class="badge bg-danger">Não</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-calendar-x fs-1 d-block mb-3"></i>
+                <p class="mb-1">Nenhum lançamento de planejamento orçamentário para este contrato.</p>
+                <small>Os lançamentos são feitos na página <strong>Lançar Planejamento</strong> do módulo Financeiro.</small>
+            </div>
             {% endif %}
 
             {% endif %}

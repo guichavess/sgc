@@ -276,6 +276,11 @@ body.sidebar-collapsed .main-content {
     margin-left: 0;
 }
 
+/* Sem sidebar (hub, login) */
+body.no-sidebar .main-content {
+    margin-left: 0;
+}
+
 /* ========================================
    FIM LAYOUT
    ======================================== */

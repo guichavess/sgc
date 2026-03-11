@@ -15,3 +15,4 @@ from app.financeiro.routes import diarias
 from app.financeiro.routes import orcamentaria
 from app.financeiro.routes import fornecedores
 from app.financeiro.routes import execucoes
+from app.financeiro.routes import planejamento

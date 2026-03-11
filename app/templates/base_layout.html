@@ -17,10 +17,11 @@
 
     {% block extra_css %}{% endblock %}
 </head>
-<body class="has-layout sidebar-collapsed">
+<body class="has-layout sidebar-collapsed {% if request.endpoint in ('hub', 'auth.login') %}no-sidebar{% endif %}">
     <script>
     // Sincroniza estado da sidebar ANTES do primeiro paint (evita piscada)
     (function(){
+        if (document.body.classList.contains('no-sidebar')) return;
         if (window.innerWidth >= 992 && localStorage.getItem('sgc_sidebar_collapsed') === 'false') {
             document.body.classList.remove('sidebar-collapsed');
         }
@@ -31,9 +32,11 @@
     <header class="top-navbar">
         <div class="top-navbar-inner">
             <div class="top-navbar-left">
+                {% if request.endpoint not in ('hub', 'auth.login') %}
                 <button class="sidebar-toggle-btn" id="sidebarToggle" title="Menu">
                     <i class="bi bi-list"></i>
                 </button>
+                {% endif %}
                 <a class="top-navbar-brand" href="{{ url_for('hub') }}">
                     <img src="{{ url_for('static', filename='img/logo-sead-branca.png') }}" alt="SEAD" class="top-navbar-logo">
                     <span class="top-navbar-title">SGC <span style="opacity:.5;margin:0 4px;">|</span> <span style="font-weight:400;font-size:.9rem;opacity:.8;">{% block module_name %}Gestao de Contratos{% endblock %}</span></span>
@@ -77,6 +80,7 @@
         </div>
     </header>
 
+    {% if request.endpoint not in ('hub', 'auth.login') %}
     {# ===== Sidebar ===== #}
     <nav class="sidebar" id="sidebar">
         {# Hub link #}
@@ -95,6 +99,7 @@
 
     {# Overlay mobile #}
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    {% endif %}
 
     {# ===== Main Content ===== #}
     <main class="main-content">

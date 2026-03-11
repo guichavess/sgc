@@ -9,7 +9,7 @@ Alterações:
   - diarias_itinerario: ADD COLUMN etapa_atual_id
 
 Seed:
-  - 3 etapas iniciais (Solicitação Iniciada, Solicitação Autorizada, Financeiro)
+  - 3 etapas iniciais (Solicitação Iniciada, Financeiro, Aquisição de Passagens)
 
 Retroativo:
   - Insere histórico de etapa 1 para todos os itinerários existentes
@@ -88,9 +88,8 @@ def run_migration():
     print("\n[3/5] Inserindo etapas (seed)...")
     etapas = [
         (1, 'Solicitacao Iniciada', 'solicitacao_iniciada', 1, '#0d6efd', 'fas fa-file-alt'),
-        (2, 'Solicitacao Autorizada', 'solicitacao_autorizada', 2, '#198754', 'fas fa-signature'),
-        (3, 'Análise de Disponibilidade Orçamentária', 'analise_orcamentaria', 3, '#fd7e14', 'fas fa-search-dollar'),
-        (4, 'Aquisição de Passagens', 'aquisicao_passagens', 4, '#6f42c1', 'fas fa-plane-departure'),
+        (2, 'Financeiro', 'financeiro', 2, '#fd7e14', 'fas fa-search-dollar'),
+        (3, 'Aquisição de Passagens', 'aquisicao_passagens', 3, '#6f42c1', 'fas fa-plane-departure'),
     ]
     for etapa in etapas:
         cursor.execute("""

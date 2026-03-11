@@ -83,9 +83,8 @@ ETAPA_ALIASES = {
 class DiariasEtapaID(IntEnum):
     """IDs das etapas no fluxo de diárias."""
     SOLICITACAO_INICIADA = 1
-    SOLICITACAO_AUTORIZADA = 2
-    FINANCEIRO = 3  # Análise de Disponibilidade Orçamentária
-    AQUISICAO_PASSAGENS = 4  # Somente para Diárias+Passagens e Apenas Passagens
+    FINANCEIRO = 2              # Nota de Reserva + Quadro Orçamentário
+    AQUISICAO_PASSAGENS = 3     # Cotações + Escolha (somente tipos 2,3)
 
 
 # =============================================================================

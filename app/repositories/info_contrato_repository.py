@@ -53,42 +53,61 @@ class InfoContratoRepository(BaseRepository[Contrato]):
                 )
             )
 
-        # Filtro por situação
+        # Filtro por situação — aceita string ou lista
         if situacao:
-            query = query.filter(Contrato.situacao == situacao)
+            items = situacao if isinstance(situacao, list) else [situacao]
+            items = [s for s in items if s]
+            if items:
+                query = query.filter(Contrato.situacao.in_(items))
 
-        # Filtro por natureza (via Natureza dos empenho_itens vinculados)
+        # Filtro por natureza (via Natureza dos empenho_itens vinculados) — aceita int ou lista
         if natureza_codigo:
-            query = query.filter(
-                Contrato.codigo.in_(
-                    db.session.query(EmpenhoItem.CodContrato)
-                    .filter(EmpenhoItem.Natureza == str(natureza_codigo))
-                    .distinct()
+            items = natureza_codigo if isinstance(natureza_codigo, list) else [natureza_codigo]
+            items_str = [str(n) for n in items if n]
+            if items_str:
+                query = query.filter(
+                    Contrato.codigo.in_(
+                        db.session.query(EmpenhoItem.CodContrato)
+                        .filter(EmpenhoItem.Natureza.in_(items_str))
+                        .distinct()
+                    )
                 )
-            )
 
-        # Filtro por tipo de execução
+        # Filtro por tipo de execução — aceita int ou lista
         if tipo_execucao_id:
-            query = query.filter(Contrato.tipo_execucao_id == tipo_execucao_id)
+            items = tipo_execucao_id if isinstance(tipo_execucao_id, list) else [tipo_execucao_id]
+            items = [i for i in items if i]
+            if items:
+                query = query.filter(Contrato.tipo_execucao_id.in_(items))
 
-        # Filtro por centro de custo
+        # Filtro por centro de custo — aceita int ou lista
         if centro_de_custo_id:
-            query = query.filter(Contrato.centro_de_custo_id == centro_de_custo_id)
+            items = centro_de_custo_id if isinstance(centro_de_custo_id, list) else [centro_de_custo_id]
+            items = [i for i in items if i]
+            if items:
+                query = query.filter(Contrato.centro_de_custo_id.in_(items))
 
-        # Filtro por tipo de contrato (derivado da modalidade)
+        # Filtro por tipo de contrato (derivado da modalidade) — aceita string ou lista
         if tipo_contrato:
+            tipos = tipo_contrato if isinstance(tipo_contrato, list) else [tipo_contrato]
             mapa_modalidades = {
                 'SERVICO': ('SERVICOS', 'ALUGUEIS_IMOVEIS', 'ALUGUEIS'),
                 'MATERIAL': ('FORNECIMENTO_MATERIAIS',),
                 'MISTO': ('FORNECIMENTO_BENS',),
             }
-            modalidades = mapa_modalidades.get(tipo_contrato)
-            if modalidades:
-                query = query.filter(Contrato.modalidade.in_(modalidades))
+            todas_modalidades = []
+            for tc in tipos:
+                mods = mapa_modalidades.get(tc, ())
+                todas_modalidades.extend(mods)
+            if todas_modalidades:
+                query = query.filter(Contrato.modalidade.in_(todas_modalidades))
 
-        # Filtro por PDM (CATMAT)
+        # Filtro por PDM (CATMAT) — aceita int ou lista
         if pdm_id:
-            query = query.filter(Contrato.catmat_pdm_id == pdm_id)
+            items = pdm_id if isinstance(pdm_id, list) else [pdm_id]
+            items = [i for i in items if i]
+            if items:
+                query = query.filter(Contrato.catmat_pdm_id.in_(items))
 
         # Naturezas a excluir (estornos/cancelamentos)
         EXCLUDE_NATUREZA = {'339092', '449092'}

@@ -34,6 +34,14 @@ class Usuario(db.Model, UserMixin):
         """Retorna se o usuário está ativo."""
         return self.ativo
 
+    @property
+    def is_secretario(self):
+        """Verifica se o usuário é o Secretário de Estado (cargo institucional)."""
+        if not self.cargo:
+            return False
+        cargo_lower = self.cargo.lower()
+        return 'secretário' in cargo_lower or 'secretario' in cargo_lower
+
     def tem_permissao(self, modulo, acao=None):
         """Verifica se o usuário tem permissão para módulo/ação.
 
