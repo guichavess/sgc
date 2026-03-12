@@ -849,6 +849,29 @@ def api_planejamento_excel(codigo):
         cod_contrato=str(codigo)
     ).order_by(PlanejamentoOrcamentario.competencia).all()
 
+    # Buscar liquidado por mês para este contrato
+    from app.extensions import db
+    from sqlalchemy import text as sa_text
+    from decimal import Decimal
+    liq_map = {}
+    cod_numerico = str(codigo).replace('.', '').replace('/', '')
+    try:
+        cod_int = int(cod_numerico)
+        sql = sa_text("""
+            SELECT MONTH(dataEmissao) AS mes, YEAR(dataEmissao) AS ano,
+                   SUM(CASE WHEN tipoAlteracao = 'ANULACAO' THEN -valor ELSE valor END) AS total
+            FROM liquidacao
+            WHERE statusDocumento = 'CONTABILIZADO'
+              AND codigoUG = '210101'
+              AND codContrato = :cod
+            GROUP BY YEAR(dataEmissao), MONTH(dataEmissao)
+        """)
+        for row in db.session.execute(sql, {'cod': cod_int}).fetchall():
+            chave = f'{int(row[0]):02d}/{int(row[1])}'
+            liq_map[chave] = float(row[2]) if row[2] else 0.0
+    except (ValueError, TypeError):
+        pass
+
     wb = Workbook()
     ws = wb.active
     ws.title = 'Planejamento'
@@ -864,7 +887,7 @@ def api_planejamento_excel(codigo):
     )
     money_fmt = '#,##0.00'
 
-    headers = ['Competência', 'Valor', 'Planejamento Inicial', 'Repactuação/Prorrogação']
+    headers = ['Competência', 'Valor Planejado', 'Valor Pago', 'Planejamento Inicial', 'Repactuação/Prorrogação']
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col_idx, value=header)
         cell.font = header_font
@@ -876,8 +899,12 @@ def api_planejamento_excel(codigo):
         c = ws.cell(row=row_idx, column=2, value=float(p.valor or 0))
         c.number_format = money_fmt
         c.border = thin_border
-        ws.cell(row=row_idx, column=3, value='Sim' if p.planejamento_inicial else 'Não').border = thin_border
-        ws.cell(row=row_idx, column=4, value='Sim' if p.repactuacao_prorrogacao else 'Não').border = thin_border
+        liq_val = liq_map.get(p.competencia, 0.0)
+        c = ws.cell(row=row_idx, column=3, value=liq_val)
+        c.number_format = money_fmt
+        c.border = thin_border
+        ws.cell(row=row_idx, column=4, value='Sim' if p.planejamento_inicial else 'Não').border = thin_border
+        ws.cell(row=row_idx, column=5, value='Sim' if p.repactuacao_prorrogacao else 'Não').border = thin_border
 
     # Total
     total_row = len(dados) + 2
@@ -889,8 +916,13 @@ def api_planejamento_excel(codigo):
     c.number_format = money_fmt
     c.font = Font(bold=True, color='2E7D32')
     c.border = thin_border
+    total_liq = sum(liq_map.get(p.competencia, 0.0) for p in dados)
+    c = ws.cell(row=total_row, column=3, value=total_liq)
+    c.number_format = money_fmt
+    c.font = Font(bold=True, color='1565C0')
+    c.border = thin_border
 
-    for col_idx in range(1, 5):
+    for col_idx in range(1, 6):
         ws.column_dimensions[get_column_letter(col_idx)].width = 22
 
     output = BytesIO()

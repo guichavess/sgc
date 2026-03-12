@@ -231,11 +231,33 @@ def contrato_gerenciar(codigo):
     # Planejamento orçamentário
     from app.models.planejamento_orcamentario import PlanejamentoOrcamentario
     planejamento_total = Decimal('0')
+    planejamento_liquidado_map = {}
     if aba == 'planejamento':
         planejamento_dados = PlanejamentoOrcamentario.query.filter_by(
             cod_contrato=str(codigo)
         ).order_by(PlanejamentoOrcamentario.competencia).all()
         planejamento_total = sum((Decimal(str(p.valor or 0)) for p in planejamento_dados), Decimal('0'))
+
+        # Buscar liquidado por mês para este contrato
+        from app.extensions import db
+        from sqlalchemy import text
+        cod_numerico = str(codigo).replace('.', '').replace('/', '')
+        try:
+            cod_int = int(cod_numerico)
+            sql = text("""
+                SELECT MONTH(dataEmissao) AS mes, YEAR(dataEmissao) AS ano,
+                       SUM(CASE WHEN tipoAlteracao = 'ANULACAO' THEN -valor ELSE valor END) AS total
+                FROM liquidacao
+                WHERE statusDocumento = 'CONTABILIZADO'
+                  AND codigoUG = '210101'
+                  AND codContrato = :cod
+                GROUP BY YEAR(dataEmissao), MONTH(dataEmissao)
+            """)
+            for row in db.session.execute(sql, {'cod': cod_int}).fetchall():
+                chave = f'{int(row[0]):02d}/{int(row[1])}'
+                planejamento_liquidado_map[chave] = Decimal(str(row[2])) if row[2] else Decimal('0')
+        except (ValueError, TypeError):
+            pass
     else:
         # Check existence for tab icon
         existe = PlanejamentoOrcamentario.query.filter_by(
@@ -284,6 +306,7 @@ def contrato_gerenciar(codigo):
         solicitacoes_pagamento=solicitacoes_pagamento,
         planejamento_dados=planejamento_dados,
         planejamento_total=planejamento_total,
+        planejamento_liquidado_map=planejamento_liquidado_map,
         vigencia_final_efetiva=vigencia_final_efetiva,
         vigencia_final_aditivo=vigencia_final_aditivo
     )

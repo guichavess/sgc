@@ -1667,17 +1667,22 @@
                     <thead style="background-color: #343990; color: white;">
                         <tr>
                             <th>Competência</th>
-                            <th class="text-end">Valor</th>
+                            <th class="text-end">Valor Planejado</th>
+                            <th class="text-end">Valor Pago</th>
                             <th class="text-center">Planejamento Inicial</th>
                             <th class="text-center">Repactuação/Prorrogação</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for p in planejamento_dados %}
+                        {% set liq_val = planejamento_liquidado_map.get(p.competencia, 0) %}
                         <tr>
                             <td class="fw-semibold">{{ p.competencia }}</td>
                             <td class="text-end text-success fw-semibold">
                                 R$ {{ "{:,.2f}".format(p.valor or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
+                            </td>
+                            <td class="text-end fw-semibold {% if liq_val > 0 %}text-primary{% else %}text-muted{% endif %}">
+                                R$ {{ "{:,.2f}".format(liq_val)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}
                             </td>
                             <td class="text-center">
                                 {% if p.planejamento_inicial %}

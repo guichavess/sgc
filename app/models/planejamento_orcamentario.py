@@ -14,6 +14,8 @@ class PlanejamentoOrcamentario(db.Model):
     cod_contrato = db.Column(db.String(20), nullable=False)
     competencia = db.Column(db.String(7), nullable=False)  # MM/YYYY
     valor = db.Column(db.Numeric(15, 2))
+    cod_natureza = db.Column(db.String(10), nullable=True)
+    cod_subitem = db.Column(db.String(20), nullable=True)
     dt_lancamento = db.Column(db.DateTime, default=datetime.now)
     usuario = db.Column(db.BigInteger, db.ForeignKey('sis_usuarios.id'))
     planejamento_inicial = db.Column(db.Boolean, default=False)

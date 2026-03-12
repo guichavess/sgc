@@ -82,10 +82,13 @@ TOKEN = get_token()
 # =========================
 
 # >>> nome fixo conforme solicitado <<<
-tabela_destino = "loa_2026"
+tabela_destino = "loa"
 
-# Anos a buscar (edite aqui)
+# Anos a buscar (default ou via CLI: --years 2026)
 YEARS = [2023, 2024, 2025, 2026]
+if '--years' in sys.argv:
+    idx = sys.argv.index('--years')
+    YEARS = [int(y) for y in sys.argv[idx+1:] if y.isdigit()]
 
 # Escolha do modo:
 # - "single"  -> usa só a UG definida em UG_SINGLE

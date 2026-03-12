@@ -1118,8 +1118,6 @@ class PrestacaoContratoService:
             EmpenhoItem.Natureza.isnot(None),
             EmpenhoItem.Natureza != '',
             EmpenhoItem.Natureza.notin_(EXCLUDE_NATUREZA),
-            EmpenhoItem.CodContrato.isnot(None),
-            EmpenhoItem.CodContrato != 0
         ).distinct().all()
 
         # Converter Text → int para lookup na tabela natdespesas

@@ -363,7 +363,7 @@ def api_naturezas_por_acao(acao):
     try:
         sql = text("""
             SELECT DISTINCT l.codNatureza, n.titulo
-            FROM loa_2026 l
+            FROM loa l
             LEFT JOIN natdespesas n ON CAST(l.codNatureza AS CHAR) = CAST(n.codigo AS CHAR)
             WHERE l.codAcao = :acao
               AND l.codNatureza IS NOT NULL
@@ -386,7 +386,7 @@ def api_fontes_por_acao_natureza(acao, natureza):
     try:
         sql = text("""
             SELECT DISTINCT l.codFonte, f.descricao
-            FROM loa_2026 l
+            FROM loa l
             LEFT JOIN class_fonte f ON CAST(l.codFonte AS CHAR) = CAST(f.codigo AS CHAR)
             WHERE l.codAcao = :acao
               AND l.codNatureza = :natureza

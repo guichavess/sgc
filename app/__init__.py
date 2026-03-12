@@ -57,42 +57,65 @@ def create_app(config_class=None):
         return render_template('hub.html')
 
     # Rota para atualizar SIAFE (apenas Pedro Alexandre)
+    # Grupos: SIAFE (execução sequencial interna, paralela entre grupos) e LOA (separado)
     SIAFE_SCRIPTS = [
-        {'id': 'reserva',     'arquivo': 'atualizar_reserva.py',     'nome': 'Reservas'},
-        {'id': 'empenho',     'arquivo': 'atualizar_empenho.py',     'nome': 'Empenhos'},
-        {'id': 'liquidacao',  'arquivo': 'atualizar_liquidacao.py',  'nome': 'Liquidações'},
-        {'id': 'pd',          'arquivo': 'atualizar_pd.py',          'nome': 'PDs'},
-        {'id': 'ob',          'arquivo': 'atualizar_ob.py',          'nome': 'OBs'},
-        {'id': 'contratos',   'arquivo': 'atualizar_contratos.py',   'nome': 'Contratos'},
+        {'id': 'reserva',     'arquivo': 'atualizar_reserva.py',     'nome': 'Reservas',     'grupo': 'siafe', 'args': []},
+        {'id': 'empenho',     'arquivo': 'atualizar_empenho.py',     'nome': 'Empenhos',     'grupo': 'siafe', 'args': []},
+        {'id': 'liquidacao',  'arquivo': 'atualizar_liquidacao.py',  'nome': 'Liquidações',  'grupo': 'siafe', 'args': []},
+        {'id': 'pd',          'arquivo': 'atualizar_pd.py',          'nome': 'PDs',           'grupo': 'siafe', 'args': []},
+        {'id': 'ob',          'arquivo': 'atualizar_ob.py',          'nome': 'OBs',           'grupo': 'siafe', 'args': []},
+        {'id': 'contratos',   'arquivo': 'atualizar_contratos.py',   'nome': 'Contratos',     'grupo': 'siafe', 'args': []},
+        {'id': 'loa',         'arquivo': 'atualizar_loa.py',         'nome': 'LOA',           'grupo': 'loa',   'args': ['--years', '2026']},
+        {'id': 'sei',         'arquivo': 'atualizar_etapas_sei.py',  'nome': 'Etapas SEI',    'grupo': 'sei',   'args': []},
     ]
     SIAFE_SCRIPTS_MAP = {s['id']: s for s in SIAFE_SCRIPTS}
-    _siafe_status = {'running': False, 'atual': -1, 'scripts': []}
+    _siafe_status = {'running': False, 'scripts': []}
+
+    def _executar_script(scripts_dir, script_info, idx):
+        """Executa um único script e atualiza o status."""
+        _siafe_status['scripts'][idx]['status'] = 'running'
+        script_path = os.path.join(scripts_dir, script_info['arquivo'])
+        cmd = [sys.executable, script_path] + script_info.get('args', [])
+        try:
+            env = {**os.environ, 'PYTHONIOENCODING': 'utf-8'}
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=600,
+                cwd=scripts_dir, env=env
+            )
+            ok = result.returncode == 0
+            _siafe_status['scripts'][idx]['status'] = 'ok' if ok else 'erro'
+            if not ok and result.stderr:
+                _siafe_status['scripts'][idx]['erro'] = result.stderr[-300:]
+        except subprocess.TimeoutExpired:
+            _siafe_status['scripts'][idx]['status'] = 'erro'
+            _siafe_status['scripts'][idx]['erro'] = 'Timeout (10min)'
+        except Exception as e:
+            _siafe_status['scripts'][idx]['status'] = 'erro'
+            _siafe_status['scripts'][idx]['erro'] = str(e)
 
     def _executar_scripts_siafe(selected_scripts):
-        """Executa scripts de atualização SIAFE selecionados em background."""
+        """Executa scripts em paralelo por grupo independente."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         scripts_dir = os.path.join(app.root_path, '..', 'scripts')
+
+        # Agrupa scripts por grupo mantendo a ordem e o índice original
+        grupos = {}
         for i, s in enumerate(selected_scripts):
-            _siafe_status['atual'] = i
-            _siafe_status['scripts'][i]['status'] = 'running'
-            script_path = os.path.join(scripts_dir, s['arquivo'])
-            try:
-                result = subprocess.run(
-                    [sys.executable, script_path],
-                    capture_output=True, text=True, timeout=600,
-                    cwd=scripts_dir
-                )
-                ok = result.returncode == 0
-                _siafe_status['scripts'][i]['status'] = 'ok' if ok else 'erro'
-                if not ok and result.stderr:
-                    _siafe_status['scripts'][i]['erro'] = result.stderr[-300:]
-            except subprocess.TimeoutExpired:
-                _siafe_status['scripts'][i]['status'] = 'erro'
-                _siafe_status['scripts'][i]['erro'] = 'Timeout (10min)'
-            except Exception as e:
-                _siafe_status['scripts'][i]['status'] = 'erro'
-                _siafe_status['scripts'][i]['erro'] = str(e)
+            g = s.get('grupo', 'siafe')
+            grupos.setdefault(g, []).append((i, s))
+
+        def run_group(items):
+            """Executa scripts de um grupo sequencialmente."""
+            for idx, script_info in items:
+                _executar_script(scripts_dir, script_info, idx)
+
+        # Executa grupos em paralelo (siafe e loa rodam ao mesmo tempo)
+        with ThreadPoolExecutor(max_workers=len(grupos)) as pool:
+            futures = [pool.submit(run_group, items) for items in grupos.values()]
+            for f in as_completed(futures):
+                f.result()  # propaga exceções
+
         _siafe_status['running'] = False
-        _siafe_status['atual'] = -1
 
     @app.route('/api/atualizar-siafe', methods=['POST'])
     @login_required
@@ -108,13 +131,12 @@ def create_app(config_class=None):
         if selected_ids:
             selected_scripts = [SIAFE_SCRIPTS_MAP[sid] for sid in selected_ids if sid in SIAFE_SCRIPTS_MAP]
         else:
-            selected_scripts = list(SIAFE_SCRIPTS)
+            selected_scripts = [s for s in SIAFE_SCRIPTS if s['grupo'] == 'siafe']
 
         if not selected_scripts:
             return jsonify({'erro': 'Nenhum script selecionado'}), 400
 
         _siafe_status['running'] = True
-        _siafe_status['atual'] = -1
         _siafe_status['scripts'] = [
             {'nome': s['nome'], 'status': 'pendente', 'erro': None}
             for s in selected_scripts
@@ -132,9 +154,20 @@ def create_app(config_class=None):
             return jsonify({'erro': 'Acesso negado'}), 403
         return jsonify({
             'running': _siafe_status['running'],
-            'atual': _siafe_status['atual'],
             'scripts': _siafe_status['scripts']
         })
+
+    # Migração inline: adicionar cod_natureza e cod_subitem ao planejamento_orcamentario
+    with app.app_context():
+        for col_sql in [
+            "ALTER TABLE planejamento_orcamentario ADD COLUMN cod_natureza VARCHAR(10) NULL",
+            "ALTER TABLE planejamento_orcamentario ADD COLUMN cod_subitem VARCHAR(20) NULL",
+        ]:
+            try:
+                db.session.execute(db.text(col_sql))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()  # coluna já existe
 
     # Registra filtros Jinja2
     from app.constants import normalizar_competencia

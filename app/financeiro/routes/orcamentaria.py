@@ -2,6 +2,7 @@
 Rotas do módulo Orçamentário (Financeiro).
 Tela principal de gerenciamento orçamentário — admins + Pedro Alexandre.
 """
+from collections import defaultdict
 from functools import wraps
 from decimal import Decimal
 from flask import render_template, request, jsonify, flash, redirect, url_for
@@ -30,11 +31,14 @@ def requires_admin_or_pedro(f):
 # Constantes de contas LOA
 # =============================================================================
 CONTA_INICIAL = '522110101'
-CONTA_SUPLEMENTAR = '522120101'
-CONTAS_ESPECIAL = ('522120201', '522120202', '522120203')
-CONTAS_EXTRAORDINARIA = ('522120301', '522120302', '522120303')
-CONTA_CONTINGENCIADO = '622120106'
-CONTA_ANULADA = '522190401'
+CONTA_SUPLEMENTAR = '522120101'        # Credito Suplementar
+CONTA_ESPECIAIS_ABERTO = '522120201'   # Creditos Especiais Aberto
+CONTAS_ESPECIAL = ('522120201', '522120202', '522120203')  # mantido para compatibilidade
+CONTAS_EXTRAORDINARIA = ('522120301', '522120302', '522120303')  # mantido para compatibilidade
+CONTA_CANCELADO = '522190401'          # Credito Cancelado
+CONTA_BLOQUEADO = '622120106'          # Creditos Bloqueados (Contingenciado)
+CONTA_CONTINGENCIADO = '622120106'     # alias
+CONTA_ANULADA = '522190401'            # alias
 CONTA_CREDITO_DISPONIVEL = '622110101'
 
 ZERO = Decimal('0')
@@ -90,20 +94,36 @@ def orcamentaria():
     natureza_filtro = request.args.get('natureza', '')
     acao_filtro = request.args.get('acao', '')
 
-    # --- KPI Cards: totais gerais (respeitam todos os filtros) ---
-    kpi = _calcular_kpis(ano, mes, fonte_filtro, natureza_filtro, acao_filtro)
+    try:
+        # --- KPI Cards: totais gerais (respeitam todos os filtros) ---
+        kpi = _calcular_kpis(ano, mes, fonte_filtro, natureza_filtro, acao_filtro)
 
-    # --- Tabela: Execução por Ação ---
-    acoes = _calcular_acoes(ano, mes, fonte_filtro, natureza_filtro, acao_filtro)
+        # --- Tabela: Execução por Ação ---
+        acoes = _calcular_acoes(ano, mes, fonte_filtro, natureza_filtro, acao_filtro)
 
-    # --- Pré-carrega naturezas de todas as ações (evita AJAX lento) ---
-    naturezas_por_acao = _calcular_todas_naturezas(ano, mes, fonte_filtro, natureza_filtro, acao_filtro)
+        # --- Pré-carrega naturezas de todas as ações (evita AJAX lento) ---
+        naturezas_por_acao = _calcular_todas_naturezas(ano, mes, fonte_filtro, natureza_filtro, acao_filtro)
 
-    # --- Listas para filtros (dependentes dos outros filtros selecionados) ---
-    fontes = _listar_fontes_filtradas(ano, mes, acao_filtro, natureza_filtro, '')
-    meses_disponiveis = _listar_meses_filtrados(ano, '', acao_filtro, natureza_filtro, fonte_filtro)
-    naturezas_disponiveis = _listar_naturezas_filtradas(ano, mes, acao_filtro, '', fonte_filtro)
-    acoes_disponiveis = _listar_acoes_filtradas(ano, mes, '', natureza_filtro, fonte_filtro)
+        # --- Listas para filtros (dependentes dos outros filtros selecionados) ---
+        fontes = _listar_fontes_filtradas(ano, mes, acao_filtro, natureza_filtro, '')
+        meses_disponiveis = _listar_meses_filtrados(ano, '', acao_filtro, natureza_filtro, fonte_filtro)
+        naturezas_disponiveis = _listar_naturezas_filtradas(ano, mes, acao_filtro, '', fonte_filtro)
+        acoes_disponiveis = _listar_acoes_filtradas(ano, mes, '', natureza_filtro, fonte_filtro)
+    except Exception:
+        db.session.rollback()
+        flash('Tabela LOA ainda não foi importada. Execute a atualização LOA primeiro.', 'warning')
+        kpi = {k: ZERO for k in (
+            'credito_disponivel', 'reservado', 'empenhado', 'liquidado',
+            'pds_pagar', 'pago', 'dotacao_atualizada',
+            'pct_disponivel', 'pct_reservado', 'pct_empenhado',
+            'pct_liquidado', 'pct_pds', 'pct_pago',
+        )}
+        acoes = {'itens': [], 'totais': defaultdict(lambda: ZERO)}
+        naturezas_por_acao = '{}'
+        fontes = []
+        meses_disponiveis = []
+        naturezas_disponiveis = []
+        acoes_disponiveis = []
 
     return render_template(
         'financeiro/orcamentaria.html',
@@ -179,13 +199,26 @@ def _calcular_kpis(ano, mes, fonte, natureza='', acao=''):
         filtro_exec_acao_class = f"AND {_SQL_ACAO_FROM_CLASS} = :acao"
         params_data["acao"] = acao
 
-    # Crédito Disponível (LOA)
+    # Crédito Disponível (LOA) — usa MAX(mes) conforme BI
+    params_cred = {"ano": ano}
+    filtros_cred = ""
+    if fonte:
+        filtros_cred += " AND codFonte = :fonte"
+        params_cred["fonte"] = fonte
+    if natureza:
+        filtros_cred += " AND codNatureza = :natureza"
+        params_cred["natureza"] = natureza
+    if acao:
+        filtros_cred += " AND codAcao = :acao"
+        params_cred["acao"] = acao
     sql_credito = text(f"""
-        SELECT COALESCE(SUM(saldo), 0) FROM loa_2026
-        WHERE ano = :ano AND id = :conta {filtro_mes} {filtro_fonte} {filtro_natureza} {filtro_acao}
+        SELECT COALESCE(SUM(saldo), 0) FROM loa
+        WHERE ano = :ano AND id = :conta
+          AND mes = (SELECT MAX(mes) FROM loa WHERE ano = :ano)
+          {filtros_cred}
     """)
     credito_disp = db.session.execute(
-        sql_credito, {**params, "conta": CONTA_CREDITO_DISPONIVEL}
+        sql_credito, {**params_cred, "conta": CONTA_CREDITO_DISPONIVEL}
     ).scalar() or 0
 
     # Reservado (só CONTABILIZADO; ANULACAO inverte sinal)
@@ -265,26 +298,40 @@ def _calcular_kpis(ano, mes, fonte, natureza='', acao=''):
         filtros_dot_ini += " AND codAcao = :acao"
         params_dot_ini["acao"] = acao
     sql_dot_ini = text(f"""
-        SELECT COALESCE(SUM(saldo), 0) FROM loa_2026
+        SELECT COALESCE(SUM(saldo), 0) FROM loa
         WHERE ano = :ano AND id = :conta AND mes = 1 {filtros_dot_ini}
     """)
     dot_inicial = _decimal(
         db.session.execute(sql_dot_ini, {**params_dot_ini, "conta": CONTA_INICIAL}).scalar() or 0
     )
 
-    # Demais contas LOA (respeitam filtro de mês)
+    # Demais contas LOA — usa MAX(mes) conforme lógica do BI
+    # (saldo é snapshot mensal, não acumulativo; pega o mês mais recente)
+    params_dot_max = {"ano": ano}
+    filtros_dot_max = ""
+    if fonte:
+        filtros_dot_max += " AND codFonte = :fonte"
+        params_dot_max["fonte"] = fonte
+    if natureza:
+        filtros_dot_max += " AND codNatureza = :natureza"
+        params_dot_max["natureza"] = natureza
+    if acao:
+        filtros_dot_max += " AND codAcao = :acao"
+        params_dot_max["acao"] = acao
     sql_dotacao = text(f"""
-        SELECT id, COALESCE(SUM(saldo), 0) as total FROM loa_2026
-        WHERE ano = :ano {filtro_mes} {filtro_fonte} {filtro_natureza} {filtro_acao}
+        SELECT id, COALESCE(SUM(saldo), 0) as total FROM loa
+        WHERE ano = :ano
+          AND mes = (SELECT MAX(mes) FROM loa WHERE ano = :ano)
+          {filtros_dot_max}
         GROUP BY id
     """)
-    rows = db.session.execute(sql_dotacao, params).fetchall()
+    rows = db.session.execute(sql_dotacao, params_dot_max).fetchall()
     totais_conta = {r[0]: _decimal(r[1]) for r in rows}
     dot_suplementar = totais_conta.get(CONTA_SUPLEMENTAR, ZERO)
-    dot_especial = sum(totais_conta.get(c, ZERO) for c in CONTAS_ESPECIAL)
-    dot_extra = sum(totais_conta.get(c, ZERO) for c in CONTAS_EXTRAORDINARIA)
-    dot_anulada = totais_conta.get(CONTA_ANULADA, ZERO)
-    dot_atualizada = dot_inicial + dot_suplementar + dot_especial + dot_extra - abs(dot_anulada)
+    dot_especiais_aberto = totais_conta.get(CONTA_ESPECIAIS_ABERTO, ZERO)
+    dot_cancelado = totais_conta.get(CONTA_CANCELADO, ZERO)
+    dot_bloqueado = totais_conta.get(CONTA_BLOQUEADO, ZERO)
+    dot_atualizada = dot_inicial + dot_suplementar + dot_especiais_aberto - abs(dot_cancelado) - abs(dot_bloqueado)
 
     return {
         'credito_disponivel': _decimal(credito_disp),
@@ -336,26 +383,39 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
         params_dot_ini["acao"] = acao
     sql_dot_ini = text(f"""
         SELECT codAcao as acao, COALESCE(SUM(saldo), 0) as total
-        FROM loa_2026
+        FROM loa
         WHERE ano = :ano AND id = :conta AND mes = 1 {filtros_dot_ini}
         GROUP BY acao
     """)
     dot_ini_rows = db.session.execute(sql_dot_ini, {**params_dot_ini, "conta": CONTA_INICIAL}).fetchall()
     dot_ini_por_acao = {r[0]: _decimal(r[1]) for r in dot_ini_rows if r[0]}
 
-    # Demais contas LOA (respeitam filtro de mês)
+    # Demais contas LOA — usa MAX(mes) conforme lógica do BI
+    params_dot_max = {"ano": ano}
+    filtros_dot_max = ""
+    if fonte:
+        filtros_dot_max += " AND codFonte = :fonte"
+        params_dot_max["fonte"] = fonte
+    if natureza:
+        filtros_dot_max += " AND codNatureza = :natureza"
+        params_dot_max["natureza"] = natureza
+    if acao:
+        filtros_dot_max += " AND codAcao = :acao"
+        params_dot_max["acao"] = acao
     sql = text(f"""
         SELECT
             codAcao as acao,
             id as conta,
             COALESCE(SUM(saldo), 0) as total
-        FROM loa_2026
-        WHERE ano = :ano {filtro_mes} {filtro_fonte} {filtro_natureza} {filtro_acao}
+        FROM loa
+        WHERE ano = :ano
+          AND mes = (SELECT MAX(mes) FROM loa WHERE ano = :ano)
+          {filtros_dot_max}
         GROUP BY acao, conta
         ORDER BY acao
     """)
 
-    rows = db.session.execute(sql, params).fetchall()
+    rows = db.session.execute(sql, params_dot_max).fetchall()
 
     # Agrupa por ação
     acoes_dict = {}
@@ -399,13 +459,12 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
 
         dot_inicial = dot_ini_por_acao.get(acao_cod, ZERO)
         dot_suplementar = contas.get(CONTA_SUPLEMENTAR, ZERO)
-        dot_especial = sum(contas.get(c, ZERO) for c in CONTAS_ESPECIAL)
-        dot_extra = sum(contas.get(c, ZERO) for c in CONTAS_EXTRAORDINARIA)
-        contingenciado = contas.get(CONTA_CONTINGENCIADO, ZERO)
-        dot_anulada = contas.get(CONTA_ANULADA, ZERO)
+        dot_especiais_aberto = contas.get(CONTA_ESPECIAIS_ABERTO, ZERO)
+        dot_cancelado = contas.get(CONTA_CANCELADO, ZERO)
+        dot_bloqueado = contas.get(CONTA_BLOQUEADO, ZERO)
         credito_disp = contas.get(CONTA_CREDITO_DISPONIVEL, ZERO)
 
-        dot_atualizada = dot_inicial + dot_suplementar + dot_especial + dot_extra - abs(dot_anulada)
+        dot_atualizada = dot_inicial + dot_suplementar + dot_especiais_aberto - abs(dot_cancelado) - abs(dot_bloqueado)
         analise = dot_atualizada - abs(credito_disp) if credito_disp else ZERO
         pct_exec = _pct(analise, dot_atualizada)
 
@@ -426,10 +485,10 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
             'desc_acao': f'{acao_cod} - {desc_map.get(acao_cod, "")}',
             'dot_inicial': dot_inicial,
             'dot_suplementar': dot_suplementar,
-            'dot_especial': dot_especial,
-            'dot_extraordinaria': dot_extra,
-            'contingenciado': contingenciado,
-            'dot_anulada': dot_anulada,
+            'dot_especial': dot_especiais_aberto,
+            'dot_extraordinaria': ZERO,
+            'contingenciado': ZERO,
+            'dot_anulada': dot_cancelado,
             'dot_atualizada': dot_atualizada,
             'credito_disponivel': credito_disp,
             'analise': analise,
@@ -682,7 +741,7 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
         params_dot_ini["acao"] = acao
     sql_dot_ini = text(f"""
         SELECT codAcao, codNatureza, COALESCE(SUM(saldo), 0) as total
-        FROM loa_2026
+        FROM loa
         WHERE ano = :ano AND id = :conta AND mes = 1 AND codNatureza IS NOT NULL {filtros_dot_ini}
         GROUP BY codAcao, codNatureza
     """)
@@ -691,16 +750,28 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
         if r[0] and r[1]:
             dot_ini_por_nat[(r[0], r[1])] = float(_decimal(r[2]))
 
-    # Demais contas LOA (respeitam filtro de mês)
+    # Demais contas LOA — usa MAX(mes) conforme lógica do BI
+    params_dot_max = {"ano": ano}
+    filtros_dot_max = ""
+    if fonte:
+        filtros_dot_max += " AND codFonte = :fonte"
+        params_dot_max["fonte"] = fonte
+    if natureza:
+        filtros_dot_max += " AND codNatureza = :natureza"
+        params_dot_max["natureza"] = natureza
+    if acao:
+        filtros_dot_max += " AND codAcao = :acao"
+        params_dot_max["acao"] = acao
     sql = text(f"""
         SELECT codAcao, codNatureza, id as conta, COALESCE(SUM(saldo), 0) as total
-        FROM loa_2026
+        FROM loa
         WHERE ano = :ano AND codNatureza IS NOT NULL
-          {filtro_mes} {filtro_fonte} {filtro_natureza} {filtro_acao}
+          AND mes = (SELECT MAX(mes) FROM loa WHERE ano = :ano)
+          {filtros_dot_max}
         GROUP BY codAcao, codNatureza, conta
         ORDER BY codAcao, codNatureza
     """)
-    rows = db.session.execute(sql, params).fetchall()
+    rows = db.session.execute(sql, params_dot_max).fetchall()
 
     # Descrições de natureza
     nat_map, _ = _carregar_descricoes()
@@ -730,13 +801,12 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
             contas = nats[nat]
             dot_inicial = dot_ini_por_nat.get((acao_v, nat), 0)
             dot_suplementar = contas.get(CONTA_SUPLEMENTAR, 0)
-            dot_especial = sum(contas.get(c, 0) for c in CONTAS_ESPECIAL)
-            dot_extra = sum(contas.get(c, 0) for c in CONTAS_EXTRAORDINARIA)
-            contingenciado = contas.get(CONTA_CONTINGENCIADO, 0)
-            dot_anulada = contas.get(CONTA_ANULADA, 0)
+            dot_especiais_aberto = contas.get(CONTA_ESPECIAIS_ABERTO, 0)
+            dot_cancelado = contas.get(CONTA_CANCELADO, 0)
+            dot_bloqueado = contas.get(CONTA_BLOQUEADO, 0)
             credito_disp = contas.get(CONTA_CREDITO_DISPONIVEL, 0)
 
-            dot_atualizada = dot_inicial + dot_suplementar + dot_especial + dot_extra - abs(dot_anulada)
+            dot_atualizada = dot_inicial + dot_suplementar + dot_especiais_aberto - abs(dot_cancelado) - abs(dot_bloqueado)
             analise = dot_atualizada - abs(credito_disp) if credito_disp else 0
             pct_exec = round((analise / dot_atualizada * 100), 2) if dot_atualizada else 0
 
@@ -757,10 +827,10 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
                 'desc_natureza': f'{nat} - {desc}' if desc else nat,
                 'dot_inicial': dot_inicial,
                 'dot_suplementar': dot_suplementar,
-                'dot_especial': dot_especial,
-                'dot_extraordinaria': dot_extra,
-                'contingenciado': contingenciado,
-                'dot_anulada': dot_anulada,
+                'dot_especial': dot_especiais_aberto,
+                'dot_extraordinaria': 0,
+                'contingenciado': 0,
+                'dot_anulada': dot_cancelado,
                 'dot_atualizada': dot_atualizada,
                 'credito_disponivel': credito_disp,
                 'analise': analise,
@@ -786,7 +856,7 @@ def _listar_fontes(ano):
     """Lista fontes distintas para filtro, com descrição."""
     sql = text("""
         SELECT DISTINCT codFonte as fonte
-        FROM loa_2026
+        FROM loa
         WHERE ano = :ano AND codFonte IS NOT NULL
         ORDER BY fonte
     """)
@@ -804,7 +874,7 @@ def _listar_naturezas(ano):
     """Lista naturezas distintas para filtro, com descrição."""
     sql = text("""
         SELECT DISTINCT codNatureza as nat
-        FROM loa_2026
+        FROM loa
         WHERE ano = :ano AND codNatureza IS NOT NULL
         ORDER BY nat
     """)
@@ -820,7 +890,7 @@ def _listar_naturezas(ano):
 def _listar_meses(ano):
     """Lista meses disponíveis."""
     sql = text("""
-        SELECT DISTINCT mes FROM loa_2026
+        SELECT DISTINCT mes FROM loa
         WHERE ano = :ano ORDER BY mes
     """)
     rows = db.session.execute(sql, {"ano": ano}).fetchall()
@@ -831,7 +901,7 @@ def _listar_acoes(ano):
     """Lista ações distintas para filtro, com descrição."""
     sql = text("""
         SELECT DISTINCT codAcao as acao
-        FROM loa_2026
+        FROM loa
         WHERE ano = :ano AND codAcao IS NOT NULL
         ORDER BY acao
     """)
@@ -874,13 +944,13 @@ def _build_filtro_sql(ano, mes, acao, natureza, fonte, excluir):
 
 def _listar_meses_filtrados(ano, mes, acao, natureza, fonte):
     where, params = _build_filtro_sql(ano, mes, acao, natureza, fonte, 'mes')
-    sql = text(f"SELECT DISTINCT mes FROM loa_2026 {where} ORDER BY mes")
+    sql = text(f"SELECT DISTINCT mes FROM loa {where} ORDER BY mes")
     return [r[0] for r in db.session.execute(sql, params).fetchall() if r[0] is not None]
 
 
 def _listar_acoes_filtradas(ano, mes, acao, natureza, fonte):
     where, params = _build_filtro_sql(ano, mes, acao, natureza, fonte, 'acao')
-    sql = text(f"SELECT DISTINCT codAcao FROM loa_2026 {where} AND codAcao IS NOT NULL ORDER BY codAcao")
+    sql = text(f"SELECT DISTINCT codAcao FROM loa {where} AND codAcao IS NOT NULL ORDER BY codAcao")
     codigos = [r[0] for r in db.session.execute(sql, params).fetchall() if r[0]]
     sql_desc = text("SELECT codigo, titulo FROM acao")
     desc_map = {str(r[0]): r[1] for r in db.session.execute(sql_desc).fetchall() if r[0] and r[1]}
@@ -891,7 +961,7 @@ def _listar_acoes_filtradas(ano, mes, acao, natureza, fonte):
 
 def _listar_naturezas_filtradas(ano, mes, acao, natureza, fonte):
     where, params = _build_filtro_sql(ano, mes, acao, natureza, fonte, 'natureza')
-    sql = text(f"SELECT DISTINCT codNatureza FROM loa_2026 {where} AND codNatureza IS NOT NULL ORDER BY codNatureza")
+    sql = text(f"SELECT DISTINCT codNatureza FROM loa {where} AND codNatureza IS NOT NULL ORDER BY codNatureza")
     codigos = [r[0] for r in db.session.execute(sql, params).fetchall() if r[0]]
     nat_map, _ = _carregar_descricoes()
     resultado = [{'codigo': c, 'descricao': nat_map.get(str(c), '')} for c in codigos]
@@ -901,7 +971,7 @@ def _listar_naturezas_filtradas(ano, mes, acao, natureza, fonte):
 
 def _listar_fontes_filtradas(ano, mes, acao, natureza, fonte):
     where, params = _build_filtro_sql(ano, mes, acao, natureza, fonte, 'fonte')
-    sql = text(f"SELECT DISTINCT codFonte FROM loa_2026 {where} AND codFonte IS NOT NULL ORDER BY codFonte")
+    sql = text(f"SELECT DISTINCT codFonte FROM loa {where} AND codFonte IS NOT NULL ORDER BY codFonte")
     codigos = [r[0] for r in db.session.execute(sql, params).fetchall() if r[0]]
     _, fonte_map = _carregar_descricoes()
     resultado = [{'codigo': c, 'descricao': fonte_map.get(str(c), '')} for c in codigos]
@@ -951,7 +1021,7 @@ def api_filtros_dependentes():
         nat_vals = [v.strip() for v in natureza_raw.split(',') if v.strip()] if natureza_raw else []
         fonte_vals = [v.strip() for v in fonte_raw.split(',') if v.strip()] if fonte_raw else []
 
-        base = "FROM loa_2026 WHERE ano = :ano"
+        base = "FROM loa WHERE ano = :ano"
 
         def _build_query(select_col, excluir):
             """Constrói SQL e params excluindo o filtro indicado."""
@@ -1026,29 +1096,41 @@ def api_orcamentaria_naturezas(acao):
     mes = request.args.get('mes', type=int)
     fonte = request.args.get('fonte', '')
 
-    filtro_mes = "AND mes = :mes" if mes else ""
     filtro_fonte = ""
-    params = {"ano": ano, "acao": acao}
-    if mes:
-        params["mes"] = mes
+    params_base = {"ano": ano, "acao": acao}
     if fonte:
         filtro_fonte = "AND codFonte = :fonte"
-        params["fonte"] = fonte
+        params_base["fonte"] = fonte
 
+    # Dotação Inicial — sempre mes=1
+    sql_ini = text(f"""
+        SELECT codNatureza as natureza, COALESCE(SUM(saldo), 0) as total
+        FROM loa
+        WHERE ano = :ano AND codAcao = :acao AND id = :conta AND mes = 1
+          {filtro_fonte}
+        GROUP BY natureza
+    """)
+    dot_ini_por_nat = {}
+    for r in db.session.execute(sql_ini, {**params_base, "conta": CONTA_INICIAL}).fetchall():
+        if r[0]:
+            dot_ini_por_nat[r[0]] = float(_decimal(r[1]))
+
+    # Demais contas LOA — MAX(mes)
     sql = text(f"""
         SELECT
             codNatureza as natureza,
             id as conta,
             COALESCE(SUM(saldo), 0) as total
-        FROM loa_2026
+        FROM loa
         WHERE ano = :ano
           AND codAcao = :acao
-          {filtro_mes} {filtro_fonte}
+          AND mes = (SELECT MAX(mes) FROM loa WHERE ano = :ano)
+          {filtro_fonte}
         GROUP BY natureza, conta
         ORDER BY natureza
     """)
 
-    rows = db.session.execute(sql, params).fetchall()
+    rows = db.session.execute(sql, params_base).fetchall()
 
     nat_dict = {}
     for nat, conta, total in rows:
@@ -1058,18 +1140,22 @@ def api_orcamentaria_naturezas(acao):
             nat_dict[nat] = {}
         nat_dict[nat][conta] = float(_decimal(total))
 
+    # Garante que naturezas com dotação inicial apareçam
+    for nat in dot_ini_por_nat:
+        if nat not in nat_dict:
+            nat_dict[nat] = {}
+
     resultado = []
     for nat in sorted(nat_dict.keys()):
         contas = nat_dict[nat]
-        dot_inicial = contas.get(CONTA_INICIAL, 0)
+        dot_inicial = dot_ini_por_nat.get(nat, 0)
         dot_suplementar = contas.get(CONTA_SUPLEMENTAR, 0)
-        dot_especial = sum(contas.get(c, 0) for c in CONTAS_ESPECIAL)
-        dot_extra = sum(contas.get(c, 0) for c in CONTAS_EXTRAORDINARIA)
-        contingenciado = contas.get(CONTA_CONTINGENCIADO, 0)
-        dot_anulada = contas.get(CONTA_ANULADA, 0)
+        dot_especiais_aberto = contas.get(CONTA_ESPECIAIS_ABERTO, 0)
+        dot_cancelado = contas.get(CONTA_CANCELADO, 0)
+        dot_bloqueado = contas.get(CONTA_BLOQUEADO, 0)
         credito_disp = contas.get(CONTA_CREDITO_DISPONIVEL, 0)
 
-        dot_atualizada = dot_inicial + dot_suplementar + dot_especial + dot_extra - abs(dot_anulada)
+        dot_atualizada = dot_inicial + dot_suplementar + dot_especiais_aberto - abs(dot_cancelado) - abs(dot_bloqueado)
         analise = dot_atualizada - abs(credito_disp) if credito_disp else 0
         pct_exec = round((analise / dot_atualizada * 100), 2) if dot_atualizada else 0
 
@@ -1077,10 +1163,10 @@ def api_orcamentaria_naturezas(acao):
             'natureza': nat,
             'dot_inicial': dot_inicial,
             'dot_suplementar': dot_suplementar,
-            'dot_especial': dot_especial,
-            'dot_extraordinaria': dot_extra,
-            'contingenciado': contingenciado,
-            'dot_anulada': dot_anulada,
+            'dot_especial': dot_especiais_aberto,
+            'dot_extraordinaria': ZERO,
+            'contingenciado': ZERO,
+            'dot_anulada': dot_cancelado,
             'dot_atualizada': dot_atualizada,
             'credito_disponivel': credito_disp,
             'analise': analise,

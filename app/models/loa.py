@@ -8,7 +8,7 @@ from app.extensions import db
 class Loa(db.Model):
     """Saldos contábeis da LOA por classificação orçamentária."""
 
-    __tablename__ = 'loa_2026'
+    __tablename__ = 'loa'
 
     # PK autoincrement (pandas to_sql gera sem PK, adicionamos para o ORM)
     row_id = db.Column('row_id', db.BigInteger, primary_key=True, autoincrement=True)
