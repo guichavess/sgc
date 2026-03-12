@@ -887,7 +887,7 @@ def api_planejamento_excel(codigo):
     )
     money_fmt = '#,##0.00'
 
-    headers = ['Competência', 'Valor Planejado', 'Valor Pago', 'Planejamento Inicial', 'Repactuação/Prorrogação']
+    headers = ['Competência', 'Valor Planejado', 'Valor Liquidado', 'Planejamento Inicial', 'Repactuação/Prorrogação']
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col_idx, value=header)
         cell.font = header_font

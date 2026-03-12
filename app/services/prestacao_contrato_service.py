@@ -87,6 +87,11 @@ class PrestacaoContratoService:
         )
 
     @staticmethod
+    def listar_codigos_filtrados(**filtros):
+        """Retorna apenas os códigos dos contratos filtrados (query leve)."""
+        return InfoContratoRepository.listar_codigos_filtrados(**filtros)
+
+    @staticmethod
     def listar_situacoes():
         """Lista situações distintas dos contratos."""
         return InfoContratoRepository.listar_situacoes_distintas()
