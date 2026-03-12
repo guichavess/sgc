@@ -377,7 +377,7 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
     desc_map = {}
     for codigo, titulo in desc_rows:
         if codigo and titulo:
-            desc_map[codigo] = titulo
+            desc_map[str(codigo)] = titulo
 
     # Execução financeira por ação (empenho/liquidação/PD/OB)
     exec_por_acao = _calcular_execucao(ano, nivel='acao', mes=mes, fonte=fonte, natureza=natureza, acao=acao)
