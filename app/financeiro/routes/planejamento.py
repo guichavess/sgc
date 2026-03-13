@@ -751,10 +751,38 @@ def planejamento_relatorio():
     dot_by_natureza = _query_dotacao_por_natureza(ano)
 
     # ══════════════════════════════════════════════════════════════════
+    # Total Execuções Orçamentárias (fornecedores sem contrato) por natureza
+    # ══════════════════════════════════════════════════════════════════
+    exec_orc_total = ZERO
+    exec_orc_by_natureza = {}
+    try:
+        q_exec = db.session.query(
+            ExecucaoOrcamentaria.natureza,
+            func.coalesce(func.sum(ExecucaoOrcamentaria.valor), 0).label('total')
+        ).filter(
+            ExecucaoOrcamentaria.competencia.like(f'%/{ano}')
+        ).group_by(ExecucaoOrcamentaria.natureza)
+        if filtro_natureza:
+            str_nats = [str(n) for n in filtro_natureza]
+            q_exec = q_exec.filter(ExecucaoOrcamentaria.natureza.in_(str_nats))
+        for row in q_exec.all():
+            nat = str(row.natureza) if row.natureza else ''
+            val = _decimal(row.total)
+            exec_orc_total += val
+            if nat:
+                exec_orc_by_natureza[nat] = val
+    except Exception:
+        pass
+
+    # ══════════════════════════════════════════════════════════════════
     # KPIs
     # ══════════════════════════════════════════════════════════════════
+    # Saldo = Dotação Atualizada - Total Execuções Orçamentárias
+    saldo_dotacao = dot_atualizada - exec_orc_total
+
     kpi = {
         'dotacao_atualizada': dot_atualizada,
+        'saldo_dotacao': saldo_dotacao,
         'planejado': plan_total,
         'empenhado': emp_total,
         'dif_plan_emp': emp_total - plan_total,
@@ -899,6 +927,8 @@ def planejamento_relatorio():
 
         nat_name = nat_names.get(nat_code, nat_code)
         dot_nat = dot_by_natureza.get(nat_code, ZERO)
+        exec_nat = exec_orc_by_natureza.get(nat_code, ZERO)
+        saldo_nat = dot_nat - exec_nat  # Dotação atualizada menos execuções orçamentárias
 
         # Sub-itens
         subitems = []
@@ -926,6 +956,8 @@ def planejamento_relatorio():
 
         nat_table.append({
             'natcompleta': nat_name,
+            'dotacao': dot_nat,
+            'saldo_dotacao': saldo_nat,
             'planejado': p,
             'empenhado': e,
             'liquidado': l,
@@ -1098,7 +1130,31 @@ def api_planejamento_salvar():
                 db.session.add(novo)
 
         db.session.commit()
-        return jsonify({'sucesso': True, 'msg': 'Planejamento salvo com sucesso.'})
+
+        # Calcular saldo da dotação atualizada para a natureza deste contrato
+        saldo_info = {}
+        if cod_natureza:
+            dot_nat = _query_dotacao_atualizada(ano, [int(cod_natureza)])
+            exec_nat = db.session.query(
+                func.coalesce(func.sum(ExecucaoOrcamentaria.valor), 0)
+            ).filter(
+                ExecucaoOrcamentaria.natureza == cod_natureza,
+                ExecucaoOrcamentaria.competencia.like(f'%/{ano}')
+            ).scalar()
+            total_exec = _decimal(exec_nat)
+            saldo_info = {
+                'cod_natureza': cod_natureza,
+                'cod_subitem': cod_subitem,
+                'dotacao_atualizada': float(dot_nat),
+                'total_execucoes': float(total_exec),
+                'saldo_dotacao': float(dot_nat - total_exec),
+            }
+
+        return jsonify({
+            'sucesso': True,
+            'msg': 'Planejamento salvo com sucesso.',
+            'saldo': saldo_info,
+        })
 
     except Exception as e:
         db.session.rollback()

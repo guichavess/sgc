@@ -34,3 +34,6 @@ typing_extensions==4.15.0
 urllib3==2.6.3
 Werkzeug==3.1.5
 APScheduler==3.10.4
+trino[external-authentication]==0.329.0
+pandas
+openpyxl

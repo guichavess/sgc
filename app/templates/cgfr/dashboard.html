@@ -1,0 +1,576 @@
+{% extends "cgfr/base_cgfr.html" %}
+
+{% block title %}CGFR - Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+{# === Header === #}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-folder2-open me-2"></i>Dashboard de Processos</h4>
+    <div class="d-flex align-items-center gap-2">
+        <span class="text-muted" style="font-size: 0.78rem;"><i class="bi bi-clock"></i> Dados em tempo real</span>
+        <a href="{{ url_for('cgfr.report') }}" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1">
+            <i class="bi bi-file-earmark-pdf"></i> Relatorio
+        </a>
+    </div>
+</div>
+
+{# === KPI Cards — Espelha sistema original === #}
+<div class="row g-3 mb-4" id="statsCards">
+    <div class="col-6 col-lg-3">
+        <div class="card kpi-card kpi-blue">
+            <div class="card-body position-relative">
+                <div class="kpi-title">Total de Processos</div>
+                <div class="kpi-value" id="kpiTotal">{{ stats.total|default(0) }}</div>
+                <i class="bi bi-files kpi-icon"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card kpi-card kpi-green">
+            <div class="card-body position-relative">
+                <div class="kpi-title">Valor Aprovado</div>
+                <div class="kpi-value kpi-value-sm" id="kpiAprovado">{{ stats.valor_total_acordado_fmt|default('R$ 0,00') }}</div>
+                <i class="bi bi-currency-dollar kpi-icon"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card kpi-card kpi-orange">
+            <div class="card-body position-relative">
+                <div class="kpi-title">Valor Solicitado</div>
+                <div class="kpi-value kpi-value-sm" id="kpiSolicitado">{{ stats.valor_total_solicitado_fmt|default('R$ 0,00') }}</div>
+                <i class="bi bi-file-earmark-text kpi-icon"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card kpi-card kpi-red">
+            <div class="card-body position-relative">
+                <div class="kpi-title">Pendentes de Analise</div>
+                <div class="kpi-value" id="kpiPendentes">{{ stats.pendentes_classificacao|default(0) }}</div>
+                <i class="bi bi-exclamation-circle kpi-icon"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# === Filtros e Pesquisa === #}
+<div class="card mb-3" style="border-radius: var(--radius-lg, 12px);">
+    <div class="card-body py-3 px-4">
+        {# Linha 1: Busca + Checkbox + Reserva + Prioridade + Total #}
+        <div class="filters-top-bar mb-3">
+            <div class="input-group input-group-sm" style="max-width: 420px;">
+                <span class="input-group-text bg-transparent border-end-0">
+                    <i class="bi bi-search text-muted"></i>
+                </span>
+                <input type="text" id="searchGlobal" class="form-control border-start-0"
+                       placeholder="Digite para pesquisar..." style="font-size: 0.84rem;">
+            </div>
+            <div class="form-check ms-auto">
+                <input class="form-check-input" type="checkbox" id="showOnlyEdited">
+                <label class="form-check-label" for="showOnlyEdited">Apenas processos editados</label>
+            </div>
+            <select id="filterReserva" class="form-select form-select-sm fw-semibold"
+                    style="width: auto; font-size: 0.82rem;">
+                <option value="">Reserva: Todos</option>
+                <option value="sim">Com Reserva</option>
+                <option value="nao">Sem Reserva</option>
+            </select>
+            <select id="filterPrioridade" class="form-select form-select-sm fw-semibold"
+                    style="width: auto; font-size: 0.82rem;">
+                <option value="">Prioridade: Todos</option>
+                <option value="Alto">Alto</option>
+                <option value="Medio">Medio</option>
+                <option value="Baixo">Baixo</option>
+            </select>
+            <span class="total-records">
+                Total de registros: <strong id="totalRecords">0</strong>
+            </span>
+            <button class="btn btn-outline-danger btn-sm" id="btnClearAll" style="display:none;">
+                <i class="bi bi-x-lg me-1"></i> Limpar Filtros
+            </button>
+        </div>
+
+        {# Linha 2: Dropdowns de filtro por coluna #}
+        <div class="filters-bar">
+            <div class="d-flex flex-wrap gap-2">
+                {% set column_filters = [
+                    ('processo_formatado', 'Processo'),
+                    ('objeto_do_pedido', 'Objeto do Pedido'),
+                    ('fornecedor', 'Fornecedor'),
+                    ('natureza_despesa', 'Natureza'),
+                    ('deliberacao', 'Deliberacao'),
+                    ('tipo_processo', 'Tipo Processo'),
+                    ('data_da_reuniao', 'Data Reuniao'),
+                    ('data_inclusao_fmt', 'Data Inclusao'),
+                ] %}
+                {% for col_key, col_label in column_filters %}
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                        <i class="bi bi-funnel me-1"></i> {{ col_label }}
+                    </button>
+                    <div class="dropdown-menu p-2 column-filter-menu">
+                        <input type="text" class="form-control form-control-sm column-filter-search mb-2" placeholder="Buscar...">
+                        <div class="column-filter-options" data-column="{{ col_key }}"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div id="selectedFiltersInfo" class="alert alert-info py-2 px-3 mt-2 mb-0 d-none" style="font-size: 0.82rem;"></div>
+    </div>
+</div>
+
+{# === Tabela principal === #}
+<div class="card table-card">
+    <div class="card-header">
+        <div class="row align-items-center w-100">
+            <div class="col-md-6">
+                <div class="btn-group btn-group-filter" role="group">
+                    <input type="radio" class="btn-check" name="statusFilter" id="filterAll" value="all" checked autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="filterAll">Todos</label>
+
+                    <input type="radio" class="btn-check" name="statusFilter" id="filterClassified" value="classified" autocomplete="off">
+                    <label class="btn btn-outline-success btn-sm" for="filterClassified">
+                        <i class="bi bi-check-circle me-1"></i>Classificados
+                    </label>
+
+                    <input type="radio" class="btn-check" name="statusFilter" id="filterPending" value="pending" autocomplete="off">
+                    <label class="btn btn-outline-warning btn-sm" for="filterPending">
+                        <i class="bi bi-clock me-1"></i>Pendentes
+                    </label>
+
+                    <input type="radio" class="btn-check" name="statusFilter" id="filterNovos" value="novos" autocomplete="off">
+                    <label class="btn btn-outline-info btn-sm" for="filterNovos">
+                        <i class="bi bi-stars me-1"></i>Novos
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-3 text-center">
+                <button class="btn btn-sm btn-outline-danger" id="btnSync" title="Sincronizar com Data Lake">
+                    <i class="bi bi-arrow-repeat"></i> Sincronizar
+                </button>
+                <a href="{{ url_for('cgfr.api_export_excel') }}" class="btn btn-sm btn-outline-success ms-1"
+                   title="Exportar Excel">
+                    <i class="bi bi-file-earmark-excel"></i> Excel
+                </a>
+            </div>
+            <div class="col-md-3 text-end">
+                <span class="text-muted" style="font-size: 0.78rem;" id="tableTitle">Todos os Processos</span>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table id="tabelaProcessos" class="table table-hover table-sm mb-0" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Processo</th>
+                        <th>Objeto do Pedido</th>
+                        <th>Fornecedor</th>
+                        <th>Data Envio</th>
+                        <th>Data Recebimento</th>
+                        <th>Data da Reuniao</th>
+                        <th class="text-end">Valor Solicitado</th>
+                        <th class="text-end">Valor Aprovado</th>
+                        <th>Natureza</th>
+                        <th>Deliberacao</th>
+                        <th>Tipo Processo</th>
+                        <th>Prioridade</th>
+                        <th>Data Inclusao</th>
+                        <th class="text-center">Operacoes</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+</div>
+
+{# Modal de Edicao #}
+{% include 'cgfr/partials/modal_edicao.html' %}
+{% endblock %}
+
+{% block cgfr_js %}
+<script>
+/**
+ * CGFR Dashboard JS — Espelha processos.js do sistema original.
+ * DataTable client-side, filtros radio/dropdown, KPIs recalculados, modal edicao.
+ */
+
+/* Opcoes para Select2 do modal (carregadas server-side) */
+window.cgfrFilterOptions = {{ filter_options|tojson }};
+
+$(document).ready(function() {
+    var dataTable;
+    var searchTerm = '';
+    var statusFilter = 'all';
+    var showOnlyEdited = false;
+    var allRecords = [];
+    var activeColumnFilters = {};
+    var reservaFilter = '';
+    var prioridadeFilter = '';
+
+    initDataTable();
+    initRadioFilters();
+    initSearchDebounce();
+    initColumnFilters();
+    initShowOnlyEdited();
+    initReservaFilter();
+    initPrioridadeFilter();
+    initClearFilters();
+    initSyncButton();
+    initEditModal();
+
+    /* ===== DataTable ===== */
+    function initDataTable() {
+        dataTable = $('#tabelaProcessos').DataTable({
+            ajax: {
+                url: '{{ url_for("cgfr.api_data") }}',
+                type: 'POST',
+                contentType: 'application/json',
+                data: function() {
+                    return JSON.stringify({
+                        search: searchTerm,
+                        statusFilter: statusFilter,
+                        showOnlyEdited: showOnlyEdited,
+                    });
+                },
+                dataSrc: function(json) {
+                    allRecords = json.records || [];
+                    updateKPIs(json);
+                    populateColumnFilters(allRecords);
+                    updateTotalRecords(allRecords.length);
+                    return allRecords;
+                },
+            },
+            columns: [
+                {
+                    data: 'protocolo_formatado',
+                    render: function(data, type, row) {
+                        if (type === 'display' && row.link_acesso) {
+                            return '<a href="' + row.link_acesso + '" target="_blank" class="text-decoration-none">' +
+                                (data || '-') + ' <i class="bi bi-box-arrow-up-right" style="font-size:0.7em"></i></a>';
+                        }
+                        return data || '-';
+                    },
+                },
+                { data: 'objeto_do_pedido', defaultContent: '<span class="text-muted">-</span>' },
+                { data: 'fornecedor', defaultContent: '<span class="text-muted">-</span>' },
+                { data: 'dt_enviado_fmt', defaultContent: '-' },
+                { data: 'data_recebido_cgfr', defaultContent: '-' },
+                { data: 'data_da_reuniao', defaultContent: '-' },
+                { data: 'valor_solicitado_fmt', className: 'text-end', defaultContent: '-' },
+                { data: 'valor_acordado_fmt', className: 'text-end', defaultContent: '-' },
+                { data: 'natureza_despesa', defaultContent: '<span class="text-muted">-</span>' },
+                {
+                    data: 'deliberacao',
+                    render: function(data) {
+                        if (!data) return '<span class="badge badge-status bg-secondary">Pendente</span>';
+                        if (data === 'Deferido' || data === 'Aprovado') {
+                            return '<span class="badge badge-status bg-success">' + data + '</span>';
+                        }
+                        return '<span class="badge badge-status bg-warning text-dark">' + data + '</span>';
+                    },
+                },
+                { data: 'tipo_processo', defaultContent: '<span class="text-muted">-</span>' },
+                {
+                    data: 'nivel_prioridade',
+                    render: function(data) {
+                        if (!data) return '<span class="text-muted">-</span>';
+                        var colors = { 'Alto': 'bg-danger', 'Medio': 'bg-warning text-dark', 'Baixo': 'bg-success' };
+                        var icons = { 'Alto': 'bi-arrow-up-circle-fill', 'Medio': 'bi-dash-circle-fill', 'Baixo': 'bi-arrow-down-circle-fill' };
+                        return '<span class="badge ' + (colors[data] || 'bg-secondary') + '" style="font-size:0.75em;">' +
+                            '<i class="bi ' + (icons[data] || '') + ' me-1"></i>' + data + '</span>';
+                    },
+                    defaultContent: '-',
+                },
+                {
+                    data: 'data_inclusao_fmt',
+                    render: function(data, type, row) {
+                        if (type !== 'display') return data || '';
+                        if (!data || data === '-') return '<span class="text-muted">-</span>';
+                        if (row.is_novo) {
+                            return data + ' <span class="badge bg-info text-dark" style="font-size:0.65em;">Novo</span>';
+                        }
+                        return data;
+                    },
+                    defaultContent: '-',
+                },
+                {
+                    data: 'protocolo_formatado',
+                    className: 'text-center',
+                    orderable: false,
+                    searchable: false,
+                    render: function(data) {
+                        return '<button class="btn btn-primary btn-sm btn-edit" data-protocolo="' + (data || '') + '">' +
+                            '<i class="bi bi-pencil-square me-1"></i>Editar</button>';
+                    },
+                },
+            ],
+            createdRow: function(row, data) {
+                if (data.is_classified) {
+                    $(row).addClass('row-classified');
+                } else {
+                    $(row).addClass('row-pending');
+                }
+            },
+            language: { url: 'https://cdn.datatables.net/plug-ins/1.13.8/i18n/pt-BR.json' },
+            order: [],
+            pageLength: 10,
+            lengthChange: false,
+            responsive: true,
+            processing: true,
+            serverSide: false,
+            searching: true,
+            dom: 'rt<"d-flex justify-content-between align-items-center mt-2 px-2"ip>',
+        });
+
+        $.fn.dataTable.ext.search.push(function(settings, searchData, index, rowData) {
+            if (statusFilter === 'novos' && !rowData.is_novo) return false;
+            if (reservaFilter === 'sim' && rowData.possui_reserva != 1) return false;
+            if (reservaFilter === 'nao' && rowData.possui_reserva == 1) return false;
+            if (prioridadeFilter && (rowData.nivel_prioridade || '') !== prioridadeFilter) return false;
+            for (var col in activeColumnFilters) {
+                var allowed = activeColumnFilters[col];
+                if (allowed && allowed.length > 0 && allowed.indexOf(String(rowData[col] || '')) === -1) return false;
+            }
+            return true;
+        });
+
+        dataTable.on('draw', function() {
+            recalcKPIs(dataTable.rows({ search: 'applied' }).data().toArray());
+        });
+
+        window.cgfrTable = dataTable;
+        window.cgfrAtualizarKPIs = function() { reloadTable(); };
+    }
+
+    /* ===== KPIs ===== */
+    function updateKPIs(json) {
+        animateCounter('kpiTotal', json.total || 0);
+        animateCounter('kpiPendentes', json.kpi_pendentes || 0);
+        $('#kpiAprovado').text(json.kpi_aprovado_fmt || 'R$ 0,00');
+        $('#kpiSolicitado').text(json.kpi_solicitado_fmt || 'R$ 0,00');
+    }
+
+    function recalcKPIs(rows) {
+        var total = rows.length, pendentes = 0, somaAprov = 0, somaSolic = 0;
+        rows.forEach(function(r) {
+            if (!r.is_classified) pendentes++;
+            somaAprov += parseFloat(r.valor_aprovado) || 0;
+            somaSolic += parseFloat(r.valor_solicitado) || 0;
+        });
+        animateCounter('kpiTotal', total);
+        animateCounter('kpiPendentes', pendentes);
+        $('#kpiAprovado').text(formatBRL(somaAprov));
+        $('#kpiSolicitado').text(formatBRL(somaSolic));
+        $('#totalRecords').text(total);
+    }
+
+    function formatBRL(v) {
+        if (!v || v === 0) return 'R$ 0,00';
+        return 'R$ ' + v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    }
+
+    function updateTotalRecords(c) { $('#totalRecords').text(c); }
+
+    function animateCounter(id, target) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var start = parseInt(el.textContent) || 0, diff = target - start;
+        if (diff === 0) { el.textContent = target; return; }
+        var dur = 400, t0 = null;
+        function step(ts) {
+            if (!t0) t0 = ts;
+            var p = Math.min((ts - t0) / dur, 1);
+            el.textContent = Math.round(start + diff * (1 - Math.pow(1 - p, 3)));
+            if (p < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    /* ===== Filters ===== */
+    function initRadioFilters() {
+        $('input[name="statusFilter"]').on('change', function() {
+            statusFilter = this.value;
+            var t = { all:'Todos os Processos', classified:'Classificados', pending:'Pendentes', novos:'Novos' };
+            $('#tableTitle').text(t[statusFilter] || 'Todos os Processos');
+            updateClearVis();
+            reloadTable();
+        });
+    }
+
+    function initSearchDebounce() {
+        var timer;
+        $('#searchGlobal').on('keyup', function() {
+            var self = this;
+            clearTimeout(timer);
+            timer = setTimeout(function() { searchTerm = self.value.trim(); updateClearVis(); reloadTable(); }, 500);
+        });
+    }
+
+    function initShowOnlyEdited() {
+        $('#showOnlyEdited').on('change', function() { showOnlyEdited = this.checked; updateClearVis(); reloadTable(); });
+    }
+
+    function initReservaFilter() {
+        $('#filterReserva').on('change', function() { reservaFilter = this.value; updateClearVis(); if(dataTable) dataTable.draw(); });
+    }
+
+    function initPrioridadeFilter() {
+        $('#filterPrioridade').on('change', function() { prioridadeFilter = this.value; updateClearVis(); if(dataTable) dataTable.draw(); });
+    }
+
+    function reloadTable(cb) { if (dataTable) dataTable.ajax.reload(cb || null, false); }
+
+    /* ===== Column Filters ===== */
+    function initColumnFilters() {
+        $(document).on('keyup', '.column-filter-search', function() {
+            var s = this.value.toLowerCase();
+            $(this).closest('.column-filter-menu').find('.column-filter-options .form-check:not(.filter-select-all)').each(function() {
+                $(this).toggle($(this).find('.form-check-label').text().toLowerCase().indexOf(s) !== -1);
+            });
+        });
+        $(document).on('change', '.column-filter-options input[type="checkbox"]', function() {
+            var div = $(this).closest('.column-filter-options');
+            if ($(this).data('select-all') === true) {
+                div.find('input[type="checkbox"]').prop('checked', this.checked);
+            } else {
+                var all = div.find('input:not([data-select-all])');
+                div.find('[data-select-all]').prop('checked', all.length === all.filter(':checked').length);
+            }
+            applyColFilters();
+        });
+    }
+
+    function populateColumnFilters(records) {
+        $('.column-filter-options').each(function() {
+            var c = $(this), col = c.data('column'), prev = activeColumnFilters[col] || [];
+            var uniq = {};
+            records.forEach(function(r) {
+                var v = r[col];
+                if (v != null && v !== '' && v !== '-') {
+                    var s = String(v);
+                    uniq[s] = s.length > 60 ? s.substring(0,57)+'...' : s;
+                }
+            });
+            var keys = Object.keys(uniq).sort(function(a,b){ return a.localeCompare(b,'pt-BR',{sensitivity:'base'}); });
+            var allSel = prev.length === 0;
+            var h = '<div class="form-check filter-select-all"><input class="form-check-input" type="checkbox" data-select-all="true"'+(allSel?' checked':'')+'><label class="form-check-label fw-semibold">Todos</label></div>';
+            keys.forEach(function(k) {
+                var chk = allSel || prev.indexOf(k) !== -1;
+                h += '<div class="form-check"><input class="form-check-input" type="checkbox" value="'+esc(k)+'"'+(chk?' checked':'')+'><label class="form-check-label" title="'+esc(k)+'">'+esc(uniq[k])+'</label></div>';
+            });
+            c.html(h);
+        });
+    }
+
+    function applyColFilters() {
+        activeColumnFilters = {};
+        $('.column-filter-options').each(function() {
+            var col = $(this).data('column');
+            if ($(this).find('[data-select-all]').prop('checked')) return;
+            var vals = [];
+            $(this).find('input:checked:not([data-select-all])').each(function(){ vals.push($(this).val()); });
+            if (vals.length > 0) activeColumnFilters[col] = vals;
+        });
+        $('.filters-bar .dropdown').each(function() {
+            var col = $(this).find('.column-filter-options').data('column');
+            $(this).find('.dropdown-toggle').toggleClass('has-filter', !!(activeColumnFilters[col] && activeColumnFilters[col].length));
+        });
+        updateClearVis();
+        updateFiltersInfo();
+        if (dataTable) dataTable.draw();
+    }
+
+    function updateFiltersInfo() {
+        var parts = [], labels = {
+            'processo_formatado':'Processo','objeto_do_pedido':'Objeto','fornecedor':'Fornecedor',
+            'natureza_despesa':'Natureza','deliberacao':'Deliberacao','tipo_processo':'Tipo Processo',
+            'data_da_reuniao':'Data Reuniao','data_inclusao_fmt':'Data Inclusao'
+        };
+        for (var c in activeColumnFilters) {
+            var v = activeColumnFilters[c];
+            if (v && v.length) {
+                var d = v.length > 3 ? v.slice(0,3).join(', ')+' (+'+(v.length-3)+')' : v.join(', ');
+                parts.push('<strong>'+(labels[c]||c)+':</strong> '+esc(d));
+            }
+        }
+        var el = $('#selectedFiltersInfo');
+        if (parts.length) { el.html('<i class="bi bi-funnel-fill me-1"></i> Filtros ativos: '+parts.join(' &nbsp;|&nbsp; ')).removeClass('d-none'); }
+        else { el.addClass('d-none'); }
+    }
+
+    /* ===== Clear All ===== */
+    function initClearFilters() {
+        $('#btnClearAll').on('click', function() {
+            $('.column-filter-options input').prop('checked', true);
+            $('.column-filter-search').val('');
+            $('#showOnlyEdited').prop('checked', false); showOnlyEdited = false;
+            $('#filterReserva').val(''); reservaFilter = '';
+            $('#filterPrioridade').val(''); prioridadeFilter = '';
+            $('#searchGlobal').val(''); searchTerm = '';
+            $('#filterAll').prop('checked', true); statusFilter = 'all';
+            $('#tableTitle').text('Todos os Processos');
+            activeColumnFilters = {};
+            $(this).hide();
+            $('#selectedFiltersInfo').addClass('d-none');
+            $('.filters-bar .dropdown-toggle').removeClass('has-filter');
+            reloadTable();
+        });
+    }
+
+    function updateClearVis() {
+        var has = searchTerm || statusFilter !== 'all' || showOnlyEdited || reservaFilter || prioridadeFilter || Object.keys(activeColumnFilters).length;
+        $('#btnClearAll').toggle(!!has);
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(String(s)));
+        return d.innerHTML;
+    }
+
+    /* ===== Sync ===== */
+    function initSyncButton() {
+        $('#btnSync').on('click', function() {
+            Swal.fire({
+                title: 'Sincronizar dados?',
+                text: 'Buscar dados mais recentes do Data Lake SEI.',
+                icon: 'question', showCancelButton: true,
+                confirmButtonColor: '#DC2626', confirmButtonText: 'Sincronizar', cancelButtonText: 'Cancelar'
+            }).then(function(r) { if (r.isConfirmed) doSync(); });
+        });
+    }
+
+    function doSync() {
+        Swal.fire({ title: 'Sincronizando...', html: 'Buscando dados do Data Lake SEI.', allowOutsideClick: false, didOpen: function(){ Swal.showLoading(); } });
+        fetch('{{ url_for("cgfr.admin_sync") }}', { method:'POST', headers:{'Content-Type':'application/json'} })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            Swal.fire({ icon: d.sucesso?'success':'error', title: d.sucesso?'Sincronizado!':'Erro',
+                html: d.sucesso ? 'Inseridos: <b>'+d.inserted+'</b><br>Atualizados: <b>'+d.updated+'</b><br>Erros: <b>'+d.errors+'</b>' : d.msg||'Erro desconhecido' });
+            if (d.sucesso) reloadTable();
+        })
+        .catch(function(){ Swal.fire('Erro','Falha na comunicacao.','error'); });
+    }
+
+    /* ===== Modal Edicao ===== */
+    function initEditModal() {
+        $('#tabelaProcessos').on('click', '.btn-edit', function(e) {
+            e.preventDefault();
+            var p = $(this).data('protocolo');
+            if (p) abrirModalEdicao(String(p));
+        });
+    }
+});
+</script>
+{% endblock %}

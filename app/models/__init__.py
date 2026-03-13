@@ -38,6 +38,9 @@ from app.models.tipo_execucao import TipoExecucao
 # Models de Empenho Itens (normalizada) e Classificadores
 from app.models.empenho_item import EmpenhoItem, ClassTipoPatrimonial, ClassSubItemDespesa
 
+# Classificador de Fonte de Recurso
+from app.models.class_fonte import ClassFonte
+
 # Model de PD (Programacao de Desembolso)
 from app.models.pd import PD
 
@@ -64,6 +67,9 @@ from app.models.diaria import (
 
 # Planejamento Orçamentário
 from app.models.planejamento_orcamentario import PlanejamentoOrcamentario
+
+# CGFR (Consultoria de Gestão Financeira)
+from app.cgfr.models import CgfrProcessoEnviado, Acao
 
 # Exporta db para manter compatibilidade com imports existentes
 from app.extensions import db
@@ -147,4 +153,9 @@ __all__ = [
     'DiariasCotacao',
     # Planejamento Orçamentário
     'PlanejamentoOrcamentario',
+    # Classificador de Fonte
+    'ClassFonte',
+    # CGFR
+    'CgfrProcessoEnviado',
+    'Acao',
 ]

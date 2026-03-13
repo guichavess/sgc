@@ -26,6 +26,8 @@ ID_SERIE_AUTORIZACAO_SECRETARIO = "574"  # "SEAD_AUTORIZAÇÃO_DO_SECRETÁRIO"
 ID_SERIE_QUADRO_ORCAMENTARIO = "723"   # "SEAD_QUADRO_ORCAMENTARIO"
 ID_SERIE_DESPACHO = "754"              # "SEAD_DESPACHO"
 ID_SERIE_ESCOLHA_PASSAGENS = "2977"    # "SEAD_ESCOLHA_PASSAGENS"
+ID_SERIE_NOTA_EMPENHO = "419"         # "NE - Nota de Empenho"
+ID_SERIE_AUTORIZACAO_SCDP = "264"     # Doc externo para Autorização SCDP
 ID_HIPOTESE_LEGAL_INFO_PESSOAL = "4"  # "Informação Pessoal" - Art. 31 da Lei nº 12.527/2011
 
 # Unidade destino pós-autorização (Diretoria de Planejamento e Finanças)
@@ -1799,4 +1801,415 @@ def gerar_autorizacao_secretario(token, id_procedimento, tipo_solicitacao_id, se
 
     except Exception as e:
         current_app.logger.error(f"SEI Diárias: Erro ao gerar autorização do secretário: {e}")
+        return None
+
+
+# ── Análise de Diárias (idSerie 7) ───────────────────────────────────────
+
+ID_SERIE_ANALISE = "7"  # "SEAD_ANALISE"
+ID_SERIE_PRESTACAO_CONTAS = "1908"  # Documento de prestação de contas
+LIMITE_DIARIAS_ANUAL = 180  # Decreto Estadual nº 14.910/2012, art. 7º
+
+
+def verificar_elegibilidade_servidor(cpf, ano=None):
+    """
+    Verifica se um servidor está apto a receber novas diárias.
+
+    Regras (Decreto Estadual nº 14.910/2012):
+    1. Total acumulado de diárias no ano < 180 (art. 7º)
+    2. Prestação de contas da última viagem aprovada (art. 12, §2º)
+
+    A verificação da prestação de contas ocorre em duas etapas:
+    a) Primeiro verifica na tabela local (diarias_controle_prestacao)
+    b) Se pendente, busca documento idSerie 1908 no último processo SEI
+
+    Args:
+        cpf: CPF do servidor (com ou sem formatação)
+        ano: Ano de referência (default: ano corrente)
+
+    Returns:
+        dict com {
+            apto: bool,
+            acumulado: float (total diárias no ano),
+            limite: int (180),
+            prestacao_status: str ('APROVADO', 'PENDENTE', 'N/A'),
+            ultima_viagem: dict ou None,
+            motivo_bloqueio: str ou None,
+        }
+    """
+    from app.extensions import db
+    from app.models.diaria import (
+        DiariasControleServidor, DiariasControleViagem, DiariasControlePrestacao,
+    )
+
+    if not ano:
+        ano = date.today().year
+
+    resultado = {
+        'apto': True,
+        'acumulado': 0.0,
+        'limite': LIMITE_DIARIAS_ANUAL,
+        'prestacao_status': 'N/A',
+        'ultima_viagem': None,
+        'motivo_bloqueio': None,
+    }
+
+    cpf_limpo = cpf.strip()
+
+    # 1. Calcular acumulado anual
+    acumulado_query = db.session.query(
+        db.func.coalesce(db.func.sum(DiariasControleServidor.qtd_diarias), 0)
+    ).join(
+        DiariasControleViagem,
+        DiariasControleServidor.viagem_id == DiariasControleViagem.id
+    ).filter(
+        DiariasControleServidor.cpf == cpf_limpo,
+        DiariasControleViagem.status_viagem == DiariasControleViagem.STATUS_REALIZADA,
+        db.extract('year', DiariasControleViagem.data_inicio) == ano,
+    )
+    acumulado = float(acumulado_query.scalar() or 0)
+    resultado['acumulado'] = acumulado
+
+    if acumulado >= LIMITE_DIARIAS_ANUAL:
+        resultado['apto'] = False
+        resultado['motivo_bloqueio'] = (
+            f'Limite anual atingido: {acumulado:.1f} de {LIMITE_DIARIAS_ANUAL} diárias '
+            f'(Decreto 14.910/2012, art. 7º)'
+        )
+        return resultado
+
+    # 2. Buscar última viagem realizada do servidor
+    ultima = db.session.query(
+        DiariasControleServidor
+    ).join(
+        DiariasControleViagem,
+        DiariasControleServidor.viagem_id == DiariasControleViagem.id
+    ).filter(
+        DiariasControleServidor.cpf == cpf_limpo,
+        DiariasControleViagem.status_viagem == DiariasControleViagem.STATUS_REALIZADA,
+    ).order_by(
+        DiariasControleViagem.data_termino.desc()
+    ).first()
+
+    if not ultima:
+        # Sem viagem anterior — apto (primeira viagem)
+        resultado['prestacao_status'] = 'N/A'
+        return resultado
+
+    resultado['ultima_viagem'] = {
+        'processo': ultima.viagem.processo if ultima.viagem else None,
+        'data_inicio': str(ultima.viagem.data_inicio) if ultima.viagem else None,
+        'data_termino': str(ultima.viagem.data_termino) if ultima.viagem else None,
+    }
+
+    # 3. Verificar prestação de contas na tabela local
+    if ultima.prestacao:
+        if ultima.prestacao.relatorio == DiariasControlePrestacao.RELATORIO_APROVADO:
+            resultado['prestacao_status'] = 'APROVADO'
+            return resultado
+        elif ultima.prestacao.status == DiariasControlePrestacao.STATUS_ENTREGUE:
+            # Entregue mas ainda não aprovada — verificamos via SEI também
+            resultado['prestacao_status'] = 'ENTREGUE'
+        else:
+            resultado['prestacao_status'] = 'PENDENTE'
+
+    # 4. Verificação complementar via SEI (busca idSerie 1908)
+    if ultima.viagem and ultima.viagem.processo:
+        try:
+            resp_docs = consultar_documentos_procedimento(ultima.viagem.processo)
+            if resp_docs.get('sucesso'):
+                for doc in resp_docs['documentos']:
+                    serie = doc.get('Serie', {})
+                    if str(serie.get('IdSerie', '')) == ID_SERIE_PRESTACAO_CONTAS:
+                        resultado['prestacao_status'] = 'APROVADO'
+                        current_app.logger.info(
+                            f"SEI Diárias: Prestação de contas encontrada via SEI "
+                            f"para CPF {cpf_limpo} no processo {ultima.viagem.processo}"
+                        )
+                        return resultado
+        except Exception as e:
+            current_app.logger.warning(
+                f"SEI Diárias: Erro ao verificar prestação via SEI: {e}"
+            )
+
+    # Se chegou aqui e prestação não é APROVADO, bloqueia
+    if resultado['prestacao_status'] != 'APROVADO':
+        resultado['apto'] = False
+        resultado['motivo_bloqueio'] = (
+            f'Prestação de contas pendente para a última viagem '
+            f'(processo {ultima.viagem.processo if ultima.viagem else "?"}). '
+            f'Decreto 14.910/2012, art. 12, §2º'
+        )
+
+    return resultado
+
+
+def gerar_analise_diarias(token, id_procedimento, sei_protocolo, servidores_analise):
+    """
+    Gera documento SEAD_ANALISE (IdSerie 7) no processo SEI.
+
+    Conteúdo: tabela com servidor, quantidade acumulada e status da prestação.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        sei_protocolo: Protocolo formatado do processo
+        servidores_analise: lista de dicts com {
+            nome: str,
+            acumulado: float,
+            prestacao_status: str ('APROVADO', 'PENDENTE', 'N/A'),
+            apto: bool,
+        }
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para análise.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+
+    ano_atual = date.today().year
+
+    # Monta linhas da tabela
+    linhas_html = ''
+    for s in servidores_analise:
+        nome = s.get('nome', '?')
+        acumulado = s.get('acumulado', 0)
+        prestacao = s.get('prestacao_status', 'N/A')
+        linhas_html += f"""
+            <tr>
+                <td style="border: 1px solid #000; padding: 6px;">{nome}</td>
+                <td style="border: 1px solid #000; padding: 6px; text-align: center;">
+                    {acumulado:.1f}
+                </td>
+                <td style="border: 1px solid #000; padding: 6px; text-align: center;">
+                    {prestacao}
+                </td>
+            </tr>
+        """
+
+    # Determina conclusão
+    todos_aptos = all(s.get('apto', False) for s in servidores_analise)
+    if todos_aptos:
+        conclusao = 'Do exposto, o(a) servidor(a) está apto(a) a receber novas diárias.'
+    else:
+        nomes_bloqueados = [s['nome'] for s in servidores_analise if not s.get('apto')]
+        conclusao = (
+            'Do exposto, o(s) seguinte(s) servidor(es) <b>não está(ão) apto(s)</b> '
+            f'a receber novas diárias: {", ".join(nomes_bloqueados)}.'
+        )
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p><b>PROCESSO Nº {sei_protocolo}</b></p>
+        <p><b>INTERESSADO:</b> @INTERESSADOS_VIRGULA_ESPACO_MAIUSCULAS@</p>
+
+        <p style="text-align: center;"><b>RELATÓRIO DE ANÁLISE</b></p>
+
+        <p style="text-indent: 2em; text-align: justify;">
+            Trata-se de análise preliminar sobre o quantitativo de diárias recebidas pelo(a)
+            servidor(a) e o resultado de suas prestações de contas no exercício anterior.
+        </p>
+
+        <p style="text-indent: 2em; text-align: justify;">
+            Conforme o art. 7º do Decreto Estadual nº 14.910/2012, "<i>o total das diárias
+            atribuídas a militar, servidor ou empregado público não poderá exceder de 180 (cento e oitenta)
+            por ano, salvo em casos especiais, previamente autorizados pelo Governador do Estado</i>".
+        </p>
+
+        <p style="text-indent: 2em; text-align: justify;">
+            Também, o §2º do art. 12, do referido Decreto Estadual, diz que "<i>a falta de
+            comprovação do deslocamento no prazo previsto, inabilita o servidor a receber novas diárias,
+            salvo em casos excepcionais, de comprovado interesse público e devidamente justificado pelo
+            chefe imediato</i>".
+        </p>
+
+        <p style="text-indent: 2em; text-align: justify;">
+            Portanto, diante do processo de diárias e após a verificação do cumprimento legal
+            da legislação vigente, apresento o(a) servidor(a) com a quantidade de diárias acumuladas
+            recebidas durante o <b>ano {ano_atual}</b>, bem como a sua habilitação para receber novas diárias:
+        </p>
+
+        <br>
+        <table style="border-collapse: collapse; width: 100%; margin: 10px 0;">
+            <thead>
+                <tr style="background-color: #f0f0f0;">
+                    <th style="border: 1px solid #000; padding: 8px;">Servidor/Terceirizado</th>
+                    <th style="border: 1px solid #000; padding: 8px;">Quant. Acumulada</th>
+                    <th style="border: 1px solid #000; padding: 8px;">Prestação de Contas Anterior</th>
+                </tr>
+            </thead>
+            <tbody>
+                {linhas_html}
+            </tbody>
+        </table>
+        <br>
+
+        <p style="text-indent: 2em; text-align: justify;">{conclusao}</p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_ANALISE,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Análise de Diárias - {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando análise para procedimento {id_procedimento} "
+            f"({len(servidores_analise)} servidores)..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar análise ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Análise gerada - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar análise: {e}")
+        return None
+
+
+def gerar_nota_empenho(token, id_procedimento, sei_protocolo, codigo_ne, dados_empenho=None):
+    """
+    Gera documento Nota de Empenho (idSerie 419) no processo SEI.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID interno do procedimento SEI
+        sei_protocolo: Número formatado do processo
+        codigo_ne: Código da NE (ex: '2026NE00456')
+        dados_empenho: dict opcional com dados adicionais {
+            'valor', 'natureza_despesa', 'fonte_recursos', 'favorecido', 'objeto'
+        }
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado, etc.)
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para NE.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+
+    # Monta HTML do conteúdo da NE
+    dados = dados_empenho or {}
+    hoje = datetime.now()
+    data_formatada = f"{hoje.day} de {MESES_EXTENSO[hoje.month]} de {hoje.year}"
+
+    linhas_extra = ""
+    if dados.get('valor'):
+        linhas_extra += f"""
+            <tr>
+                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Valor</td>
+                <td style="padding:6px 10px; border:1px solid #ccc;">R$ {dados['valor']}</td>
+            </tr>"""
+    if dados.get('natureza_despesa'):
+        linhas_extra += f"""
+            <tr>
+                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Natureza da Despesa</td>
+                <td style="padding:6px 10px; border:1px solid #ccc;">{dados['natureza_despesa']}</td>
+            </tr>"""
+    if dados.get('fonte_recursos'):
+        linhas_extra += f"""
+            <tr>
+                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Fonte de Recursos</td>
+                <td style="padding:6px 10px; border:1px solid #ccc;">{dados['fonte_recursos']}</td>
+            </tr>"""
+    if dados.get('favorecido'):
+        linhas_extra += f"""
+            <tr>
+                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Favorecido</td>
+                <td style="padding:6px 10px; border:1px solid #ccc;">{dados['favorecido']}</td>
+            </tr>"""
+    if dados.get('objeto'):
+        linhas_extra += f"""
+            <tr>
+                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Objeto</td>
+                <td style="padding:6px 10px; border:1px solid #ccc;">{dados['objeto']}</td>
+            </tr>"""
+
+    html_conteudo = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <h3 style="text-align: center; margin-bottom: 20px;">NOTA DE EMPENHO</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+            <tr>
+                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold; width:35%;">Nota de Empenho</td>
+                <td style="padding:6px 10px; border:1px solid #ccc;">{codigo_ne}</td>
+            </tr>
+            <tr>
+                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Processo</td>
+                <td style="padding:6px 10px; border:1px solid #ccc;">{sei_protocolo}</td>
+            </tr>
+            <tr>
+                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Data</td>
+                <td style="padding:6px 10px; border:1px solid #ccc;">{data_formatada}</td>
+            </tr>{linhas_extra}
+        </table>
+    </div>
+    """
+
+    conteudo_b64 = base64.b64encode(html_conteudo.encode('utf-8')).decode('utf-8')
+
+    payload = {
+        "Procedimento": id_procedimento,
+        "IdSerie": ID_SERIE_NOTA_EMPENHO,
+        "Numero": codigo_ne,
+        "Descricao": f"Nota de Empenho {codigo_ne}",
+        "Conteudo": conteudo_b64,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diarias: Gerando NE {codigo_ne} no procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diarias: Erro ao gerar NE ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diarias: NE gerada - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diarias: Erro ao gerar NE: {e}")
         return None

@@ -1,0 +1,243 @@
+{# Modal de Edicao/Classificacao de Processo CGFR #}
+<div class="modal fade" id="modalEdicao" tabindex="-1" aria-labelledby="modalEdicaoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #DC2626, #EF4444); color: white;">
+                <h5 class="modal-title" id="modalEdicaoLabel">
+                    <i class="bi bi-pencil-square me-2"></i>Classificar Processo
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modal-processo-formatado">
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Processo</label>
+                    <p id="modal-processo-display" class="form-control-plaintext fw-bold text-primary"></p>
+                </div>
+
+                <hr>
+                <h6 class="fw-bold mb-3"><i class="bi bi-tag me-1"></i> Classificacao Orcamentaria</h6>
+
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="modal-natureza" class="form-label">Natureza de Despesa <span class="text-danger">*</span></label>
+                        <select id="modal-natureza" class="form-select cgfr-select2" style="width:100%"></select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="modal-fonte" class="form-label">Fonte <span class="text-danger">*</span></label>
+                        <select id="modal-fonte" class="form-select cgfr-select2" style="width:100%"></select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="modal-acao" class="form-label">Acao <span class="text-danger">*</span></label>
+                        <select id="modal-acao" class="form-select cgfr-select2" style="width:100%"></select>
+                    </div>
+                </div>
+
+                <hr>
+                <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-1"></i> Informacoes Complementares</h6>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="modal-fornecedor" class="form-label">Fornecedor</label>
+                        <input type="text" class="form-control" id="modal-fornecedor">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="modal-tipo-despesa" class="form-label">Tipo de Despesa</label>
+                        <select id="modal-tipo-despesa" class="form-select">
+                            <option value="">Selecione...</option>
+                            <option value="Custeio">Custeio</option>
+                            <option value="Investimento">Investimento</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    <div class="col-12">
+                        <label for="modal-objeto" class="form-label">Objeto do Pedido</label>
+                        <textarea class="form-control" id="modal-objeto" rows="2"></textarea>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    <div class="col-12">
+                        <label for="modal-necessidade" class="form-label">Necessidade</label>
+                        <textarea class="form-control" id="modal-necessidade" rows="2"></textarea>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    <div class="col-12">
+                        <label for="modal-deliberacao" class="form-label">Deliberacao</label>
+                        <textarea class="form-control" id="modal-deliberacao" rows="2"></textarea>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-4">
+                        <label for="modal-valor-solicitado" class="form-label">Valor Solicitado (R$)</label>
+                        <input type="text" class="form-control cgfr-money" id="modal-valor-solicitado" placeholder="0,00">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="modal-valor-aprovado" class="form-label">Valor Aprovado (R$)</label>
+                        <input type="text" class="form-control cgfr-money" id="modal-valor-aprovado" placeholder="0,00">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="modal-data-reuniao" class="form-label">Data da Reuniao</label>
+                        <input type="date" class="form-control" id="modal-data-reuniao">
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    <div class="col-md-4">
+                        <label for="modal-prioridade" class="form-label">Prioridade</label>
+                        <select id="modal-prioridade" class="form-select">
+                            <option value="">Selecione...</option>
+                            <option value="Alto">Alto</option>
+                            <option value="Medio">Medio</option>
+                            <option value="Baixo">Baixo</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="modal-reserva" class="form-label">Possui Reserva?</label>
+                        <select id="modal-reserva" class="form-select">
+                            <option value="0">Nao</option>
+                            <option value="1">Sim</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="modal-valor-reserva" class="form-label">Valor Reserva</label>
+                        <input type="text" class="form-control" id="modal-valor-reserva" placeholder="">
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    <div class="col-12">
+                        <label for="modal-observacao" class="form-label">Observacao</label>
+                        <textarea class="form-control" id="modal-observacao" rows="2"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="btnSalvarClassificacao">
+                    <i class="bi bi-check-lg me-1"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function abrirModalEdicao(protocolo) {
+    // Buscar dados do registro via DataTable cache
+    const table = window.cgfrTable;
+    const data = table.rows().data().toArray().find(r => r.processo_formatado === protocolo);
+
+    if (!data) {
+        Swal.fire('Erro', 'Processo nao encontrado na tabela.', 'error');
+        return;
+    }
+
+    // Preencher campos
+    $('#modal-processo-formatado').val(data.processo_formatado);
+    $('#modal-processo-display').text(data.processo_formatado);
+    $('#modal-fornecedor').val(data.fornecedor);
+    $('#modal-objeto').val(data.objeto_do_pedido || '');
+    $('#modal-necessidade').val(data.necessidade || '');
+    $('#modal-deliberacao').val(data.deliberacao || '');
+    $('#modal-tipo-despesa').val(data.tipo_despesa);
+    $('#modal-valor-solicitado').val(data.valor_solicitado);
+    $('#modal-valor-aprovado').val(data.valor_aprovado);
+    $('#modal-data-reuniao').val(data.data_da_reuniao || '');
+    $('#modal-prioridade').val(data.nivel_prioridade);
+    $('#modal-reserva').val(data.possui_reserva || 0);
+    $('#modal-valor-reserva').val(data.valor_reserva);
+    $('#modal-observacao').val(data.observacao || '');
+
+    // Inicializar Select2 (se nao inicializado)
+    initSelect2Fields(data);
+
+    new bootstrap.Modal(document.getElementById('modalEdicao')).show();
+}
+
+function initSelect2Fields(data) {
+    const opts = window.cgfrFilterOptions;
+
+    // Natureza
+    $('#modal-natureza').empty().select2({
+        dropdownParent: $('#modalEdicao'),
+        theme: 'bootstrap-5',
+        placeholder: 'Selecione a natureza...',
+        allowClear: true,
+        language: 'pt-BR',
+        data: [{id: '', text: ''}].concat(opts.naturezas)
+    }).val(data.natureza_despesa_id || '').trigger('change');
+
+    // Fonte
+    $('#modal-fonte').empty().select2({
+        dropdownParent: $('#modalEdicao'),
+        theme: 'bootstrap-5',
+        placeholder: 'Selecione a fonte...',
+        allowClear: true,
+        language: 'pt-BR',
+        data: [{id: '', text: ''}].concat(opts.fontes)
+    }).val(data.fonte_id || '').trigger('change');
+
+    // Acao
+    $('#modal-acao').empty().select2({
+        dropdownParent: $('#modalEdicao'),
+        theme: 'bootstrap-5',
+        placeholder: 'Selecione a acao...',
+        allowClear: true,
+        language: 'pt-BR',
+        data: [{id: '', text: ''}].concat(opts.acoes)
+    }).val(data.acao_id || '').trigger('change');
+}
+
+// Salvar
+$(document).on('click', '#btnSalvarClassificacao', function() {
+    const payload = {
+        processo_formatado: $('#modal-processo-formatado').val(),
+        natureza_despesa_id: $('#modal-natureza').val() || null,
+        fonte_id: $('#modal-fonte').val() || null,
+        acao_id: $('#modal-acao').val() || null,
+        fornecedor: $('#modal-fornecedor').val(),
+        objeto_do_pedido: $('#modal-objeto').val(),
+        necessidade: $('#modal-necessidade').val(),
+        deliberacao: $('#modal-deliberacao').val(),
+        tipo_despesa: $('#modal-tipo-despesa').val(),
+        valor_solicitado: $('#modal-valor-solicitado').val(),
+        valor_aprovado: $('#modal-valor-aprovado').val(),
+        data_da_reuniao: $('#modal-data-reuniao').val() || null,
+        nivel_prioridade: $('#modal-prioridade').val(),
+        possui_reserva: $('#modal-reserva').val(),
+        valor_reserva: $('#modal-valor-reserva').val(),
+        observacao: $('#modal-observacao').val(),
+    };
+
+    fetch('{{ url_for("cgfr.api_salvar") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEdicao')).hide();
+            Swal.fire({
+                icon: 'success',
+                title: 'Salvo!',
+                text: data.msg,
+                timer: 1500,
+                showConfirmButton: false
+            });
+            window.cgfrTable.ajax.reload(null, false);
+            window.cgfrAtualizarKPIs();
+        } else {
+            Swal.fire('Erro', data.msg || 'Erro ao salvar.', 'error');
+        }
+    })
+    .catch(() => Swal.fire('Erro', 'Falha na comunicacao.', 'error'));
+});
+</script>

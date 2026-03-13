@@ -1,0 +1,214 @@
+/* ==========================================================================
+   CGFR - Consultoria de Gestao Financeira
+   Espelha estilos do sistema original (processos.css)
+   ========================================================================== */
+
+/* ---------- KPI Cards (border-left colorida) ---------- */
+.kpi-card {
+    border: none;
+    border-radius: var(--radius-md, 8px);
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.1));
+    transition: transform 0.2s, box-shadow 0.2s;
+    background: #fff;
+    border-left: 5px solid var(--brand-500, #3b82f6);
+}
+
+.kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,.15));
+}
+
+.kpi-card .card-body { padding: 18px 20px; }
+
+.kpi-card.kpi-blue  { border-left-color: #3b82f6; }
+.kpi-card.kpi-green { border-left-color: #10b981; }
+.kpi-card.kpi-orange { border-left-color: #f59e0b; }
+.kpi-card.kpi-red   { border-left-color: #ef4444; }
+
+.kpi-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.kpi-card.kpi-blue .kpi-title  { color: #3b82f6; }
+.kpi-card.kpi-green .kpi-title { color: #10b981; }
+.kpi-card.kpi-orange .kpi-title { color: #f59e0b; }
+.kpi-card.kpi-red .kpi-title   { color: #ef4444; }
+
+.kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary, #1e293b);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+}
+
+.kpi-value.kpi-value-sm { font-size: 1.1rem; }
+
+.kpi-icon {
+    opacity: 0.12;
+    font-size: 2.2rem;
+    position: absolute;
+    right: 18px;
+    top: 18px;
+}
+
+/* ---------- Tabela ---------- */
+.table-card {
+    border-radius: var(--radius-lg, 12px);
+    overflow: hidden;
+}
+
+.table-card .card-header {
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#tabelaProcessos th {
+    white-space: normal;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+    padding: 8px 6px;
+}
+
+#tabelaProcessos td {
+    font-size: 0.78rem;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    vertical-align: middle;
+    line-height: 1.35;
+    padding: 6px;
+}
+
+#tabelaProcessos tr.row-classified td:first-child {
+    border-left: 4px solid #10b981 !important;
+}
+
+#tabelaProcessos tr.row-pending td:first-child {
+    border-left: 4px solid #f59e0b !important;
+}
+
+.badge-status {
+    font-weight: 500;
+    font-size: 0.72rem;
+    padding: 3px 10px;
+    border-radius: 50px;
+}
+
+/* ---------- Filtros Radio ---------- */
+.btn-group-filter .btn {
+    border-radius: 20px !important;
+    margin: 0 2px;
+    font-size: 0.78rem;
+    padding: 4px 14px;
+}
+
+.btn-group-filter .btn-check:checked + .btn {
+    font-weight: 600;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* ---------- Filtros por Coluna ---------- */
+.filters-bar { padding: 12px 0; }
+
+.filters-bar .dropdown .btn {
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 5px 12px;
+    border-color: var(--border-default, #dee2e6);
+    color: var(--text-secondary, #64748b);
+}
+
+.filters-bar .dropdown .btn:hover {
+    background: var(--surface-bg, #f8f9fa);
+}
+
+.filters-bar .dropdown .btn.has-filter {
+    border-color: var(--brand-500, #3b82f6);
+    color: var(--brand-600, #2563eb);
+    background: var(--brand-50, #eff6ff);
+    font-weight: 600;
+}
+
+.column-filter-menu {
+    min-width: 260px;
+    max-width: 360px;
+    padding: 10px !important;
+    border-radius: var(--radius-md, 8px);
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,.15));
+}
+
+.column-filter-search {
+    font-size: 0.82rem;
+    border-radius: var(--radius-sm, 6px);
+}
+
+.column-filter-options {
+    max-height: 250px;
+    overflow-y: auto;
+    margin-top: 4px;
+}
+
+.column-filter-options .form-check {
+    padding: 4px 8px 4px 28px;
+    font-size: 0.82rem;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 1px;
+}
+
+.column-filter-options .form-check:hover {
+    background: var(--surface-bg, #f8f9fa);
+}
+
+.column-filter-options .form-check-label {
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 280px;
+    display: block;
+}
+
+.column-filter-options .form-check-input { cursor: pointer; }
+
+.column-filter-options .filter-select-all {
+    border-bottom: 1px solid var(--border-light, #e9ecef);
+    margin-bottom: 4px;
+    padding-bottom: 6px;
+    font-weight: 600;
+}
+
+/* ---------- Top bar filtros ---------- */
+.filters-top-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.filters-top-bar .form-check-label { font-size: 0.84rem; }
+.filters-top-bar .total-records { font-size: 0.84rem; color: var(--text-muted, #94a3b8); }
+
+/* ---------- DataTable controles ---------- */
+.table-card .dataTables_info { font-size: 0.80rem; color: var(--text-muted, #94a3b8); padding-top: 8px; }
+.table-card .dataTables_paginate { padding-top: 4px; }
+.table-card .dataTables_paginate .paginate_button { font-size: 0.80rem; }
+
+/* ---------- Modal ---------- */
+#modalEdicao .modal-header { border-bottom: none; }
+.cgfr-select2 + .select2-container { width: 100% !important; }
+
+/* ---------- Print ---------- */
+@media print {
+    .btn-group-filter, #btnSync, .btn-edit, .sidebar, .navbar,
+    .filters-top-bar, .filters-bar, #selectedFiltersInfo { display: none !important; }
+}

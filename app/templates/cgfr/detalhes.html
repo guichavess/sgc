@@ -1,0 +1,268 @@
+{% extends "cgfr/base_cgfr.html" %}
+
+{% block title %}CGFR - {{ processo.processo_formatado }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    {# Breadcrumb #}
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('cgfr.dashboard') }}">CGFR</a></li>
+            <li class="breadcrumb-item active">{{ processo.processo_formatado }}</li>
+        </ol>
+    </nav>
+
+    <div class="row g-4">
+        {# === Dados do Processo (Sync) === #}
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-bottom">
+                    <h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark-text me-2"></i>Dados do Processo</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless mb-0">
+                        <tr>
+                            <td class="text-muted" style="width:180px">Processo</td>
+                            <td class="fw-semibold">{{ processo.processo_formatado }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Tipo</td>
+                            <td>{{ processo.tipo_processo or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Especificacao</td>
+                            <td>{{ processo.especificacao or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Data do Processo</td>
+                            <td>{{ processo.data_hora_processo.strftime('%d/%m/%Y %H:%M') if processo.data_hora_processo else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Tramitado p/ CGFR</td>
+                            <td>{{ processo.tramitado_sead_cgfr or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Recebido CGFR</td>
+                            <td>
+                                {% if processo.recebido_cgfr %}
+                                    <span class="badge bg-success">Sim</span>
+                                    {{ processo.data_recebido_cgfr or '' }}
+                                {% else %}
+                                    <span class="badge bg-secondary">Nao</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Devolvido CGFR</td>
+                            <td>
+                                {% if processo.devolvido_cgfr_sead %}
+                                    <span class="badge bg-info">Sim</span>
+                                    {{ processo.data_devolvido_cgfr_sead or '' }}
+                                {% else %}
+                                    <span class="badge bg-secondary">Nao</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Data Inclusao</td>
+                            <td>{{ processo.data_inclusao.strftime('%d/%m/%Y %H:%M') if processo.data_inclusao else '-' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {# === Classificacao (Editavel) === #}
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between">
+                    <h6 class="mb-0 fw-bold"><i class="bi bi-tag me-2"></i>Classificacao</h6>
+                    <span class="badge {{ 'cgfr-badge-classificado' if processo.classificado else 'cgfr-badge-pendente' }}">
+                        {{ processo.status_classificacao }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless mb-0">
+                        <tr>
+                            <td class="text-muted" style="width:180px">Natureza</td>
+                            <td>{{ processo.natureza_despesa.titulo if processo.natureza_despesa else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Fonte</td>
+                            <td>{{ processo.fonte.descricao if processo.fonte else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Acao</td>
+                            <td>{{ processo.acao.acao if processo.acao else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Fornecedor</td>
+                            <td>{{ processo.fornecedor or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Objeto</td>
+                            <td>{{ processo.objeto_do_pedido or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Necessidade</td>
+                            <td>{{ processo.necessidade or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Deliberacao</td>
+                            <td>{{ processo.deliberacao or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Tipo Despesa</td>
+                            <td>{{ processo.tipo_despesa or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Valor Solicitado</td>
+                            <td class="fw-semibold">
+                                {% if processo.valor_solicitado %}
+                                    R$ {{ "%.2f"|format(processo.valor_solicitado)|replace('.', ',')|replace(',', 'X', 1) }}
+                                {% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Valor Aprovado</td>
+                            <td class="fw-semibold text-success">
+                                {% if processo.valor_aprovado %}
+                                    R$ {{ "%.2f"|format(processo.valor_aprovado)|replace('.', ',')|replace(',', 'X', 1) }}
+                                {% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Data Reuniao</td>
+                            <td>{{ processo.data_da_reuniao.strftime('%d/%m/%Y') if processo.data_da_reuniao else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Prioridade</td>
+                            <td>
+                                {% if processo.nivel_prioridade %}
+                                    {% set cls = 'danger' if processo.nivel_prioridade == 'Alto' else ('warning' if processo.nivel_prioridade == 'Medio' else 'info') %}
+                                    <span class="badge bg-{{ cls }}">{{ processo.nivel_prioridade }}</span>
+                                {% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Reserva</td>
+                            <td>
+                                {% if processo.possui_reserva %}
+                                    Sim {{ '- ' + processo.valor_reserva if processo.valor_reserva else '' }}
+                                {% else %}Nao{% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Observacao</td>
+                            <td>{{ processo.observacao or '-' }}</td>
+                        </tr>
+                    </table>
+
+                    <div class="mt-3">
+                        <button class="btn btn-danger" id="btnEditarDetalhe">
+                            <i class="bi bi-pencil me-1"></i> Editar Classificacao
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{# Modal de Edicao #}
+{% include 'cgfr/partials/modal_edicao.html' %}
+{% endblock %}
+
+{% block cgfr_js %}
+<script>
+$(document).ready(function() {
+    window.cgfrFilterOptions = {{ filter_options | tojson }};
+
+    // Simular dados do processo para o modal
+    const processoData = {
+        processo_formatado: '{{ processo.processo_formatado }}',
+        natureza_despesa_id: {{ processo.natureza_despesa_id or 'null' }},
+        fonte_id: {{ processo.fonte_id or 'null' }},
+        acao_id: {{ processo.acao_id or 'null' }},
+        fornecedor: {{ processo.fornecedor | tojson if processo.fornecedor else '""' }},
+        objeto_do_pedido: {{ processo.objeto_do_pedido | tojson if processo.objeto_do_pedido else '""' }},
+        necessidade: {{ processo.necessidade | tojson if processo.necessidade else '""' }},
+        deliberacao: {{ processo.deliberacao | tojson if processo.deliberacao else '""' }},
+        tipo_despesa: '{{ processo.tipo_despesa or '' }}',
+        valor_solicitado: '{{ processo.valor_solicitado or '' }}',
+        valor_aprovado: '{{ processo.valor_aprovado or '' }}',
+        data_da_reuniao: '{{ processo.data_da_reuniao.strftime("%Y-%m-%d") if processo.data_da_reuniao else '' }}',
+        nivel_prioridade: '{{ processo.nivel_prioridade or '' }}',
+        possui_reserva: {{ processo.possui_reserva or 0 }},
+        valor_reserva: '{{ processo.valor_reserva or '' }}',
+        observacao: {{ processo.observacao | tojson if processo.observacao else '""' }}
+    };
+
+    $('#btnEditarDetalhe').on('click', function() {
+        // Preencher modal manualmente
+        $('#modal-processo-formatado').val(processoData.processo_formatado);
+        $('#modal-processo-display').text(processoData.processo_formatado);
+        $('#modal-fornecedor').val(processoData.fornecedor);
+        $('#modal-objeto').val(processoData.objeto_do_pedido);
+        $('#modal-necessidade').val(processoData.necessidade);
+        $('#modal-deliberacao').val(processoData.deliberacao);
+        $('#modal-tipo-despesa').val(processoData.tipo_despesa);
+        $('#modal-valor-solicitado').val(processoData.valor_solicitado);
+        $('#modal-valor-aprovado').val(processoData.valor_aprovado);
+        $('#modal-data-reuniao').val(processoData.data_da_reuniao);
+        $('#modal-prioridade').val(processoData.nivel_prioridade);
+        $('#modal-reserva').val(processoData.possui_reserva);
+        $('#modal-valor-reserva').val(processoData.valor_reserva);
+        $('#modal-observacao').val(processoData.observacao);
+
+        initSelect2Fields(processoData);
+        new bootstrap.Modal(document.getElementById('modalEdicao')).show();
+    });
+
+    // Override: apos salvar no detalhe, recarregar pagina
+    $(document).off('click', '#btnSalvarClassificacao').on('click', '#btnSalvarClassificacao', function() {
+        const payload = {
+            processo_formatado: $('#modal-processo-formatado').val(),
+            natureza_despesa_id: $('#modal-natureza').val() || null,
+            fonte_id: $('#modal-fonte').val() || null,
+            acao_id: $('#modal-acao').val() || null,
+            fornecedor: $('#modal-fornecedor').val(),
+            objeto_do_pedido: $('#modal-objeto').val(),
+            necessidade: $('#modal-necessidade').val(),
+            deliberacao: $('#modal-deliberacao').val(),
+            tipo_despesa: $('#modal-tipo-despesa').val(),
+            valor_solicitado: $('#modal-valor-solicitado').val(),
+            valor_aprovado: $('#modal-valor-aprovado').val(),
+            data_da_reuniao: $('#modal-data-reuniao').val() || null,
+            nivel_prioridade: $('#modal-prioridade').val(),
+            possui_reserva: $('#modal-reserva').val(),
+            valor_reserva: $('#modal-valor-reserva').val(),
+            observacao: $('#modal-observacao').val(),
+        };
+
+        fetch('{{ url_for("cgfr.api_salvar") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.sucesso) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Salvo!',
+                    text: data.msg,
+                    timer: 1500,
+                    showConfirmButton: false
+                }).then(() => location.reload());
+            } else {
+                Swal.fire('Erro', data.msg || 'Erro ao salvar.', 'error');
+            }
+        })
+        .catch(() => Swal.fire('Erro', 'Falha na comunicacao.', 'error'));
+    });
+});
+</script>
+{% endblock %}

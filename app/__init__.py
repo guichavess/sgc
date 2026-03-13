@@ -204,6 +204,9 @@ def _register_blueprints(app):
     app.register_blueprint(dashboards_bp, url_prefix='/dashboards')
     app.register_blueprint(diarias_bp, url_prefix='/diarias')
 
+    from app.cgfr.routes import cgfr_bp
+    app.register_blueprint(cgfr_bp, url_prefix='/cgfr')
+
     from app.notificacoes import notificacoes_bp
     app.register_blueprint(notificacoes_bp, url_prefix='/notificacoes')
 

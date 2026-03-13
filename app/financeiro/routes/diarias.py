@@ -1,10 +1,10 @@
 """
 Rotas de Diárias - Módulo Financeiro.
-Lista solicitações de diárias despachadas para DFIN e permite inserção de Nota de Reserva
-e Quadro Orçamentário.
+Lista solicitações de diárias despachadas para DFIN e permite inserção de Nota de Reserva,
+Quadro Orçamentário, upload de Autorização SCDP e criação de Nota de Empenho.
 """
 from decimal import Decimal, InvalidOperation
-from flask import render_template, request, flash, redirect, url_for, abort
+from flask import render_template, request, flash, redirect, url_for, abort, jsonify
 from flask_login import login_required, current_user
 
 from app.financeiro.routes import financeiro_bp
@@ -14,6 +14,7 @@ from app.constants import DiariasEtapaID
 from app.services.diaria_service import DiariaService
 from app.services.diarias_sei_integration import (
     gerar_token_sei_admin, adicionar_documento_externo, gerar_quadro_orcamentario,
+    gerar_nota_empenho, ID_SERIE_AUTORIZACAO_SCDP,
 )
 from app.utils.permissions import requires_permission
 
@@ -272,5 +273,122 @@ def inserir_quadro_orcamentario(id):
         flash('Quadro Orçamentário inserido e documento gerado no SEI com sucesso!', 'success')
     elif not itinerario.sei_id_procedimento:
         flash('Quadro Orçamentário inserido com sucesso!', 'success')
+
+    return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+
+@financeiro_bp.route('/diarias/<int:id>/upload-scdp', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def upload_autorizacao_scdp(id):
+    """Upload do PDF 'Autorização SOLICITAÇÃO APROVADA SCDP' ao processo SEI."""
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guard: precisa ter processo SEI
+    if not itinerario.sei_protocolo:
+        flash('Esta solicitação não possui processo SEI vinculado.', 'warning')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    if itinerario.sei_id_autorizacao_scdp:
+        flash('A Autorização SCDP já foi enviada para esta solicitação.', 'warning')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    arquivo = request.files.get('arquivo_scdp')
+    numero_scdp = request.form.get('numero_scdp', '').strip()
+
+    if not arquivo or not arquivo.filename:
+        flash('O arquivo PDF da Autorização SCDP é obrigatório.', 'danger')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    try:
+        arquivo_bytes = arquivo.read()
+        if len(arquivo_bytes) == 0:
+            flash('O arquivo está vazio.', 'danger')
+            return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+        token = gerar_token_sei_admin()
+        if not token:
+            flash('Não foi possível autenticar no SEI.', 'danger')
+            return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+        retorno = adicionar_documento_externo(
+            token=token,
+            protocolo_formatado=itinerario.sei_protocolo,
+            arquivo_bytes=arquivo_bytes,
+            nome_arquivo=arquivo.filename,
+            descricao=f'Autorização SOLICITAÇÃO APROVADA SCDP{" (" + numero_scdp + ")" if numero_scdp else ""}',
+            id_serie=ID_SERIE_AUTORIZACAO_SCDP,
+            numero=numero_scdp or None,
+        )
+
+        if retorno:
+            itinerario.sei_id_autorizacao_scdp = str(retorno.get('IdDocumento', ''))
+            itinerario.sei_autorizacao_scdp_formatado = retorno.get('DocumentoFormatado', '')
+            db.session.commit()
+            flash('Autorização SCDP enviada ao SEI com sucesso!', 'success')
+        else:
+            flash('Erro ao enviar documento ao SEI.', 'danger')
+
+    except Exception as e:
+        flash(f'Erro ao enviar Autorização SCDP: {e}', 'danger')
+
+    return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+
+@financeiro_bp.route('/diarias/<int:id>/inserir-nota-empenho', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def inserir_nota_empenho(id):
+    """Cria documento Nota de Empenho (idSerie 419) no processo SEI."""
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guard: precisa ter processo SEI
+    if not itinerario.sei_id_procedimento:
+        flash('Esta solicitação não possui processo SEI vinculado.', 'warning')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    if itinerario.sei_id_nota_empenho:
+        flash('A Nota de Empenho já foi inserida para esta solicitação.', 'warning')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    codigo_ne = request.form.get('nota_empenho_codigo', '').strip()
+    if not codigo_ne:
+        flash('O código da Nota de Empenho é obrigatório.', 'danger')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    # Dados opcionais para enriquecer o documento
+    dados_empenho = {
+        'valor': request.form.get('ne_valor', '').strip() or None,
+        'natureza_despesa': request.form.get('ne_natureza_despesa', '').strip() or None,
+        'fonte_recursos': request.form.get('ne_fonte_recursos', '').strip() or None,
+        'favorecido': request.form.get('ne_favorecido', '').strip() or None,
+        'objeto': request.form.get('ne_objeto', '').strip() or None,
+    }
+
+    try:
+        token = gerar_token_sei_admin()
+        if not token:
+            flash('Não foi possível autenticar no SEI.', 'danger')
+            return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+        retorno = gerar_nota_empenho(
+            token=token,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=itinerario.sei_protocolo or itinerario.n_processo or '',
+            codigo_ne=codigo_ne,
+            dados_empenho=dados_empenho,
+        )
+
+        if retorno:
+            itinerario.nota_empenho_codigo = codigo_ne
+            itinerario.sei_id_nota_empenho = str(retorno.get('IdDocumento', ''))
+            itinerario.sei_nota_empenho_formatado = retorno.get('DocumentoFormatado', '')
+            db.session.commit()
+            flash(f'Nota de Empenho {codigo_ne} inserida e documento gerado no SEI!', 'success')
+        else:
+            flash('Erro ao gerar documento de Nota de Empenho no SEI.', 'danger')
+
+    except Exception as e:
+        flash(f'Erro ao inserir Nota de Empenho: {e}', 'danger')
 
     return redirect(url_for('financeiro.diarias_detalhe', id=id))

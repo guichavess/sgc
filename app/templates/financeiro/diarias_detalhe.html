@@ -473,6 +473,188 @@
 </div>
 {% endif %}
 
+{# ================================================================ #}
+{# Seção Autorização SCDP — visível para tipos 2 e 3 (passagens)   #}
+{# ================================================================ #}
+{% if itinerario.tipo_solicitacao_id in [2, 3] %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-3" style="background-color: #5C6BC0;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-file-earmark-pdf me-2"></i>Autorização SCDP
+        </h5>
+    </div>
+    <div class="card-body">
+
+        {% if itinerario.sei_id_autorizacao_scdp %}
+            {# SCDP já enviado - modo visualização #}
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Autorização SCDP enviada ao SEI!</strong>
+                    {% if itinerario.sei_autorizacao_scdp_formatado %}
+                        <br><small class="text-muted">Documento SEI: {{ itinerario.sei_autorizacao_scdp_formatado }}</small>
+                    {% endif %}
+                </div>
+            </div>
+
+        {% elif current_user.tem_permissao('financeiro', 'criar') %}
+            {# Formulário de upload #}
+            <p class="text-muted small mb-3">
+                <i class="bi bi-info-circle me-1"></i>
+                Faça o upload do PDF "Autorização SOLICITAÇÃO APROVADA SCDP" para incluí-lo no processo SEI.
+            </p>
+            <form method="POST" action="{{ url_for('financeiro.upload_autorizacao_scdp', id=itinerario.id) }}"
+                  enctype="multipart/form-data" id="formSCDP">
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label for="numero_scdp" class="form-label fw-bold">
+                            <i class="bi bi-hash me-1"></i>Número SCDP
+                        </label>
+                        <input type="text" class="form-control" id="numero_scdp" name="numero_scdp"
+                               placeholder="Ex: 0020210439">
+                        <div class="form-text">Código da solicitação aprovada no SCDP.</div>
+                    </div>
+                    <div class="col-md-7">
+                        <label for="arquivo_scdp" class="form-label fw-bold">
+                            <i class="bi bi-file-pdf me-1"></i>Arquivo PDF <span class="text-danger">*</span>
+                        </label>
+                        <input type="file" class="form-control" id="arquivo_scdp" name="arquivo_scdp"
+                               accept=".pdf" required>
+                        <div class="form-text">O PDF será enviado ao processo SEI automaticamente.</div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary fw-bold px-4" id="btnEnviarSCDP">
+                        <i class="bi bi-cloud-upload me-1"></i> Enviar Autorização SCDP
+                    </button>
+                </div>
+            </form>
+
+        {% else %}
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="bi bi-info-circle fs-4 me-3"></i>
+                <div>
+                    <strong>Aguardando upload da Autorização SCDP.</strong>
+                    <p class="mb-0 mt-1 small text-muted">
+                        O documento será enviado por um usuário da CCDP com permissão.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
+{# ================================================================ #}
+{# Seção Nota de Empenho — visível após NR e Quadro preenchidos    #}
+{# ================================================================ #}
+{% if itinerario.nota_reserva and itinerario.quadro_ug %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-3" style="background-color: #C62828;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-file-earmark-text me-2"></i>Nota de Empenho
+        </h5>
+    </div>
+    <div class="card-body">
+
+        {% if itinerario.sei_id_nota_empenho %}
+            {# NE já inserida - modo visualização #}
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Nota de Empenho inserida!</strong>
+                    <div class="mt-1">
+                        <span class="fw-bold fs-5">{{ itinerario.nota_empenho_codigo }}</span>
+                        {% if itinerario.sei_nota_empenho_formatado %}
+                            <br><small class="text-muted">Documento SEI: {{ itinerario.sei_nota_empenho_formatado }}</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+        {% elif current_user.tem_permissao('financeiro', 'criar') and itinerario.sei_id_procedimento %}
+            {# Formulário de inserção #}
+            <form method="POST" action="{{ url_for('financeiro.inserir_nota_empenho', id=itinerario.id) }}" id="formNE">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="nota_empenho_codigo" class="form-label fw-bold">
+                            <i class="bi bi-hash me-1"></i>Código da NE <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="nota_empenho_codigo" name="nota_empenho_codigo"
+                               placeholder="Ex: 2026NE00456" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="ne_valor" class="form-label fw-bold">
+                            <i class="bi bi-currency-dollar me-1"></i>Valor
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="text" class="form-control" id="ne_valor" name="ne_valor"
+                                   placeholder="0,00"
+                                   value="{{ '{:,.2f}'.format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') if itinerario.valor_total else '' }}">
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="ne_natureza_despesa" class="form-label fw-bold">Natureza da Despesa</label>
+                        <input type="text" class="form-control" id="ne_natureza_despesa" name="ne_natureza_despesa"
+                               placeholder="Ex: 3.3.9.0.14"
+                               value="{{ itinerario.quadro_natureza_despesa or '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="ne_fonte_recursos" class="form-label fw-bold">Fonte de Recursos</label>
+                        <input type="text" class="form-control" id="ne_fonte_recursos" name="ne_fonte_recursos"
+                               placeholder="Ex: 5000000000"
+                               value="{{ itinerario.quadro_fonte_recursos or '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="ne_favorecido" class="form-label fw-bold">Favorecido</label>
+                        <input type="text" class="form-control" id="ne_favorecido" name="ne_favorecido"
+                               placeholder="Nome do favorecido">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="ne_objeto" class="form-label fw-bold">Objeto</label>
+                        <input type="text" class="form-control" id="ne_objeto" name="ne_objeto"
+                               placeholder="Ex: Pagamento de diárias">
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-3 py-2 small">
+                    <i class="bi bi-info-circle me-1"></i>
+                    O documento NE (idSerie 419) será gerado automaticamente no processo SEI.
+                    Os campos Natureza e Fonte são pré-preenchidos a partir do Quadro Orçamentário.
+                </div>
+
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-danger fw-bold px-4" id="btnInserirNE">
+                        <i class="bi bi-save me-1"></i> Inserir Nota de Empenho
+                    </button>
+                    <a href="{{ url_for('financeiro.diarias_lista') }}" class="btn btn-outline-secondary ms-2">
+                        Cancelar
+                    </a>
+                </div>
+            </form>
+
+        {% else %}
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="bi bi-info-circle fs-4 me-3"></i>
+                <div>
+                    <strong>Aguardando inserção da Nota de Empenho.</strong>
+                    <p class="mb-0 mt-1 small text-muted">
+                        {% if not itinerario.sei_id_procedimento %}
+                            Não há processo SEI vinculado a esta solicitação.
+                        {% else %}
+                            A NE será inserida por um usuário com permissão.
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
 {% block extra_js %}
 <script>
     // Previne duplo-clique no submit da NR
@@ -517,6 +699,20 @@
         saldoNr.addEventListener('input', calcular);
         valorDespesa.addEventListener('input', calcular);
     })();
+
+    // Previne duplo-clique no submit SCDP
+    document.getElementById('formSCDP')?.addEventListener('submit', function() {
+        const btn = document.getElementById('btnEnviarSCDP');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando...';
+    });
+
+    // Previne duplo-clique no submit NE
+    document.getElementById('formNE')?.addEventListener('submit', function() {
+        const btn = document.getElementById('btnInserirNE');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando...';
+    });
 </script>
 {% endblock %}
 {% endblock %}

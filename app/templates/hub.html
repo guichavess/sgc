@@ -129,6 +129,14 @@
         box-shadow: 0 8px 20px rgba(224, 122, 36, 0.4);
     }
 
+    .module-icon-cgfr {
+        background: linear-gradient(135deg, #DC2626, #EF4444);
+    }
+
+    .module-card-cgfr:hover .module-icon {
+        box-shadow: 0 8px 20px rgba(220, 38, 38, 0.4);
+    }
+
     .user-greeting {
         text-align: center;
         margin-bottom: 2rem;
@@ -253,6 +261,21 @@
                 <h3 class="module-name">Dashboards</h3>
                 <p class="module-description">
                     Visão consolidada com gráficos e indicadores de desempenho
+                </p>
+            </a>
+        </div>
+        {% endif %}
+
+        {# Modulo CGFR (visivel apenas para administradores) #}
+        {% if current_user.is_admin %}
+        <div class="col-md-4">
+            <a href="{{ url_for('cgfr.dashboard') }}" class="module-card module-card-cgfr">
+                <div class="module-icon module-icon-cgfr">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                </div>
+                <h3 class="module-name">CGFR</h3>
+                <p class="module-description">
+                    Consultoria de Gestao Financeira e classificacao de processos
                 </p>
             </a>
         </div>

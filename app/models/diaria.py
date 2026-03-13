@@ -48,17 +48,18 @@ class Orgao(db.Model):
 
 
 class Setor(db.Model):
-    """Setores (tabela já existente)."""
+    """Setores (tabela já existente, atualizada com sigla)."""
     __tablename__ = 'setor'
 
     identidade = db.Column(db.BigInteger, primary_key=True)
     nome = db.Column(db.Text)
     idorgao = db.Column(db.BigInteger, db.ForeignKey('orgao.idorgao'))
+    sigla = db.Column(db.String(50))
 
     orgao = db.relationship('Orgao', backref='setores', lazy='joined')
 
     def __repr__(self):
-        return f'<Setor {self.identidade} - {self.nome}>'
+        return f'<Setor {self.identidade} - {self.sigla or self.nome}>'
 
 
 # ── Tabelas do módulo Diárias (prefixo diarias_) ───────────────────────────
@@ -243,6 +244,15 @@ class DiariasItinerario(db.Model):
     sei_escolha_passagens_formatado = db.Column(db.String(50), nullable=True)
     sei_id_memorando_cotacoes = db.Column(db.String(50), nullable=True)      # ID do 2º memorando (cotações)
     sei_memorando_cotacoes_formatado = db.Column(db.String(50), nullable=True)  # Número formatado
+
+    # Autorização SCDP (PDF externo, inserido pelo CCDP no financeiro)
+    sei_id_autorizacao_scdp = db.Column(db.String(50), nullable=True)
+    sei_autorizacao_scdp_formatado = db.Column(db.String(50), nullable=True)
+
+    # Nota de Empenho (documento SEI gerado pelo financeiro, idSerie 419)
+    nota_empenho_codigo = db.Column(db.String(50), nullable=True)
+    sei_id_nota_empenho = db.Column(db.String(50), nullable=True)
+    sei_nota_empenho_formatado = db.Column(db.String(50), nullable=True)
 
     # Timeline / Etapa atual
     etapa_atual_id = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), default=1)
@@ -500,3 +510,119 @@ class DiariasCotacaoVoo(db.Model):
         if self.tem_conexao and self.destino_conexao:
             rota += f' > {self.destino_conexao}'
         return rota
+
+
+# ── Tabelas de Controle de Diárias (acumulado + prestação de contas) ──────
+
+class DiariasControleViagem(db.Model):
+    """Viagem (nível processo) — agrupa servidores de um mesmo processo SEI."""
+    __tablename__ = 'diarias_controle_viagens'
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    processo = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    itinerario_id = db.Column(db.Integer, db.ForeignKey('diarias_itinerario.id'), nullable=True)
+    setor_id = db.Column(db.BigInteger, db.ForeignKey('setor.identidade'), nullable=True)
+    origem = db.Column(db.String(100))         # Nome texto (histórico/display)
+    destino = db.Column(db.String(255))        # Nome texto (histórico/display)
+    origem_id = db.Column(db.Integer, nullable=True)   # cod_ibge: municipio (estadual) ou estado (nacional)
+    destino_id = db.Column(db.Integer, nullable=True)  # cod_ibge: municipio (estadual) ou estado (nacional)
+    tipo_viagem = db.Column(db.SmallInteger, nullable=True)  # 1=Estadual, 2=Nacional
+    data_inicio = db.Column(db.Date, nullable=False, index=True)
+    data_termino = db.Column(db.Date, nullable=False)
+    status_viagem = db.Column(db.SmallInteger, default=1)  # 1=Realizada, 2=Cancelada
+    observacao = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.TIMESTAMP, default=datetime.now)
+
+    # Relationships
+    itinerario = db.relationship('DiariasItinerario', lazy='select',
+                                 backref=db.backref('controle_viagem', uselist=False))
+    setor = db.relationship('Setor', lazy='joined')
+    servidores = db.relationship('DiariasControleServidor', back_populates='viagem',
+                                 lazy='select', cascade='all, delete-orphan')
+
+    # Status / Tipo constants
+    STATUS_REALIZADA = 1
+    STATUS_CANCELADA = 2
+    TIPO_ESTADUAL = 1
+    TIPO_NACIONAL = 2
+
+    def __repr__(self):
+        return f'<DiariasControleViagem {self.id} - {self.processo}>'
+
+    @property
+    def origem_nome(self):
+        """Retorna nome da origem: resolve cod_ibge ou retorna texto histórico."""
+        if self.origem_id:
+            if self.tipo_viagem == self.TIPO_ESTADUAL:
+                mun = Municipio.query.get(self.origem_id)
+                return mun.nome if mun else self.origem
+            else:
+                est = Estado.query.get(self.origem_id)
+                return est.nome if est else self.origem
+        return self.origem
+
+    @property
+    def destino_nome(self):
+        """Retorna nome do destino: resolve cod_ibge ou retorna texto histórico."""
+        if self.destino_id:
+            if self.tipo_viagem == self.TIPO_ESTADUAL:
+                mun = Municipio.query.get(self.destino_id)
+                return mun.nome if mun else self.destino
+            else:
+                est = Estado.query.get(self.destino_id)
+                return est.nome if est else self.destino
+        return self.destino
+
+
+class DiariasControleServidor(db.Model):
+    """Servidor em uma viagem — dados financeiros individuais."""
+    __tablename__ = 'diarias_controle_servidores'
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    viagem_id = db.Column(db.BigInteger, db.ForeignKey('diarias_controle_viagens.id'), nullable=False, index=True)
+    cpf = db.Column(db.String(14), nullable=False, index=True)
+    nome = db.Column(db.String(255))
+    vinculo = db.Column(db.String(50))
+    qtd_diarias = db.Column(db.Numeric(4, 1), nullable=False, default=0)
+    valor_unitario = db.Column(db.Numeric(10, 2))
+    valor_total = db.Column(db.Numeric(10, 2))
+    natureza_despesa = db.Column(db.String(10))
+    sub_item = db.Column(db.String(10))
+    fonte_recursos = db.Column(db.String(20))
+    baixa_np = db.Column(db.String(50), nullable=True)
+    sistema_scdp = db.Column(db.String(20), nullable=True)
+
+    # Relationships
+    viagem = db.relationship('DiariasControleViagem', back_populates='servidores')
+    prestacao = db.relationship('DiariasControlePrestacao', uselist=False,
+                                back_populates='servidor', lazy='joined',
+                                cascade='all, delete-orphan')
+
+    def __repr__(self):
+        return f'<DiariasControleServidor {self.id} - {self.cpf} - {self.nome}>'
+
+
+class DiariasControlePrestacao(db.Model):
+    """Prestação de contas de um servidor em uma viagem."""
+    __tablename__ = 'diarias_controle_prestacao'
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    servidor_id = db.Column(db.BigInteger, db.ForeignKey('diarias_controle_servidores.id'),
+                            nullable=False, unique=True, index=True)
+    status = db.Column(db.SmallInteger, default=2)  # 1=Entregue, 2=Pendente
+    data_entrega = db.Column(db.Date, nullable=True)
+    relatorio = db.Column(db.SmallInteger, nullable=True)  # 1=Aprovado, 2=Reprovado, 3=Pendente
+    ano_referencia = db.Column(db.SmallInteger, nullable=True)
+
+    # Relationships
+    servidor = db.relationship('DiariasControleServidor', back_populates='prestacao')
+
+    # Status constants
+    STATUS_ENTREGUE = 1
+    STATUS_PENDENTE = 2
+    RELATORIO_APROVADO = 1
+    RELATORIO_REPROVADO = 2
+    RELATORIO_PENDENTE = 3
+
+    def __repr__(self):
+        return f'<DiariasControlePrestacao {self.id} - status={self.status}>'

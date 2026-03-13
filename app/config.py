@@ -70,6 +70,16 @@ class Config:
     SGA_API_HASHKEY = os.getenv('SGA_API_HASHKEY', '')
 
     # ==========================================================================
+    # TRINO DATA LAKE (CGFR - leitura do Data Lake SEI)
+    # ==========================================================================
+    TRINO_HOST = os.getenv('TRINO_HOST', '10.0.122.75')
+    TRINO_PORT = int(os.getenv('TRINO_PORT', '8443'))
+    TRINO_USER = os.getenv('TRINO_USER', '')
+    TRINO_PASSWORD = os.getenv('TRINO_PASSWORD', '')
+    TRINO_CATALOG = os.getenv('TRINO_CATALOG', 'iceberg')
+    TRINO_SCHEMA = os.getenv('TRINO_SCHEMA', 'sei')
+
+    # ==========================================================================
     # LOGGING
     # ==========================================================================
     LOG_DIR = os.getenv('LOG_DIR', 'logs')

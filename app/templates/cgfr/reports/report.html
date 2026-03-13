@@ -1,0 +1,117 @@
+{% extends "cgfr/base_cgfr.html" %}
+
+{% block title %}CGFR - Relatorio{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-bar-graph me-2"></i>Relatorio CGFR</h4>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('cgfr.report_pdf', **filtros) }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-printer me-1"></i> Imprimir
+            </a>
+            <a href="{{ url_for('cgfr.api_export_excel', **filtros) }}" class="btn btn-sm btn-outline-success">
+                <i class="bi bi-file-earmark-excel me-1"></i> Excel
+            </a>
+        </div>
+    </div>
+
+    {# Resumo #}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm text-center p-3">
+                <span class="text-muted small">Total Processos</span>
+                <h4 class="fw-bold mb-0">{{ dados.total_processos }}</h4>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm text-center p-3">
+                <span class="text-muted small">Grupos (Naturezas)</span>
+                <h4 class="fw-bold mb-0">{{ dados.grupos | length }}</h4>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm text-center p-3">
+                <span class="text-muted small">Total Solicitado</span>
+                <h4 class="fw-bold mb-0 text-primary">R$ {{ "%.2f"|format(dados.total_solicitado) }}</h4>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm text-center p-3">
+                <span class="text-muted small">Total Aprovado</span>
+                <h4 class="fw-bold mb-0 text-success">R$ {{ "%.2f"|format(dados.total_aprovado) }}</h4>
+            </div>
+        </div>
+    </div>
+
+    {# Grupos por natureza #}
+    {% for grupo in dados.grupos %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between">
+            <h6 class="mb-0 fw-bold">
+                <i class="bi bi-tag-fill me-2 text-danger"></i>{{ grupo.natureza }}
+            </h6>
+            <span class="badge bg-secondary">{{ grupo.processos | length }} processo(s)</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Processo</th>
+                            <th>Tipo</th>
+                            <th>Fonte</th>
+                            <th>Acao</th>
+                            <th>Fornecedor</th>
+                            <th class="text-end">Valor Solic.</th>
+                            <th class="text-end">Valor Aprov.</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in grupo.processos %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('cgfr.detalhes', protocolo=p.processo_formatado) }}"
+                                   class="text-primary fw-semibold">{{ p.processo_formatado }}</a>
+                            </td>
+                            <td>{{ p.tipo_processo or '' }}</td>
+                            <td>{{ p.fonte.descricao if p.fonte else '' }}</td>
+                            <td>{{ p.acao.acao if p.acao else '' }}</td>
+                            <td>{{ p.fornecedor or '' }}</td>
+                            <td class="text-end">{{ "R$ %.2f"|format(p.valor_solicitado) if p.valor_solicitado else '' }}</td>
+                            <td class="text-end">{{ "R$ %.2f"|format(p.valor_aprovado) if p.valor_aprovado else '' }}</td>
+                            <td>
+                                <span class="badge {{ 'cgfr-badge-classificado' if p.classificado else 'cgfr-badge-pendente' }}">
+                                    {{ p.status_classificacao }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr class="fw-bold">
+                            <td colspan="5">Subtotal</td>
+                            <td class="text-end">R$ {{ "%.2f"|format(grupo.subtotal_solicitado) }}</td>
+                            <td class="text-end">R$ {{ "%.2f"|format(grupo.subtotal_aprovado) }}</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if not dados.grupos %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted"></i>
+            <p class="text-muted mt-2">Nenhum processo encontrado.</p>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
