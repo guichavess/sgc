@@ -24,7 +24,11 @@ DB_USER = os.getenv('DB_USER', 'root')
 DB_PASS = os.getenv('DB_PASS', 'root')
 DB_NAME = os.getenv('DB_NAME', 'sgc')
 
-CSV_PATH = r'C:\Users\guilh\OneDrive\Documentos\setores.csv'
+# Procura setores.csv na raiz do projeto, senão fallback Windows
+_PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+CSV_PATH = os.path.join(_PROJECT_ROOT, 'setores.csv')
+if not os.path.exists(CSV_PATH):
+    CSV_PATH = r'C:\Users\guilh\OneDrive\Documentos\setores.csv'
 
 DRY_RUN = '--executar' not in sys.argv
 
