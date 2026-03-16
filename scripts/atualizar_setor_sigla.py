@@ -1,7 +1,7 @@
 """
 Script de migração: Atualiza tabela setor.
 
-1. Adiciona coluna 'sigla' VARCHAR(20) se não existir
+1. Adiciona coluna 'sigla' VARCHAR(100) se não existir
 2. Atualiza siglas dos setores existentes (match por identidade)
 3. Insere novos setores do CSV que não existem no banco
 
@@ -61,12 +61,12 @@ def run():
     if column_exists(cursor, 'setor', 'sigla'):
         print("\n[1] Coluna 'sigla' já existe. SKIP.")
     else:
-        print("\n[1] Adicionando coluna 'sigla' VARCHAR(20)...")
+        print("\n[1] Adicionando coluna 'sigla' VARCHAR(100)...")
         if not DRY_RUN:
-            cursor.execute("ALTER TABLE setor ADD COLUMN sigla VARCHAR(20) NULL")
+            cursor.execute("ALTER TABLE setor ADD COLUMN sigla VARCHAR(100) NULL")
             print("    OK — coluna adicionada.")
         else:
-            print("    (DRY-RUN) ALTER TABLE setor ADD COLUMN sigla VARCHAR(20) NULL")
+            print("    (DRY-RUN) ALTER TABLE setor ADD COLUMN sigla VARCHAR(100) NULL")
 
     # 2. Ler CSV
     print(f"\n[2] Lendo CSV: {CSV_PATH}")
@@ -115,14 +115,16 @@ def run():
             if len(updates) > 5:
                 print(f"    ... e mais {len(updates) - 5} updates")
 
-    # 6. Executar inserts
+    # 6. Executar inserts (desabilita FK check para órgãos faltantes)
     if inserts:
         print("\n[5] Inserindo novos setores...")
         if not DRY_RUN:
+            cursor.execute("SET FOREIGN_KEY_CHECKS=0")
             cursor.executemany(
                 "INSERT INTO setor (identidade, nome, idorgao, sigla) VALUES (%s, %s, %s, %s)",
                 inserts,
             )
+            cursor.execute("SET FOREIGN_KEY_CHECKS=1")
             print(f"    OK — {cursor.rowcount} linhas inseridas.")
         else:
             for ident, nome, idorgao, sigla in inserts[:5]:
