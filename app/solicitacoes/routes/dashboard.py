@@ -7,7 +7,9 @@ from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from app.solicitacoes.routes import solicitacoes_bp
-from app.models import Solicitacao, Contrato, Etapa, TipoPagamento, StatusEmpenho
+from app.models import Solicitacao, Contrato, Etapa, TipoPagamento, StatusEmpenho, SolicitacaoEmpenho
+from app.models.saldo import SaldoEmpenho
+from app.models.historico import HistoricoMovimentacao
 from app.extensions import db
 from app.repositories import SolicitacaoRepository
 from app.constants import MESES_PT_BR, normalizar_competencia, NUMERO_PARA_MES
@@ -74,6 +76,86 @@ def dashboard():
 
     solicitacoes = pagination.items
 
+    # =========================================================================
+    # PRE-LOAD: buscar dados que as properties N+1 buscam individualmente
+    # Evita dezenas de queries extras por página (saldo, empenho, tempo, natureza)
+    # =========================================================================
+    sol_ids = [s.id for s in solicitacoes]
+
+    # 1) Saldos por (contrato, competência) — usado em saldo_atual_contrato
+    saldos_map = {}  # (cod_contrato, competencia) → SaldoEmpenho
+    if solicitacoes:
+        pares = list({(s.codigo_contrato, s.competencia) for s in solicitacoes if s.competencia})
+        if pares:
+            # Subconsulta para pegar o saldo mais recente por (contrato, competência)
+            sub = db.session.query(
+                SaldoEmpenho.cod_contrato,
+                SaldoEmpenho.competencia,
+                func.max(SaldoEmpenho.data).label('max_data')
+            ).filter(
+                db.tuple_(SaldoEmpenho.cod_contrato, SaldoEmpenho.competencia).in_(pares)
+            ).group_by(SaldoEmpenho.cod_contrato, SaldoEmpenho.competencia).subquery()
+
+            saldos_rows = SaldoEmpenho.query.join(
+                sub,
+                db.and_(
+                    SaldoEmpenho.cod_contrato == sub.c.cod_contrato,
+                    SaldoEmpenho.competencia == sub.c.competencia,
+                    SaldoEmpenho.data == sub.c.max_data,
+                )
+            ).all()
+            for s in saldos_rows:
+                saldos_map[(s.cod_contrato, s.competencia)] = s
+
+    # 2) Valor empenho solicitado — SolicitacaoEmpenho.valor por id_solicitacao
+    empenho_vals = {}
+    if sol_ids:
+        emp_rows = SolicitacaoEmpenho.query.filter(
+            SolicitacaoEmpenho.id_solicitacao.in_(sol_ids)
+        ).all()
+        for e in emp_rows:
+            empenho_vals[e.id_solicitacao] = e.valor
+
+    # 3) Primeira movimentação (para tempo_decorrido_visual em processos abertos)
+    primeiro_hist = {}
+    if sol_ids:
+        sub_hist = db.session.query(
+            HistoricoMovimentacao.id_solicitacao,
+            func.min(HistoricoMovimentacao.data_movimentacao).label('min_data')
+        ).filter(
+            HistoricoMovimentacao.id_solicitacao.in_(sol_ids)
+        ).group_by(HistoricoMovimentacao.id_solicitacao).all()
+        for sol_id, min_data in sub_hist:
+            primeiro_hist[sol_id] = min_data
+
+    # Montar dicts para o template acessar sem N+1
+    saldos_preloaded = {}
+    tempos_preloaded = {}
+    for s in solicitacoes:
+        saldos_preloaded[s.id] = saldos_map.get((s.codigo_contrato, s.competencia))
+
+        # Calcular tempo decorrido visual
+        if s.tempo_total:
+            tempos_preloaded[s.id] = s.tempo_total
+        else:
+            data_inicio_proc = primeiro_hist.get(s.id) or s.data_solicitacao
+            if data_inicio_proc:
+                diff = datetime.now() - data_inicio_proc
+                days = diff.days
+                total_seconds = int(diff.total_seconds())
+                hours = (total_seconds % 86400) // 3600
+                minutes = (total_seconds % 3600) // 60
+                if days > 0:
+                    tempos_preloaded[s.id] = f"{days} dias"
+                elif hours > 0:
+                    tempos_preloaded[s.id] = f"{hours} horas"
+                elif minutes > 0:
+                    tempos_preloaded[s.id] = f"{minutes} min"
+                else:
+                    tempos_preloaded[s.id] = "recentemente"
+            else:
+                tempos_preloaded[s.id] = "--"
+
     # Busca etapas para filtro
     todas_etapas = Etapa.query.order_by(Etapa.ordem).all()
 
@@ -99,27 +181,33 @@ def dashboard():
 
     todas_competencias.sort(key=chave_ordenacao, reverse=True)
 
-    # Contagens para os filtros (competências agrupadas por nome normalizado)
-    contagem_comp_raw = dict(
-        db.session.query(Solicitacao.competencia, func.count(Solicitacao.id))
-        .group_by(Solicitacao.competencia).all()
-    )
+    # Contagens para os filtros — query única retornando todas as dimensões
+    contagem_rows = db.session.query(
+        Solicitacao.competencia,
+        Solicitacao.etapa_atual_id,
+        Solicitacao.id_tipo_pagamento,
+        Solicitacao.status_empenho_id,
+        func.count(Solicitacao.id)
+    ).group_by(
+        Solicitacao.competencia,
+        Solicitacao.etapa_atual_id,
+        Solicitacao.id_tipo_pagamento,
+        Solicitacao.status_empenho_id,
+    ).all()
+
+    contagem_comp_raw = {}
+    contagem_etapas = {}
+    contagem_tipos = {}
+    contagem_status_empenho = {}
+    for comp, etapa, tipo, st_emp, cnt in contagem_rows:
+        contagem_comp_raw[comp] = contagem_comp_raw.get(comp, 0) + cnt
+        contagem_etapas[etapa] = contagem_etapas.get(etapa, 0) + cnt
+        contagem_tipos[tipo] = contagem_tipos.get(tipo, 0) + cnt
+        contagem_status_empenho[st_emp] = contagem_status_empenho.get(st_emp, 0) + cnt
+
     contagem_competencias = {}
     for norm, originais in mapa_comp.items():
         contagem_competencias[norm] = sum(contagem_comp_raw.get(o, 0) for o in originais)
-
-    contagem_etapas = dict(
-        db.session.query(Solicitacao.etapa_atual_id, func.count(Solicitacao.id))
-        .group_by(Solicitacao.etapa_atual_id).all()
-    )
-    contagem_tipos = dict(
-        db.session.query(Solicitacao.id_tipo_pagamento, func.count(Solicitacao.id))
-        .group_by(Solicitacao.id_tipo_pagamento).all()
-    )
-    contagem_status_empenho = dict(
-        db.session.query(Solicitacao.status_empenho_id, func.count(Solicitacao.id))
-        .group_by(Solicitacao.status_empenho_id).all()
-    )
 
     return render_template(
         'solicitacoes/dashboard.html',
@@ -135,5 +223,9 @@ def dashboard():
         contagem_competencias=contagem_competencias,
         contagem_etapas=contagem_etapas,
         contagem_tipos=contagem_tipos,
-        contagem_status_empenho=contagem_status_empenho
+        contagem_status_empenho=contagem_status_empenho,
+        # Dados pré-carregados (evita N+1 no template)
+        saldos_preloaded=saldos_preloaded,
+        empenho_vals=empenho_vals,
+        tempos_preloaded=tempos_preloaded,
     )

@@ -31,8 +31,17 @@ class ProcessoTrinoRepository:
         Returns:
             Dict com dados do processo ou None.
         """
+        import re
+        # Sanitizar: protocolo deve ser apenas dígitos, pontos e barras
+        if not re.match(r'^[\d./ -]+$', protocolo):
+            logger.warning(f'Protocolo com caracteres inválidos: {protocolo}')
+            return None
+
         sql = """
-            SELECT *
+            SELECT protocolo_formatado, tipo_procedimento, tipo_processo,
+                   data_hora_processo, foi_enviado_cgfr, dt_enviado,
+                   foi_recebido_cgfr, dt_recebido, foi_devolvido_cgfr,
+                   dt_devolvido, valor_solicitado
             FROM sei.sei_processo.sei_consolidado_sead_sefaz_cgfr
             WHERE protocolo_formatado = '{}'
             LIMIT 1

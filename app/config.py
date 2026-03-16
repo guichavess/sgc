@@ -28,6 +28,12 @@ class Config:
 
     SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}?charset=utf8mb4"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_size': 20,
+        'max_overflow': 10,
+        'pool_pre_ping': True,
+        'pool_recycle': 3600,
+    }
 
     # ==========================================================================
     # SEI (Sistema Eletrônico de Informações)

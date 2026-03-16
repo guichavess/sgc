@@ -76,12 +76,16 @@ class DiariaService:
             func.sum(DiariasItemItinerario.valor_cargo)
         ).filter_by(id_itinerario=itinerario_id).scalar() or Decimal('0.00')
 
-        # Soma das cotações selecionadas para cada pessoa
-        itens = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario_id).all()
-        soma_cotacoes = Decimal('0.00')
-        for item in itens:
-            if item.cotacao_id and item.cotacao:
-                soma_cotacoes += item.cotacao.valor
+        # Soma das cotações selecionadas para cada pessoa (single query)
+        soma_cotacoes = db.session.query(
+            func.coalesce(func.sum(DiariasCotacao.valor), 0)
+        ).join(
+            DiariasItemItinerario,
+            DiariasItemItinerario.cotacao_id == DiariasCotacao.id
+        ).filter(
+            DiariasItemItinerario.id_itinerario == itinerario_id
+        ).scalar() or Decimal('0.00')
+        soma_cotacoes = Decimal(str(soma_cotacoes))
 
         return soma_valores * Decimal(str(itinerario.qtd_diarias_solicitadas)) + soma_cotacoes
 

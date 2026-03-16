@@ -10,6 +10,10 @@ import time
 import requests as http_requests
 import concurrent.futures
 
+# Session reutilizável para conexões SEI (keep-alive, connection pooling)
+_sei_session = http_requests.Session()
+_sei_session.verify = False
+
 from app.solicitacoes.routes import solicitacoes_bp
 from app.models import (
     Solicitacao, SolicitacaoEmpenho, Contrato,
@@ -316,7 +320,7 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
         resp = None
         for tentativa in range(1, max_tentativas + 1):
             try:
-                resp = http_requests.get(base_url, headers=headers, params=params, timeout=120, verify=False)
+                resp = _sei_session.get(base_url, headers=headers, params=params, timeout=60)
                 break  # sucesso, sai do loop
             except (http_requests.exceptions.SSLError,
                     http_requests.exceptions.ConnectionError) as e_retry:

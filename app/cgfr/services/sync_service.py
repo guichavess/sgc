@@ -44,21 +44,51 @@ class SyncService:
             logger.exception('Erro ao buscar dados do Trino')
             return {'error': str(e), **resultado}
 
+        # Processa em lotes para reduzir round-trips ao MySQL
+        BATCH_SIZE = 500
+        batch = []
+
         for reg in registros:
+            protocolo = reg.get('protocolo_formatado')
+            if not protocolo:
+                resultado['skipped'] += 1
+                continue
             try:
-                protocolo = reg.get('protocolo_formatado')
-                if not protocolo:
-                    resultado['skipped'] += 1
-                    continue
-
                 dados_sync = SyncService._extrair_dados_sync(reg)
+                batch.append(dados_sync)
+            except Exception:
+                logger.exception(f'Erro ao extrair dados {reg.get("protocolo_formatado", "?")}')
+                resultado['errors'] += 1
+                continue
 
-                # INSERT ... ON DUPLICATE KEY UPDATE (apenas colunas sync)
-                # valor_solicitado: atualiza SOMENTE se o campo local estiver NULL
+            if len(batch) >= BATCH_SIZE:
+                SyncService._flush_batch(batch, resultado)
+                batch = []
+
+        if batch:
+            SyncService._flush_batch(batch, resultado)
+
+        try:
+            db.session.commit()
+        except Exception:
+            logger.exception('Erro ao commit da sincronização')
+            db.session.rollback()
+            resultado['errors'] += 1
+
+        logger.info(
+            f'Sync CGFR concluído: {resultado["inserted"]} inseridos, '
+            f'{resultado["updated"]} atualizados, {resultado["errors"]} erros'
+        )
+        return resultado
+
+    @staticmethod
+    def _flush_batch(batch, resultado):
+        """Executa um lote de upserts no MySQL."""
+        for dados_sync in batch:
+            try:
                 update_parts_list = [
                     f'{col} = VALUES({col})' for col in SYNC_COLUMNS if col in dados_sync
                 ]
-                # valor_solicitado condicional: só atualiza se estiver NULL no MySQL
                 if dados_sync.get('valor_solicitado') is not None:
                     update_parts_list.append(
                         'valor_solicitado = COALESCE(valor_solicitado, VALUES(valor_solicitado))'
@@ -77,30 +107,22 @@ class SyncService:
 
                 result = db.session.execute(sql, dados_sync)
 
-                # rowcount: 1 = inserted, 2 = updated, 0 = no change
                 if result.rowcount == 1:
                     resultado['inserted'] += 1
                 elif result.rowcount == 2:
                     resultado['updated'] += 1
                 else:
                     resultado['skipped'] += 1
-
             except Exception:
-                logger.exception(f'Erro ao sincronizar processo {reg.get("protocolo_formatado", "?")}')
+                logger.exception(f'Erro upsert {dados_sync.get("processo_formatado", "?")}')
                 resultado['errors'] += 1
 
+        # Flush intermediário para não acumular tudo na transaction
         try:
-            db.session.commit()
+            db.session.flush()
         except Exception:
-            logger.exception('Erro ao commit da sincronização')
+            logger.exception('Erro no flush intermediário')
             db.session.rollback()
-            resultado['errors'] += 1
-
-        logger.info(
-            f'Sync CGFR concluído: {resultado["inserted"]} inseridos, '
-            f'{resultado["updated"]} atualizados, {resultado["errors"]} erros'
-        )
-        return resultado
 
     @staticmethod
     def _fmt_datetime(dt):

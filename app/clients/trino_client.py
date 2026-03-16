@@ -65,7 +65,10 @@ def fetch_processos_cgfr(limit=5000):
         Lista de dicts com dados dos processos.
     """
     sql = f"""
-        SELECT *
+        SELECT protocolo_formatado, tipo_procedimento, tipo_processo,
+               data_hora_processo, foi_enviado_cgfr, dt_enviado,
+               foi_recebido_cgfr, dt_recebido, foi_devolvido_cgfr,
+               dt_devolvido, valor_solicitado
         FROM sei.sei_processo.sei_consolidado_sead_sefaz_cgfr
         LIMIT {int(limit)}
     """

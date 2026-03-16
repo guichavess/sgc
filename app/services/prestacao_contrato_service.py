@@ -461,6 +461,14 @@ class PrestacaoContratoService:
         vinculacoes = query.all()
         resultado = []
 
+        # Batch: pré-carregar todos os CatmatItem necessários de uma vez
+        from app.models.catmat import CatmatItem as CatmatItemModel
+        catmat_ids = {v.catmat_item_id for v in vinculacoes if v.catmat_item_id and v.tipo == 'M'}
+        catmat_map = {}
+        if catmat_ids:
+            items = CatmatItemModel.query.filter(CatmatItemModel.id.in_(catmat_ids)).all()
+            catmat_map = {i.id: i for i in items}
+
         for v in vinculacoes:
             item_data = {
                 'vinculacao_id': v.id,
@@ -485,9 +493,7 @@ class PrestacaoContratoService:
                     item_data['item_id'] = v.catserv_servico_id
                     item_data['codigo'] = v.catserv_servico_id
                 elif v.tipo == 'M' and v.catmat_item_id:
-                    # catmat_item_id armazena catmat_itens.id
-                    from app.models.catmat import CatmatItem as CatmatItemModel
-                    item_mat = db.session.get(CatmatItemModel, v.catmat_item_id)
+                    item_mat = catmat_map.get(v.catmat_item_id)
                     item_data['item_id'] = item_mat.id if item_mat else v.catmat_item_id
                     item_data['codigo'] = item_mat.codigo if item_mat else v.catmat_item_id
                 else:
@@ -503,9 +509,7 @@ class PrestacaoContratoService:
                     item_data['catserv_servico_id'] = v.servico.codigo_servico
                     item_data['catmat_item_id'] = None
                 elif v.tipo == 'M' and v.catmat_item_id:
-                    # catmat_item_id armazena catmat_itens.id
-                    from app.models.catmat import CatmatItem as CatmatItemModel
-                    item_mat = db.session.get(CatmatItemModel, v.catmat_item_id)
+                    item_mat = catmat_map.get(v.catmat_item_id)
                     if item_mat:
                         item_data['item_id'] = item_mat.id
                         item_data['codigo'] = item_mat.codigo
@@ -523,9 +527,7 @@ class PrestacaoContratoService:
             if v.tipo == 'S' and v.servico:
                 item_data['associacao'] = f'{v.servico.codigo_servico} - {v.servico.nome}'
             elif v.tipo == 'M' and v.catmat_item_id:
-                # catmat_item_id armazena catmat_itens.id
-                from app.models.catmat import CatmatItem as CatmatItemModel
-                item_mat = db.session.get(CatmatItemModel, v.catmat_item_id)
+                item_mat = catmat_map.get(v.catmat_item_id)
                 if item_mat:
                     item_data['associacao'] = f'{item_mat.codigo} - {item_mat.descricao}'
 
@@ -877,11 +879,14 @@ class PrestacaoContratoService:
         Salva a divisão do saldo global por itens vinculados.
         itens_valores: dict {item_vinculado_id: valor_float}
         """
+        # Batch-load existing records to avoid N+1
+        existentes = SaldoContratoItem.query.filter_by(
+            saldo_contrato_id=saldo_id
+        ).all()
+        existente_map = {e.item_vinculado_id: e for e in existentes}
+
         for item_id, valor in itens_valores.items():
-            existente = SaldoContratoItem.query.filter_by(
-                saldo_contrato_id=saldo_id,
-                item_vinculado_id=item_id
-            ).first()
+            existente = existente_map.get(item_id)
             if existente:
                 existente.valor = valor
             else:
@@ -953,17 +958,27 @@ class PrestacaoContratoService:
     def listar_solicitacoes_contrato(codigo_contrato):
         """Busca solicitações de pagamento vinculadas ao contrato."""
         from app.models.solicitacao import Solicitacao, SolicitacaoEmpenho
+        from sqlalchemy.orm import joinedload
 
         solicitacoes = Solicitacao.query.filter_by(
             codigo_contrato=str(codigo_contrato)
+        ).options(
+            joinedload(Solicitacao.etapa),
         ).order_by(Solicitacao.data_solicitacao.desc()).all()
+
+        # Batch: buscar todos os empenhos de uma vez
+        sol_ids = [s.id for s in solicitacoes]
+        empenho_map = {}
+        if sol_ids:
+            empenhos = SolicitacaoEmpenho.query.filter(
+                SolicitacaoEmpenho.id_solicitacao.in_(sol_ids)
+            ).all()
+            for e in empenhos:
+                empenho_map[e.id_solicitacao] = e
 
         resultado = []
         for sol in solicitacoes:
-            # Buscar empenho vinculado
-            empenho = SolicitacaoEmpenho.query.filter_by(
-                id_solicitacao=sol.id
-            ).first()
+            empenho = empenho_map.get(sol.id)
 
             resultado.append({
                 'id': sol.id,

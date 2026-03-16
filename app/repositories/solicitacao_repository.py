@@ -4,6 +4,7 @@ Repositório de Solicitações.
 from typing import List, Optional
 from datetime import datetime
 from sqlalchemy import or_, func
+from sqlalchemy.orm import joinedload, subqueryload
 
 from app.repositories.base import BaseRepository
 from app.models import Solicitacao, Contrato, Etapa, HistoricoMovimentacao
@@ -47,7 +48,12 @@ class SolicitacaoRepository(BaseRepository[Solicitacao]):
         per_page: int = 20
     ):
         """Lista solicitações com múltiplos filtros."""
-        query = cls.model.query.join(Contrato)
+        query = cls.model.query.join(Contrato).options(
+            joinedload(cls.model.contrato),
+            joinedload(cls.model.etapa),
+            joinedload(cls.model.status_empenho),
+            joinedload(cls.model.tipo_pagamento),
+        )
 
         # Busca textual (contratado, protocolo, código contrato, descrição)
         if busca:
@@ -174,6 +180,9 @@ class SolicitacaoRepository(BaseRepository[Solicitacao]):
 
         return cls.model.query.join(
             Contrato
+        ).options(
+            joinedload(cls.model.contrato),
+            joinedload(cls.model.etapa),
         ).filter(
             cls.model.id.in_(subquery)
         ).order_by(

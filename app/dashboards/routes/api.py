@@ -93,15 +93,24 @@ def api_top_contratos_empenhado():
     ).order_by(func.sum(vlr_calc).desc()
     ).limit(10).all()
 
+    # Batch: buscar todos os contratos de uma vez
+    cod_list = [str(c) for c, _ in result if c]
+    contratos_map = {}
+    if cod_list:
+        all_contratos = Contrato.query.filter(
+            func.replace(func.replace(Contrato.codigo, '.', ''), '/', '').in_(cod_list)
+        ).all()
+        for c in all_contratos:
+            key = c.codigo.replace('.', '').replace('/', '')
+            contratos_map[key] = c
+
     categories = []
     values = []
     for cod_contrato, total in result:
         if not cod_contrato:
             continue
         cod_str = str(cod_contrato)
-        contrato = Contrato.query.filter(
-            func.replace(func.replace(Contrato.codigo, '.', ''), '/', '') == cod_str
-        ).first()
+        contrato = contratos_map.get(cod_str)
         nome = contrato.nomeContratadoResumido if contrato else f'Contrato {cod_contrato}'
         categories.append((nome or f'Contrato {cod_contrato}')[:35])
         values.append(round(float(total), 2))
@@ -144,39 +153,31 @@ def api_tempo_medio_etapa():
     etapa_map = {e.id: (e.alias or e.nome) for e in etapas}
     etapa_ordem = {e.id: e.ordem for e in etapas}
 
-    # Calcular tempo medio por etapa via historico
-    # Agrupa movimentacoes por solicitacao, calcula diff entre entrada e saida de cada etapa
-    subq = db.session.query(
-        HistoricoMovimentacao.id_solicitacao,
-        HistoricoMovimentacao.id_etapa_nova,
-        HistoricoMovimentacao.data_movimentacao,
-    ).order_by(
-        HistoricoMovimentacao.id_solicitacao,
-        HistoricoMovimentacao.data_movimentacao,
-    ).all()
-
-    # Agrupar por solicitacao
-    from collections import defaultdict
-    sol_movs = defaultdict(list)
-    for id_sol, id_etapa, data_mov in subq:
-        sol_movs[id_sol].append((id_etapa, data_mov))
-
-    # Calcular tempo por etapa
-    etapa_tempos = defaultdict(list)
-    for id_sol, movs in sol_movs.items():
-        for i, (id_etapa, data_entrada) in enumerate(movs):
-            if i + 1 < len(movs):
-                _, data_saida = movs[i + 1]
-                dias = (data_saida - data_entrada).total_seconds() / 86400
-                if dias >= 0:
-                    etapa_tempos[id_etapa].append(dias)
+    # Calcular tempo médio por etapa usando SQL com LEAD window function
+    # Subquery: pega a data da próxima movimentação por solicitação
+    from sqlalchemy import text
+    tempo_sql = text("""
+        SELECT id_etapa_nova AS etapa_id,
+               AVG(TIMESTAMPDIFF(SECOND, data_movimentacao, prox_data)) / 86400 AS media_dias
+        FROM (
+            SELECT id_etapa_nova, data_movimentacao,
+                   LEAD(data_movimentacao) OVER (
+                       PARTITION BY id_solicitacao ORDER BY data_movimentacao
+                   ) AS prox_data
+            FROM sis_historico_movimentacoes
+        ) sub
+        WHERE prox_data IS NOT NULL
+          AND prox_data >= data_movimentacao
+        GROUP BY id_etapa_nova
+    """)
+    tempo_result = db.session.execute(tempo_sql).fetchall()
+    etapa_tempos = {int(row[0]): float(row[1]) for row in tempo_result if row[1] is not None}
 
     categories = []
     data = []
     for etapa_id in sorted(etapa_tempos.keys(), key=lambda x: etapa_ordem.get(x, 999)):
-        tempos = etapa_tempos[etapa_id]
-        if tempos:
-            media = sum(tempos) / len(tempos)
+        media = etapa_tempos[etapa_id]
+        if media > 0:
             nome = etapa_map.get(etapa_id, f'Etapa {etapa_id}')
             categories.append(nome)
             data.append(round(media, 1))
@@ -240,6 +241,38 @@ def api_empenhado_vs_liquidado():
     ).order_by(func.sum(vlr_calc).desc()
     ).limit(15).all()
 
+    # Batch: buscar contratos e liquidações de uma vez
+    cod_list = [str(c) for c, _ in top_contratos if c]
+
+    # Contratos em batch
+    contratos_map = {}
+    if cod_list:
+        all_contratos = Contrato.query.filter(
+            func.replace(func.replace(Contrato.codigo, '.', ''), '/', '').in_(cod_list)
+        ).all()
+        for c in all_contratos:
+            contratos_map[c.codigo.replace('.', '').replace('/', '')] = c
+
+    # Liquidações em batch (uma query para todos os contratos)
+    vlr_liq = case(
+        (Liquidacao.statusDocumento == 'ANULADO', Liquidacao.valor * -1),
+        else_=Liquidacao.valor
+    )
+    liq_map = {}
+    if cod_list:
+        liq_rows = db.session.query(
+            Liquidacao.codContrato,
+            func.sum(vlr_liq).label('total')
+        ).filter(
+            Liquidacao.codigoUG == UG_CODE,
+            Liquidacao.codContrato.in_(cod_list),
+            Liquidacao.statusDocumento.in_(['CONTABILIZADO', 'ANULADO']),
+            Liquidacao.dataEmissao >= date(ano, 1, 1),
+            Liquidacao.dataEmissao <= date(ano, 12, 31),
+        ).group_by(Liquidacao.codContrato).all()
+        for cod, total in liq_rows:
+            liq_map[str(cod)] = float(total or 0)
+
     categories = []
     empenhados = []
     liquidados = []
@@ -248,27 +281,12 @@ def api_empenhado_vs_liquidado():
         if not cod_contrato:
             continue
         cod_str = str(cod_contrato)
-        contrato = Contrato.query.filter(
-            func.replace(func.replace(Contrato.codigo, '.', ''), '/', '') == cod_str
-        ).first()
+        contrato = contratos_map.get(cod_str)
         nome = (contrato.nomeContratadoResumido if contrato else f'Contrato {cod_contrato}') or ''
-
-        # Liquidado para o mesmo contrato
-        vlr_liq = case(
-            (Liquidacao.statusDocumento == 'ANULADO', Liquidacao.valor * -1),
-            else_=Liquidacao.valor
-        )
-        total_liq = db.session.query(func.sum(vlr_liq)).filter(
-            Liquidacao.codigoUG == UG_CODE,
-            Liquidacao.codContrato == cod_contrato,
-            Liquidacao.statusDocumento.in_(['CONTABILIZADO', 'ANULADO']),
-            Liquidacao.dataEmissao >= date(ano, 1, 1),
-            Liquidacao.dataEmissao <= date(ano, 12, 31),
-        ).scalar()
 
         categories.append(nome[:25])
         empenhados.append(round(float(total_emp), 2))
-        liquidados.append(round(float(total_liq or 0), 2))
+        liquidados.append(round(float(liq_map.get(cod_str, 0)), 2))
 
     return jsonify({
         'categories': categories,
@@ -336,6 +354,36 @@ def api_saldo_por_contrato():
     ).order_by(func.sum(vlr_emp).desc()
     ).limit(15).all()
 
+    # Batch: buscar contratos e liquidações de uma vez
+    cod_list = [str(c) for c, _ in top_contratos if c]
+
+    contratos_map = {}
+    if cod_list:
+        all_contratos = Contrato.query.filter(
+            func.replace(func.replace(Contrato.codigo, '.', ''), '/', '').in_(cod_list)
+        ).all()
+        for c in all_contratos:
+            contratos_map[c.codigo.replace('.', '').replace('/', '')] = c
+
+    vlr_liq = case(
+        (Liquidacao.statusDocumento == 'ANULADO', Liquidacao.valor * -1),
+        else_=Liquidacao.valor
+    )
+    liq_map = {}
+    if cod_list:
+        liq_rows = db.session.query(
+            Liquidacao.codContrato,
+            func.sum(vlr_liq).label('total')
+        ).filter(
+            Liquidacao.codigoUG == UG_CODE,
+            Liquidacao.codContrato.in_(cod_list),
+            Liquidacao.statusDocumento.in_(['CONTABILIZADO', 'ANULADO']),
+            Liquidacao.dataEmissao >= date(ano, 1, 1),
+            Liquidacao.dataEmissao <= date(ano, 12, 31),
+        ).group_by(Liquidacao.codContrato).all()
+        for cod, total in liq_rows:
+            liq_map[str(cod)] = float(total or 0)
+
     categories = []
     saldos = []
 
@@ -343,24 +391,10 @@ def api_saldo_por_contrato():
         if not cod_contrato:
             continue
         cod_str = str(cod_contrato)
-        contrato = Contrato.query.filter(
-            func.replace(func.replace(Contrato.codigo, '.', ''), '/', '') == cod_str
-        ).first()
+        contrato = contratos_map.get(cod_str)
         nome = (contrato.nomeContratadoResumido if contrato else f'Contrato {cod_contrato}') or ''
 
-        vlr_liq = case(
-            (Liquidacao.statusDocumento == 'ANULADO', Liquidacao.valor * -1),
-            else_=Liquidacao.valor
-        )
-        total_liq = db.session.query(func.sum(vlr_liq)).filter(
-            Liquidacao.codigoUG == UG_CODE,
-            Liquidacao.codContrato == cod_contrato,
-            Liquidacao.statusDocumento.in_(['CONTABILIZADO', 'ANULADO']),
-            Liquidacao.dataEmissao >= date(ano, 1, 1),
-            Liquidacao.dataEmissao <= date(ano, 12, 31),
-        ).scalar()
-
-        saldo = max(0.0, float(total_emp) - float(total_liq or 0))
+        saldo = max(0.0, float(total_emp) - float(liq_map.get(cod_str, 0)))
         categories.append(nome[:25])
         saldos.append(round(saldo, 2))
 

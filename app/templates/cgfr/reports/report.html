@@ -1,117 +1,330 @@
 {% extends "cgfr/base_cgfr.html" %}
 
-{% block title %}CGFR - Relatorio{% endblock %}
+{% block title %}CGFR - Relatorio de Processos{% endblock %}
+
+{% block cgfr_css %}
+<style>
+    .report-institutional-header { border-bottom: 3px solid #1e40af; padding-bottom: 18px; margin-bottom: 20px; }
+    .report-logo { height: 72px; width: auto; object-fit: contain; }
+    .report-logo-secondary { height: 60px; width: auto; object-fit: contain; }
+    .report-orgao-nome { font-size: 1.05rem; font-weight: 700; color: #1e293b; line-height: 1.3; }
+    .report-orgao-secretaria { font-size: 0.88rem; font-weight: 600; color: #1e40af; line-height: 1.3; }
+    .report-orgao-setor { font-size: 0.80rem; font-weight: 500; color: #64748b; line-height: 1.3; }
+    .report-header { border-bottom: 2px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 20px; }
+    .natureza-card { border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+    .natureza-card .card-header { padding: 10px 18px; font-size: 0.85rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+    .natureza-card .card-header .section-subtotals { font-size: 0.75rem; font-weight: 500; opacity: 0.85; }
+    .natureza-card .table { font-size: 0.78rem; margin-bottom: 0; }
+    .natureza-card .table th { font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.02em; font-weight: 600; white-space: normal; padding: 6px; }
+    .natureza-card .table td { white-space: normal; word-wrap: break-word; overflow-wrap: break-word; vertical-align: middle; padding: 5px 6px; line-height: 1.3; }
+    .report-filters-bar { padding: 8px 0; position: relative; z-index: 10; }
+    .report-filters-bar .dropdown .btn { font-size: 0.80rem; font-weight: 500; padding: 4px 10px; border-color: #e2e8f0; color: #64748b; }
+    .report-filters-bar .dropdown .btn:hover { background: #f8fafc; }
+    .report-filters-bar .dropdown .btn.has-filter { border-color: #3b82f6; color: #1e40af; background: #eff6ff; font-weight: 600; }
+    .report-filter-menu { min-width: 240px; max-width: 340px; padding: 10px !important; z-index: 1050; }
+    .report-filter-options { max-height: 220px; overflow-y: auto; margin-top: 4px; }
+    .report-filter-options .form-check { padding: 3px 8px 3px 28px; font-size: 0.80rem; border-radius: 4px; cursor: pointer; margin-bottom: 1px; }
+    .report-filter-options .form-check:hover { background: #f8fafc; }
+    .report-filter-options .form-check-label { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; display: block; }
+    .report-filter-options .filter-select-all { border-bottom: 1px solid #e2e8f0; margin-bottom: 4px; padding-bottom: 5px; font-weight: 600; }
+    .natureza-pagination { font-size: 0.78rem; padding: 8px 16px; background: #f8fafc; }
+    .natureza-pagination .btn { font-size: 0.75rem; padding: 3px 10px; }
+    @media print {
+        nav.navbar, .no-print, footer, #reportFilters { display: none !important; }
+        body, #main-content { background: white !important; margin: 0 !important; padding: 0 !important; max-width: none !important; }
+        .card { border: none !important; box-shadow: none !important; }
+        a { text-decoration: none !important; color: black !important; }
+        tr { page-break-inside: avoid; }
+        .natureza-pagination { display: none !important; }
+        .report-row { display: table-row !important; }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-
-    <div class="d-flex align-items-center justify-content-between mb-4">
-        <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-bar-graph me-2"></i>Relatorio CGFR</h4>
-        <div class="d-flex gap-2">
-            <a href="{{ url_for('cgfr.report_pdf', **filtros) }}" target="_blank" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-printer me-1"></i> Imprimir
-            </a>
-            <a href="{{ url_for('cgfr.api_export_excel', **filtros) }}" class="btn btn-sm btn-outline-success">
-                <i class="bi bi-file-earmark-excel me-1"></i> Excel
-            </a>
+{# Filtros #}
+<div class="card mb-3 no-print" id="reportFilters" style="border-radius: 12px;">
+    <div class="card-body py-3 px-4">
+        <div class="d-flex align-items-center gap-3 flex-wrap mb-3">
+            <form method="GET" action="{{ url_for('cgfr.report') }}" id="reportForm" class="d-flex align-items-center gap-3 flex-wrap flex-grow-1">
+                <div class="input-group input-group-sm" style="max-width: 380px;">
+                    <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" name="search" class="form-control border-start-0"
+                           placeholder="Pesquisar..." value="{{ request.args.get('search', '') }}" style="font-size: 0.82rem;">
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="showOnlyEdited" value="1"
+                           id="reportOnlyEdited" {% if request.args.get('showOnlyEdited') == '1' %}checked{% endif %}>
+                    <label class="form-check-label" for="reportOnlyEdited" style="font-size: 0.82rem;">Apenas editados</label>
+                </div>
+                <select name="reserva" class="form-select form-select-sm fw-semibold"
+                        style="width: auto; font-size: 0.82rem; border-color: #3b82f6; color: #1e40af; background-color: #eff6ff;">
+                    <option value="" {% if not request.args.get('reserva') %}selected{% endif %}>Reserva: Todos</option>
+                    <option value="sim" {% if request.args.get('reserva') == 'sim' %}selected{% endif %}>Com Reserva</option>
+                    <option value="nao" {% if request.args.get('reserva') == 'nao' %}selected{% endif %}>Sem Reserva</option>
+                </select>
+                <select name="prioridade" class="form-select form-select-sm fw-semibold"
+                        style="width: auto; font-size: 0.82rem; border-color: #3b82f6; color: #1e40af; background-color: #eff6ff;">
+                    <option value="" {% if not request.args.get('prioridade') %}selected{% endif %}>Prioridade: Todos</option>
+                    <option value="Alto" {% if request.args.get('prioridade') == 'Alto' %}selected{% endif %}>Alto</option>
+                    <option value="Medio" {% if request.args.get('prioridade') == 'Medio' %}selected{% endif %}>Medio</option>
+                    <option value="Baixo" {% if request.args.get('prioridade') == 'Baixo' %}selected{% endif %}>Baixo</option>
+                </select>
+                <div id="hiddenFilterInputs"></div>
+                <div class="ms-auto d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i> Aplicar Filtros</button>
+                    <a href="{{ url_for('cgfr.report') }}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+                </div>
+            </form>
         </div>
+        <div class="report-filters-bar">
+            <div class="d-flex flex-wrap gap-2">
+                {% set filter_columns = [
+                    ('processo_formatado', 'Processo'), ('objeto_do_pedido', 'Objeto do Pedido'),
+                    ('ultimo_andamento_sigla', 'Ultimo Andamento'), ('geracao_sigla', 'Sigla'),
+                    ('ultimo_andamento_descricao', 'Descricao'), ('data_da_reuniao', 'Data da Reuniao'),
+                    ('natureza_despesa', 'Natureza'), ('fornecedor', 'Fornecedor'),
+                    ('deliberacao', 'Deliberacao'), ('tipo_processo', 'Tipo Processo'),
+                ] %}
+                {% for col_key, col_label in filter_columns %}
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle {% if col_key in active_filters %}has-filter{% endif %}"
+                            type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                        <i class="bi bi-funnel me-1"></i> {{ col_label }}
+                    </button>
+                    <div class="dropdown-menu p-2 report-filter-menu">
+                        <input type="text" class="form-control form-control-sm report-filter-search mb-2" placeholder="Buscar...">
+                        <div class="report-filter-options" data-column="{{ col_key }}"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% if active_filters %}
+        <div class="alert alert-info py-2 px-3 mt-2 mb-0" style="font-size: 0.80rem;">
+            <i class="bi bi-funnel-fill me-1"></i> <strong>Filtros ativos:</strong>
+            {% for col, vals in active_filters.items() %} {{ col }}: {{ vals|join(', ') }}{% if not loop.last %} | {% endif %}{% endfor %}
+        </div>
+        {% endif %}
     </div>
-
-    {# Resumo #}
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm text-center p-3">
-                <span class="text-muted small">Total Processos</span>
-                <h4 class="fw-bold mb-0">{{ dados.total_processos }}</h4>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm text-center p-3">
-                <span class="text-muted small">Grupos (Naturezas)</span>
-                <h4 class="fw-bold mb-0">{{ dados.grupos | length }}</h4>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm text-center p-3">
-                <span class="text-muted small">Total Solicitado</span>
-                <h4 class="fw-bold mb-0 text-primary">R$ {{ "%.2f"|format(dados.total_solicitado) }}</h4>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm text-center p-3">
-                <span class="text-muted small">Total Aprovado</span>
-                <h4 class="fw-bold mb-0 text-success">R$ {{ "%.2f"|format(dados.total_aprovado) }}</h4>
-            </div>
-        </div>
-    </div>
-
-    {# Grupos por natureza #}
-    {% for grupo in dados.grupos %}
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between">
-            <h6 class="mb-0 fw-bold">
-                <i class="bi bi-tag-fill me-2 text-danger"></i>{{ grupo.natureza }}
-            </h6>
-            <span class="badge bg-secondary">{{ grupo.processos | length }} processo(s)</span>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Processo</th>
-                            <th>Tipo</th>
-                            <th>Fonte</th>
-                            <th>Acao</th>
-                            <th>Fornecedor</th>
-                            <th class="text-end">Valor Solic.</th>
-                            <th class="text-end">Valor Aprov.</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in grupo.processos %}
-                        <tr>
-                            <td>
-                                <a href="{{ url_for('cgfr.detalhes', protocolo=p.processo_formatado) }}"
-                                   class="text-primary fw-semibold">{{ p.processo_formatado }}</a>
-                            </td>
-                            <td>{{ p.tipo_processo or '' }}</td>
-                            <td>{{ p.fonte.descricao if p.fonte else '' }}</td>
-                            <td>{{ p.acao.acao if p.acao else '' }}</td>
-                            <td>{{ p.fornecedor or '' }}</td>
-                            <td class="text-end">{{ "R$ %.2f"|format(p.valor_solicitado) if p.valor_solicitado else '' }}</td>
-                            <td class="text-end">{{ "R$ %.2f"|format(p.valor_aprovado) if p.valor_aprovado else '' }}</td>
-                            <td>
-                                <span class="badge {{ 'cgfr-badge-classificado' if p.classificado else 'cgfr-badge-pendente' }}">
-                                    {{ p.status_classificacao }}
-                                </span>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot class="table-light">
-                        <tr class="fw-bold">
-                            <td colspan="5">Subtotal</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(grupo.subtotal_solicitado) }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(grupo.subtotal_aprovado) }}</td>
-                            <td></td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-    </div>
-    {% endfor %}
-
-    {% if not dados.grupos %}
-    <div class="card border-0 shadow-sm">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-inbox fs-1 text-muted"></i>
-            <p class="text-muted mt-2">Nenhum processo encontrado.</p>
-        </div>
-    </div>
-    {% endif %}
-
 </div>
+
+{# Relatorio #}
+<div class="card" style="border-radius: 12px;">
+    <div class="card-body p-4">
+        <div class="report-institutional-header">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                    <img src="{{ url_for('static', filename='img/favicon.jpg') }}" alt="Governo do Piaui" class="report-logo">
+                    <div>
+                        <div class="report-orgao-nome">Governo do Estado do Piaui</div>
+                        <div class="report-orgao-secretaria">Secretaria de Estado da Administracao - SEAD</div>
+                        <div class="report-orgao-setor">Consultoria de Gestao Financeira - CGFR</div>
+                    </div>
+                </div>
+                <img src="{{ url_for('static', filename='img/logo_colorida.jpeg') }}" alt="SEAD" class="report-logo-secondary">
+            </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center report-header">
+            <div>
+                <h4 class="fw-bold mb-1">Relatorio de Processos CGFR, por Natureza</h4>
+                <div style="font-size: 0.85rem; color: #1e40af; font-weight: 600; line-height: 1.4;">Secretaria de Estado da Administracao - SEAD</div>
+                <div style="font-size: 0.82rem; color: #64748b; font-weight: 500; line-height: 1.4;">Consultoria de Gestao Financeira - CGFR</div>
+                <p class="text-muted mb-0 mt-1" style="font-size: 0.82rem;">Gerado em: {{ now_date }}</p>
+            </div>
+            <div class="no-print d-flex gap-2">
+                <a href="{{ url_for('cgfr.report_excel') }}?{{ request.query_string.decode() }}"
+                   class="btn btn-success btn-sm">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> Exportar Excel
+                </a>
+                <a href="{{ url_for('cgfr.report_pdf') }}?{{ request.query_string.decode() }}"
+                   class="btn btn-danger btn-sm" target="_blank">
+                    <i class="bi bi-file-earmark-pdf me-1"></i> Gerar PDF
+                </a>
+                <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-printer me-1"></i> Imprimir
+                </button>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="card border-0 h-100" style="background: #eff6ff; border-radius: 8px;">
+                    <div class="card-body d-flex align-items-center p-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 44px; height: 44px; background: white;">
+                            <i class="bi bi-files" style="color: #1e40af; font-size: 1rem;"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted" style="font-size: 0.70rem; font-weight: 600; text-transform: uppercase;">Quantidade de Processos</div>
+                            <div class="fw-bold" style="font-size: 1.2rem;">{{ total_processos }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card border-0 h-100" style="background: #ecfdf5; border-radius: 8px;">
+                    <div class="card-body d-flex align-items-center p-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 44px; height: 44px; background: white;">
+                            <i class="bi bi-currency-dollar" style="color: #059669; font-size: 1rem;"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted" style="font-size: 0.70rem; font-weight: 600; text-transform: uppercase;">Valor Total Solicitado</div>
+                            <div class="fw-bold" style="font-size: 1.2rem;">{{ "R$ {:,.2f}".format(valor_total).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if not naturezas_com and not naturezas_sem %}
+        <div class="text-center py-5" style="background: #fffbeb; border-radius: 8px;">
+            <i class="bi bi-search" style="font-size: 2.5rem; color: #f59e0b;"></i>
+            <h5 class="fw-bold mt-3">Nenhum resultado encontrado</h5>
+            <p class="text-muted mb-0">Tente ajustar os filtros acima.</p>
+        </div>
+        {% endif %}
+
+        {% macro render_natureza_table(natureza, processos, header_class, header_icon, badge_class) %}
+        {% set ns = namespace(subtotal_solic=0.0, subtotal_aprov=0.0) %}
+        {% for p in processos %}
+            {% set ns.subtotal_solic = ns.subtotal_solic + (p.valor_solicitado|default(0, true)|float) %}
+            {% set ns.subtotal_aprov = ns.subtotal_aprov + (p.valor_aprovado|default(0, true)|float) %}
+        {% endfor %}
+        <div class="card natureza-card border">
+            <div class="card-header {{ header_class }} border-bottom">
+                <div>
+                    <i class="bi {{ header_icon }} me-2"></i>{{ natureza }}
+                    <span class="badge {{ badge_class }} ms-2" style="font-size: 0.68rem;">{{ processos|length }}</span>
+                </div>
+                <div class="section-subtotals">
+                    Solic.: <strong>{{ "R$ {:,.2f}".format(ns.subtotal_solic).replace(",", "X").replace(".", ",").replace("X", ".") }}</strong>
+                    &nbsp;&middot;&nbsp;
+                    Aprov.: <strong>{{ "R$ {:,.2f}".format(ns.subtotal_aprov).replace(",", "X").replace(".", ",").replace("X", ".") }}</strong>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Processo</th>
+                                <th>Objeto do Pedido</th>
+                                <th>Fornecedor</th>
+                                <th>Data Envio</th>
+                                <th>Data Recebimento</th>
+                                <th>Data da Reuniao</th>
+                                <th class="text-end">Valor Solicitado</th>
+                                <th class="text-end">Valor Aprovado</th>
+                                <th>Deliberacao</th>
+                                <th>Tipo Processo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in processos %}
+                            <tr class="report-row" {% if loop.index > 10 %}style="display:none;"{% endif %}>
+                                <td class="fw-semibold">{{ p.protocolo_formatado }}</td>
+                                <td>{{ p.objeto_do_pedido or '' }}</td>
+                                <td>{{ p.fornecedor or '' }}</td>
+                                <td>{{ p.dt_enviado_fmt or '-' }}</td>
+                                <td>{{ p.data_recebido_cgfr or '-' }}</td>
+                                <td>{{ p.data_da_reuniao or '-' }}</td>
+                                <td class="text-end">{{ p.valor_solicitado_fmt or '-' }}</td>
+                                <td class="text-end">{{ p.valor_acordado_fmt or '-' }}</td>
+                                <td>{{ p.deliberacao or 'Pendente' }}</td>
+                                <td>{{ p.tipo_processo or '' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="natureza-pagination d-flex justify-content-between align-items-center no-print">
+                    <span class="text-muted">
+                        <span class="pag-range">1-{{ [processos|length, 10]|min }}</span> de <strong class="pag-total-items">{{ processos|length }}</strong> processos
+                        {% if processos|length > 10 %}
+                        &nbsp;|&nbsp; Pagina <span class="pag-current">1</span> de <span class="pag-total">{{ ((processos|length - 1) // 10) + 1 }}</span>
+                        {% endif %}
+                    </span>
+                    {% if processos|length > 10 %}
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-outline-secondary btn-sm pag-prev" disabled><i class="bi bi-chevron-left me-1"></i>Anterior</button>
+                        <button class="btn btn-primary btn-sm pag-next">Proximo<i class="bi bi-chevron-right ms-1"></i></button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endmacro %}
+
+        {% for natureza, processos in naturezas_com.items() %}
+            {{ render_natureza_table(natureza, processos, 'bg-white', 'bi-tag', 'bg-primary') }}
+        {% endfor %}
+
+        {% for natureza, processos in naturezas_sem.items() %}
+            {{ render_natureza_table('Natureza Nao Informada', processos, 'bg-light text-secondary', 'bi-question-circle', 'bg-secondary') }}
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block cgfr_js %}
+<script>
+$(document).ready(function () {
+    var PAGE_SIZE = 10;
+
+    // Paginacao por card de natureza
+    $('.natureza-card').each(function () {
+        var card = $(this);
+        var rows = card.find('tbody .report-row');
+        var total = rows.length;
+        if (total <= PAGE_SIZE) return;
+        var page = 0, pages = Math.ceil(total / PAGE_SIZE);
+        var btnP = card.find('.pag-prev'), btnN = card.find('.pag-next');
+        var pagRange = card.find('.pag-range'), pagCurrent = card.find('.pag-current');
+        function render() {
+            var s = page * PAGE_SIZE, e = Math.min(s + PAGE_SIZE, total);
+            rows.hide().slice(s, e).show();
+            pagRange.text((s + 1) + '-' + e);
+            pagCurrent.text(page + 1);
+            btnP.prop('disabled', page === 0);
+            btnN.prop('disabled', page >= pages - 1);
+        }
+        btnN.on('click', function () { if (page < pages - 1) { page++; render(); } });
+        btnP.on('click', function () { if (page > 0) { page--; render(); } });
+    });
+
+    // Popular filtros dropdown com valores unicos (pre-computados no servidor)
+    var filterValues = {{ filter_values|tojson }};
+    var activeFilters = {{ active_filters|tojson }};
+
+    $('.report-filter-options').each(function () {
+        var c = $(this), col = c.data('column');
+        var vals = filterValues[col] || [];
+        if (!vals.length) { c.html('<div class="text-center text-muted py-2" style="font-size:0.78rem;">Sem dados</div>'); return; }
+        var sel = activeFilters[col] || [], allSel = sel.length === 0;
+        var h = '<div class="form-check filter-select-all"><input class="form-check-input" type="checkbox" id="rf_'+col+'_all" '+(allSel?'checked':'')+'><label class="form-check-label" for="rf_'+col+'_all">Todos</label></div>';
+        vals.forEach(function (v, i) {
+            var ck = allSel || sel.indexOf(v) !== -1, esc = $('<span>').text(v).html();
+            h += '<div class="form-check"><input class="form-check-input rf-cb" type="checkbox" value="'+esc+'" id="rf_'+col+'_'+i+'" data-column="'+col+'" '+(ck?'checked':'')+'><label class="form-check-label" for="rf_'+col+'_'+i+'">'+esc+'</label></div>';
+        });
+        c.html(h);
+    });
+
+    $(document).on('keyup', '.report-filter-search', function () {
+        var t = $(this).val().toLowerCase();
+        $(this).siblings('.report-filter-options').find('.form-check:not(.filter-select-all)').each(function () { $(this).toggle($(this).find('label').text().toLowerCase().indexOf(t) !== -1); });
+    });
+    $(document).on('change', '.filter-select-all input', function () { $(this).closest('.report-filter-options').find('.rf-cb').prop('checked', $(this).prop('checked')); });
+    $(document).on('change', '.rf-cb', function () { var o = $(this).closest('.report-filter-options'), a = o.find('.rf-cb'), c = a.filter(':checked'); o.find('.filter-select-all input').prop('checked', c.length === a.length); });
+
+    $('#reportForm').on('submit', function () {
+        $('#hiddenFilterInputs').empty();
+        $('.report-filter-options').each(function () {
+            var col = $(this).data('column'), allCb = $(this).find('.filter-select-all input');
+            if (allCb.prop('checked')) return;
+            $(this).find('.rf-cb:checked').each(function () { $('#hiddenFilterInputs').append('<input type="hidden" name="filters['+col+'][]" value="'+$(this).val()+'">'); });
+        });
+    });
+
+});
+</script>
 {% endblock %}

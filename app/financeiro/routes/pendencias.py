@@ -3,6 +3,7 @@ Rotas de Pendências de NE - Módulo Financeiro.
 """
 from flask import render_template, request, flash, redirect, url_for
 from flask_login import login_required
+from sqlalchemy.orm import joinedload
 
 from app.financeiro.routes import financeiro_bp
 from app.models import Solicitacao, Contrato, SolicitacaoEmpenho
@@ -21,11 +22,13 @@ def pendencias_ne():
     busca = request.args.get('q', '').strip()
     page = request.args.get('page', 1, type=int)
 
-    # Busca solicitações com empenho mas sem NE
+    # Busca solicitações com empenho mas sem NE (eager load contrato)
     query = db.session.query(
         Solicitacao, SolicitacaoEmpenho
     ).join(
         Contrato
+    ).options(
+        joinedload(Solicitacao.contrato),
     ).join(
         SolicitacaoEmpenho,
         SolicitacaoEmpenho.id_solicitacao == Solicitacao.id

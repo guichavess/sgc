@@ -56,10 +56,38 @@
     top: 18px;
 }
 
+/* ---------- Filter card overflow fix ---------- */
+/* Ensure dropdown menus from filter buttons are not clipped by parent card or overlapped by next sibling */
+.card.mb-3 {
+    position: relative;
+    z-index: 20;
+    overflow: visible;
+}
+.card.mb-3 .card-body {
+    overflow: visible;
+}
+
+/* Report filters card */
+#reportFilters {
+    position: relative;
+    z-index: 20;
+    overflow: visible;
+}
+#reportFilters .card-body {
+    overflow: visible;
+}
+
+/* Report filter dropdown menus */
+.report-filter-menu {
+    z-index: 1050;
+}
+
 /* ---------- Tabela ---------- */
 .table-card {
     border-radius: var(--radius-lg, 12px);
     overflow: hidden;
+    position: relative;
+    z-index: 1;
 }
 
 .table-card .card-header {
@@ -117,7 +145,7 @@
 }
 
 /* ---------- Filtros por Coluna ---------- */
-.filters-bar { padding: 12px 0; }
+.filters-bar { padding: 12px 0; position: relative; z-index: 10; }
 
 .filters-bar .dropdown .btn {
     font-size: 0.82rem;
@@ -144,6 +172,7 @@
     padding: 10px !important;
     border-radius: var(--radius-md, 8px);
     box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,.15));
+    z-index: 1050;
 }
 
 .column-filter-search {

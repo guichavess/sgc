@@ -3,7 +3,7 @@
 
 {% set ns = namespace(maior_data=none) %}
 {% for sol in solicitacoes %}
-    {% set s = sol.saldo_atual_contrato %}
+    {% set s = saldos_preloaded.get(sol.id) %}
     {% if s and s.data %}
         {% if ns.maior_data is none or s.data > ns.maior_data %}
             {% set ns.maior_data = s.data %}
@@ -311,7 +311,7 @@
                         </td>
                         
                         <td class="text-center text-nowrap">
-                            {% set tempo = sol.tempo_decorrido_visual %}
+                            {% set tempo = tempos_preloaded.get(sol.id, '--') %}
                             
                             {% if tempo and tempo != '--' %}
                                 {% if sol.tempo_total %}
@@ -333,7 +333,7 @@
                         </td>
 
                         <td class="text-center">
-                            {% set saldo_obj = sol.saldo_atual_contrato %}
+                            {% set saldo_obj = saldos_preloaded.get(sol.id) %}
                             {% if saldo_obj %}
                                 <div class="fw-bold text-success" >
                                     R$ {{ "{:,.2f}".format(saldo_obj.saldo)|replace(',', 'X')|replace('.', ',')|replace('X', '.') }}
@@ -346,8 +346,8 @@
                             {% if sol.status_empenho_id and sol.status_empenho_id != 3 %}
                                 <div class="text-center">
                                     <div class="fw-bold text-dark small mb-1">
-                                        {% if sol.valor_empenho_solicitado %}
-                                            R$ {{ "{:,.2f}".format(sol.valor_empenho_solicitado)|replace(',', 'X')|replace('.', ',')|replace('X', '.') }}
+                                        {% if empenho_vals.get(sol.id) %}
+                                            R$ {{ "{:,.2f}".format(empenho_vals[sol.id])|replace(',', 'X')|replace('.', ',')|replace('X', '.') }}
                                         {% else %}
                                             ---
                                         {% endif %}

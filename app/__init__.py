@@ -217,6 +217,14 @@ def _register_context_processors(app):
     @app.context_processor
     def inject_notificacao_data():
         """Injeta dados de notificacao em todos os templates."""
+        from flask import request as req
+        # Pular queries de notificação em rotas de API (JSON) — não renderizam templates
+        if req.path.startswith('/api/') or '/api/' in req.path:
+            return {
+                'notificacao_count': 0,
+                'notificacoes_criticas': [],
+                'precisa_preencher_contato': False,
+            }
         if current_user.is_authenticated:
             from app.repositories.notificacao_repository import NotificacaoRepository
             try:
