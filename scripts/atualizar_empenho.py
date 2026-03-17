@@ -630,6 +630,34 @@ def main():
         except Exception as e:
             print(f"  ERRO ao gravar ano {year} no banco (rollback automático): {e}")
 
+    # Garantir índices de performance nas tabelas
+    print("\nVerificando índices de performance...")
+    _INDICES = {
+        'empenho': [
+            ('idx_empenho_cod_contrato', 'codContrato'),
+            ('idx_empenho_data_emissao', 'dataEmissao'),
+            ('idx_empenho_ug_status_data', 'codigoUG, statusDocumento, dataEmissao'),
+            ('idx_empenho_contrato_ano', 'codContrato, anoProcesso'),
+        ],
+        'empenho_itens': [
+            ('idx_empenho_itens_CodContrato', 'CodContrato'),
+            ('idx_empenho_itens_Natureza', 'Natureza(6)'),
+            ('idx_ei_join', 'CodContrato, codigo(20), codigoUG(10)'),
+        ],
+    }
+    with ENGINE.begin() as conn:
+        for tabela, indices in _INDICES.items():
+            existing = {r[2] for r in conn.execute(text(f"SHOW INDEX FROM `{tabela}`")).fetchall()}
+            for idx_name, cols in indices:
+                if idx_name not in existing:
+                    try:
+                        conn.execute(text(f"CREATE INDEX `{idx_name}` ON `{tabela}` ({cols})"))
+                        print(f"  Criado: {idx_name} em {tabela}")
+                    except Exception as e:
+                        print(f"  Índice {idx_name} já existe ou erro: {e}")
+                else:
+                    print(f"  OK: {idx_name} em {tabela}")
+
     elapsed_total = time.time() - t0
     print(f"\n{'='*70}")
     print(f"FINALIZADO! Tempo total: {elapsed_total:.2f}s ({elapsed_total/60:.1f} min)")

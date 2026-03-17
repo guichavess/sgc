@@ -35,6 +35,9 @@ ID_SERIE_NL = "420"               # "NL - Nota de Liquidação"
 ID_SERIE_PD = "421"               # "PD - Programação de Desembolso"
 ID_SERIE_OB = "422"               # "OB - Ordem Bancária"
 ID_SERIE_RELATORIO_VIAGEM = "1908"  # "SEAD_RELATÓRIO DE VIAGEM (DIÁRIA)"
+ID_SERIE_COMPROVANTE_VIAGEM = "35"    # "Comprovante" (upload externo pelo solicitante)
+ID_SERIE_NP = "423"                   # "NP - Nota Patrimonial"
+ID_SERIE_PRESTACAO_SCDP = "264"       # "Documento" (Externo - Prestação SCDP)
 ID_HIPOTESE_LEGAL_INFO_PESSOAL = "4"  # "Informação Pessoal" - Art. 31 da Lei nº 12.527/2011
 
 # Unidade destino pós-autorização (Diretoria de Planejamento e Finanças)
@@ -1868,7 +1871,7 @@ def verificar_elegibilidade_servidor(cpf, ano=None):
         'motivo_bloqueio': None,
     }
 
-    cpf_limpo = cpf.strip()
+    cpf_limpo = cpf.strip().replace('.', '').replace('-', '')
 
     # 1. Calcular acumulado anual
     acumulado_query = db.session.query(
@@ -2186,14 +2189,12 @@ def gerar_nota_empenho(token, id_procedimento, sei_protocolo, codigo_ne, dados_e
     </div>
     """
 
-    conteudo_b64 = base64.b64encode(html_conteudo.encode('utf-8')).decode('utf-8')
-
     payload = {
-        "Procedimento": id_procedimento,
+        "Procedimento": str(id_procedimento),
         "IdSerie": ID_SERIE_NOTA_EMPENHO,
         "Numero": codigo_ne,
         "Descricao": f"Nota de Empenho {codigo_ne}",
-        "Conteudo": conteudo_b64,
+        "Conteudo": html_conteudo,
         "NivelAcesso": "Restrito",
         "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
         "SinBloqueado": "N",
@@ -2314,7 +2315,7 @@ def gerar_despacho_ccdp(token, id_procedimento, sei_protocolo):
 
 
 def gerar_despacho_sga(token, id_procedimento, sei_protocolo, ref_despacho_ccdp_id,
-                       ref_despacho_ccdp_formatado):
+                       ref_despacho_ccdp_formatado, nome_assinante=None, cargo_assinante=None):
     """
     Gera o Despacho SGA (série 2987) assinado pelo Superintendente.
 
@@ -2326,6 +2327,8 @@ def gerar_despacho_sga(token, id_procedimento, sei_protocolo, ref_despacho_ccdp_
         sei_protocolo: Protocolo formatado do processo
         ref_despacho_ccdp_id: ID do despacho CCDP anterior (para referência)
         ref_despacho_ccdp_formatado: Número formatado do despacho CCDP
+        nome_assinante: Nome do assinante (default: busca do current_user ou fallback)
+        cargo_assinante: Cargo do assinante (default: 'Superintendente de Gestão Administrativa – SEAD')
 
     Returns:
         dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
@@ -2338,6 +2341,19 @@ def gerar_despacho_sga(token, id_procedimento, sei_protocolo, ref_despacho_ccdp_
 
     ref_texto = ref_despacho_ccdp_formatado or ref_despacho_ccdp_id or ''
 
+    # Resolve nome e cargo do assinante
+    _nome = nome_assinante
+    _cargo = cargo_assinante or 'Superintendente de Gestão Administrativa – SEAD'
+    if not _nome:
+        try:
+            from flask_login import current_user
+            _nome = current_user.nome.upper() if current_user and current_user.nome else 'SUPERINTENDENTE'
+        except Exception:
+            _nome = 'SUPERINTENDENTE'
+
+    # Evita referência duplicada quando formatado é igual ao id
+    ref_complemento = f' ({ref_despacho_ccdp_id})' if ref_despacho_ccdp_formatado and ref_despacho_ccdp_formatado != ref_despacho_ccdp_id else ''
+
     conteudo_html = f"""
     <div style="font-family: Arial, sans-serif; font-size: 12pt;">
         <p>Processo nº <b>{sei_protocolo}</b></p>
@@ -2349,15 +2365,15 @@ def gerar_despacho_sga(token, id_procedimento, sei_protocolo, ref_despacho_ccdp_
         <p>PARA: NÚCLEO DE CONTROLE INTERNO - NCI</p>
         <br>
         <p style="text-indent: 2em; text-align: justify;">
-            Em atenção ao {ref_texto} ({ref_despacho_ccdp_id}), da COORDENAÇÃO DE
+            Em atenção ao {ref_texto}{ref_complemento}, da COORDENAÇÃO DE
             CONTROLE DE DIÁRIAS E PASSAGENS, encaminhamos os autos para análise e demais
             providências necessárias.
         </p>
         <br>
         <p style="text-align: center;">
             <i>(assinado eletronicamente)</i><br>
-            <b>PEDRO ALEXANDRE CABRAL DE OLIVEIRA</b><br>
-            Superintendente de Gestão Administrativa – SEAD
+            <b>{_nome}</b><br>
+            {_cargo}
         </p>
     </div>
     """
@@ -3209,4 +3225,122 @@ def gerar_relatorio_viagem(token, id_procedimento, sei_protocolo, dados_relatori
 
     except Exception as e:
         current_app.logger.error(f"SEI Diárias: Erro ao gerar relatório de viagem: {e}")
+        return None
+
+
+# ── NP - Nota Patrimonial (idSerie 423) ──────────────────────────────────
+
+def gerar_np(token, id_procedimento, sei_protocolo, codigo_np):
+    """Gera documento NP - Nota Patrimonial (série 423) no processo SEI."""
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para NP.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p style="text-align: center;"><b>NOTA PATRIMONIAL</b></p>
+        <br>
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Código NP: <b>{codigo_np}</b></p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_NP,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Numero": codigo_np,
+        "Descricao": f"NP {codigo_np} - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(f"SEI Diárias: Gerando NP {codigo_np}...")
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar NP ({response.status_code}): {response.text}"
+            )
+        response.raise_for_status()
+        retorno = response.json()
+        current_app.logger.info(f"SEI Diárias: NP gerada - {retorno.get('DocumentoFormatado', retorno)}")
+        return retorno
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar NP: {e}")
+        return None
+
+
+# ── Despacho Final CCDP (idSerie 754) ────────────────────────────────────
+
+def gerar_despacho_final_ccdp(token, id_procedimento, sei_protocolo):
+    """
+    Gera Despacho Final CCDP (série 754) - "Processo pago e concluído nesta unidade."
+
+    Criado na unidade UNIDADE_CCDP.
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para despacho final CCDP.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Interessados: @interessados_virgula_espaco@</p>
+        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
+        <br>
+        <p style="text-align: center;"><b>DESPACHO</b></p>
+        <br>
+        <p style="text-indent: 2em; text-align: justify;">
+            Processo pago e concluído nesta unidade.
+        </p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_DESPACHO,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Despacho Final CCDP - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando despacho final CCDP para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar despacho final CCDP ({response.status_code}): {response.text}"
+            )
+        response.raise_for_status()
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Despacho final CCDP gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho final CCDP: {e}")
         return None

@@ -99,15 +99,15 @@
 
 #tabelaProcessos th {
     white-space: normal;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.02em;
     vertical-align: middle;
-    padding: 8px 6px;
+    padding: 6px 5px;
 }
 
 #tabelaProcessos td {
-    font-size: 0.78rem;
+    font-size: 0.73rem;
     white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;
@@ -131,17 +131,104 @@
     border-radius: 50px;
 }
 
-/* ---------- Filtros Radio ---------- */
-.btn-group-filter .btn {
-    border-radius: 20px !important;
-    margin: 0 2px;
-    font-size: 0.78rem;
-    padding: 4px 14px;
+/* ---------- Status Filter — Segmented Control ---------- */
+.status-filter-group {
+    display: inline-flex;
+    align-items: center;
+    background: #f1f5f9;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
-.btn-group-filter .btn-check:checked + .btn {
+.status-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-size: 0.80rem;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    background: transparent;
+    white-space: nowrap;
+    user-select: none;
+    position: relative;
+}
+
+.status-filter-btn:hover {
+    color: #334155;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.status-filter-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.status-filter-label {
+    line-height: 1;
+}
+
+/* Active state */
+.btn-check:checked + .status-filter-btn {
+    background: #fff;
+    color: #1e293b;
     font-weight: 600;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.btn-check:checked + .status-filter-btn .status-filter-icon {
+    opacity: 1;
+}
+
+/* Color accents on active */
+.btn-check:checked + .status-filter-btn.sf-success {
+    color: #166534;
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    box-shadow: 0 1px 3px rgba(22, 101, 52, 0.12), 0 1px 2px rgba(22, 101, 52, 0.06);
+}
+.btn-check:checked + .status-filter-btn.sf-success .status-filter-icon { color: #16a34a; }
+
+.btn-check:checked + .status-filter-btn.sf-warning {
+    color: #854d0e;
+    background: linear-gradient(135deg, #fefce8, #fef9c3);
+    box-shadow: 0 1px 3px rgba(133, 77, 14, 0.12), 0 1px 2px rgba(133, 77, 14, 0.06);
+}
+.btn-check:checked + .status-filter-btn.sf-warning .status-filter-icon { color: #ca8a04; }
+
+.btn-check:checked + .status-filter-btn.sf-info {
+    color: #1e40af;
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    box-shadow: 0 1px 3px rgba(30, 64, 175, 0.12), 0 1px 2px rgba(30, 64, 175, 0.06);
+}
+.btn-check:checked + .status-filter-btn.sf-info .status-filter-icon { color: #3b82f6; }
+
+.btn-check:checked + .status-filter-btn.sf-danger {
+    color: #991b1b;
+    background: linear-gradient(135deg, #fef2f2, #fecaca);
+    box-shadow: 0 1px 3px rgba(153, 27, 27, 0.12), 0 1px 2px rgba(153, 27, 27, 0.06);
+}
+.btn-check:checked + .status-filter-btn.sf-danger .status-filter-icon { color: #dc2626; }
+
+/* Responsive: stack em telas pequenas */
+@media (max-width: 768px) {
+    .status-filter-group {
+        flex-wrap: wrap;
+    }
+    .status-filter-btn {
+        padding: 5px 12px;
+        font-size: 0.75rem;
+    }
 }
 
 /* ---------- Filtros por Coluna ---------- */
@@ -227,6 +314,18 @@
 .filters-top-bar .form-check-label { font-size: 0.84rem; }
 .filters-top-bar .total-records { font-size: 0.84rem; color: var(--text-muted, #94a3b8); }
 
+/* Fix selects Reserva/Prioridade: padding-right para nao sobrepor seta do dropdown */
+.filters-top-bar .form-select {
+    min-width: 160px;
+    padding-right: 2rem;
+}
+
+/* Mesma correcao para selects na pagina de relatorio */
+#reportFilters .form-select {
+    min-width: 160px;
+    padding-right: 2rem;
+}
+
 /* ---------- DataTable controles ---------- */
 .table-card .dataTables_info { font-size: 0.80rem; color: var(--text-muted, #94a3b8); padding-top: 8px; }
 .table-card .dataTables_paginate { padding-top: 4px; }
@@ -238,6 +337,6 @@
 
 /* ---------- Print ---------- */
 @media print {
-    .btn-group-filter, #btnSync, .btn-edit, .sidebar, .navbar,
+    .status-filter-group, #btnSync, .btn-edit, .sidebar, .navbar,
     .filters-top-bar, .filters-bar, #selectedFiltersInfo { display: none !important; }
 }

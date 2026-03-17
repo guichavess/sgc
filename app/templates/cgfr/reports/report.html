@@ -67,7 +67,7 @@
                         style="width: auto; font-size: 0.82rem; border-color: #3b82f6; color: #1e40af; background-color: #eff6ff;">
                     <option value="" {% if not request.args.get('prioridade') %}selected{% endif %}>Prioridade: Todos</option>
                     <option value="Alto" {% if request.args.get('prioridade') == 'Alto' %}selected{% endif %}>Alto</option>
-                    <option value="Medio" {% if request.args.get('prioridade') == 'Medio' %}selected{% endif %}>Medio</option>
+                    <option value="Medio" {% if request.args.get('prioridade') == 'Medio' %}selected{% endif %}>Médio</option>
                     <option value="Baixo" {% if request.args.get('prioridade') == 'Baixo' %}selected{% endif %}>Baixo</option>
                 </select>
                 <div id="hiddenFilterInputs"></div>
@@ -81,10 +81,10 @@
             <div class="d-flex flex-wrap gap-2">
                 {% set filter_columns = [
                     ('processo_formatado', 'Processo'), ('objeto_do_pedido', 'Objeto do Pedido'),
-                    ('ultimo_andamento_sigla', 'Ultimo Andamento'), ('geracao_sigla', 'Sigla'),
-                    ('ultimo_andamento_descricao', 'Descricao'), ('data_da_reuniao', 'Data da Reuniao'),
+                    ('ultimo_andamento_sigla', 'Último Andamento'), ('geracao_sigla', 'Sigla'),
+                    ('ultimo_andamento_descricao', 'Descrição'), ('data_da_reuniao', 'Data da Reunião'),
                     ('natureza_despesa', 'Natureza'), ('fornecedor', 'Fornecedor'),
-                    ('deliberacao', 'Deliberacao'), ('tipo_processo', 'Tipo Processo'),
+                    ('deliberacao', 'Deliberação'), ('tipo_processo', 'Tipo de Processo'),
                 ] %}
                 {% for col_key, col_label in filter_columns %}
                 <div class="dropdown">
@@ -117,9 +117,9 @@
                 <div class="d-flex align-items-center gap-3">
                     <img src="{{ url_for('static', filename='img/favicon.jpg') }}" alt="Governo do Piaui" class="report-logo">
                     <div>
-                        <div class="report-orgao-nome">Governo do Estado do Piaui</div>
-                        <div class="report-orgao-secretaria">Secretaria de Estado da Administracao - SEAD</div>
-                        <div class="report-orgao-setor">Consultoria de Gestao Financeira - CGFR</div>
+                        <div class="report-orgao-nome">Governo do Estado do Piauí</div>
+                        <div class="report-orgao-secretaria">Secretaria de Estado da Administração - SEAD</div>
+                        <div class="report-orgao-setor">Consultoria de Gestão Financeira - CGFR</div>
                     </div>
                 </div>
                 <img src="{{ url_for('static', filename='img/logo_colorida.jpeg') }}" alt="SEAD" class="report-logo-secondary">
@@ -127,9 +127,9 @@
         </div>
         <div class="d-flex justify-content-between align-items-center report-header">
             <div>
-                <h4 class="fw-bold mb-1">Relatorio de Processos CGFR, por Natureza</h4>
-                <div style="font-size: 0.85rem; color: #1e40af; font-weight: 600; line-height: 1.4;">Secretaria de Estado da Administracao - SEAD</div>
-                <div style="font-size: 0.82rem; color: #64748b; font-weight: 500; line-height: 1.4;">Consultoria de Gestao Financeira - CGFR</div>
+                <h4 class="fw-bold mb-1">Relatório de Processos CGFR, por Natureza</h4>
+                <div style="font-size: 0.85rem; color: #1e40af; font-weight: 600; line-height: 1.4;">Secretaria de Estado da Administração - SEAD</div>
+                <div style="font-size: 0.82rem; color: #64748b; font-weight: 500; line-height: 1.4;">Consultoria de Gestão Financeira - CGFR</div>
                 <p class="text-muted mb-0 mt-1" style="font-size: 0.82rem;">Gerado em: {{ now_date }}</p>
             </div>
             <div class="no-print d-flex gap-2">
@@ -210,13 +210,13 @@
                                 <th>Processo</th>
                                 <th>Objeto do Pedido</th>
                                 <th>Fornecedor</th>
-                                <th>Data Envio</th>
-                                <th>Data Recebimento</th>
-                                <th>Data da Reuniao</th>
+                                <th>Data de Envio</th>
+                                <th>Data de Recebimento</th>
+                                <th>Data da Reunião</th>
                                 <th class="text-end">Valor Solicitado</th>
                                 <th class="text-end">Valor Aprovado</th>
-                                <th>Deliberacao</th>
-                                <th>Tipo Processo</th>
+                                <th>Deliberação</th>
+                                <th>Tipo de Processo</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -260,7 +260,7 @@
         {% endfor %}
 
         {% for natureza, processos in naturezas_sem.items() %}
-            {{ render_natureza_table('Natureza Nao Informada', processos, 'bg-light text-secondary', 'bi-question-circle', 'bg-secondary') }}
+            {{ render_natureza_table('Natureza Não Informada', processos, 'bg-light text-secondary', 'bi-question-circle', 'bg-secondary') }}
         {% endfor %}
     </div>
 </div>

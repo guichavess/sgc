@@ -311,6 +311,23 @@ class DiariasItinerario(db.Model):
     sei_id_relatorio_viagem = db.Column(db.String(50), nullable=True)
     sei_relatorio_viagem_formatado = db.Column(db.String(50), nullable=True)
 
+    # Comprovante de Viagem (idSerie 35, upload PDF pelo solicitante após relatório)
+    sei_id_comprovante_viagem = db.Column(db.String(50), nullable=True)
+    sei_comprovante_viagem_formatado = db.Column(db.String(50), nullable=True)
+
+    # NP - Nota Patrimonial (idSerie 423, inserida pela CCDP)
+    np_codigo = db.Column(db.String(50), nullable=True)
+    sei_id_np = db.Column(db.String(50), nullable=True)
+    sei_np_formatado = db.Column(db.String(50), nullable=True)
+
+    # Documento Prestação SCDP (idSerie 264, upload externo pela CCDP)
+    sei_id_prestacao_scdp = db.Column(db.String(50), nullable=True)
+    sei_prestacao_scdp_formatado = db.Column(db.String(50), nullable=True)
+
+    # Despacho Final CCDP (idSerie 754, "Processo pago e concluído nesta unidade.")
+    sei_id_despacho_final = db.Column(db.String(50), nullable=True)
+    sei_despacho_final_formatado = db.Column(db.String(50), nullable=True)
+
     # Timeline / Etapa atual
     etapa_atual_id = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), default=1)
 

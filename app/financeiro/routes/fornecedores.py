@@ -99,9 +99,12 @@ def fornecedores_cadastrar():
         criado_por=current_user.id,
     )
     db.session.add(fornecedor)
-    db.session.commit()
-
-    flash(f'Fornecedor "{descricao}" cadastrado com sucesso!', 'success')
+    try:
+        db.session.commit()
+        flash(f'Fornecedor "{descricao}" cadastrado com sucesso!', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao salvar. Tente novamente.', 'danger')
     return redirect(url_for('financeiro.fornecedores_lista'))
 
 
@@ -133,9 +136,12 @@ def fornecedores_vincular_contrato(id):
         vinculado_por=current_user.id,
     )
     db.session.add(vinculo)
-    db.session.commit()
-
-    flash(f'Contrato {cod_contrato} vinculado ao fornecedor "{fornecedor.descricao}".', 'success')
+    try:
+        db.session.commit()
+        flash(f'Contrato {cod_contrato} vinculado ao fornecedor "{fornecedor.descricao}".', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao salvar. Tente novamente.', 'danger')
     return redirect(url_for('financeiro.fornecedores_lista'))
 
 
@@ -149,9 +155,12 @@ def fornecedores_remover_contrato(id):
     vinculo = FornecedorContrato.query.get_or_404(id)
     cod = vinculo.cod_contrato
     db.session.delete(vinculo)
-    db.session.commit()
-
-    flash(f'Vínculo com contrato {cod} removido.', 'success')
+    try:
+        db.session.commit()
+        flash(f'Vínculo com contrato {cod} removido.', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao salvar. Tente novamente.', 'danger')
     return redirect(url_for('financeiro.fornecedores_lista'))
 
 

@@ -106,7 +106,7 @@ class CgfrProcessoEnviado(db.Model):
         for c in self.__table__.columns:
             value = getattr(self, c.name)
             if isinstance(value, datetime):
-                result[c.name] = value.strftime('%d/%m/%Y %H:%M:%S')
+                result[c.name] = value.strftime('%d/%m/%Y')
             elif isinstance(value, date):
                 result[c.name] = value.strftime('%d/%m/%Y')
             elif isinstance(value, Decimal):

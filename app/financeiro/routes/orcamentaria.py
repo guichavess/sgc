@@ -2,29 +2,17 @@
 Rotas do módulo Orçamentário (Financeiro).
 Tela principal de gerenciamento orçamentário — admins + Pedro Alexandre.
 """
+import logging
 from collections import defaultdict
-from functools import wraps
 from decimal import Decimal
 from flask import render_template, request, jsonify, flash, redirect, url_for
 from sqlalchemy import text
 from flask_login import login_required, current_user
 
-from app.financeiro.routes import financeiro_bp
+from app.financeiro.routes import financeiro_bp, requires_admin_or_pedro
 from app.extensions import db
 
-
-def requires_admin_or_pedro(f):
-    """Permite acesso a admins gerais e ao Pedro Alexandre."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not current_user.is_authenticated:
-            return redirect(url_for('auth.login'))
-        is_pedro = current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper()
-        if not current_user.is_admin and not is_pedro:
-            flash('Acesso restrito.', 'danger')
-            return redirect(url_for('hub'))
-        return f(*args, **kwargs)
-    return decorated
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -119,7 +107,7 @@ def orcamentaria():
             'pct_liquidado', 'pct_pds', 'pct_pago',
         )}
         acoes = {'itens': [], 'totais': defaultdict(lambda: ZERO)}
-        naturezas_por_acao = '{}'
+        naturezas_por_acao = {}
         fontes = []
         meses_disponiveis = []
         naturezas_disponiveis = []
@@ -594,8 +582,8 @@ def _calcular_execucao(ano, nivel='acao', mes=None, fonte='', natureza='', acao=
             val = float(r[-1])
             resultado.setdefault(key, {'res': 0, 'emp': 0, 'liq': 0, 'pd': 0, 'ob': 0})
             resultado[key]['res'] += val
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar reserva por acao: %s', e)
 
     # --- Empenho (tem codAcao direto, CONTABILIZADO, ANULACAO inverte sinal) ---
     sql_emp = text(f"""
@@ -635,8 +623,8 @@ def _calcular_execucao(ano, nivel='acao', mes=None, fonte='', natureza='', acao=
             val = float(r[-1])
             resultado.setdefault(key, {'res': 0, 'emp': 0, 'liq': 0, 'pd': 0, 'ob': 0})
             resultado[key]['liq'] += val
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar liquidacao por acao: %s', e)
 
     # --- PD, OB (CONTABILIZADO, sem tipoAlteracao) ---
     tabelas = [('pd', 'pd'), ('ob', 'ob')]
@@ -657,8 +645,8 @@ def _calcular_execucao(ano, nivel='acao', mes=None, fonte='', natureza='', acao=
                 val = float(r[-1])
                 resultado.setdefault(key, {'res': 0, 'emp': 0, 'liq': 0, 'pd': 0, 'ob': 0})
                 resultado[key][campo] += val
-        except Exception:
-            pass  # Tabela pode não existir
+        except Exception as e:
+            logger.warning('Erro ao consultar tabela %s por acao: %s', tabela, e)
 
     return resultado
 
@@ -687,13 +675,21 @@ def _calcular_exec_gerencial(nivel='acao'):
             else:
                 key = str(r[0])
             resultado[key] = float(r[-1])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar execucoes orcamentarias: %s', e)
     return resultado
 
 
+_cache_descricoes = {}
+
 def _carregar_descricoes():
-    """Carrega descrições de natureza (natdespesas) e fonte (class_fonte)."""
+    """Carrega descrições de natureza (natdespesas) e fonte (class_fonte).
+    Cacheia por request (limpa ao fim do request via g ou module cache de 60s)."""
+    import time
+    now = time.time()
+    if _cache_descricoes.get('ts', 0) > now - 60:
+        return _cache_descricoes['nat'], _cache_descricoes['fonte']
+
     nat_rows = db.session.execute(
         text("SELECT codigo, titulo FROM natdespesas")
     ).fetchall()
@@ -704,6 +700,7 @@ def _carregar_descricoes():
     ).fetchall()
     fonte_map = {str(r[0]): r[1] for r in fonte_rows if r[0] and r[1]}
 
+    _cache_descricoes.update({'nat': nat_map, 'fonte': fonte_map, 'ts': now})
     return nat_map, fonte_map
 
 
@@ -1250,8 +1247,8 @@ def api_orcamentaria_contratos(acao, natureza):
     try:
         for r in db.session.execute(sql_emp, base_params).fetchall():
             exec_maps['emp'][str(r[0]).strip()] = float(r[1])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar empenho por contrato: %s', e)
 
     # Liquidação (tipoAlteracao, ação via codClassificacao segmento 8)
     sql_liq = text(f"""
@@ -1273,8 +1270,8 @@ def api_orcamentaria_contratos(acao, natureza):
     try:
         for r in db.session.execute(sql_liq, base_params).fetchall():
             exec_maps['liq'][str(r[0]).strip()] = float(r[1])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar liquidacao por contrato: %s', e)
 
     # PD (sem tipoAlteracao, ação via codClassificacao segmento 8)
     sql_pd = text(f"""
@@ -1293,8 +1290,8 @@ def api_orcamentaria_contratos(acao, natureza):
     try:
         for r in db.session.execute(sql_pd, base_params).fetchall():
             exec_maps['pd'][str(r[0]).strip()] = float(r[1])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar pd por contrato: %s', e)
 
     # OB (sem tipoAlteracao, ação via codClassificacao segmento 8)
     sql_ob = text(f"""
@@ -1313,8 +1310,8 @@ def api_orcamentaria_contratos(acao, natureza):
     try:
         for r in db.session.execute(sql_ob, base_params).fetchall():
             exec_maps['ob'][str(r[0]).strip()] = float(r[1])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar ob por contrato: %s', e)
 
     resultado = []
     for cod_contrato, nome_contratado, total, qtd in rows:
@@ -1365,7 +1362,7 @@ def api_orcamentaria_contratos(acao, natureza):
                 'pago': 0,
                 'semContrato': True,
             })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar execucoes sem contrato: %s', e)
 
     return jsonify(resultado)

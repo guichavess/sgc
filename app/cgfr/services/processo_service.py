@@ -9,6 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import or_, func
+from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.cgfr.models import CgfrProcessoEnviado, Acao
@@ -71,7 +72,10 @@ class ProcessoService:
         Espelha website/app/services/processo_service.py::get_processos_paginados.
         """
         try:
-            query = CgfrProcessoEnviado.query
+            query = CgfrProcessoEnviado.query.options(
+                joinedload(CgfrProcessoEnviado.natureza_rel),
+                joinedload(CgfrProcessoEnviado.fonte_rel),
+            )
 
             if search:
                 term = f'%{search}%'
@@ -154,7 +158,10 @@ class ProcessoService:
     @staticmethod
     def get_record_completo(protocolo):
         """Busca dados completos de um processo. Retorna dict flat."""
-        processo = CgfrProcessoEnviado.query.filter_by(
+        processo = CgfrProcessoEnviado.query.options(
+            joinedload(CgfrProcessoEnviado.natureza_rel),
+            joinedload(CgfrProcessoEnviado.fonte_rel),
+        ).filter_by(
             processo_formatado=protocolo
         ).first()
 
@@ -326,7 +333,7 @@ class ProcessoService:
         total_aprovado = Decimal('0')
 
         for p in processos:
-            nat_nome = p.natureza_rel.titulo if p.natureza_rel else 'Sem Classificacao'
+            nat_nome = p.natureza_rel.titulo if p.natureza_rel else 'Sem Classificação'
             if nat_nome not in grupos:
                 grupos[nat_nome] = {
                     'natureza': nat_nome,
@@ -364,7 +371,7 @@ def _format_record(p, acao_map=None):
 
     # Aliases para compatibilidade com DataTable columns do original
     d['protocolo_formatado'] = d.get('processo_formatado', '')
-    d['dt_enviado_fmt'] = d.get('tramitado_sead_cgfr', '') or '-'
+    d['dt_enviado_fmt'] = _strip_time(d.get('tramitado_sead_cgfr')) or '-'
     d['valor_acordado_fmt'] = _format_brl_display(d.get('valor_aprovado'))
     d['valor_solicitado_fmt'] = _format_brl_display(d.get('valor_solicitado'))
     d['is_classified'] = p.classificado
@@ -384,14 +391,14 @@ def _format_record(p, acao_map=None):
 
     di = p.data_inclusao
     if di:
-        d['data_inclusao_fmt'] = di.strftime('%d/%m/%Y %H:%M')
+        d['data_inclusao_fmt'] = di.strftime('%d/%m/%Y')
         d['is_novo'] = di > datetime(2026, 1, 1, 0, 0, 0)
     else:
         d['data_inclusao_fmt'] = '-'
         d['is_novo'] = False
 
-    d['data_recebido_cgfr'] = d.get('data_recebido_cgfr', '') or '-'
-    d['data_da_reuniao'] = d.get('data_da_reuniao') or '-'
+    d['data_recebido_cgfr'] = _strip_time(d.get('data_recebido_cgfr')) or '-'
+    d['data_da_reuniao'] = _strip_time(d.get('data_da_reuniao')) or '-'
 
     d['status_cgfr'] = _calcular_status_cgfr(d)
     d['status_cgfr_badge'] = _badge_status_cgfr(d['status_cgfr'])
@@ -439,6 +446,17 @@ def _format_brl_display(valor):
         return f'R$ {v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
     except (ValueError, TypeError):
         return '-'
+
+
+def _strip_time(value):
+    """Remove hora/minuto/segundo de strings de data como '23/02/2026 12:16:25' -> '23/02/2026'."""
+    if not value or value == '-':
+        return value
+    s = str(value).strip()
+    # Se tem espaco, pega so a parte da data (antes do espaco)
+    if ' ' in s:
+        return s.split(' ')[0]
+    return s
 
 
 def _to_float(value):

@@ -91,6 +91,8 @@ class DiariasEtapaID(IntEnum):
     DESPACHO_APOIO = 7          # Despacho APOIO/DFIN (Superintendente → DFIN)
     DESPACHO_DIRETOR = 8        # Despacho Diretor DFIN → GEO
     DESPACHO_GEO = 9            # Despacho GEO → CCDP + NL/PD/OB
+    COMPROVANTE_VIAGEM = 10     # Upload comprovante viagem (cliente, pós-relatório)
+    PRESTACAO_CONTAS_CCDP = 11  # NP + Prestação SCDP + Despacho Final (CCDP)
 
 
 # =============================================================================

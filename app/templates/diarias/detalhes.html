@@ -338,6 +338,59 @@
         </section>
         {% endif %}
 
+        {# ── Comprovante de Viagem (após relatório gerado) ── #}
+        {% if itinerario.sei_id_relatorio_viagem %}
+        <section class="mb-4">
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header py-3" style="background: linear-gradient(135deg, #198754 0%, #20c997 100%);">
+                    <h5 class="mb-0 text-white fw-bold">
+                        <i class="bi bi-file-earmark-pdf me-2"></i>Comprovante de Viagem
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if itinerario.sei_id_comprovante_viagem %}
+                        <div class="alert alert-success d-flex align-items-center mb-0">
+                            <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                            <div>
+                                <strong>Comprovante de viagem enviado!</strong><br>
+                                <span class="text-muted">
+                                    Documento SEI:
+                                    <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank" class="fw-bold">
+                                        {{ itinerario.sei_comprovante_viagem_formatado }}
+                                        <i class="bi bi-box-arrow-up-right small"></i>
+                                    </a>
+                                </span>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Envie o comprovante de realização da viagem (PDF) para dar continuidade ao processo.
+                        </div>
+
+                        <form method="POST" action="{{ url_for('diarias.upload_comprovante', id=itinerario.id) }}"
+                              enctype="multipart/form-data" id="formComprovante">
+                            <div class="mb-3">
+                                <label for="arquivo_comprovante" class="form-label fw-bold">
+                                    <i class="bi bi-upload me-1"></i>Arquivo PDF <span class="text-danger">*</span>
+                                </label>
+                                <input type="file" class="form-control" id="arquivo_comprovante"
+                                       name="arquivo_comprovante" accept=".pdf" required>
+                                <div class="form-text">Selecione o PDF do comprovante de realização da viagem.</div>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="submit" id="btnEnviarComprovante" class="btn btn-lg text-white"
+                                    style="background: linear-gradient(135deg, #198754 0%, #20c997 100%);">
+                                    <i class="bi bi-cloud-upload me-2"></i>Enviar Comprovante
+                                </button>
+                            </div>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
     </div>
 </div>
 
@@ -373,7 +426,10 @@ function gerarRelatorioViagem() {
         method: 'POST',
         body: formData,
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) throw new Error('Erro do servidor: ' + response.status);
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             let msg = data.message;
@@ -394,6 +450,16 @@ function gerarRelatorioViagem() {
         btn.innerHTML = textoOriginal;
     });
 }
+</script>
+{% endif %}
+
+{% if itinerario.sei_id_relatorio_viagem and not itinerario.sei_id_comprovante_viagem %}
+<script>
+document.getElementById('formComprovante')?.addEventListener('submit', function() {
+    const btn = document.getElementById('btnEnviarComprovante');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando...';
+});
 </script>
 {% endif %}
 {% endblock %}

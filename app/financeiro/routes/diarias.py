@@ -3,6 +3,7 @@ Rotas de Diárias - Módulo Financeiro.
 Lista solicitações de diárias despachadas para DFIN e permite inserção de Nota de Reserva,
 Quadro Orçamentário, upload de Autorização SCDP e criação de Nota de Empenho.
 """
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from flask import render_template, request, flash, redirect, url_for, abort, jsonify
 from flask_login import login_required, current_user
@@ -16,16 +17,17 @@ from app.services.diarias_sei_integration import (
     gerar_token_sei_admin, adicionar_documento_externo, gerar_quadro_orcamentario,
     gerar_nota_empenho, gerar_despacho_ccdp, enviar_procedimento,
     gerar_despacho_apoio, gerar_despacho_diretor, gerar_despacho_geo,
-    gerar_nl, gerar_pd, gerar_ob,
-    ID_SERIE_AUTORIZACAO_SCDP, UNIDADE_CCDP, UNIDADE_APOIOSGA,
-    UNIDADE_DFIN_APOIO, UNIDADE_GEO,
+    gerar_nl, gerar_pd, gerar_ob, gerar_np, gerar_despacho_final_ccdp,
+    ID_SERIE_AUTORIZACAO_SCDP, ID_SERIE_PRESTACAO_SCDP,
+    UNIDADE_CCDP, UNIDADE_APOIOSGA, UNIDADE_DFIN_APOIO, UNIDADE_GEO,
 )
 from app.services.sei_auth import autenticar_usuario_sei
 from app.services.sei_integration import assinar_documento
 from app.utils.permissions import (
     requires_permission, usuario_tem_caixa,
-    CAIXA_DFIN_APOIO, CAIXA_GEO,
+    CAIXA_CCDP, CAIXA_DFIN_APOIO, CAIXA_GEO,
 )
+from app.services.diarias_notification import DiariasNotifier
 
 
 @financeiro_bp.route('/diarias')
@@ -172,6 +174,11 @@ def inserir_nr(id):
         flash(f'Nota de Reserva {nr_code} inserida e documento enviado ao SEI com sucesso!', 'success')
     elif not arquivo or not arquivo.filename:
         flash(f'Nota de Reserva {nr_code} inserida com sucesso!', 'success')
+
+    try:
+        DiariasNotifier.notificar_etapa(itinerario, 'nota_reserva', current_user.id)
+    except Exception:
+        pass  # Notificacao nao deve bloquear o fluxo
 
     return redirect(url_for('financeiro.diarias_lista'))
 
@@ -393,6 +400,10 @@ def inserir_nota_empenho(id):
             itinerario.sei_id_nota_empenho = str(retorno.get('IdDocumento', ''))
             itinerario.sei_nota_empenho_formatado = retorno.get('DocumentoFormatado', '')
             db.session.commit()
+            try:
+                DiariasNotifier.notificar_etapa(itinerario, 'nota_empenho', current_user.id)
+            except Exception:
+                pass  # Notificacao nao deve bloquear o fluxo
             flash(f'Nota de Empenho {codigo_ne} inserida e documento gerado no SEI!', 'success')
         else:
             flash('Erro ao gerar documento de Nota de Empenho no SEI.', 'danger')
@@ -420,7 +431,22 @@ def despacho_ccdp(id):
         return jsonify({'sucesso': False, 'erro': 'A Nota de Empenho deve ser inserida antes do despacho.'}), 400
 
     if itinerario.sei_id_despacho_ccdp:
-        return jsonify({'sucesso': False, 'erro': 'O Despacho CCDP já foi gerado para esta solicitação.'}), 400
+        # Se etapa já avançou, é double-click — apenas informa
+        if itinerario.etapa_atual_id >= DiariasEtapaID.DESPACHO_CCDP:
+            return jsonify({
+                'sucesso': True, 'ja_existe': True,
+                'mensagem': 'O Despacho CCDP já foi gerado.',
+                'documento_formatado': itinerario.sei_despacho_ccdp_formatado or '',
+            })
+        # Se doc existe MAS etapa não avançou → dead state (assinatura falhou antes)
+        # Redireciona para retry
+        return jsonify({
+            'sucesso': True,
+            'pendente_assinatura': True,
+            'documento_formatado': itinerario.sei_despacho_ccdp_formatado or '',
+            'id_documento': itinerario.sei_id_despacho_ccdp,
+            'mensagem': 'Despacho já criado mas pendente de assinatura. Use o botão "Realizar Assinatura".',
+        })
 
     if not itinerario.sei_id_procedimento:
         return jsonify({'sucesso': False, 'erro': 'Não há processo SEI vinculado.'}), 400
@@ -475,17 +501,19 @@ def despacho_ccdp(id):
             }
         )
 
-        if not resultado_assinatura.get('sucesso'):
-            # Doc criado mas não assinado — salvar mesmo assim
-            erro_assinatura = resultado_assinatura.get('erro', 'Erro desconhecido')
+        if not resultado_assinatura or not resultado_assinatura.get('sucesso'):
+            # Doc criado mas não assinado — salvar referência para permitir retry
+            erro_assinatura = resultado_assinatura.get('erro', 'Erro desconhecido') if resultado_assinatura else 'Sem resposta'
             itinerario.sei_id_despacho_ccdp = doc_id
             itinerario.sei_despacho_ccdp_formatado = doc_formatado
             db.session.commit()
+            # NÃO notifica — o processo ainda não avançou
             return jsonify({
                 'sucesso': True,
+                'pendente_assinatura': True,
                 'documento_formatado': doc_formatado,
                 'id_documento': doc_id,
-                'aviso': f'Documento gerado mas assinatura falhou: {erro_assinatura}',
+                'aviso': f'Documento gerado mas assinatura falhou: {erro_assinatura}. Use o botão "Realizar Assinatura" para completar.',
             })
 
         # 5. Enviar procedimento para APOIOSGA
@@ -509,6 +537,11 @@ def despacho_ccdp(id):
         )
 
         db.session.commit()
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'despacho_ccdp', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
 
         return jsonify({
             'sucesso': True,
@@ -544,7 +577,11 @@ def despacho_apoio(id):
         return jsonify({'sucesso': False, 'erro': 'A Analise NCI ainda nao foi gerada.'}), 400
 
     if itinerario.sei_id_despacho_apoio:
-        return jsonify({'sucesso': False, 'erro': 'O Despacho APOIO ja foi gerado.'}), 400
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'O Despacho APOIO já foi gerado.',
+            'documento_formatado': itinerario.sei_despacho_apoio_formatado or '',
+        })
 
     if not itinerario.sei_id_procedimento:
         return jsonify({'sucesso': False, 'erro': 'Nao ha processo SEI vinculado.'}), 400
@@ -610,7 +647,7 @@ def despacho_apoio(id):
 
         # Salvar
         itinerario.ciencia_apoio = True
-        from datetime import datetime
+
         itinerario.ciencia_apoio_data = datetime.now()
         itinerario.sei_id_despacho_apoio = doc_id
         itinerario.sei_despacho_apoio_formatado = doc_formatado
@@ -624,6 +661,11 @@ def despacho_apoio(id):
         )
 
         db.session.commit()
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'despacho_apoio', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
 
         resultado = {
             'sucesso': True,
@@ -661,7 +703,11 @@ def despacho_diretor(id):
         return jsonify({'sucesso': False, 'erro': 'O Despacho APOIO ainda nao foi gerado.'}), 400
 
     if itinerario.sei_id_despacho_diretor:
-        return jsonify({'sucesso': False, 'erro': 'O Despacho do Diretor ja foi gerado.'}), 400
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'O Despacho do Diretor já foi gerado.',
+            'documento_formatado': itinerario.sei_despacho_diretor_formatado or '',
+        })
 
     if not itinerario.sei_id_procedimento:
         return jsonify({'sucesso': False, 'erro': 'Nao ha processo SEI vinculado.'}), 400
@@ -734,7 +780,7 @@ def despacho_diretor(id):
 
         # Salvar
         itinerario.ciencia_diretor = True
-        from datetime import datetime
+
         itinerario.ciencia_diretor_data = datetime.now()
         itinerario.sei_id_despacho_diretor = doc_id
         itinerario.sei_despacho_diretor_formatado = doc_formatado
@@ -748,6 +794,11 @@ def despacho_diretor(id):
         )
 
         db.session.commit()
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'despacho_diretor', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
 
         resultado = {
             'sucesso': True,
@@ -787,7 +838,11 @@ def despacho_geo(id):
         return jsonify({'sucesso': False, 'erro': 'O Despacho do Diretor ainda nao foi gerado.'}), 400
 
     if itinerario.sei_id_despacho_geo:
-        return jsonify({'sucesso': False, 'erro': 'O Despacho GEO ja foi gerado.'}), 400
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'O Despacho GEO já foi gerado.',
+            'documento_formatado': itinerario.sei_despacho_geo_formatado or '',
+        })
 
     if not itinerario.sei_id_procedimento:
         return jsonify({'sucesso': False, 'erro': 'Nao ha processo SEI vinculado.'}), 400
@@ -857,7 +912,7 @@ def despacho_geo(id):
 
         # Salvar
         itinerario.ciencia_geo = True
-        from datetime import datetime
+
         itinerario.ciencia_geo_data = datetime.now()
         itinerario.sei_id_despacho_geo = doc_id
         itinerario.sei_despacho_geo_formatado = doc_formatado
@@ -871,6 +926,11 @@ def despacho_geo(id):
         )
 
         db.session.commit()
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'despacho_geo', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
 
         resultado = {
             'sucesso': True,
@@ -897,11 +957,18 @@ def inserir_nl(id):
     """Insere NL - Nota de Liquidacao (idSerie 420) no processo SEI."""
     itinerario = DiariasItinerario.query.get_or_404(id)
 
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Esta solicitação não possui processo SEI vinculado.'}), 400
+
     if not itinerario.sei_id_despacho_geo:
         return jsonify({'sucesso': False, 'erro': 'O Despacho GEO deve ser gerado antes da NL.'}), 400
 
     if itinerario.sei_id_nl:
-        return jsonify({'sucesso': False, 'erro': 'A NL ja foi inserida.'}), 400
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'A NL já foi inserida.',
+            'documento_formatado': itinerario.sei_nl_formatado or '',
+        })
 
     dados = request.get_json()
     if not dados:
@@ -933,6 +1000,11 @@ def inserir_nl(id):
         itinerario.sei_nl_formatado = retorno.get('DocumentoFormatado', '')
         db.session.commit()
 
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'nl_inserida', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
+
         return jsonify({
             'sucesso': True,
             'documento_formatado': retorno.get('DocumentoFormatado', ''),
@@ -951,11 +1023,18 @@ def inserir_pd(id):
     """Insere PD - Programacao de Desembolso (idSerie 421) no processo SEI."""
     itinerario = DiariasItinerario.query.get_or_404(id)
 
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Esta solicitação não possui processo SEI vinculado.'}), 400
+
     if not itinerario.sei_id_nl:
         return jsonify({'sucesso': False, 'erro': 'A NL deve ser inserida antes da PD.'}), 400
 
     if itinerario.sei_id_pd:
-        return jsonify({'sucesso': False, 'erro': 'A PD ja foi inserida.'}), 400
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'A PD já foi inserida.',
+            'documento_formatado': itinerario.sei_pd_formatado or '',
+        })
 
     dados = request.get_json()
     if not dados:
@@ -987,6 +1066,11 @@ def inserir_pd(id):
         itinerario.sei_pd_formatado = retorno.get('DocumentoFormatado', '')
         db.session.commit()
 
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'pd_inserida', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
+
         return jsonify({
             'sucesso': True,
             'documento_formatado': retorno.get('DocumentoFormatado', ''),
@@ -1005,11 +1089,18 @@ def inserir_ob(id):
     """Insere OB - Ordem Bancaria (idSerie 422) no processo SEI."""
     itinerario = DiariasItinerario.query.get_or_404(id)
 
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Esta solicitação não possui processo SEI vinculado.'}), 400
+
     if not itinerario.sei_id_pd:
         return jsonify({'sucesso': False, 'erro': 'A PD deve ser inserida antes da OB.'}), 400
 
     if itinerario.sei_id_ob:
-        return jsonify({'sucesso': False, 'erro': 'A OB ja foi inserida.'}), 400
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'A OB já foi inserida.',
+            'documento_formatado': itinerario.sei_ob_formatado or '',
+        })
 
     dados = request.get_json()
     if not dados:
@@ -1041,10 +1132,366 @@ def inserir_ob(id):
         itinerario.sei_ob_formatado = retorno.get('DocumentoFormatado', '')
         db.session.commit()
 
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'ob_inserida', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
+
         return jsonify({
             'sucesso': True,
             'documento_formatado': retorno.get('DocumentoFormatado', ''),
             'id_documento': str(retorno.get('IdDocumento', '')),
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado OB: {str(e)}'}), 500
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ETAPA 11 - Prestação de Contas CCDP (NP + Prestação SCDP + Despacho Final)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@financeiro_bp.route('/diarias/<int:id>/inserir-np', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def inserir_np(id):
+    """Insere NP - Nota Patrimonial (idSerie 423) no processo SEI."""
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if not usuario_tem_caixa(CAIXA_CCDP):
+        return jsonify({'sucesso': False, 'erro': 'Acesso restrito a usuarios da CCDP.'}), 403
+
+    if not itinerario.sei_id_comprovante_viagem:
+        return jsonify({'sucesso': False, 'erro': 'O comprovante de viagem deve ser enviado antes da NP.'}), 400
+
+    if itinerario.sei_id_np:
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'A NP já foi inserida.',
+            'documento_formatado': itinerario.sei_np_formatado or '',
+        })
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados nao fornecidos.'}), 400
+
+    codigo = dados.get('codigo', '').strip()
+    if not codigo:
+        return jsonify({'sucesso': False, 'erro': 'O codigo da NP e obrigatorio.'}), 400
+
+    try:
+        token = gerar_token_sei_admin()
+        if not token:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao autenticar no SEI.'}), 500
+
+        sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+        retorno = gerar_np(
+            token=token,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=sei_protocolo,
+            codigo_np=codigo,
+        )
+
+        if not retorno:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar NP no SEI.'}), 500
+
+        itinerario.np_codigo = codigo
+        itinerario.sei_id_np = str(retorno.get('IdDocumento', ''))
+        itinerario.sei_np_formatado = retorno.get('DocumentoFormatado', '')
+        db.session.commit()
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'np_inserida', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
+
+        return jsonify({
+            'sucesso': True,
+            'documento_formatado': retorno.get('DocumentoFormatado', ''),
+            'id_documento': str(retorno.get('IdDocumento', '')),
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro ao inserir NP: {str(e)}'}), 500
+
+
+@financeiro_bp.route('/diarias/<int:id>/upload-prestacao-scdp', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def upload_prestacao_scdp(id):
+    """Upload do Documento de Prestação SCDP (idSerie 264, externo) ao processo SEI."""
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if not usuario_tem_caixa(CAIXA_CCDP):
+        flash('Acesso restrito a usuarios da CCDP.', 'danger')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    if not itinerario.sei_id_np:
+        flash('A Nota Patrimonial (NP) deve ser inserida antes.', 'danger')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    if itinerario.sei_id_prestacao_scdp:
+        flash('O Documento de Prestação SCDP já foi enviado.', 'warning')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    arquivo = request.files.get('arquivo_prestacao_scdp')
+    if not arquivo or not arquivo.filename:
+        flash('Selecione um arquivo PDF para enviar.', 'danger')
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    try:
+        arquivo_bytes = arquivo.read()
+        if not arquivo_bytes:
+            flash('Arquivo vazio.', 'danger')
+            return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+        token = gerar_token_sei_admin()
+        if not token:
+            flash('Falha na autenticação SEI.', 'danger')
+            return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+        retorno = adicionar_documento_externo(
+            token=token,
+            protocolo_formatado=itinerario.sei_protocolo,
+            arquivo_bytes=arquivo_bytes,
+            nome_arquivo=arquivo.filename,
+            descricao='Documento de Prestação SCDP',
+            id_serie=ID_SERIE_PRESTACAO_SCDP,
+        )
+
+        if retorno:
+            itinerario.sei_id_prestacao_scdp = str(retorno.get('IdDocumento', ''))
+            itinerario.sei_prestacao_scdp_formatado = retorno.get('DocumentoFormatado', '')
+            db.session.commit()
+            try:
+                DiariasNotifier.notificar_etapa(itinerario, 'prestacao_scdp', current_user.id)
+            except Exception:
+                pass  # Notificacao nao deve bloquear o fluxo
+            flash('Documento de Prestação SCDP enviado ao SEI com sucesso!', 'success')
+        else:
+            flash('Erro ao enviar documento ao SEI.', 'danger')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao enviar documento: {str(e)}', 'danger')
+
+    return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+
+@financeiro_bp.route('/diarias/<int:id>/despacho-final', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def despacho_final(id):
+    """Gera Despacho Final CCDP (idSerie 754) - 'Processo pago e concluído nesta unidade.'"""
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if not usuario_tem_caixa(CAIXA_CCDP):
+        return jsonify({'sucesso': False, 'erro': 'Acesso restrito a usuarios da CCDP.'}), 403
+
+    if not itinerario.sei_id_prestacao_scdp:
+        return jsonify({'sucesso': False, 'erro': 'O Documento de Prestacao SCDP deve ser enviado antes.'}), 400
+
+    if itinerario.sei_id_despacho_final:
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'O Despacho Final já foi gerado.',
+            'documento_formatado': itinerario.sei_despacho_final_formatado or '',
+        })
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados nao fornecidos.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip() or 'Auxiliar Técnica'
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Credenciais SEI sao obrigatorias.'}), 400
+
+    try:
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha)
+        if not auth or not auth.get('token'):
+            return jsonify({'sucesso': False, 'erro': 'Falha na autenticacao SEI.'}), 401
+
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
+
+        sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+        retorno_doc = gerar_despacho_final_ccdp(
+            token=token_admin,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=sei_protocolo,
+        )
+
+        if not retorno_doc:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar Despacho Final no SEI.'}), 500
+
+        doc_id = str(retorno_doc.get('IdDocumento', ''))
+        doc_formatado = retorno_doc.get('DocumentoFormatado', '')
+
+        # Assinar com credenciais do usuario
+        resultado_assinatura = assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_CCDP,
+            dados_assinatura={
+                'protocolo_doc': doc_id,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': sei_senha,
+            }
+        )
+
+        aviso = None
+        if not resultado_assinatura.get('sucesso'):
+            aviso = f'Documento gerado mas assinatura falhou: {resultado_assinatura.get("erro", "")}'
+
+        # Salvar
+        itinerario.sei_id_despacho_final = doc_id
+        itinerario.sei_despacho_final_formatado = doc_formatado
+
+        # Avançar etapa - processo concluido
+        itinerario.etapa_atual_id = DiariasEtapaID.PRESTACAO_CONTAS_CCDP
+        DiariaService.registrar_movimentacao(
+            itinerario.id,
+            DiariasEtapaID.PRESTACAO_CONTAS_CCDP,
+            current_user.id,
+            'Despacho final CCDP - Processo pago e concluido',
+        )
+
+        db.session.commit()
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'processo_concluido', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
+
+        resp = {
+            'sucesso': True,
+            'documento_formatado': doc_formatado,
+            'id_documento': doc_id,
+        }
+        if aviso:
+            resp['aviso'] = aviso
+        return jsonify(resp)
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro ao gerar despacho final: {str(e)}'}), 500
+
+
+# ── Retry assinatura Despacho CCDP (quando doc criado mas assinatura falhou) ──
+
+
+@financeiro_bp.route('/diarias/<int:id>/assinar-despacho-ccdp', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def assinar_despacho_ccdp(id):
+    """Retry de assinatura do Despacho CCDP quando o documento já foi criado no SEI
+    mas a assinatura falhou anteriormente.
+
+    Após assinatura bem-sucedida:
+    1. Assina o documento existente
+    2. Envia o procedimento para APOIOSGA
+    3. Avança a etapa
+    """
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guard: doc deve existir mas etapa não deve ter avançado
+    if not itinerario.sei_id_despacho_ccdp:
+        return jsonify({'sucesso': False, 'erro': 'Nenhum despacho CCDP encontrado para assinar.'}), 400
+
+    if itinerario.etapa_atual_id >= DiariasEtapaID.DESPACHO_CCDP:
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'O Despacho CCDP já foi assinado e a etapa já avançou.',
+            'documento_formatado': itinerario.sei_despacho_ccdp_formatado or '',
+        })
+
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Não há processo SEI vinculado.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados não fornecidos.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip() or 'Auxiliar Técnica'
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Credenciais SEI são obrigatórias.'}), 400
+
+    try:
+        # 1. Autenticar usuário no SEI
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha)
+        if not auth or not auth.get('token'):
+            return jsonify({'sucesso': False, 'erro': 'Falha na autenticação SEI. Verifique suas credenciais.'}), 401
+
+        # 2. Assinar o documento existente
+        doc_id = itinerario.sei_id_despacho_ccdp
+        doc_formatado = itinerario.sei_despacho_ccdp_formatado or ''
+
+        resultado_assinatura = assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_CCDP,
+            dados_assinatura={
+                'protocolo_doc': doc_id,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': sei_senha,
+            }
+        )
+
+        if not resultado_assinatura or not resultado_assinatura.get('sucesso'):
+            erro_txt = resultado_assinatura.get('erro', 'Erro desconhecido') if resultado_assinatura else 'Sem resposta'
+            return jsonify({
+                'sucesso': False,
+                'erro': f'Assinatura falhou novamente: {erro_txt}',
+            }), 500
+
+        # 3. Token admin para enviar procedimento
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
+
+        # 4. Enviar procedimento para APOIOSGA
+        envio = enviar_procedimento(
+            token=token_admin,
+            protocolo_procedimento=itinerario.sei_protocolo,
+            unidades_destino=[UNIDADE_APOIOSGA],
+            unidade_origem=UNIDADE_CCDP,
+        )
+
+        # 5. Avançar etapa
+        DiariaService.registrar_movimentacao(
+            id_itinerario=id,
+            etapa_nova_id=DiariasEtapaID.DESPACHO_CCDP,
+            usuario_id=current_user.id if current_user else None,
+            comentario=f'Despacho CCDP ({doc_formatado}) assinado (retry) e enviado para APOIOSGA.',
+        )
+
+        db.session.commit()
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'despacho_ccdp', current_user.id)
+        except Exception:
+            pass
+
+        return jsonify({
+            'sucesso': True,
+            'documento_formatado': doc_formatado,
+            'id_documento': doc_id,
+            'envio_procedimento': envio,
         })
 
     except Exception as e:

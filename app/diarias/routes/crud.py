@@ -12,6 +12,7 @@ from app.services.sei_auth import gerar_token_sei_admin, autenticar_usuario_sei
 from app.services.sei_integration import assinar_documento
 from app.models.diaria import DiariasTipoSolicitacao, DiariasValorCargo, DiariasItinerario, Estado
 from app.constants import DiariasEtapaID
+from app.services.diarias_notification import DiariasNotifier
 
 
 # IDs dos tipos de solicitação (espelhados do seed)
@@ -103,7 +104,7 @@ def store():
                 'nome_arquivo': arquivo_anexo.filename,
                 'descricao': f'Documento anexo - Solicitacao de Diarias',
             }
-            print(f"[DEBUG SEI] store(): Arquivo recebido: {arquivo_anexo.filename}, "
+            current_app.logger.debug(f"SEI store(): Arquivo recebido: {arquivo_anexo.filename}, "
                   f"tamanho: {len(arquivo_externo['bytes'])} bytes")
 
         dados = {
@@ -128,14 +129,15 @@ def store():
         )
 
         # ── Integração SEI: Nacional + Passagens (Diárias+Passagens ou Apenas Passagens) ──
-        print(f"[DEBUG SEI] store(): tipo={tipo}, tipo_solicitacao_id={tipo_solicitacao_id}")
-        print(f"[DEBUG SEI] store(): condicao SEI = {tipo == 2 and tipo_solicitacao_id in (TIPO_SOL_DIARIAS_PASSAGENS, TIPO_SOL_APENAS_PASSAGENS)}")
         if tipo == 2 and tipo_solicitacao_id in (TIPO_SOL_DIARIAS_PASSAGENS, TIPO_SOL_APENAS_PASSAGENS):
-            print(f"[DEBUG SEI] store(): Entrando na integracao SEI...")
             _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
                                   justificativa_memorando, objetivo, arquivo_externo)
 
         flash('Solicitação de diária criada com sucesso!', 'success')
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'nova_solicitacao', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
         return redirect(url_for('diarias.dashboard'))
 
     except Exception as e:
@@ -154,8 +156,18 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
     from app.extensions import db
 
     try:
-        print(f"[DEBUG SEI] _integrar_sei_diarias: INICIO - itinerario.id={itinerario.id}")
         tipo_itinerario = dados.get('tipo_itinerario', 2)
+
+        # Pré-carrega todos os cargos necessários em uma única query (evita N+1)
+        cargo_ids = set()
+        for p in pessoas:
+            if p.get('cargo_id'):
+                cargo_ids.add(int(p['cargo_id']))
+            if p.get('cargo_assessorado_id'):
+                cargo_ids.add(int(p['cargo_assessorado_id']))
+        cargos_map = {}
+        if cargo_ids:
+            cargos_map = {c.id: c for c in DiariasCargo.query.filter(DiariasCargo.id.in_(cargo_ids)).all()}
 
         # Monta dados dos servidores a partir dos dados da API (passados via form)
         servidores_sei = []
@@ -168,7 +180,7 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
             # Busca nome do cargo (diarias_cargos) e valor da diária
             cargo_id = p.get('cargo_id')
             cargo_assessorado_id = p.get('cargo_assessorado_id')
-            cargo_obj = DiariasCargo.query.get(cargo_id) if cargo_id else None
+            cargo_obj = cargos_map.get(int(cargo_id)) if cargo_id else None
             cargo_nome = cargo_obj.nome if cargo_obj else p.get('cargo_folha', '')
 
             # Se assessorando, usa o cargo do assessorado para cálculo do valor
@@ -177,7 +189,7 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
             valor_total_pessoa = valor_unitario * float(itinerario.qtd_diarias_solicitadas)
 
             # Busca nome do cargo assessorado para exibição no SEI
-            cargo_assessorado_obj = DiariasCargo.query.get(cargo_assessorado_id) if cargo_assessorado_id else None
+            cargo_assessorado_obj = cargos_map.get(int(cargo_assessorado_id)) if cargo_assessorado_id else None
             cargo_assessorado_nome = cargo_assessorado_obj.nome if cargo_assessorado_obj else None
 
             # Dados bancários da API pessoaSGA
@@ -199,7 +211,7 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
             })
 
         primeiro_cargo = pessoas[0].get('cargo_id') if pessoas else None
-        cargo_principal_obj = DiariasCargo.query.get(primeiro_cargo) if primeiro_cargo else None
+        cargo_principal_obj = cargos_map.get(int(primeiro_cargo)) if primeiro_cargo else None
 
         dados_servidor = {
             'cargo': cargo_principal_obj.nome if cargo_principal_obj else (pessoas[0].get('cargo_folha', 'Servidor') if pessoas else 'Servidor'),
@@ -231,21 +243,12 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
             'trecho': trecho,
         }
 
-        print(f"[DEBUG SEI] _integrar_sei_diarias: Chamando criar_processo_diarias_completo")
-        print(f"[DEBUG SEI]   dados_requisicao keys: {list(dados_requisicao.keys())}")
-        print(f"[DEBUG SEI]   servidores count: {len(servidores_sei)}, trecho: {trecho}")
-        print(f"[DEBUG SEI]   tipo_solicitacao_id: {tipo_solicitacao_id}")
-
         resultado = criar_processo_diarias_completo(
             dados_itinerario, dados_servidor, justificativa_memorando,
             dados_requisicao=dados_requisicao,
             arquivo_externo=arquivo_externo,
             tipo_solicitacao_id=tipo_solicitacao_id,
         )
-
-        print(f"[DEBUG SEI] _integrar_sei_diarias: resultado sucesso={resultado['sucesso']}, erro={resultado.get('erro')}")
-        print(f"[DEBUG SEI]   requisicao presente: {resultado.get('requisicao') is not None}")
-        print(f"[DEBUG SEI]   doc_externo presente: {resultado.get('doc_externo') is not None}")
 
         if resultado['sucesso']:
             # Salva dados do SEI no itinerário
@@ -288,10 +291,10 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
             )
 
     except Exception as e:
-        print(f"[DEBUG SEI] _integrar_sei_diarias: EXCECAO GERAL: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
+        db.session.rollback()
         current_app.logger.error(f"SEI Diárias: Erro na integração para itinerário {itinerario.id}: {e}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
 
 
 @diarias_bp.route('/detalhes/<int:id>')
@@ -502,6 +505,11 @@ def gerar_relatorio(id):
         itinerario.sei_relatorio_viagem_formatado = doc_formatado
         db.session.commit()
 
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'relatorio_viagem', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
+
         resp = {
             'success': True,
             'message': f'Relatório de Viagem gerado com sucesso! ({doc_formatado})',
@@ -516,3 +524,90 @@ def gerar_relatorio(id):
         db.session.rollback()
         current_app.logger.error(f"Erro ao gerar relatório de viagem: {e}")
         return jsonify({'success': False, 'error': f'Erro inesperado: {str(e)}'}), 500
+
+
+@diarias_bp.route('/<int:id>/upload-comprovante', methods=['POST'])
+@login_required
+@requires_permission('diarias.visualizar')
+def upload_comprovante(id):
+    """Upload do Comprovante de Viagem (IdSerie 35) ao processo SEI.
+
+    Disponível para o solicitante após gerar o Relatório de Viagem.
+    Após upload, o processo avança para a etapa de Prestação de Contas na CCDP.
+    """
+    from app.services.diarias_sei_integration import (
+        adicionar_documento_externo, ID_SERIE_COMPROVANTE_VIAGEM,
+    )
+    from app.extensions import db
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Valida: relatório já gerado
+    if not itinerario.sei_id_relatorio_viagem:
+        flash('O Relatório de Viagem deve ser gerado antes de enviar o comprovante.', 'danger')
+        return redirect(url_for('diarias.detalhes', id=id))
+
+    # Valida: comprovante não já enviado
+    if itinerario.sei_id_comprovante_viagem:
+        flash('O comprovante de viagem já foi enviado.', 'warning')
+        return redirect(url_for('diarias.detalhes', id=id))
+
+    arquivo = request.files.get('arquivo_comprovante')
+    if not arquivo or not arquivo.filename:
+        flash('Selecione um arquivo PDF para enviar.', 'danger')
+        return redirect(url_for('diarias.detalhes', id=id))
+
+    MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+
+    try:
+        arquivo_bytes = arquivo.read()
+        if not arquivo_bytes:
+            flash('Arquivo vazio.', 'danger')
+            return redirect(url_for('diarias.detalhes', id=id))
+
+        if len(arquivo_bytes) > MAX_UPLOAD_SIZE:
+            flash('Arquivo excede o tamanho máximo de 10MB.', 'danger')
+            return redirect(url_for('diarias.detalhes', id=id))
+
+        token = gerar_token_sei_admin()
+        if not token:
+            flash('Falha na autenticação SEI.', 'danger')
+            return redirect(url_for('diarias.detalhes', id=id))
+
+        retorno = adicionar_documento_externo(
+            token=token,
+            protocolo_formatado=itinerario.sei_protocolo,
+            arquivo_bytes=arquivo_bytes,
+            nome_arquivo=arquivo.filename,
+            descricao='Comprovante de Realização da Viagem',
+            id_serie=ID_SERIE_COMPROVANTE_VIAGEM,
+        )
+
+        if retorno:
+            itinerario.sei_id_comprovante_viagem = str(retorno.get('IdDocumento', ''))
+            itinerario.sei_comprovante_viagem_formatado = retorno.get('DocumentoFormatado', '')
+
+            # Avança etapa para Comprovante de Viagem
+            itinerario.etapa_atual_id = DiariasEtapaID.COMPROVANTE_VIAGEM
+            DiariaService.registrar_movimentacao(
+                itinerario.id,
+                DiariasEtapaID.COMPROVANTE_VIAGEM,
+                current_user.id,
+                'Comprovante de viagem enviado pelo solicitante',
+            )
+
+            db.session.commit()
+            try:
+                DiariasNotifier.notificar_etapa(itinerario, 'comprovante_viagem', current_user.id)
+            except Exception:
+                pass  # Notificacao nao deve bloquear o fluxo
+            flash('Comprovante de viagem enviado ao SEI com sucesso!', 'success')
+        else:
+            flash('Erro ao enviar comprovante ao SEI.', 'danger')
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao enviar comprovante: {e}")
+        flash(f'Erro ao enviar comprovante: {str(e)}', 'danger')
+
+    return redirect(url_for('diarias.detalhes', id=id))

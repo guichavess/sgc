@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy import or_, and_
 
+from sqlalchemy.orm import joinedload
+
 from app.repositories.base import BaseRepository
 from app.cgfr.models import CgfrProcessoEnviado
 from app.extensions import db
@@ -39,7 +41,10 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
         Returns:
             Query SQLAlchemy filtrada.
         """
-        query = cls.model.query
+        query = cls.model.query.options(
+            joinedload(cls.model.natureza_rel),
+            joinedload(cls.model.fonte_rel),
+        )
         filtros = filtros or {}
 
         # Filtro de status

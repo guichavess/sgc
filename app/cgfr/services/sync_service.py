@@ -126,12 +126,16 @@ class SyncService:
 
     @staticmethod
     def _fmt_datetime(dt):
-        """Formata datetime do Trino para string dd/mm/yyyy HH:MM:SS."""
+        """Formata datetime do Trino para string dd/mm/yyyy."""
         if not dt:
             return None
         if isinstance(dt, datetime):
-            return dt.strftime('%d/%m/%Y %H:%M:%S')
-        return str(dt)
+            return dt.strftime('%d/%m/%Y')
+        # Se for string com hora, remove
+        s = str(dt).strip()
+        if ' ' in s:
+            return s.split(' ')[0]
+        return s
 
     @staticmethod
     def _to_decimal(value):

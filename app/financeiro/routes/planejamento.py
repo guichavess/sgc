@@ -2,14 +2,15 @@
 Rotas do Planejamento Orçamentário (Financeiro).
 Páginas: Lançar Planejamento e Relatório de Execução.
 """
-from functools import wraps
+import logging
 from datetime import datetime
 from decimal import Decimal
-from flask import render_template, request, jsonify, redirect, url_for, flash
+from io import BytesIO
+from flask import render_template, request, jsonify, redirect, url_for, flash, send_file
 from flask_login import login_required, current_user
 from sqlalchemy import func, case, extract, text
 
-from app.financeiro.routes import financeiro_bp
+from app.financeiro.routes import financeiro_bp, requires_admin_or_pedro
 from app.extensions import db
 from app.models.empenho import Empenho
 from app.models.empenho_item import EmpenhoItem, ClassSubItemDespesa
@@ -17,21 +18,9 @@ from app.models.execucao_orcamentaria import ExecucaoOrcamentaria
 from app.models.planejamento_orcamentario import PlanejamentoOrcamentario
 from app.services.prestacao_contrato_service import PrestacaoContratoService
 
+logger = logging.getLogger(__name__)
 
-# ── Controle de acesso ──────────────────────────────────────────────────────
 
-def _requires_admin_or_pedro(f):
-    """Permite acesso a admins gerais e ao Pedro Alexandre."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not current_user.is_authenticated:
-            return redirect(url_for('auth.login'))
-        is_pedro = current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper()
-        if not current_user.is_admin and not is_pedro:
-            flash('Acesso restrito.', 'danger')
-            return redirect(url_for('hub'))
-        return f(*args, **kwargs)
-    return decorated
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -130,7 +119,7 @@ def _decimal(val):
 
 @financeiro_bp.route('/planejamento')
 @login_required
-@_requires_admin_or_pedro
+@requires_admin_or_pedro
 def planejamento_index():
     """Página principal — Lançar Planejamento Orçamentário."""
     ano = datetime.now().year
@@ -423,8 +412,8 @@ def _query_empenhado_geral(dt_ini, dt_fim, filtro_natureza=None, num_codes_int=N
             by_natureza[nat] = by_natureza.get(nat, ZERO) + val
             mm = f'{int(row[1]):02d}'
             by_month[mm] = by_month.get(mm, ZERO) + val
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro em _query_empenhado_geral: %s', e)
 
     return total, by_month, by_natureza
 
@@ -464,8 +453,8 @@ def _query_liquidado(num_codes_int, num_to_cod, dt_ini, dt_fim):
             by_contract[cod_fmt] = by_contract.get(cod_fmt, ZERO) + val
             mm = f'{int(row[1]):02d}'
             by_month[mm] = by_month.get(mm, ZERO) + val
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro em _query_liquidado: %s', e)
 
     return total, by_month, by_contract
 
@@ -516,8 +505,8 @@ def _query_liquidado_geral(dt_ini, dt_fim, filtro_natureza=None, num_codes_int=N
             by_natureza[nat] = by_natureza.get(nat, ZERO) + val
             mm = f'{int(row[1]):02d}'
             by_month[mm] = by_month.get(mm, ZERO) + val
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro em _query_liquidado_geral: %s', e)
 
     return total, by_month, by_natureza
 
@@ -637,8 +626,8 @@ def _query_dotacao_por_natureza(ano):
     try:
         for r in db.session.execute(sql_ini, {**params, 'conta': CONTA_INICIAL}).fetchall():
             ini_by_nat[str(r[0])] = _decimal(r[1])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar dotacao inicial por natureza: %s', e)
 
     # Demais contas por natureza: MAX(mes) do ano
     sql_max = text("""
@@ -652,8 +641,8 @@ def _query_dotacao_por_natureza(ano):
         for r in db.session.execute(sql_max, params).fetchall():
             nat = str(r[0])
             by_nat_conta.setdefault(nat, {})[r[1]] = _decimal(r[2])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar contas LOA por natureza: %s', e)
 
     # Calcular dotação atualizada por natureza
     all_nats = set(ini_by_nat.keys()) | set(by_nat_conta.keys())
@@ -674,7 +663,7 @@ def _query_dotacao_por_natureza(ano):
 
 @financeiro_bp.route('/planejamento/relatorio')
 @login_required
-@_requires_admin_or_pedro
+@requires_admin_or_pedro
 def planejamento_relatorio():
     """Dashboard — Relatório Planejado vs. Liquidado (estilo Power BI)."""
     ano = request.args.get('ano', datetime.now().year, type=int)
@@ -771,8 +760,8 @@ def planejamento_relatorio():
             exec_orc_total += val
             if nat:
                 exec_orc_by_natureza[nat] = val
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('Erro ao consultar execucoes orcamentarias: %s', e)
 
     # ══════════════════════════════════════════════════════════════════
     # KPIs
@@ -875,18 +864,15 @@ def planejamento_relatorio():
             _subitem_codes_used.add(sub)
 
     # Lookup de descrição do sub-item (apenas os códigos usados)
+    # Mover após plan_by_nat_sub para incluir subitens só-planejados
     subitem_desc = {}
-    if _subitem_codes_used:
-        for sid in db.session.query(ClassSubItemDespesa).all():
-            codigo = f'{sid.valoresClassificador1}.{sid.valoresClassificador2}'
-            if codigo in _subitem_codes_used:
-                subitem_desc[codigo] = sid.nomeClassificador or codigo
+    subitem_desc_by_val1 = {}
 
     for row in sub_emp_rows:
         nat = str(row[0]) if row[0] else ''
         sub = str(row[1]) if row[1] else 'Sem Sub-item'
         desc = subitem_desc.get(sub, sub)
-        subitem_values.setdefault(nat, {}).setdefault(desc, {'emp': ZERO, 'liq': ZERO})
+        subitem_values.setdefault(nat, {}).setdefault(desc, {'emp': ZERO, 'liq': ZERO, 'cod': sub})
         subitem_values[nat][desc]['emp'] += _decimal(row[2])
 
     # Planejado por natureza+subitem (para detalhamento nos sub-itens)
@@ -916,6 +902,27 @@ def planejamento_relatorio():
         val = _decimal(row.total)
         plan_by_nat_sub.setdefault(nat, {})[sub_code] = val
 
+    # Lookup de descrição do sub-item (empenho + planejado)
+    _parts = set()
+    for c in _subitem_codes_used:
+        if '.' in c:
+            _parts.add(c.split('.', 1)[0])
+    # Incluir códigos de subitens do planejamento (ex: diárias sem empenho)
+    for subs in plan_by_nat_sub.values():
+        for sub_code in subs:
+            if sub_code:
+                _parts.add(sub_code)
+    if _parts:
+        sids = db.session.query(ClassSubItemDespesa).filter(
+            ClassSubItemDespesa.valoresClassificador1.in_(_parts)
+        ).all()
+        for sid in sids:
+            codigo = f'{sid.valoresClassificador1}.{sid.valoresClassificador2}'
+            if codigo in _subitem_codes_used:
+                subitem_desc[codigo] = sid.nomeClassificador or codigo
+            if sid.valoresClassificador1 not in subitem_desc_by_val1:
+                subitem_desc_by_val1[sid.valoresClassificador1] = sid.nomeClassificador or sid.valoresClassificador1
+
     nat_table = []
     for nat_code in sorted(all_nats):
         p = plan_by_natureza.get(nat_code, ZERO)
@@ -932,16 +939,25 @@ def planejamento_relatorio():
 
         # Sub-itens
         subitems = []
+        plan_subs = plan_by_nat_sub.get(nat_code, {})
+        matched_plan_codes = set()  # códigos de planejamento já casados
+
         if nat_code in subitem_values:
-            plan_subs = plan_by_nat_sub.get(nat_code, {})
             for sub_name, sub_vals in subitem_values[nat_code].items():
                 se = sub_vals['emp']
                 sl = sub_vals['liq']
-                # Encontrar planejado: sub_name é "51 - SERVICOS TECNICOS..." - extrair código
+                emp_cod = sub_vals.get('cod', '')  # código empenho ex: "2144.339014"
+                emp_val1 = emp_cod.split('.')[0] if '.' in emp_cod else emp_cod
+                # Encontrar planejado: match por código do subitem (val1)
+                # ou por prefixo do sub_name (compatibilidade com contratos)
                 sp = ZERO
                 for plan_sub_code, plan_val in plan_subs.items():
-                    if plan_sub_code and sub_name.startswith(plan_sub_code):
+                    if plan_sub_code and (
+                        plan_sub_code == emp_val1 or
+                        sub_name.startswith(plan_sub_code)
+                    ):
                         sp = plan_val
+                        matched_plan_codes.add(plan_sub_code)
                         break
                 if se or sl or sp:
                     subitems.append({
@@ -952,7 +968,21 @@ def planejamento_relatorio():
                         'pct_liq': float(_pct(sl, dot_nat)) if dot_nat else 0.0,
                         'pct_emp': float(_pct(se, dot_nat)) if dot_nat else 0.0,
                     })
-            subitems.sort(key=lambda x: x['empenhado'], reverse=True)
+
+        # Subitens com planejado mas sem empenho (ex: Diárias no Exterior)
+        for plan_sub_code, plan_val in plan_subs.items():
+            if plan_sub_code and plan_sub_code not in matched_plan_codes and plan_val:
+                desc = subitem_desc_by_val1.get(plan_sub_code, plan_sub_code)
+                subitems.append({
+                    'subitem': desc,
+                    'planejado': plan_val,
+                    'empenhado': ZERO,
+                    'liquidado': ZERO,
+                    'pct_liq': 0.0,
+                    'pct_emp': 0.0,
+                })
+
+        subitems.sort(key=lambda x: x['empenhado'], reverse=True)
 
         nat_table.append({
             'natcompleta': nat_name,
@@ -1056,7 +1086,7 @@ def planejamento_relatorio():
 
 @financeiro_bp.route('/api/planejamento/salvar', methods=['POST'])
 @login_required
-@_requires_admin_or_pedro
+@requires_admin_or_pedro
 def api_planejamento_salvar():
     """Salva respostas do planejamento orçamentário para um contrato."""
     data = request.get_json() or {}
@@ -1159,3 +1189,217 @@ def api_planejamento_salvar():
     except Exception as e:
         db.session.rollback()
         return jsonify({'sucesso': False, 'msg': f'Erro ao salvar: {str(e)}'}), 500
+
+
+# ── Export XLSX ────────────────────────────────────────────────────────────────
+
+def _build_export_data(ano, filtro_mes_rel, f, filtro_natureza):
+    """Retorna (nat_table, all_contratos) com TODOS os dados (sem paginação)."""
+    codigos = PrestacaoContratoService.listar_codigos_filtrados(**f)
+
+    num_to_cod = {}
+    num_codes_int = []
+    for cod in codigos:
+        num = cod.replace('.', '').replace('/', '')
+        num_to_cod[num] = cod
+        try:
+            num_codes_int.append(int(num))
+        except ValueError:
+            pass
+    geral_codigos = codigos or None
+
+    dt_ini = f'{ano}-01-01'
+    dt_fim = f'{ano + 1}-01-01'
+    if filtro_mes_rel:
+        dt_ini = f'{ano}-{filtro_mes_rel:02d}-01'
+        if filtro_mes_rel == 12:
+            dt_fim = f'{ano + 1}-01-01'
+        else:
+            dt_fim = f'{ano}-{filtro_mes_rel + 1:02d}-01'
+
+    # Empenhado e Liquidado por contrato
+    _, _, emp_by_contract = _query_empenhado(num_codes_int, num_to_cod, dt_ini, dt_fim)
+    _, _, liq_by_contract = _query_liquidado(num_codes_int, num_to_cod, dt_ini, dt_fim)
+
+    # Empenhado e Liquidado por natureza
+    _, _, emp_by_natureza = _query_empenhado_geral(dt_ini, dt_fim, filtro_natureza or None, num_codes_int or None)
+    _, _, liq_by_natureza = _query_liquidado_geral(dt_ini, dt_fim, filtro_natureza or None, num_codes_int or None)
+
+    # Planejado por contrato e natureza
+    plan_total_c, _, plan_by_contract, plan_ini = _query_planejado(geral_codigos, ano, filtro_mes_rel)
+    plan_total_n, _, plan_by_natureza = _query_planejado_por_natureza(ano, filtro_mes_rel, filtro_natureza or None, geral_codigos)
+
+    # Nat table
+    all_nats = set(emp_by_natureza.keys()) | set(liq_by_natureza.keys()) | set(plan_by_natureza.keys())
+    nat_map = {}
+    try:
+        for r in db.session.execute(text("SELECT codigo, titulo FROM natdespesas")).fetchall():
+            if r[0] and r[1]:
+                nat_map[str(r[0])] = r[1]
+    except Exception:
+        pass
+
+    nat_table = []
+    for nat_code in sorted(all_nats):
+        p = plan_by_natureza.get(nat_code, ZERO)
+        e = emp_by_natureza.get(nat_code, ZERO)
+        l = liq_by_natureza.get(nat_code, ZERO)
+        desc = nat_map.get(nat_code, '')
+        nat_name = f'{nat_code}-{desc}' if desc else nat_code
+        nat_table.append({
+            'natcompleta': nat_name,
+            'planejado': p,
+            'empenhado': e,
+            'liquidado': l,
+            'pct_liq': float(_pct(l, p)),
+            'pct_emp': float(_pct(e, p)),
+        })
+    nat_table.sort(key=lambda x: x['empenhado'], reverse=True)
+
+    # Contratos table — ALL (sem paginação)
+    all_contracts = PrestacaoContratoService.listar_contratos_paginado(
+        **f, page=1, per_page=999999
+    ).items
+    contratos_table = []
+    for c in all_contracts:
+        cod = c.codigo
+        p = plan_by_contract.get(cod, ZERO)
+        e = emp_by_contract.get(cod, ZERO)
+        l = liq_by_contract.get(cod, ZERO)
+        cc = ''
+        if hasattr(c, 'centro_de_custo') and c.centro_de_custo:
+            cc = c.centro_de_custo.descricao
+        nat = ''
+        if hasattr(c, 'nat_despesa') and c.nat_despesa:
+            nat = f'{c.nat_despesa.codigo}-{c.nat_despesa.titulo}'
+        contratos_table.append({
+            'codigo': cod,
+            'credor': c.nomeContratado or c.nomeContratadoResumido or '',
+            'planejado': p,
+            'empenhado': e,
+            'liquidado': l,
+            'centro_custo': cc,
+            'pct_liq': float(_pct(l, p)),
+            'pct_emp': float(_pct(e, p)),
+            'natcompleta': nat,
+            'plan_inicial': 'SIM' if plan_ini.get(cod) else 'NAO',
+        })
+
+    return nat_table, contratos_table
+
+
+def _make_xlsx(headers, rows, sheet_name='Dados'):
+    """Gera um arquivo XLSX em memória."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, numbers
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+
+    # Header style
+    header_font = Font(bold=True, color='FFFFFF', size=10)
+    header_fill = PatternFill('solid', fgColor='2957A4')
+    header_align = Alignment(horizontal='center', wrap_text=True)
+
+    for col_idx, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+
+    # Data
+    num_fmt_brl = '#,##0.00'
+    pct_fmt = '0.00"%"'
+    for row_idx, row_data in enumerate(rows, 2):
+        for col_idx, val in enumerate(row_data, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            if isinstance(val, (Decimal, float)) and not isinstance(val, bool):
+                cell.number_format = num_fmt_brl
+                cell.alignment = Alignment(horizontal='right')
+
+    # Auto-width
+    for col in ws.columns:
+        max_len = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            try:
+                val = str(cell.value or '')
+                if len(val) > max_len:
+                    max_len = len(val)
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 50)
+
+    # Freeze header
+    ws.freeze_panes = 'A2'
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+@financeiro_bp.route('/planejamento/relatorio/export/natureza')
+@login_required
+@requires_admin_or_pedro
+def export_natureza_xlsx():
+    """Exporta tabela Planejado vs. Liquidado por Natureza como XLSX."""
+    ano = request.args.get('ano', datetime.now().year, type=int)
+    filtro_mes_rel = request.args.get('mes', type=int) or None
+    f = _parse_filtros_contrato()
+    filtro_natureza = [int(v) for v in request.args.getlist('natureza') if v.strip()]
+
+    nat_table, _ = _build_export_data(ano, filtro_mes_rel, f, filtro_natureza)
+
+    headers = ['Natureza', 'Planejado', 'Empenhado', 'Liquidado', '% Liq', '% Emp']
+    rows = []
+    for n in nat_table:
+        rows.append([
+            n['natcompleta'],
+            float(n['planejado']),
+            float(n['empenhado']),
+            float(n['liquidado']),
+            n['pct_liq'],
+            n['pct_emp'],
+        ])
+
+    buf = _make_xlsx(headers, rows, 'Natureza de Despesa')
+    fname = f'natureza_despesa_{ano}.xlsx'
+    return send_file(buf, as_attachment=True, download_name=fname,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+@financeiro_bp.route('/planejamento/relatorio/export/contratos')
+@login_required
+@requires_admin_or_pedro
+def export_contratos_xlsx():
+    """Exporta tabela Planejado vs. Liquidado por Contrato como XLSX (todos)."""
+    ano = request.args.get('ano', datetime.now().year, type=int)
+    filtro_mes_rel = request.args.get('mes', type=int) or None
+    f = _parse_filtros_contrato()
+    filtro_natureza = [int(v) for v in request.args.getlist('natureza') if v.strip()]
+
+    _, contratos_table = _build_export_data(ano, filtro_mes_rel, f, filtro_natureza)
+
+    headers = ['Contrato', 'Credor', 'Natureza', 'Centro de Custo',
+               'Plan. Inicial', 'Planejado', 'Empenhado', 'Liquidado', '% Liq', '% Emp']
+    rows = []
+    for c in contratos_table:
+        rows.append([
+            c['codigo'],
+            c['credor'],
+            c['natcompleta'],
+            c['centro_custo'],
+            c['plan_inicial'],
+            float(c['planejado']),
+            float(c['empenhado']),
+            float(c['liquidado']),
+            c['pct_liq'],
+            c['pct_emp'],
+        ])
+
+    buf = _make_xlsx(headers, rows, 'Contratos')
+    fname = f'contratos_{ano}.xlsx'
+    return send_file(buf, as_attachment=True, download_name=fname,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

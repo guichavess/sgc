@@ -1,126 +1,122 @@
 {# Modal de Edicao/Classificacao de Processo CGFR #}
 <div class="modal fade" id="modalEdicao" tabindex="-1" aria-labelledby="modalEdicaoLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
-            <div class="modal-header" style="background: linear-gradient(135deg, #DC2626, #EF4444); color: white;">
-                <h5 class="modal-title" id="modalEdicaoLabel">
+            <div class="modal-header py-2" style="background: linear-gradient(135deg, #282c6e, #343990); color: white;">
+                <h6 class="modal-title mb-0" id="modalEdicaoLabel">
                     <i class="bi bi-pencil-square me-2"></i>Classificar Processo
-                </h5>
+                    <span id="modal-processo-display" class="ms-2 fw-normal" style="font-size: 0.9rem; opacity: 0.9;"></span>
+                </h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body py-3">
                 <input type="hidden" id="modal-processo-formatado">
 
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Processo</label>
-                    <p id="modal-processo-display" class="form-control-plaintext fw-bold text-primary"></p>
+                {# Linha 1: Classificacao Orcamentaria #}
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-tag text-danger me-2"></i>
+                    <span class="fw-bold" style="font-size: 0.85rem;">Classificação Orçamentária</span>
                 </div>
-
-                <hr>
-                <h6 class="fw-bold mb-3"><i class="bi bi-tag me-1"></i> Classificacao Orcamentaria</h6>
-
-                <div class="row g-3">
+                <div class="row g-2 mb-3">
                     <div class="col-md-4">
-                        <label for="modal-natureza" class="form-label">Natureza de Despesa <span class="text-danger">*</span></label>
-                        <select id="modal-natureza" class="form-select cgfr-select2" style="width:100%"></select>
+                        <label for="modal-natureza" class="form-label form-label-sm mb-1">Natureza de Despesa <span class="text-danger">*</span></label>
+                        <select id="modal-natureza" class="form-select form-select-sm cgfr-select2" style="width:100%"></select>
                     </div>
                     <div class="col-md-4">
-                        <label for="modal-fonte" class="form-label">Fonte <span class="text-danger">*</span></label>
-                        <select id="modal-fonte" class="form-select cgfr-select2" style="width:100%"></select>
+                        <label for="modal-fonte" class="form-label form-label-sm mb-1">Fonte <span class="text-danger">*</span></label>
+                        <select id="modal-fonte" class="form-select form-select-sm cgfr-select2" style="width:100%"></select>
                     </div>
                     <div class="col-md-4">
-                        <label for="modal-acao" class="form-label">Acao <span class="text-danger">*</span></label>
-                        <select id="modal-acao" class="form-select cgfr-select2" style="width:100%"></select>
+                        <label for="modal-acao" class="form-label form-label-sm mb-1">Ação <span class="text-danger">*</span></label>
+                        <select id="modal-acao" class="form-select form-select-sm cgfr-select2" style="width:100%"></select>
                     </div>
                 </div>
 
-                <hr>
-                <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-1"></i> Informacoes Complementares</h6>
+                <hr class="my-2">
 
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label for="modal-fornecedor" class="form-label">Fornecedor</label>
-                        <input type="text" class="form-control" id="modal-fornecedor">
+                {# Linha 2: Fornecedor + Tipo Despesa + Valores + Data #}
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-info-circle text-danger me-2"></i>
+                    <span class="fw-bold" style="font-size: 0.85rem;">Informações Complementares</span>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-3">
+                        <label for="modal-fornecedor" class="form-label form-label-sm mb-1">Fornecedor</label>
+                        <input type="text" class="form-control form-control-sm" id="modal-fornecedor">
                     </div>
-                    <div class="col-md-6">
-                        <label for="modal-tipo-despesa" class="form-label">Tipo de Despesa</label>
-                        <select id="modal-tipo-despesa" class="form-select">
+                    <div class="col-md-2">
+                        <label for="modal-tipo-despesa" class="form-label form-label-sm mb-1">Tipo de Despesa</label>
+                        <select id="modal-tipo-despesa" class="form-select form-select-sm">
                             <option value="">Selecione...</option>
                             <option value="Custeio">Custeio</option>
                             <option value="Investimento">Investimento</option>
                         </select>
                     </div>
-                </div>
-
-                <div class="row g-3 mt-1">
-                    <div class="col-12">
-                        <label for="modal-objeto" class="form-label">Objeto do Pedido</label>
-                        <textarea class="form-control" id="modal-objeto" rows="2"></textarea>
+                    <div class="col-md-2">
+                        <label for="modal-valor-solicitado" class="form-label form-label-sm mb-1">Valor Solic. (R$)</label>
+                        <input type="text" class="form-control form-control-sm cgfr-money" id="modal-valor-solicitado" placeholder="0,00">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="modal-valor-aprovado" class="form-label form-label-sm mb-1">Valor Aprov. (R$)</label>
+                        <input type="text" class="form-control form-control-sm cgfr-money" id="modal-valor-aprovado" placeholder="0,00">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="modal-data-reuniao" class="form-label form-label-sm mb-1">Data da Reunião</label>
+                        <input type="date" class="form-control form-control-sm" id="modal-data-reuniao">
                     </div>
                 </div>
 
-                <div class="row g-3 mt-1">
-                    <div class="col-12">
-                        <label for="modal-necessidade" class="form-label">Necessidade</label>
-                        <textarea class="form-control" id="modal-necessidade" rows="2"></textarea>
+                {# Linha 3: Objeto + Necessidade lado a lado #}
+                <div class="row g-2 mb-2">
+                    <div class="col-md-6">
+                        <label for="modal-objeto" class="form-label form-label-sm mb-1">Objeto do Pedido</label>
+                        <textarea class="form-control form-control-sm" id="modal-objeto" rows="2"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="modal-necessidade" class="form-label form-label-sm mb-1">Necessidade</label>
+                        <textarea class="form-control form-control-sm" id="modal-necessidade" rows="2"></textarea>
                     </div>
                 </div>
 
-                <div class="row g-3 mt-1">
-                    <div class="col-12">
-                        <label for="modal-deliberacao" class="form-label">Deliberacao</label>
-                        <textarea class="form-control" id="modal-deliberacao" rows="2"></textarea>
+                {# Linha 4: Deliberacao + Observacao lado a lado #}
+                <div class="row g-2 mb-2">
+                    <div class="col-md-6">
+                        <label for="modal-deliberacao" class="form-label form-label-sm mb-1">Deliberação</label>
+                        <textarea class="form-control form-control-sm" id="modal-deliberacao" rows="2"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="modal-observacao" class="form-label form-label-sm mb-1">Observação</label>
+                        <textarea class="form-control form-control-sm" id="modal-observacao" rows="2"></textarea>
                     </div>
                 </div>
 
-                <div class="row g-3 mt-2">
-                    <div class="col-md-4">
-                        <label for="modal-valor-solicitado" class="form-label">Valor Solicitado (R$)</label>
-                        <input type="text" class="form-control cgfr-money" id="modal-valor-solicitado" placeholder="0,00">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="modal-valor-aprovado" class="form-label">Valor Aprovado (R$)</label>
-                        <input type="text" class="form-control cgfr-money" id="modal-valor-aprovado" placeholder="0,00">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="modal-data-reuniao" class="form-label">Data da Reuniao</label>
-                        <input type="date" class="form-control" id="modal-data-reuniao">
-                    </div>
-                </div>
-
-                <div class="row g-3 mt-1">
-                    <div class="col-md-4">
-                        <label for="modal-prioridade" class="form-label">Prioridade</label>
-                        <select id="modal-prioridade" class="form-select">
+                {# Linha 5: Prioridade + Reserva + Valor Reserva #}
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <label for="modal-prioridade" class="form-label form-label-sm mb-1">Prioridade</label>
+                        <select id="modal-prioridade" class="form-select form-select-sm">
                             <option value="">Selecione...</option>
                             <option value="Alto">Alto</option>
-                            <option value="Medio">Medio</option>
+                            <option value="Medio">Médio</option>
                             <option value="Baixo">Baixo</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
-                        <label for="modal-reserva" class="form-label">Possui Reserva?</label>
-                        <select id="modal-reserva" class="form-select">
-                            <option value="0">Nao</option>
+                    <div class="col-md-3">
+                        <label for="modal-reserva" class="form-label form-label-sm mb-1">Possui Reserva?</label>
+                        <select id="modal-reserva" class="form-select form-select-sm">
+                            <option value="0">Não</option>
                             <option value="1">Sim</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
-                        <label for="modal-valor-reserva" class="form-label">Valor Reserva</label>
-                        <input type="text" class="form-control" id="modal-valor-reserva" placeholder="">
-                    </div>
-                </div>
-
-                <div class="row g-3 mt-1">
-                    <div class="col-12">
-                        <label for="modal-observacao" class="form-label">Observacao</label>
-                        <textarea class="form-control" id="modal-observacao" rows="2"></textarea>
+                    <div class="col-md-3">
+                        <label for="modal-valor-reserva" class="form-label form-label-sm mb-1">Valor Reserva</label>
+                        <input type="text" class="form-control form-control-sm" id="modal-valor-reserva" placeholder="">
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-danger" id="btnSalvarClassificacao">
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger btn-sm" id="btnSalvarClassificacao">
                     <i class="bi bi-check-lg me-1"></i> Salvar
                 </button>
             </div>
@@ -135,7 +131,7 @@ function abrirModalEdicao(protocolo) {
     const data = table.rows().data().toArray().find(r => r.processo_formatado === protocolo);
 
     if (!data) {
-        Swal.fire('Erro', 'Processo nao encontrado na tabela.', 'error');
+        Swal.fire('Erro', 'Processo não encontrado na tabela.', 'error');
         return;
     }
 
@@ -238,6 +234,6 @@ $(document).on('click', '#btnSalvarClassificacao', function() {
             Swal.fire('Erro', data.msg || 'Erro ao salvar.', 'error');
         }
     })
-    .catch(() => Swal.fire('Erro', 'Falha na comunicacao.', 'error'));
+    .catch(() => Swal.fire('Erro', 'Falha na comunicação.', 'error'));
 });
 </script>

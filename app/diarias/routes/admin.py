@@ -22,6 +22,7 @@ from app.models.diaria import (
 )
 from app.constants import DiariasEtapaID
 from app.extensions import db
+from app.services.diarias_notification import DiariasNotifier
 
 
 # ── Agências (leitura a partir dos contratos com Natureza 339033) ────────────
@@ -62,7 +63,7 @@ def salvar_valor_cargo():
     tipo_id = request.form.get('tipo_itinerario_id', type=int)
     valor = request.form.get('valor', type=float)
 
-    if not all([cargo_id, tipo_id, valor is not None]):
+    if cargo_id is None or tipo_id is None or valor is None:
         flash('Todos os campos são obrigatórios.', 'danger')
         return redirect(url_for('diarias.cargos'))
 
@@ -72,6 +73,9 @@ def salvar_valor_cargo():
             vc.cargo_id = cargo_id
             vc.tipo_itinerario_id = tipo_id
             vc.valor = valor
+        else:
+            flash('Registro não encontrado.', 'danger')
+            return redirect(url_for('diarias.cargos'))
     else:
         vc = DiariasValorCargo(cargo_id=cargo_id, tipo_itinerario_id=tipo_id, valor=valor)
         db.session.add(vc)
@@ -572,6 +576,11 @@ def autorizar_solicitacao(id):
 
     db.session.commit()
 
+    try:
+        DiariasNotifier.notificar_etapa(itinerario, 'nova_solicitacao', current_user.id)
+    except Exception:
+        pass  # Notificacao nao deve bloquear o fluxo
+
     return jsonify(resultado)
 
 
@@ -636,6 +645,8 @@ def ciencia_sga(id):
             sei_protocolo=itinerario.sei_protocolo or itinerario.n_processo or '',
             ref_despacho_ccdp_id=itinerario.sei_id_despacho_ccdp,
             ref_despacho_ccdp_formatado=itinerario.sei_despacho_ccdp_formatado,
+            nome_assinante=current_user.nome.upper() if current_user and current_user.nome else None,
+            cargo_assinante=cargo or 'Superintendente de Gestão Administrativa – SEAD',
         )
 
         if not retorno_doc:
@@ -659,8 +670,9 @@ def ciencia_sga(id):
         )
 
         aviso = None
-        if not resultado_assinatura.get('sucesso'):
-            aviso = f'Documento gerado mas assinatura falhou: {resultado_assinatura.get("erro", "")}'
+        if not resultado_assinatura or not resultado_assinatura.get('sucesso'):
+            erro_txt = resultado_assinatura.get('erro', 'Erro desconhecido') if resultado_assinatura else 'Sem resposta'
+            aviso = f'Documento gerado mas assinatura falhou: {erro_txt}'
 
         # 5. Enviar procedimento para NCI
         envio = enviar_procedimento(
@@ -685,6 +697,11 @@ def ciencia_sga(id):
         )
 
         db.session.commit()
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'ciencia_sga', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
 
         resultado = {
             'sucesso': True,
@@ -774,7 +791,7 @@ def analise_nci(id):
         analise_formatado = retorno_analise.get('DocumentoFormatado', '')
 
         # 4. Assinar a Análise com credenciais do NCI
-        assinar_documento(
+        ret_assinatura_analise = assinar_documento(
             token=auth['token'],
             unidade_id=UNIDADE_NCI,
             dados_assinatura={
@@ -786,6 +803,9 @@ def analise_nci(id):
                 'senha': sei_senha,
             }
         )
+        aviso_assinatura = None
+        if not ret_assinatura_analise or not ret_assinatura_analise.get('sucesso'):
+            aviso_assinatura = 'Análise gerada mas assinatura falhou.'
 
         # 5. Gerar Despacho NCI (série 5)
         retorno_despacho = gerar_despacho_nci(
@@ -802,7 +822,7 @@ def analise_nci(id):
             despacho_formatado = retorno_despacho.get('DocumentoFormatado', '')
 
             # 6. Assinar o Despacho NCI
-            assinar_documento(
+            ret_assinatura_despacho = assinar_documento(
                 token=auth['token'],
                 unidade_id=UNIDADE_NCI,
                 dados_assinatura={
@@ -814,6 +834,8 @@ def analise_nci(id):
                     'senha': sei_senha,
                 }
             )
+            if not ret_assinatura_despacho or not ret_assinatura_despacho.get('sucesso'):
+                aviso_assinatura = (aviso_assinatura or '') + ' Despacho NCI gerado mas assinatura falhou.'
 
         # 7. Salvar no banco
         itinerario.ciencia_nci = True
@@ -835,13 +857,21 @@ def analise_nci(id):
 
         db.session.commit()
 
-        return jsonify({
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'analise_nci', current_user.id)
+        except Exception:
+            pass  # Notificacao nao deve bloquear o fluxo
+
+        resposta = {
             'sucesso': True,
             'analise_formatado': analise_formatado,
             'analise_id': analise_id,
             'despacho_formatado': despacho_formatado,
             'despacho_id': despacho_id,
-        })
+        }
+        if aviso_assinatura:
+            resposta['aviso'] = aviso_assinatura
+        return jsonify(resposta)
 
     except Exception as e:
         db.session.rollback()

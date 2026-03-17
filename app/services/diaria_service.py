@@ -41,6 +41,8 @@ class DiariaService:
     def calcular_diarias(data_viagem, data_retorno):
         """Calcula quantidade de diárias: dias + 0.5."""
         delta = (data_retorno - data_viagem).days
+        if delta < 0:
+            raise ValueError('Data de retorno deve ser posterior à data de viagem.')
         return delta + 0.5
 
     @staticmethod
@@ -463,7 +465,7 @@ class DiariaService:
         todas_etapas = DiariasEtapa.query.order_by(DiariasEtapa.ordem).all()
 
         # 2. Filtra etapas conforme o tipo de solicitação:
-        #    "Aquisição de Passagens" (ID 4) só para tipo 2 e 3 (com passagens)
+        #    "Aquisição de Passagens" (ID 3) só para tipo 2 e 3 (com passagens)
         TIPOS_COM_PASSAGENS = {2, 3}  # Diárias+Passagens, Apenas Passagens
         tipo_sol = getattr(itinerario, 'tipo_solicitacao_id', None)
 

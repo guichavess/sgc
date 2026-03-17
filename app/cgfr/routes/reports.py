@@ -10,6 +10,7 @@ from datetime import datetime
 from flask import render_template, request, send_file
 from flask_login import login_required
 from sqlalchemy import or_
+from sqlalchemy.orm import joinedload
 
 from app.cgfr.routes import cgfr_bp
 from app.cgfr.models import CgfrProcessoEnviado, Acao
@@ -60,7 +61,10 @@ def _get_processos_filtrados():
         if values:
             active_filters[col] = values
 
-    query = CgfrProcessoEnviado.query
+    query = CgfrProcessoEnviado.query.options(
+        joinedload(CgfrProcessoEnviado.natureza_rel),
+        joinedload(CgfrProcessoEnviado.fonte_rel),
+    )
 
     # Busca textual
     if search:
@@ -102,31 +106,14 @@ def _get_processos_filtrados():
     if prioridade_filter:
         query = query.filter(CgfrProcessoEnviado.nivel_prioridade == prioridade_filter)
 
-    # Filtros de coluna dinamicos — push to SQL instead of in-memory filtering
-    # Map filter column names to model attributes for SQL-pushable columns
-    _SQL_FILTER_MAP = {
-        'processo_formatado': CgfrProcessoEnviado.processo_formatado,
-        'objeto_do_pedido': CgfrProcessoEnviado.objeto_do_pedido,
-        'ultimo_andamento_sigla': CgfrProcessoEnviado.ultimo_andamento_sigla,
-        'geracao_sigla': CgfrProcessoEnviado.geracao_sigla,
-        'ultimo_andamento_descricao': CgfrProcessoEnviado.ultimo_andamento_descricao,
-        'fornecedor': CgfrProcessoEnviado.fornecedor,
-        'deliberacao': CgfrProcessoEnviado.deliberacao,
-        'tipo_processo': CgfrProcessoEnviado.tipo_processo,
-        'data_da_reuniao': CgfrProcessoEnviado.data_da_reuniao,
-    }
-    # Filters that must stay in-memory (computed after _format_record)
-    memory_filters = {}
-    for col, values in active_filters.items():
-        if col in _SQL_FILTER_MAP:
-            query = query.filter(_SQL_FILTER_MAP[col].in_(values))
-        else:
-            memory_filters[col] = values
+    # ---------------------------------------------------------------
+    # 1) Buscar TODOS os processos (sem filtros de coluna) para
+    #    popular os dropdowns de filtro com valores completos
+    # ---------------------------------------------------------------
+    all_processos = query.order_by(CgfrProcessoEnviado.fornecedor).all()
 
-    processos = query.order_by(CgfrProcessoEnviado.fornecedor).all()
-
-    # Cache de acoes
-    acao_ids = {p.acao_id for p in processos if p.acao_id}
+    # Cache de acoes (usado tanto para filter_values quanto para dados)
+    acao_ids = {p.acao_id for p in all_processos if p.acao_id}
     acao_map = {}
     if acao_ids:
         acoes = Acao.query.filter(Acao.id.in_(acao_ids)).all()
@@ -135,55 +122,54 @@ def _get_processos_filtrados():
     # Cache de naturezas
     nat_cache = _build_nat_cache()
 
-    # Agrupar por natureza de despesa e formatar registros
+    # Formatar TODOS os registros e extrair valores para dropdowns
+    all_formatted = []
+    for p in all_processos:
+        p_dict = _format_record(p, acao_map)
+        if p.natureza_despesa_id and p.natureza_despesa_id in nat_cache:
+            nat_descricao = nat_cache[p.natureza_despesa_id]
+        else:
+            nat_descricao = 'Não informado'
+        p_dict['natureza_despesa'] = nat_descricao if nat_descricao != 'Não informado' else None
+        p_dict['_nat_descricao'] = nat_descricao
+        all_formatted.append(p_dict)
+
+    # Extrair valores unicos de TODOS os registros (antes de filtrar)
+    all_by_nat = {}
+    for p_dict in all_formatted:
+        nat = p_dict['_nat_descricao']
+        if nat not in all_by_nat:
+            all_by_nat[nat] = []
+        all_by_nat[nat].append(p_dict)
+    filter_values = _extract_filter_values(all_by_nat)
+
+    # ---------------------------------------------------------------
+    # 2) Aplicar filtros de coluna em memoria (rapido)
+    # ---------------------------------------------------------------
+    filtered = all_formatted
+    for col, values in active_filters.items():
+        val_set = set(values)
+        filtered = [p for p in filtered if str(p.get(col, '') or '') in val_set]
+
+    # Agrupar por natureza de despesa
     dados_por_natureza = {}
     total_processos = 0
     valor_total = 0.0
 
-    for p in processos:
-        p_dict = _format_record(p, acao_map)
-
-        # Natureza como texto
-        if p.natureza_despesa_id and p.natureza_despesa_id in nat_cache:
-            nat_descricao = nat_cache[p.natureza_despesa_id]
-        else:
-            nat_descricao = 'Nao informado'
-
-        p_dict['natureza_despesa'] = nat_descricao if nat_descricao != 'Nao informado' else None
-
+    for p_dict in filtered:
+        nat_descricao = p_dict['_nat_descricao']
         if nat_descricao not in dados_por_natureza:
             dados_por_natureza[nat_descricao] = []
         dados_por_natureza[nat_descricao].append(p_dict)
-
         total_processos += 1
-        valor_total += _to_float(p.valor_solicitado)
-
-    # In-memory filters for computed columns (e.g. natureza_despesa)
-    if memory_filters:
-        for col, values in memory_filters.items():
-            filtered = {}
-            for nat, procs in dados_por_natureza.items():
-                filtered_procs = [p for p in procs if str(p.get(col, '') or '') in values]
-                if filtered_procs:
-                    filtered[nat] = filtered_procs
-            dados_por_natureza = filtered
-            # Recalcular totais
-            total_processos = sum(len(v) for v in dados_por_natureza.values())
-            valor_total = sum(
-                _to_float(p.get('valor_solicitado'))
-                for procs in dados_por_natureza.values()
-                for p in procs
-            )
-
-    # Extrair valores unicos por coluna para popular filtros
-    filter_values = _extract_filter_values(dados_por_natureza)
+        valor_total += _to_float(p_dict.get('valor_solicitado'))
 
     # Separar em 'com natureza' e 'sem natureza'
     naturezas_com = dict(sorted(
-        ((k, v) for k, v in dados_por_natureza.items() if k != 'Nao informado'),
+        ((k, v) for k, v in dados_por_natureza.items() if k != 'Não informado'),
         key=lambda x: _nat_sort_key(x[0]),
     ))
-    naturezas_sem = {k: v for k, v in dados_por_natureza.items() if k == 'Nao informado'}
+    naturezas_sem = {k: v for k, v in dados_por_natureza.items() if k == 'Não informado'}
 
     return naturezas_com, naturezas_sem, total_processos, valor_total, active_filters, filter_values
 

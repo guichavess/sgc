@@ -62,6 +62,24 @@
     .kpi-empenhado { border-left-color: #f0a500; }
     .kpi-liquidado { border-left-color: #B89E7B; }
 
+    /* ===== Sortable headers ===== */
+    th.sortable { cursor: pointer; user-select: none; position: relative; }
+    th.sortable:hover { background-color: #1e4a8a !important; }
+    th.sortable::after {
+        content: '\F282'; font-family: 'bootstrap-icons';
+        font-size: 0.6rem; margin-left: 4px; opacity: 0.4;
+    }
+    th.sortable.asc::after { content: '\F148'; opacity: 1; }
+    th.sortable.desc::after { content: '\F128'; opacity: 1; }
+
+    /* ===== Export button ===== */
+    .btn-export {
+        font-size: 0.72rem; padding: 2px 10px;
+        border-radius: 4px; background: #198754; color: #fff;
+        border: none; cursor: pointer;
+    }
+    .btn-export:hover { background: #146c43; color: #fff; }
+
     /* ===== Tabela Natureza ===== */
     .table-rounded-wrap {
         border-radius: 0.6rem; overflow: hidden; border: 1px solid #dee2e6;
@@ -412,10 +430,6 @@
                     <div class="kpi-label">Valor Empenhado R$</div>
                     <div class="kpi-value">{{ format_num_inteiro(kpi.empenhado) }}</div>
                     <div class="kpi-sub">
-                        <span class="kpi-sub-value {{ 'text-danger' if kpi.dif_plan_emp < 0 else 'text-success' }}">
-                            {{ format_num(kpi.dif_plan_emp) }}
-                        </span>
-                        &nbsp;&middot;&nbsp;
                         <span class="kpi-sub-value">{{ kpi.pct_emp }}%</span>
                     </div>
                 </div>
@@ -451,20 +465,25 @@
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body p-0">
-                    <h6 class="fw-bold mb-0 p-3 pb-2" style="color:#2957A4;">
-                        Planejado vs. Liquidado por Natureza de Despesa
-                    </h6>
+                    <div class="d-flex justify-content-between align-items-center p-3 pb-2">
+                        <h6 class="fw-bold mb-0" style="color:#2957A4;">
+                            Planejado vs. Liquidado por Natureza de Despesa
+                        </h6>
+                        <a class="btn-export" href="{{ url_for('financeiro.export_natureza_xlsx', **request.args) }}" style="text-decoration:none;">
+                            <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                        </a>
+                    </div>
                     <div class="table-rounded-wrap mx-3 mb-3">
                         <div class="table-nat-scroll">
-                            <table class="table table-sm table-striped table-hover table-nat mb-0">
+                            <table id="tblNatureza" class="table table-sm table-striped table-hover table-nat mb-0">
                                 <thead>
                                     <tr>
-                                        <th style="text-align:left; min-width:180px;">Natcompleta</th>
-                                        <th>Planejado</th>
-                                        <th>Empenhado</th>
-                                        <th>Liquidado</th>
-                                        <th>% Liq</th>
-                                        <th>% Emp</th>
+                                        <th class="sortable" data-col="0" data-type="text" style="text-align:left; min-width:180px;">Natcompleta</th>
+                                        <th class="sortable" data-col="1" data-type="num">Planejado</th>
+                                        <th class="sortable" data-col="2" data-type="num">Empenhado</th>
+                                        <th class="sortable" data-col="3" data-type="num">Liquidado</th>
+                                        <th class="sortable" data-col="4" data-type="num">% Liq</th>
+                                        <th class="sortable" data-col="5" data-type="num">% Emp</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -515,26 +534,29 @@
 
     {# ===== TABELA POR CONTRATO ===== #}
     <div class="card border-0 shadow-sm" style="position:relative; z-index:1;">
-        <div class="card-header bg-white border-bottom py-2">
+        <div class="card-header bg-white border-bottom py-2 d-flex justify-content-between align-items-center">
             <h6 class="fw-bold mb-0" style="color:#2957A4;">
                 <i class="bi bi-table me-1"></i> Planejado vs. Liquidado por Contrato
             </h6>
+            <a class="btn-export" href="{{ url_for('financeiro.export_contratos_xlsx', **request.args) }}" style="text-decoration:none;">
+                <i class="bi bi-file-earmark-excel me-1"></i>Excel
+            </a>
         </div>
         <div class="card-body p-0">
             <div class="table-rounded-wrap">
             <div class="table-contratos-scroll">
-                <table class="table table-sm table-striped table-hover table-contratos mb-0">
+                <table id="tblContratos" class="table table-sm table-striped table-hover table-contratos mb-0">
                     <thead>
                         <tr>
-                            <th style="text-align:left; min-width:90px;">Contrato</th>
-                            <th style="text-align:left; min-width:200px;">Credor</th>
-                            <th>Planejado</th>
-                            <th>Liquidado</th>
-                            <th>CentroCusto</th>
-                            <th>%</th>
-                            <th>Empenhado</th>
-                            <th style="min-width:180px;">Natcompleta</th>
-                            <th>Planej. Inicial</th>
+                            <th class="sortable" data-col="0" data-type="text" style="text-align:left; min-width:90px;">Contrato</th>
+                            <th class="sortable" data-col="1" data-type="text" style="text-align:left; min-width:200px;">Credor</th>
+                            <th class="sortable" data-col="2" data-type="num">Planejado</th>
+                            <th class="sortable" data-col="3" data-type="num">Liquidado</th>
+                            <th class="sortable" data-col="4" data-type="text">CentroCusto</th>
+                            <th class="sortable" data-col="5" data-type="num">%</th>
+                            <th class="sortable" data-col="6" data-type="num">Empenhado</th>
+                            <th class="sortable" data-col="7" data-type="text" style="min-width:180px;">Natcompleta</th>
+                            <th class="sortable" data-col="8" data-type="text">Planej. Inicial</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -799,12 +821,65 @@ document.addEventListener('DOMContentLoaded', function() {
 
     /* ===== Toggle sub-itens na tabela de Natureza ===== */
     document.querySelectorAll('.nat-toggle.has-children').forEach(function(row) {
-        row.addEventListener('click', function() {
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('th')) return; // não expandir ao clicar no header
             var natId = this.dataset.nat;
             var isOpen = this.classList.toggle('open');
             document.querySelectorAll('.nat-sub-row[data-nat-parent="' + natId + '"]').forEach(function(sub) {
                 sub.style.display = isOpen ? '' : 'none';
             });
+        });
+    });
+
+    /* ===== Sortable table headers ===== */
+    function parseBRL(txt) {
+        if (!txt || txt.trim() === '-' || txt.trim() === '') return -Infinity;
+        return parseFloat(txt.replace(/\./g, '').replace(',', '.').replace('%', '')) || 0;
+    }
+
+    document.querySelectorAll('th.sortable').forEach(function(th) {
+        th.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var table = th.closest('table');
+            var tbody = table.querySelector('tbody');
+            var colIdx = parseInt(th.dataset.col);
+            var type = th.dataset.type || 'text';
+            var isNatTable = table.id === 'tblNatureza';
+
+            // Toggle direction
+            var dir = th.classList.contains('asc') ? 'desc' : 'asc';
+            th.closest('tr').querySelectorAll('th.sortable').forEach(function(h) {
+                h.classList.remove('asc', 'desc');
+            });
+            th.classList.add(dir);
+
+            if (isNatTable) {
+                // Sort parent rows (.nat-toggle), keep sub-rows attached
+                var parents = Array.from(tbody.querySelectorAll('tr.nat-toggle'));
+                parents.sort(function(a, b) {
+                    var aVal = a.querySelectorAll('td')[colIdx]?.textContent.trim() || '';
+                    var bVal = b.querySelectorAll('td')[colIdx]?.textContent.trim() || '';
+                    var cmp = type === 'num' ? parseBRL(aVal) - parseBRL(bVal) : aVal.localeCompare(bVal, 'pt-BR');
+                    return dir === 'desc' ? -cmp : cmp;
+                });
+                parents.forEach(function(parent) {
+                    tbody.appendChild(parent);
+                    var natId = parent.dataset.nat;
+                    tbody.querySelectorAll('.nat-sub-row[data-nat-parent="' + natId + '"]').forEach(function(sub) {
+                        tbody.appendChild(sub);
+                    });
+                });
+            } else {
+                // Sort all tbody rows (excluding tfoot)
+                var rows = Array.from(tbody.querySelectorAll('tr'));
+                rows.sort(function(a, b) {
+                    var aVal = a.querySelectorAll('td')[colIdx]?.textContent.trim() || '';
+                    var bVal = b.querySelectorAll('td')[colIdx]?.textContent.trim() || '';
+                    var cmp = type === 'num' ? parseBRL(aVal) - parseBRL(bVal) : aVal.localeCompare(bVal, 'pt-BR');
+                    return dir === 'desc' ? -cmp : cmp;
+                });
+                rows.forEach(function(r) { tbody.appendChild(r); });
+            }
         });
     });
 

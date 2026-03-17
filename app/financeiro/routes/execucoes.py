@@ -104,9 +104,12 @@ def execucoes_cadastrar():
         criado_por=current_user.id,
     )
     db.session.add(execucao)
-    db.session.commit()
-
-    flash('Execução cadastrada com sucesso!', 'success')
+    try:
+        db.session.commit()
+        flash('Execução cadastrada com sucesso!', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao salvar. Tente novamente.', 'danger')
     return redirect(url_for('financeiro.execucoes_lista'))
 
 
@@ -135,7 +138,10 @@ def execucoes_vincular_contrato(id):
         return redirect(url_for('financeiro.execucoes_lista'))
 
     execucao.cod_contrato = cod_contrato
-    db.session.commit()
-
-    flash(f'Execução vinculada ao contrato {cod_contrato}.', 'success')
+    try:
+        db.session.commit()
+        flash(f'Execução vinculada ao contrato {cod_contrato}.', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao salvar. Tente novamente.', 'danger')
     return redirect(url_for('financeiro.execucoes_lista'))
