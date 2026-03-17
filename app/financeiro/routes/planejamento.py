@@ -946,8 +946,16 @@ def planejamento_relatorio():
             for sub_name, sub_vals in subitem_values[nat_code].items():
                 se = sub_vals['emp']
                 sl = sub_vals['liq']
-                emp_cod = sub_vals.get('cod', '')  # código empenho ex: "2144.339014"
+                emp_cod = sub_vals.get('cod', '')  # código empenho ex: "2144.01"
                 emp_val1 = emp_cod.split('.')[0] if '.' in emp_cod else emp_cod
+                # Resolver descrição: subitem_desc tem chave "2144.01" → nome
+                # fallback: subitem_desc_by_val1 tem chave "2144" → nome
+                display_name = subitem_desc.get(sub_name)
+                if not display_name and '.' in sub_name:
+                    v1 = sub_name.split('.', 1)[0]
+                    display_name = subitem_desc_by_val1.get(v1)
+                if not display_name:
+                    display_name = sub_name
                 # Encontrar planejado: match por código do subitem (val1)
                 # ou por prefixo do sub_name (compatibilidade com contratos)
                 sp = ZERO
@@ -961,7 +969,7 @@ def planejamento_relatorio():
                         break
                 if se or sl or sp:
                     subitems.append({
-                        'subitem': sub_name,
+                        'subitem': display_name,
                         'planejado': sp,
                         'empenhado': se,
                         'liquidado': sl,
