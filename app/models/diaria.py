@@ -254,6 +254,63 @@ class DiariasItinerario(db.Model):
     sei_id_nota_empenho = db.Column(db.String(50), nullable=True)
     sei_nota_empenho_formatado = db.Column(db.String(50), nullable=True)
 
+    # Despacho CCDP → SGA (idSerie 754, pós NE)
+    sei_id_despacho_ccdp = db.Column(db.String(50), nullable=True)
+    sei_despacho_ccdp_formatado = db.Column(db.String(50), nullable=True)
+
+    # Ciência Superintendente + Despacho SGA → NCI (idSerie 2987)
+    ciencia_superintendente = db.Column(db.Boolean, default=False)
+    ciencia_superintendente_data = db.Column(db.DateTime, nullable=True)
+    sei_id_despacho_sga = db.Column(db.String(50), nullable=True)
+    sei_despacho_sga_formatado = db.Column(db.String(50), nullable=True)
+
+    # Análise de Pagamento NCI (idSerie 461) + Despacho NCI (idSerie 5)
+    ciencia_nci = db.Column(db.Boolean, default=False)
+    ciencia_nci_data = db.Column(db.DateTime, nullable=True)
+    analise_pagamento_respostas = db.Column(db.Text, nullable=True)      # JSON com respostas S/N
+    analise_pagamento_observacoes = db.Column(db.Text, nullable=True)
+    sei_id_analise_pagamento = db.Column(db.String(50), nullable=True)
+    sei_analise_pagamento_formatado = db.Column(db.String(50), nullable=True)
+    sei_id_despacho_nci = db.Column(db.String(50), nullable=True)
+    sei_despacho_nci_formatado = db.Column(db.String(50), nullable=True)
+
+    # Despacho APOIO/DFIN (idSerie 754, pós Análise NCI - Superintendente)
+    ciencia_apoio = db.Column(db.Boolean, default=False)
+    ciencia_apoio_data = db.Column(db.DateTime, nullable=True)
+    sei_id_despacho_apoio = db.Column(db.String(50), nullable=True)
+    sei_despacho_apoio_formatado = db.Column(db.String(50), nullable=True)
+
+    # Despacho Diretor DFIN (idSerie 754 - Diretor → GEO)
+    ciencia_diretor = db.Column(db.Boolean, default=False)
+    ciencia_diretor_data = db.Column(db.DateTime, nullable=True)
+    sei_id_despacho_diretor = db.Column(db.String(50), nullable=True)
+    sei_despacho_diretor_formatado = db.Column(db.String(50), nullable=True)
+
+    # Despacho GEO (idSerie 754 - GEO → CCDP) + NL/PD/OB
+    ciencia_geo = db.Column(db.Boolean, default=False)
+    ciencia_geo_data = db.Column(db.DateTime, nullable=True)
+    sei_id_despacho_geo = db.Column(db.String(50), nullable=True)
+    sei_despacho_geo_formatado = db.Column(db.String(50), nullable=True)
+
+    # NL - Nota de Liquidação (idSerie 420)
+    nl_codigo = db.Column(db.String(50), nullable=True)
+    sei_id_nl = db.Column(db.String(50), nullable=True)
+    sei_nl_formatado = db.Column(db.String(50), nullable=True)
+
+    # PD - Programação de Desembolso (idSerie 421)
+    pd_codigo = db.Column(db.String(50), nullable=True)
+    sei_id_pd = db.Column(db.String(50), nullable=True)
+    sei_pd_formatado = db.Column(db.String(50), nullable=True)
+
+    # OB - Ordem Bancária (idSerie 422)
+    ob_codigo = db.Column(db.String(50), nullable=True)
+    sei_id_ob = db.Column(db.String(50), nullable=True)
+    sei_ob_formatado = db.Column(db.String(50), nullable=True)
+
+    # Relatório de Viagem (idSerie 1908, gerado pelo solicitante após OB)
+    sei_id_relatorio_viagem = db.Column(db.String(50), nullable=True)
+    sei_relatorio_viagem_formatado = db.Column(db.String(50), nullable=True)
+
     # Timeline / Etapa atual
     etapa_atual_id = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), default=1)
 

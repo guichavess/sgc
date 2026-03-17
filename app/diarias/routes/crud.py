@@ -2,13 +2,15 @@
 Rotas CRUD do módulo de Diárias (criar, visualizar, atender).
 """
 import json
-from flask import render_template, request, redirect, url_for, flash, current_app
+from flask import render_template, request, redirect, url_for, flash, current_app, jsonify
 from flask_login import login_required, current_user
 
 from app.diarias.routes import diarias_bp
 from app.utils.permissions import requires_permission
 from app.services.diaria_service import DiariaService
-from app.models.diaria import DiariasTipoSolicitacao, DiariasValorCargo
+from app.services.sei_auth import gerar_token_sei_admin, autenticar_usuario_sei
+from app.services.sei_integration import assinar_documento
+from app.models.diaria import DiariasTipoSolicitacao, DiariasValorCargo, DiariasItinerario, Estado
 from app.constants import DiariasEtapaID
 
 
@@ -362,3 +364,155 @@ def update_atendimento(id):
     except Exception as e:
         flash(f'Erro ao processar: {str(e)}', 'danger')
         return redirect(url_for('diarias.atender', id=id))
+
+
+@diarias_bp.route('/<int:id>/gerar-relatorio', methods=['POST'])
+@login_required
+@requires_permission('diarias.visualizar')
+def gerar_relatorio(id):
+    """Gera o Relatório de Viagem (IdSerie 1908) no processo SEI.
+
+    Disponível para o solicitante após a OB ter sido inserida no processo.
+    O relatório contém dados do servidor, dados da viagem e o relato preenchido pelo viajante.
+    """
+    from app.services.diarias_sei_integration import gerar_relatorio_viagem
+    from app.extensions import db
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Valida: OB deve existir
+    if not itinerario.sei_id_ob:
+        return jsonify({'success': False, 'error': 'A Ordem Bancária (OB) ainda não foi inserida no processo.'}), 400
+
+    # Valida: relatório ainda não gerado
+    if itinerario.sei_id_relatorio_viagem:
+        return jsonify({'success': False, 'error': 'O Relatório de Viagem já foi gerado para esta solicitação.'}), 400
+
+    # Obtém dados do formulário
+    relato = request.form.get('relato', '').strip()
+    if not relato:
+        return jsonify({'success': False, 'error': 'O relato da viagem é obrigatório.'}), 400
+
+    # Credenciais do usuário para assinatura
+    usuario_sei = request.form.get('usuario_sei', '').strip()
+    senha_sei = request.form.get('senha_sei', '').strip()
+    if not usuario_sei or not senha_sei:
+        return jsonify({'success': False, 'error': 'Credenciais SEI são obrigatórias para assinar o documento.'}), 400
+
+    # Monta dados do relatório a partir do itinerário
+    primeiro_item = itinerario.itens.first()
+    if not primeiro_item:
+        return jsonify({'success': False, 'error': 'Nenhuma pessoa encontrada na solicitação.'}), 400
+
+    # Formata valor da diária individual
+    valor_cargo = primeiro_item.valor_cargo or 0
+    valor_diaria_fmt = f'R${valor_cargo:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    # Formata valor total
+    valor_total = itinerario.valor_total or 0
+    valor_total_fmt = f'R$ {valor_total:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    # Monta trajeto
+    origem_nome = ''
+    destino_nome = ''
+    if itinerario.municipio_origem_obj:
+        origem_nome = itinerario.municipio_origem_obj.nome
+    if itinerario.estado_origem_obj:
+        origem_nome = f'{origem_nome}-{itinerario.estado_origem_obj.nome}' if origem_nome else itinerario.estado_origem_obj.nome
+    if itinerario.estado_destino_obj:
+        destino_nome = itinerario.estado_destino_obj.nome
+
+    trajeto = f'{origem_nome}/{destino_nome}/{origem_nome}' if origem_nome and destino_nome else 'N/A'
+
+    # Formata período
+    periodo_inicio = itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else ''
+    periodo_fim = itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else ''
+
+    # Lotação (setor/orgão do servidor)
+    lotacao = primeiro_item.setor or primeiro_item.orgao or ''
+    if primeiro_item.orgao and primeiro_item.setor:
+        lotacao = f'{primeiro_item.orgao} / {primeiro_item.setor}'
+
+    # Cargo/Função
+    cargo_funcao = primeiro_item.cargo.nome if primeiro_item.cargo else (primeiro_item.cargo_folha or '')
+
+    dados_relatorio = {
+        'nome': primeiro_item.nome_pessoa or '',
+        'matricula': primeiro_item.matricula_pessoa or '',
+        'cpf': primeiro_item.cpf_pessoa or '',
+        'lotacao': lotacao,
+        'cargo_funcao': cargo_funcao,
+        'periodo_inicio': periodo_inicio,
+        'periodo_fim': periodo_fim,
+        'qtd_diarias': str(itinerario.qtd_diarias_solicitadas or ''),
+        'valor_diaria': valor_diaria_fmt,
+        'valor_total': valor_total_fmt,
+        'trajeto': trajeto,
+        'relato': relato,
+    }
+
+    cargo_sei = request.form.get('cargo_sei', '').strip() or cargo_funcao
+
+    try:
+        # 1. Autentica o usuario para assinar
+        auth = autenticar_usuario_sei(usuario_sei, senha_sei)
+        if not auth or not auth.get('token'):
+            return jsonify({'success': False, 'error': 'Falha na autenticacao SEI. Verifique suas credenciais.'}), 401
+
+        # 2. Token admin para criar o documento
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'success': False, 'error': 'Falha ao obter token administrativo SEI.'}), 500
+
+        # 3. Gera o documento
+        retorno = gerar_relatorio_viagem(
+            token_admin,
+            itinerario.sei_id_procedimento,
+            itinerario.sei_protocolo,
+            dados_relatorio,
+        )
+
+        if not retorno:
+            return jsonify({'success': False, 'error': 'Erro ao gerar documento no SEI.'}), 500
+
+        id_documento = str(retorno.get('IdDocumento', ''))
+        doc_formatado = retorno.get('DocumentoFormatado', '')
+
+        # 4. Assina o documento com credenciais do usuario
+        from app.services.diarias_sei_integration import UNIDADE_SEAD
+        resultado_assinatura = assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_SEAD,
+            dados_assinatura={
+                'protocolo_doc': id_documento,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo_sei,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': senha_sei,
+            }
+        )
+
+        aviso = None
+        if not resultado_assinatura.get('sucesso'):
+            aviso = f'Documento gerado mas assinatura falhou: {resultado_assinatura.get("erro", "")}'
+
+        # 5. Salva no banco
+        itinerario.sei_id_relatorio_viagem = id_documento
+        itinerario.sei_relatorio_viagem_formatado = doc_formatado
+        db.session.commit()
+
+        resp = {
+            'success': True,
+            'message': f'Relatório de Viagem gerado com sucesso! ({doc_formatado})',
+            'documento_formatado': doc_formatado,
+            'id_documento': id_documento,
+        }
+        if aviso:
+            resp['aviso'] = aviso
+        return jsonify(resp)
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao gerar relatório de viagem: {e}")
+        return jsonify({'success': False, 'error': f'Erro inesperado: {str(e)}'}), 500

@@ -14,9 +14,18 @@ from app.constants import DiariasEtapaID
 from app.services.diaria_service import DiariaService
 from app.services.diarias_sei_integration import (
     gerar_token_sei_admin, adicionar_documento_externo, gerar_quadro_orcamentario,
-    gerar_nota_empenho, ID_SERIE_AUTORIZACAO_SCDP,
+    gerar_nota_empenho, gerar_despacho_ccdp, enviar_procedimento,
+    gerar_despacho_apoio, gerar_despacho_diretor, gerar_despacho_geo,
+    gerar_nl, gerar_pd, gerar_ob,
+    ID_SERIE_AUTORIZACAO_SCDP, UNIDADE_CCDP, UNIDADE_APOIOSGA,
+    UNIDADE_DFIN_APOIO, UNIDADE_GEO,
 )
-from app.utils.permissions import requires_permission
+from app.services.sei_auth import autenticar_usuario_sei
+from app.services.sei_integration import assinar_documento
+from app.utils.permissions import (
+    requires_permission, usuario_tem_caixa,
+    CAIXA_DFIN_APOIO, CAIXA_GEO,
+)
 
 
 @financeiro_bp.route('/diarias')
@@ -392,3 +401,652 @@ def inserir_nota_empenho(id):
         flash(f'Erro ao inserir Nota de Empenho: {e}', 'danger')
 
     return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+
+@financeiro_bp.route('/diarias/<int:id>/despacho-ccdp', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def despacho_ccdp(id):
+    """Gera Despacho CCDP (idSerie 754) após Nota de Empenho — envia para SGA.
+
+    O usuário fornece suas credenciais SEI para assinar o documento.
+    O despacho é criado na unidade CCDP e assinado pelo usuário financeiro,
+    depois o processo é enviado para a caixa APOIOSGA.
+    """
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guards
+    if not itinerario.sei_id_nota_empenho:
+        return jsonify({'sucesso': False, 'erro': 'A Nota de Empenho deve ser inserida antes do despacho.'}), 400
+
+    if itinerario.sei_id_despacho_ccdp:
+        return jsonify({'sucesso': False, 'erro': 'O Despacho CCDP já foi gerado para esta solicitação.'}), 400
+
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Não há processo SEI vinculado.'}), 400
+
+    # Parse credenciais SEI do body JSON
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados não fornecidos.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip() or 'Auxiliar Técnica'
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Credenciais SEI são obrigatórias.'}), 400
+
+    try:
+        # 1. Autenticar usuário no SEI
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha)
+        if not auth or not auth.get('token'):
+            return jsonify({'sucesso': False, 'erro': 'Falha na autenticação SEI. Verifique suas credenciais.'}), 401
+
+        # 2. Token admin para criar o documento
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
+
+        # 3. Gerar o Despacho CCDP (série 754)
+        retorno_doc = gerar_despacho_ccdp(
+            token=token_admin,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=itinerario.sei_protocolo or itinerario.n_processo or '',
+        )
+
+        if not retorno_doc:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar documento de despacho no SEI.'}), 500
+
+        doc_id = str(retorno_doc.get('IdDocumento', ''))
+        doc_formatado = retorno_doc.get('DocumentoFormatado', '')
+
+        # 4. Assinar o documento com credenciais do usuário
+        resultado_assinatura = assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_CCDP,
+            dados_assinatura={
+                'protocolo_doc': doc_id,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': sei_senha,
+            }
+        )
+
+        if not resultado_assinatura.get('sucesso'):
+            # Doc criado mas não assinado — salvar mesmo assim
+            erro_assinatura = resultado_assinatura.get('erro', 'Erro desconhecido')
+            itinerario.sei_id_despacho_ccdp = doc_id
+            itinerario.sei_despacho_ccdp_formatado = doc_formatado
+            db.session.commit()
+            return jsonify({
+                'sucesso': True,
+                'documento_formatado': doc_formatado,
+                'id_documento': doc_id,
+                'aviso': f'Documento gerado mas assinatura falhou: {erro_assinatura}',
+            })
+
+        # 5. Enviar procedimento para APOIOSGA
+        envio = enviar_procedimento(
+            token=token_admin,
+            protocolo_procedimento=itinerario.sei_protocolo,
+            unidades_destino=[UNIDADE_APOIOSGA],
+            unidade_origem=UNIDADE_CCDP,
+        )
+
+        # 6. Salvar referências no banco
+        itinerario.sei_id_despacho_ccdp = doc_id
+        itinerario.sei_despacho_ccdp_formatado = doc_formatado
+
+        # 7. Avançar etapa
+        DiariaService.registrar_movimentacao(
+            id_itinerario=id,
+            etapa_nova_id=DiariasEtapaID.DESPACHO_CCDP,
+            usuario_id=current_user.id if current_user else None,
+            comentario=f'Despacho CCDP gerado e assinado ({doc_formatado}). Enviado para APOIOSGA.',
+        )
+
+        db.session.commit()
+
+        return jsonify({
+            'sucesso': True,
+            'documento_formatado': doc_formatado,
+            'id_documento': doc_id,
+            'envio_procedimento': envio,
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500
+
+
+# ── Despacho APOIO/DFIN (Superintendente, pós Análise NCI) ─────────────────
+
+
+@financeiro_bp.route('/diarias/<int:id>/despacho-apoio', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def despacho_apoio(id):
+    """Gera Despacho APOIO/DFIN (idSerie 754) — Superintendente encaminha para DFIN.
+
+    Após a Análise NCI, o Superintendente (caixa DFIN/APOIO) dá ciência,
+    gera o despacho referenciando a análise NCI e encaminha ao Diretor DFIN.
+    """
+    if not usuario_tem_caixa(CAIXA_DFIN_APOIO):
+        return jsonify({'sucesso': False, 'erro': 'Voce nao tem acesso a caixa APOIO/DFIN.'}), 403
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guards
+    if not itinerario.sei_id_analise_pagamento:
+        return jsonify({'sucesso': False, 'erro': 'A Analise NCI ainda nao foi gerada.'}), 400
+
+    if itinerario.sei_id_despacho_apoio:
+        return jsonify({'sucesso': False, 'erro': 'O Despacho APOIO ja foi gerado.'}), 400
+
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Nao ha processo SEI vinculado.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados nao fornecidos.'}), 400
+
+    if not dados.get('ciencia'):
+        return jsonify({'sucesso': False, 'erro': 'E necessario confirmar a ciencia do despacho.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip() or 'Superintendente de Gestao Administrativa'
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Credenciais SEI sao obrigatorias.'}), 400
+
+    try:
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha)
+        if not auth or not auth.get('token'):
+            return jsonify({'sucesso': False, 'erro': 'Falha na autenticacao SEI.'}), 401
+
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
+
+        sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+        # Referencia a analise NCI
+        ref_nci = itinerario.sei_analise_pagamento_formatado or itinerario.sei_id_analise_pagamento or ''
+
+        retorno_doc = gerar_despacho_apoio(
+            token=token_admin,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=sei_protocolo,
+            ref_analise_nci_id=ref_nci,
+        )
+
+        if not retorno_doc:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar Despacho APOIO no SEI.'}), 500
+
+        doc_id = str(retorno_doc.get('IdDocumento', ''))
+        doc_formatado = retorno_doc.get('DocumentoFormatado', '')
+
+        # Assinar com credenciais do usuario
+        resultado_assinatura = assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_DFIN_APOIO,
+            dados_assinatura={
+                'protocolo_doc': doc_id,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': sei_senha,
+            }
+        )
+
+        aviso = None
+        if not resultado_assinatura.get('sucesso'):
+            aviso = f'Documento gerado mas assinatura falhou: {resultado_assinatura.get("erro", "")}'
+
+        # Salvar
+        itinerario.ciencia_apoio = True
+        from datetime import datetime
+        itinerario.ciencia_apoio_data = datetime.now()
+        itinerario.sei_id_despacho_apoio = doc_id
+        itinerario.sei_despacho_apoio_formatado = doc_formatado
+
+        # Avancar etapa
+        DiariaService.registrar_movimentacao(
+            id_itinerario=id,
+            etapa_nova_id=DiariasEtapaID.DESPACHO_APOIO,
+            usuario_id=current_user.id if current_user else None,
+            comentario=f'Despacho APOIO/DFIN ({doc_formatado}) gerado pelo Superintendente.',
+        )
+
+        db.session.commit()
+
+        resultado = {
+            'sucesso': True,
+            'documento_formatado': doc_formatado,
+            'id_documento': doc_id,
+        }
+        if aviso:
+            resultado['aviso'] = aviso
+        return jsonify(resultado)
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500
+
+
+# ── Despacho Diretor DFIN → GEO ───────────────────────────────────────────
+
+
+@financeiro_bp.route('/diarias/<int:id>/despacho-diretor', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def despacho_diretor(id):
+    """Gera Despacho do Diretor DFIN (idSerie 754) — encaminha para GEO.
+
+    O Diretor de Planejamento e Financas ve o despacho do Superintendente,
+    confirma ciencia e gera seu despacho encaminhando a GEO.
+    """
+    if not usuario_tem_caixa(CAIXA_DFIN_APOIO):
+        return jsonify({'sucesso': False, 'erro': 'Voce nao tem acesso a caixa APOIO/DFIN.'}), 403
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guards
+    if not itinerario.sei_id_despacho_apoio:
+        return jsonify({'sucesso': False, 'erro': 'O Despacho APOIO ainda nao foi gerado.'}), 400
+
+    if itinerario.sei_id_despacho_diretor:
+        return jsonify({'sucesso': False, 'erro': 'O Despacho do Diretor ja foi gerado.'}), 400
+
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Nao ha processo SEI vinculado.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados nao fornecidos.'}), 400
+
+    if not dados.get('ciencia'):
+        return jsonify({'sucesso': False, 'erro': 'E necessario confirmar a ciencia do despacho.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip() or 'Diretor de Planejamento e Financas'
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Credenciais SEI sao obrigatorias.'}), 400
+
+    try:
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha)
+        if not auth or not auth.get('token'):
+            return jsonify({'sucesso': False, 'erro': 'Falha na autenticacao SEI.'}), 401
+
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
+
+        sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+        ref_apoio = itinerario.sei_despacho_apoio_formatado or itinerario.sei_id_despacho_apoio or ''
+
+        retorno_doc = gerar_despacho_diretor(
+            token=token_admin,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=sei_protocolo,
+            ref_despacho_apoio_id=ref_apoio,
+        )
+
+        if not retorno_doc:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar Despacho do Diretor no SEI.'}), 500
+
+        doc_id = str(retorno_doc.get('IdDocumento', ''))
+        doc_formatado = retorno_doc.get('DocumentoFormatado', '')
+
+        # Assinar
+        resultado_assinatura = assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_DFIN_APOIO,
+            dados_assinatura={
+                'protocolo_doc': doc_id,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': sei_senha,
+            }
+        )
+
+        aviso = None
+        if not resultado_assinatura.get('sucesso'):
+            aviso = f'Documento gerado mas assinatura falhou: {resultado_assinatura.get("erro", "")}'
+
+        # Enviar para GEO
+        envio = enviar_procedimento(
+            token=token_admin,
+            protocolo_procedimento=itinerario.sei_protocolo,
+            unidades_destino=[UNIDADE_GEO],
+            unidade_origem=UNIDADE_DFIN_APOIO,
+        )
+
+        # Salvar
+        itinerario.ciencia_diretor = True
+        from datetime import datetime
+        itinerario.ciencia_diretor_data = datetime.now()
+        itinerario.sei_id_despacho_diretor = doc_id
+        itinerario.sei_despacho_diretor_formatado = doc_formatado
+
+        # Avancar etapa
+        DiariaService.registrar_movimentacao(
+            id_itinerario=id,
+            etapa_nova_id=DiariasEtapaID.DESPACHO_DIRETOR,
+            usuario_id=current_user.id if current_user else None,
+            comentario=f'Despacho Diretor DFIN ({doc_formatado}). Enviado para GEO.',
+        )
+
+        db.session.commit()
+
+        resultado = {
+            'sucesso': True,
+            'documento_formatado': doc_formatado,
+            'id_documento': doc_id,
+            'envio_procedimento': envio,
+        }
+        if aviso:
+            resultado['aviso'] = aviso
+        return jsonify(resultado)
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500
+
+
+# ── Despacho GEO → CCDP ──────────────────────────────────────────────────
+
+
+@financeiro_bp.route('/diarias/<int:id>/despacho-geo', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def despacho_geo(id):
+    """Gera Despacho GEO (idSerie 754) — encaminha para CCDP.
+
+    O Gerente de Execucao Orcamentaria ve o despacho do Diretor,
+    confirma ciencia, gera o despacho e encaminha a CCDP.
+    Apos isso, libera os inputs de NL, PD e OB sequencialmente.
+    """
+    if not usuario_tem_caixa(CAIXA_GEO):
+        return jsonify({'sucesso': False, 'erro': 'Voce nao tem acesso a caixa GEO.'}), 403
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guards
+    if not itinerario.sei_id_despacho_diretor:
+        return jsonify({'sucesso': False, 'erro': 'O Despacho do Diretor ainda nao foi gerado.'}), 400
+
+    if itinerario.sei_id_despacho_geo:
+        return jsonify({'sucesso': False, 'erro': 'O Despacho GEO ja foi gerado.'}), 400
+
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Nao ha processo SEI vinculado.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados nao fornecidos.'}), 400
+
+    if not dados.get('ciencia'):
+        return jsonify({'sucesso': False, 'erro': 'E necessario confirmar a ciencia do despacho.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip() or 'Gerente de Execucao Orcamentaria'
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Credenciais SEI sao obrigatorias.'}), 400
+
+    try:
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha)
+        if not auth or not auth.get('token'):
+            return jsonify({'sucesso': False, 'erro': 'Falha na autenticacao SEI.'}), 401
+
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
+
+        sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+        retorno_doc = gerar_despacho_geo(
+            token=token_admin,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=sei_protocolo,
+        )
+
+        if not retorno_doc:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar Despacho GEO no SEI.'}), 500
+
+        doc_id = str(retorno_doc.get('IdDocumento', ''))
+        doc_formatado = retorno_doc.get('DocumentoFormatado', '')
+
+        # Assinar
+        resultado_assinatura = assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_GEO,
+            dados_assinatura={
+                'protocolo_doc': doc_id,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': sei_senha,
+            }
+        )
+
+        aviso = None
+        if not resultado_assinatura.get('sucesso'):
+            aviso = f'Documento gerado mas assinatura falhou: {resultado_assinatura.get("erro", "")}'
+
+        # Enviar para CCDP
+        envio = enviar_procedimento(
+            token=token_admin,
+            protocolo_procedimento=itinerario.sei_protocolo,
+            unidades_destino=[UNIDADE_CCDP],
+            unidade_origem=UNIDADE_GEO,
+        )
+
+        # Salvar
+        itinerario.ciencia_geo = True
+        from datetime import datetime
+        itinerario.ciencia_geo_data = datetime.now()
+        itinerario.sei_id_despacho_geo = doc_id
+        itinerario.sei_despacho_geo_formatado = doc_formatado
+
+        # Avancar etapa
+        DiariaService.registrar_movimentacao(
+            id_itinerario=id,
+            etapa_nova_id=DiariasEtapaID.DESPACHO_GEO,
+            usuario_id=current_user.id if current_user else None,
+            comentario=f'Despacho GEO ({doc_formatado}). Enviado para CCDP.',
+        )
+
+        db.session.commit()
+
+        resultado = {
+            'sucesso': True,
+            'documento_formatado': doc_formatado,
+            'id_documento': doc_id,
+            'envio_procedimento': envio,
+        }
+        if aviso:
+            resultado['aviso'] = aviso
+        return jsonify(resultado)
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500
+
+
+# ── NL / PD / OB (inserção sequencial após Despacho GEO) ─────────────────
+
+
+@financeiro_bp.route('/diarias/<int:id>/inserir-nl', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def inserir_nl(id):
+    """Insere NL - Nota de Liquidacao (idSerie 420) no processo SEI."""
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if not itinerario.sei_id_despacho_geo:
+        return jsonify({'sucesso': False, 'erro': 'O Despacho GEO deve ser gerado antes da NL.'}), 400
+
+    if itinerario.sei_id_nl:
+        return jsonify({'sucesso': False, 'erro': 'A NL ja foi inserida.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados nao fornecidos.'}), 400
+
+    codigo = dados.get('codigo', '').strip()
+    if not codigo:
+        return jsonify({'sucesso': False, 'erro': 'O codigo da NL e obrigatorio.'}), 400
+
+    try:
+        token = gerar_token_sei_admin()
+        if not token:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao autenticar no SEI.'}), 500
+
+        sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+        retorno = gerar_nl(
+            token=token,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=sei_protocolo,
+            codigo_nl=codigo,
+        )
+
+        if not retorno:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar NL no SEI.'}), 500
+
+        itinerario.nl_codigo = codigo
+        itinerario.sei_id_nl = str(retorno.get('IdDocumento', ''))
+        itinerario.sei_nl_formatado = retorno.get('DocumentoFormatado', '')
+        db.session.commit()
+
+        return jsonify({
+            'sucesso': True,
+            'documento_formatado': retorno.get('DocumentoFormatado', ''),
+            'id_documento': str(retorno.get('IdDocumento', '')),
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500
+
+
+@financeiro_bp.route('/diarias/<int:id>/inserir-pd', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def inserir_pd(id):
+    """Insere PD - Programacao de Desembolso (idSerie 421) no processo SEI."""
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if not itinerario.sei_id_nl:
+        return jsonify({'sucesso': False, 'erro': 'A NL deve ser inserida antes da PD.'}), 400
+
+    if itinerario.sei_id_pd:
+        return jsonify({'sucesso': False, 'erro': 'A PD ja foi inserida.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados nao fornecidos.'}), 400
+
+    codigo = dados.get('codigo', '').strip()
+    if not codigo:
+        return jsonify({'sucesso': False, 'erro': 'O codigo da PD e obrigatorio.'}), 400
+
+    try:
+        token = gerar_token_sei_admin()
+        if not token:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao autenticar no SEI.'}), 500
+
+        sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+        retorno = gerar_pd(
+            token=token,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=sei_protocolo,
+            codigo_pd=codigo,
+        )
+
+        if not retorno:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar PD no SEI.'}), 500
+
+        itinerario.pd_codigo = codigo
+        itinerario.sei_id_pd = str(retorno.get('IdDocumento', ''))
+        itinerario.sei_pd_formatado = retorno.get('DocumentoFormatado', '')
+        db.session.commit()
+
+        return jsonify({
+            'sucesso': True,
+            'documento_formatado': retorno.get('DocumentoFormatado', ''),
+            'id_documento': str(retorno.get('IdDocumento', '')),
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500
+
+
+@financeiro_bp.route('/diarias/<int:id>/inserir-ob', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def inserir_ob(id):
+    """Insere OB - Ordem Bancaria (idSerie 422) no processo SEI."""
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if not itinerario.sei_id_pd:
+        return jsonify({'sucesso': False, 'erro': 'A PD deve ser inserida antes da OB.'}), 400
+
+    if itinerario.sei_id_ob:
+        return jsonify({'sucesso': False, 'erro': 'A OB ja foi inserida.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados nao fornecidos.'}), 400
+
+    codigo = dados.get('codigo', '').strip()
+    if not codigo:
+        return jsonify({'sucesso': False, 'erro': 'O codigo da OB e obrigatorio.'}), 400
+
+    try:
+        token = gerar_token_sei_admin()
+        if not token:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao autenticar no SEI.'}), 500
+
+        sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+        retorno = gerar_ob(
+            token=token,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=sei_protocolo,
+            codigo_ob=codigo,
+        )
+
+        if not retorno:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar OB no SEI.'}), 500
+
+        itinerario.ob_codigo = codigo
+        itinerario.sei_id_ob = str(retorno.get('IdDocumento', ''))
+        itinerario.sei_ob_formatado = retorno.get('DocumentoFormatado', '')
+        db.session.commit()
+
+        return jsonify({
+            'sucesso': True,
+            'documento_formatado': retorno.get('DocumentoFormatado', ''),
+            'id_documento': str(retorno.get('IdDocumento', '')),
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500

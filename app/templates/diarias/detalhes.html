@@ -254,6 +254,146 @@
         </section>
         {% endif %}
 
+        {# ── Relatório de Viagem (após OB inserida) ── #}
+        {% if itinerario.sei_id_ob %}
+        <section class="mb-4 mt-4">
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-header py-3" style="background: linear-gradient(135deg, #6f42c1 0%, #8b5cf6 100%);">
+                    <h5 class="mb-0 text-white fw-bold">
+                        <i class="bi bi-file-earmark-text me-2"></i>Relatório de Viagem
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if itinerario.sei_id_relatorio_viagem %}
+                        {# Relatório já gerado #}
+                        <div class="alert alert-success d-flex align-items-center mb-0">
+                            <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                            <div>
+                                <strong>Relatório de Viagem gerado com sucesso!</strong><br>
+                                <span class="text-muted">
+                                    Documento SEI:
+                                    <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank" class="fw-bold">
+                                        {{ itinerario.sei_relatorio_viagem_formatado }}
+                                        <i class="bi bi-box-arrow-up-right small"></i>
+                                    </a>
+                                </span>
+                            </div>
+                        </div>
+                    {% else %}
+                        {# Formulário para gerar relatório #}
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle me-2"></i>
+                            O pagamento da diária foi processado. Preencha o relato da viagem abaixo para gerar o Relatório de Viagem no SEI.
+                        </div>
+
+                        <form id="formRelatorioViagem" onsubmit="return false;">
+                            <div class="mb-3">
+                                <label for="relatoViagem" class="form-label fw-bold">
+                                    <i class="bi bi-pencil-square me-1"></i>Relato da Viagem <span class="text-danger">*</span>
+                                </label>
+                                <textarea id="relatoViagem" name="relato" class="form-control" rows="6"
+                                    placeholder="Descreva as atividades realizadas durante a viagem, eventos participados, resultados alcançados..."
+                                    required></textarea>
+                                <div class="form-text">
+                                    Descreva detalhadamente as atividades realizadas durante o período da viagem.
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="relatorioUsuarioSei" class="form-label fw-bold">
+                                        <i class="bi bi-person-badge me-1"></i>Usuário SEI <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="text" id="relatorioUsuarioSei" class="form-control"
+                                        placeholder="Seu login SEI" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="relatorioSenhaSei" class="form-label fw-bold">
+                                        <i class="bi bi-key me-1"></i>Senha SEI <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="password" id="relatorioSenhaSei" class="form-control"
+                                        placeholder="Sua senha SEI" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="relatorioCargoSei" class="form-label fw-bold">
+                                        <i class="bi bi-briefcase me-1"></i>Cargo (assinatura)
+                                    </label>
+                                    <input type="text" id="relatorioCargoSei" class="form-control"
+                                        placeholder="Ex: Superintendente"
+                                        value="{{ itens[0].cargo.nome if itens and itens[0].cargo else '' }}">
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-end">
+                                <button type="button" id="btnGerarRelatorio" class="btn btn-lg text-white"
+                                    style="background: linear-gradient(135deg, #6f42c1 0%, #8b5cf6 100%);"
+                                    onclick="gerarRelatorioViagem()">
+                                    <i class="bi bi-file-earmark-plus me-2"></i>Gerar Relatório de Viagem
+                                </button>
+                            </div>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
     </div>
 </div>
+
+{% if itinerario.sei_id_ob and not itinerario.sei_id_relatorio_viagem %}
+<script>
+function gerarRelatorioViagem() {
+    const relato = document.getElementById('relatoViagem').value.trim();
+    const usuarioSei = document.getElementById('relatorioUsuarioSei').value.trim();
+    const senhaSei = document.getElementById('relatorioSenhaSei').value.trim();
+    const cargoSei = document.getElementById('relatorioCargoSei').value.trim();
+
+    if (!relato) {
+        alert('O relato da viagem é obrigatório.');
+        return;
+    }
+    if (!usuarioSei || !senhaSei) {
+        alert('Preencha o usuário e senha SEI para assinar o documento.');
+        return;
+    }
+
+    const btn = document.getElementById('btnGerarRelatorio');
+    const textoOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Gerando...';
+
+    const formData = new FormData();
+    formData.append('relato', relato);
+    formData.append('usuario_sei', usuarioSei);
+    formData.append('senha_sei', senhaSei);
+    formData.append('cargo_sei', cargoSei);
+
+    fetch('{{ url_for("diarias.gerar_relatorio", id=itinerario.id) }}', {
+        method: 'POST',
+        body: formData,
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            let msg = data.message;
+            if (data.aviso) {
+                msg += '\n\nAviso: ' + data.aviso;
+            }
+            alert(msg);
+            location.reload();
+        } else {
+            alert('Erro: ' + (data.error || 'Erro desconhecido'));
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+        }
+    })
+    .catch(err => {
+        alert('Erro de conexão: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = textoOriginal;
+    });
+}
+</script>
+{% endif %}
 {% endblock %}

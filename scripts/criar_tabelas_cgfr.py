@@ -62,6 +62,7 @@ def criar_tabelas():
                 data_devolvido_cgfr_sead VARCHAR(50) NULL,
 
                 tipo_processo VARCHAR(200) NULL,
+                data_hora_processo DATETIME NULL,
 
                 -- Campos EDITÁVEIS (preenchidos pelo usuário, NUNCA sobrescritos pelo sync)
                 natureza_despesa_id INT NULL,

@@ -1453,6 +1453,7 @@
                                     <th>Código</th>
                                     <th>Credor</th>
                                     <th>Data Emissão</th>
+                                    <th>Competência</th>
                                     <th>NE Vinculada</th>
                                     <th>Status</th>
                                     <th class="text-end">Valor</th>
@@ -1464,10 +1465,17 @@
                                     <td><strong>{{ pd_item.codigo or '—' }}</strong></td>
                                     <td>{{ pd_item.nomeCredor or '—' }}</td>
                                     <td>{{ pd_item.dataEmissao.strftime('%d/%m/%Y') if pd_item.dataEmissao else '—' }}</td>
+                                    <td>
+                                        {{ mapa_competencias_pd.get(pd_item.codigo, '—') }}
+                                    </td>
                                     <td>{{ pd_item.codigoNE or '—' }}</td>
                                     <td>
-                                        {% if pd_item.statusExecucao %}
-                                        <span class="badge bg-{{ 'success' if pd_item.statusExecucao == 'Pago' else ('info' if pd_item.statusExecucao == 'Contabilizado' else 'warning') }}">{{ pd_item.statusExecucao }}</span>
+                                        {% if pd_item.statusExecucao == 'STATUS_DISPONIVEL' %}
+                                            <span class="badge bg-danger">{{ pd_item.statusExecucao }}</span>
+                                        {% elif pd_item.statusExecucao == 'STATUS_ERRO' %}
+                                            <span class="badge bg-warning text-dark">{{ pd_item.statusExecucao }}</span>
+                                        {% elif pd_item.statusExecucao %}
+                                            <span class="badge bg-success">{{ pd_item.statusExecucao }}</span>
                                         {% else %}—{% endif %}
                                     </td>
                                     <td class="text-end text-success fw-semibold">R$ {{ "{:,.2f}".format(pd_item.valor or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
@@ -1521,6 +1529,7 @@
                                     <th>Credor</th>
                                     <th>Data Emissão</th>
                                     <th>Data Pagamento</th>
+                                    <th>Competência</th>
                                     <th>Tipo OB</th>
                                     <th class="text-end">Valor</th>
                                 </tr>
@@ -1532,6 +1541,7 @@
                                     <td>{{ pag.nomeCredor or '—' }}</td>
                                     <td>{{ pag.dataEmissao.strftime('%d/%m/%Y') if pag.dataEmissao else '—' }}</td>
                                     <td>{{ pag.dataPagamento.strftime('%d/%m/%Y') if pag.dataPagamento else '—' }}</td>
+                                    <td>{{ pag.competencia or '—' }}</td>
                                     <td>{{ pag.tipoOB or '—' }}</td>
                                     <td class="text-end text-success fw-semibold">R$ {{ "{:,.2f}".format(pag.valor or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
                                 </tr>

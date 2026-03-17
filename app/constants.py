@@ -85,6 +85,12 @@ class DiariasEtapaID(IntEnum):
     SOLICITACAO_INICIADA = 1
     FINANCEIRO = 2              # Nota de Reserva + Quadro Orçamentário
     AQUISICAO_PASSAGENS = 3     # Cotações + Escolha (somente tipos 2,3)
+    DESPACHO_CCDP = 4           # Despacho CCDP → SGA (pós NE)
+    CIENCIA_SGA = 5             # Ciência do Superintendente + Despacho SGA → NCI
+    ANALISE_NCI = 6             # Análise de Pagamento + Despacho NCI
+    DESPACHO_APOIO = 7          # Despacho APOIO/DFIN (Superintendente → DFIN)
+    DESPACHO_DIRETOR = 8        # Despacho Diretor DFIN → GEO
+    DESPACHO_GEO = 9            # Despacho GEO → CCDP + NL/PD/OB
 
 
 # =============================================================================

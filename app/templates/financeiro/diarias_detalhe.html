@@ -655,6 +655,469 @@
 </div>
 {% endif %}
 
+{# ================================================================ #}
+{# Seção Despacho CCDP → SGA — visível após NE inserida             #}
+{# ================================================================ #}
+{% if itinerario.sei_id_nota_empenho %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-3" style="background-color: #4527A0;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-send me-2"></i>Despacho CCDP → Superintendência
+        </h5>
+    </div>
+    <div class="card-body">
+
+        {% if itinerario.sei_id_despacho_ccdp %}
+            {# Despacho já gerado - modo visualização #}
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Despacho CCDP gerado e enviado à SGA!</strong>
+                    {% if itinerario.sei_despacho_ccdp_formatado %}
+                        <br><small class="text-muted">Documento SEI: {{ itinerario.sei_despacho_ccdp_formatado }}</small>
+                    {% endif %}
+                </div>
+            </div>
+
+        {% elif current_user.tem_permissao('financeiro', 'criar') and itinerario.sei_id_procedimento %}
+            {# Prévia do despacho + botão para gerar #}
+            <div class="mb-3">
+                <h6 class="fw-bold"><i class="bi bi-eye me-1"></i>Prévia do Despacho</h6>
+                <div class="border rounded p-3 bg-light" id="previaDespacho" style="font-family: Arial, sans-serif; font-size: 12pt;">
+                    <p>Processo nº <b>{{ itinerario.sei_protocolo or itinerario.n_processo or 'Sem processo' }}</b></p>
+                    <p>Interessados: @interessados_virgula_espaco@</p>
+                    <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
+                    <br>
+                    <p style="text-align: center;"><b>DESPACHO</b></p>
+                    <br>
+                    <p style="text-indent: 2em; text-align: justify;">
+                        Após a realização de análise técnica e emissão da nota de empenho, retorno os
+                        autos à <b>Superintendência de Gestão Administrativa</b>, para conhecimento e
+                        providências referente à concessão de diárias.
+                    </p>
+                </div>
+            </div>
+
+            <hr>
+            <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label for="despacho_sei_usuario" class="form-label fw-bold">Usuário SEI <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="despacho_sei_usuario" placeholder="usuario@sead.pi.gov.br">
+                </div>
+                <div class="col-md-4">
+                    <label for="despacho_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="despacho_sei_senha" placeholder="Sua senha do SEI">
+                </div>
+                <div class="col-md-4">
+                    <label for="despacho_cargo" class="form-label fw-bold">Cargo</label>
+                    <input type="text" class="form-control" id="despacho_cargo" placeholder="Ex: Auxiliar Técnica"
+                           value="{{ session.get('usuario_cargo', '') }}">
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-primary fw-bold px-4" id="btnGerarDespacho"
+                    onclick="gerarDespachoCCDP()">
+                <i class="bi bi-send me-1"></i> Gerar Despacho e Assinar
+            </button>
+            <div id="despachoResultado" class="mt-3" style="display:none;"></div>
+
+        {% else %}
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="bi bi-info-circle fs-4 me-3"></i>
+                <div>
+                    <strong>Aguardando envio do Despacho CCDP.</strong>
+                    <p class="mb-0 mt-1 small text-muted">
+                        O despacho será gerado após a NE por um usuário da CCDP.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
+{# ================================================================ #}
+{# Seção Despacho APOIO/DFIN (Superintendente) — pós Análise NCI    #}
+{# ================================================================ #}
+{% if itinerario.sei_id_despacho_ccdp %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-3" style="background-color: #1565C0;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-person-badge me-2"></i>Despacho APOIO/DFIN (Superintendente)
+        </h5>
+    </div>
+    <div class="card-body">
+
+        {% if itinerario.sei_id_despacho_apoio %}
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Despacho APOIO/DFIN gerado!</strong>
+                    {% if itinerario.sei_despacho_apoio_formatado %}
+                        <br><small class="text-muted">Documento SEI: {{ itinerario.sei_despacho_apoio_formatado }}</small>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Renderiza o despacho para visualizacao #}
+            <div class="border rounded p-3 bg-light mb-3" style="font-family: Arial, sans-serif; font-size: 12pt;">
+                <p>Processo n&ordm; <b>{{ itinerario.sei_protocolo or itinerario.n_processo or 'Sem processo' }}</b></p>
+                <p>Interessados: @interessados_virgula_espaco@</p>
+                <p>Assunto: Documento Oficial</p>
+                <br>
+                <p style="text-align: center;"><b>DESPACHO</b></p>
+                <br>
+                <p style="text-indent: 2em; text-align: justify;">
+                    Considerando a aus&ecirc;ncia de irregularidades na an&aacute;lise do N&uacute;cleo de Controle
+                    Interno - NCI ({{ itinerario.sei_analise_pagamento_formatado or itinerario.sei_id_analise_pagamento }}) e a inexist&ecirc;ncia de &oacute;bices para o pagamento, encaminho o
+                    processo &agrave; <b>Diretoria de Planejamento e Finan&ccedil;as-DFIN</b> para pagamento e demais
+                    provid&ecirc;ncias pertinentes, <i>devendo ser observados os procedimentos legais.</i>
+                </p>
+            </div>
+
+        {% elif itinerario.sei_id_analise_pagamento and '{{ "110009066" }}' in (session.get('unidades', []) | map(attribute='id') | map('string') | list) %}
+            {# Usuario com caixa DFIN/APOIO pode gerar #}
+            <div class="mb-3">
+                <h6 class="fw-bold"><i class="bi bi-eye me-1"></i>Despacho NCI (para ci&ecirc;ncia)</h6>
+                <div class="border rounded p-3 bg-light" style="font-family: Arial, sans-serif; font-size: 11pt; max-height: 200px; overflow-y: auto;">
+                    <p><b>An&aacute;lise NCI:</b> {{ itinerario.sei_analise_pagamento_formatado or 'N/A' }}</p>
+                    <p><b>Despacho NCI:</b> {{ itinerario.sei_despacho_nci_formatado or 'N/A' }}</p>
+                </div>
+            </div>
+
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="cienciaApoio" onchange="toggleBtnApoio()">
+                <label class="form-check-label fw-bold" for="cienciaApoio">
+                    Declaro ci&ecirc;ncia do despacho NCI e prossigo com o encaminhamento.
+                </label>
+            </div>
+
+            <hr>
+            <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label for="apoio_sei_usuario" class="form-label fw-bold">Usu&aacute;rio SEI <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="apoio_sei_usuario" placeholder="usuario@sead.pi.gov.br">
+                </div>
+                <div class="col-md-4">
+                    <label for="apoio_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="apoio_sei_senha" placeholder="Sua senha do SEI">
+                </div>
+                <div class="col-md-4">
+                    <label for="apoio_cargo" class="form-label fw-bold">Cargo</label>
+                    <input type="text" class="form-control" id="apoio_cargo" placeholder="Superintendente"
+                           value="Superintendente de Gest&atilde;o Administrativa">
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-primary fw-bold px-4" id="btnDespachoApoio"
+                    onclick="enviarDespachoApoio()" disabled>
+                <i class="bi bi-send me-1"></i> Gerar Despacho e Assinar
+            </button>
+            <div id="apoioResultado" class="mt-3" style="display:none;"></div>
+
+        {% else %}
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="bi bi-info-circle fs-4 me-3"></i>
+                <div>
+                    <strong>Aguardando Despacho APOIO/DFIN.</strong>
+                    <p class="mb-0 mt-1 small text-muted">
+                        {% if not itinerario.sei_id_analise_pagamento %}
+                            A An&aacute;lise NCI deve ser finalizada primeiro.
+                        {% else %}
+                            O despacho ser&aacute; gerado pelo Superintendente (caixa APOIO/DFIN).
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
+{# ================================================================ #}
+{# Seção Despacho Diretor DFIN → GEO                                #}
+{# ================================================================ #}
+{% if itinerario.sei_id_despacho_apoio %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-3" style="background-color: #0D47A1;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-person-workspace me-2"></i>Despacho Diretor DFIN
+        </h5>
+    </div>
+    <div class="card-body">
+
+        {% if itinerario.sei_id_despacho_diretor %}
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Despacho do Diretor DFIN gerado!</strong>
+                    {% if itinerario.sei_despacho_diretor_formatado %}
+                        <br><small class="text-muted">Documento SEI: {{ itinerario.sei_despacho_diretor_formatado }}</small>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Renderiza o despacho para visualizacao #}
+            <div class="border rounded p-3 bg-light mb-3" style="font-family: Arial, sans-serif; font-size: 12pt;">
+                <p>Processo n&ordm; <b>{{ itinerario.sei_protocolo or itinerario.n_processo or 'Sem processo' }}</b></p>
+                <p>Interessados: @interessados_virgula_espaco@</p>
+                <p>Assunto: Documento Oficial</p>
+                <br>
+                <p style="text-align: center;"><b>DESPACHO</b></p>
+                <br>
+                <p style="text-indent: 2em; text-align: justify;">
+                    Considerando o despacho da <b>SGACG</b> ({{ itinerario.sei_despacho_apoio_formatado or itinerario.sei_id_despacho_apoio }}), encaminho o processo &agrave;
+                    <b>GER&Ecirc;NCIA DE EXECU&Ccedil;&Atilde;O OR&Ccedil;AMENT&Aacute;RIA</b> para liquida&ccedil;&atilde;o, pagamento e demais
+                    provid&ecirc;ncias pertinentes, devendo ser observados os procedimentos legais.
+                </p>
+            </div>
+
+        {% elif '110009066' in (session.get('unidades', []) | map(attribute='id') | map('string') | list) %}
+            {# Diretor ve o despacho anterior e gera o seu #}
+            <div class="mb-3">
+                <h6 class="fw-bold"><i class="bi bi-eye me-1"></i>Despacho APOIO/DFIN (para ci&ecirc;ncia)</h6>
+                <div class="border rounded p-3 bg-light" style="font-family: Arial, sans-serif; font-size: 12pt;">
+                    <p style="text-indent: 2em; text-align: justify;">
+                        Considerando a aus&ecirc;ncia de irregularidades na an&aacute;lise do N&uacute;cleo de Controle
+                        Interno - NCI ({{ itinerario.sei_analise_pagamento_formatado or '' }}) e a inexist&ecirc;ncia de &oacute;bices para o pagamento, encaminho o
+                        processo &agrave; <b>Diretoria de Planejamento e Finan&ccedil;as-DFIN</b> para pagamento e demais
+                        provid&ecirc;ncias pertinentes, <i>devendo ser observados os procedimentos legais.</i>
+                    </p>
+                    <p class="text-muted small mt-2">Documento: {{ itinerario.sei_despacho_apoio_formatado or '' }}</p>
+                </div>
+            </div>
+
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="cienciaDiretor" onchange="toggleBtnDiretor()">
+                <label class="form-check-label fw-bold" for="cienciaDiretor">
+                    Declaro ci&ecirc;ncia do despacho e prossigo com o encaminhamento &agrave; GEO.
+                </label>
+            </div>
+
+            <hr>
+            <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label for="diretor_sei_usuario" class="form-label fw-bold">Usu&aacute;rio SEI <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="diretor_sei_usuario" placeholder="usuario@sead.pi.gov.br">
+                </div>
+                <div class="col-md-4">
+                    <label for="diretor_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="diretor_sei_senha" placeholder="Sua senha do SEI">
+                </div>
+                <div class="col-md-4">
+                    <label for="diretor_cargo" class="form-label fw-bold">Cargo</label>
+                    <input type="text" class="form-control" id="diretor_cargo" placeholder="Diretor"
+                           value="Diretor de Planejamento e Finan&ccedil;as">
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-primary fw-bold px-4" id="btnDespachoDiretor"
+                    onclick="enviarDespachoDiretor()" disabled>
+                <i class="bi bi-send me-1"></i> Gerar Despacho e Assinar
+            </button>
+            <div id="diretorResultado" class="mt-3" style="display:none;"></div>
+
+        {% else %}
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="bi bi-info-circle fs-4 me-3"></i>
+                <div>
+                    <strong>Aguardando Despacho do Diretor DFIN.</strong>
+                    <p class="mb-0 mt-1 small text-muted">
+                        O despacho ser&aacute; gerado pelo Diretor de Planejamento e Finan&ccedil;as.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
+{# ================================================================ #}
+{# Seção Despacho GEO → CCDP + NL/PD/OB                            #}
+{# ================================================================ #}
+{% if itinerario.sei_id_despacho_diretor %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-3" style="background-color: #004D40;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-building me-2"></i>Despacho GEO &amp; Liquida&ccedil;&atilde;o
+        </h5>
+    </div>
+    <div class="card-body">
+
+        {% if itinerario.sei_id_despacho_geo %}
+            <div class="alert alert-success d-flex align-items-center mb-3" role="alert">
+                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Despacho GEO gerado e enviado &agrave; CCDP!</strong>
+                    {% if itinerario.sei_despacho_geo_formatado %}
+                        <br><small class="text-muted">Documento SEI: {{ itinerario.sei_despacho_geo_formatado }}</small>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Renderiza despacho GEO #}
+            <div class="border rounded p-3 bg-light mb-4" style="font-family: Arial, sans-serif; font-size: 12pt;">
+                <p style="text-indent: 2em; text-align: justify;">
+                    Encaminho os autos &agrave; <b>Coordena&ccedil;&atilde;o de Controle de Di&aacute;rias e Passagens -
+                    CCDP</b> para liquida&ccedil;&atilde;o, pagamento e demais tr&acirc;mites inerentes ao setor.
+                </p>
+            </div>
+
+            {# ── NL / PD / OB (sequencial) ────────── #}
+            <h6 class="fw-bold mb-3"><i class="bi bi-file-earmark-text me-2"></i>Documentos de Liquida&ccedil;&atilde;o e Pagamento</h6>
+
+            {# NL #}
+            <div class="card mb-3 {{ 'border-success' if itinerario.sei_id_nl else '' }}">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="badge {{ 'bg-success' if itinerario.sei_id_nl else 'bg-warning text-dark' }} me-2">1</span>
+                            <strong>NL - Nota de Liquida&ccedil;&atilde;o</strong>
+                            {% if itinerario.sei_id_nl %}
+                                <span class="text-success ms-2"><i class="bi bi-check-circle"></i> {{ itinerario.nl_codigo }} ({{ itinerario.sei_nl_formatado }})</span>
+                            {% endif %}
+                        </div>
+                        {% if not itinerario.sei_id_nl %}
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="text" class="form-control form-control-sm" id="nl_codigo"
+                                   placeholder="Ex: 2026NL00123" style="width: 180px;">
+                            <button type="button" class="btn btn-sm btn-success" id="btnNL" onclick="inserirDocumento('nl')">
+                                <i class="bi bi-plus-circle me-1"></i>Inserir NL
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {# PD #}
+            <div class="card mb-3 {{ 'border-success' if itinerario.sei_id_pd else '' }}">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="badge {{ 'bg-success' if itinerario.sei_id_pd else ('bg-secondary' if not itinerario.sei_id_nl else 'bg-warning text-dark') }} me-2">2</span>
+                            <strong>PD - Programa&ccedil;&atilde;o de Desembolso</strong>
+                            {% if itinerario.sei_id_pd %}
+                                <span class="text-success ms-2"><i class="bi bi-check-circle"></i> {{ itinerario.pd_codigo }} ({{ itinerario.sei_pd_formatado }})</span>
+                            {% endif %}
+                        </div>
+                        {% if itinerario.sei_id_nl and not itinerario.sei_id_pd %}
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="text" class="form-control form-control-sm" id="pd_codigo"
+                                   placeholder="Ex: 2026PD00123" style="width: 180px;">
+                            <button type="button" class="btn btn-sm btn-success" id="btnPD" onclick="inserirDocumento('pd')">
+                                <i class="bi bi-plus-circle me-1"></i>Inserir PD
+                            </button>
+                        </div>
+                        {% elif not itinerario.sei_id_nl %}
+                        <small class="text-muted"><i class="bi bi-lock me-1"></i>Insira a NL primeiro</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {# OB #}
+            <div class="card mb-3 {{ 'border-success' if itinerario.sei_id_ob else '' }}">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="badge {{ 'bg-success' if itinerario.sei_id_ob else ('bg-secondary' if not itinerario.sei_id_pd else 'bg-warning text-dark') }} me-2">3</span>
+                            <strong>OB - Ordem Banc&aacute;ria</strong>
+                            {% if itinerario.sei_id_ob %}
+                                <span class="text-success ms-2"><i class="bi bi-check-circle"></i> {{ itinerario.ob_codigo }} ({{ itinerario.sei_ob_formatado }})</span>
+                            {% endif %}
+                        </div>
+                        {% if itinerario.sei_id_pd and not itinerario.sei_id_ob %}
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="text" class="form-control form-control-sm" id="ob_codigo"
+                                   placeholder="Ex: 2026OB00123" style="width: 180px;">
+                            <button type="button" class="btn btn-sm btn-success" id="btnOB" onclick="inserirDocumento('ob')">
+                                <i class="bi bi-plus-circle me-1"></i>Inserir OB
+                            </button>
+                        </div>
+                        {% elif not itinerario.sei_id_pd %}
+                        <small class="text-muted"><i class="bi bi-lock me-1"></i>Insira a PD primeiro</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div id="nlpdob_resultado" class="mt-2" style="display:none;"></div>
+
+            {% if itinerario.sei_id_ob %}
+            <div class="alert alert-success mt-3 py-2">
+                <i class="bi bi-check-circle-fill me-1"></i>
+                <strong>Processo finalizado!</strong> NL, PD e OB inseridos com sucesso.
+            </div>
+            {% endif %}
+
+        {% elif '110006439' in (session.get('unidades', []) | map(attribute='id') | map('string') | list) %}
+            {# GEO user sees Director's despacho and generates their own #}
+            <div class="mb-3">
+                <h6 class="fw-bold"><i class="bi bi-eye me-1"></i>Despacho do Diretor DFIN (para ci&ecirc;ncia)</h6>
+                <div class="border rounded p-3 bg-light" style="font-family: Arial, sans-serif; font-size: 12pt;">
+                    <p style="text-indent: 2em; text-align: justify;">
+                        Considerando o despacho da <b>SGACG</b> ({{ itinerario.sei_despacho_apoio_formatado or '' }}), encaminho o processo &agrave;
+                        <b>GER&Ecirc;NCIA DE EXECU&Ccedil;&Atilde;O OR&Ccedil;AMENT&Aacute;RIA</b> para liquida&ccedil;&atilde;o, pagamento e demais
+                        provid&ecirc;ncias pertinentes, devendo ser observados os procedimentos legais.
+                    </p>
+                    <p class="text-muted small mt-2">Documento: {{ itinerario.sei_despacho_diretor_formatado or '' }}</p>
+                </div>
+            </div>
+
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="cienciaGeo" onchange="toggleBtnGeo()">
+                <label class="form-check-label fw-bold" for="cienciaGeo">
+                    Declaro ci&ecirc;ncia do despacho e prossigo com o encaminhamento &agrave; CCDP.
+                </label>
+            </div>
+
+            <hr>
+            <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label for="geo_sei_usuario" class="form-label fw-bold">Usu&aacute;rio SEI <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="geo_sei_usuario" placeholder="usuario@sead.pi.gov.br">
+                </div>
+                <div class="col-md-4">
+                    <label for="geo_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="geo_sei_senha" placeholder="Sua senha do SEI">
+                </div>
+                <div class="col-md-4">
+                    <label for="geo_cargo" class="form-label fw-bold">Cargo</label>
+                    <input type="text" class="form-control" id="geo_cargo" placeholder="Gerente"
+                           value="Ger&ecirc;ncia de Execu&ccedil;&atilde;o Or&ccedil;ament&aacute;ria">
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-primary fw-bold px-4" id="btnDespachoGeo"
+                    onclick="enviarDespachoGeo()" disabled>
+                <i class="bi bi-send me-1"></i> Gerar Despacho e Assinar
+            </button>
+            <div id="geoResultado" class="mt-3" style="display:none;"></div>
+
+        {% else %}
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="bi bi-info-circle fs-4 me-3"></i>
+                <div>
+                    <strong>Aguardando Despacho GEO.</strong>
+                    <p class="mb-0 mt-1 small text-muted">
+                        O despacho ser&aacute; gerado pelo Gerente de Execu&ccedil;&atilde;o Or&ccedil;ament&aacute;ria.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
 {% block extra_js %}
 <script>
     // Previne duplo-clique no submit da NR
@@ -713,6 +1176,251 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando...';
     });
+
+    // Gerar Despacho CCDP via AJAX
+    async function gerarDespachoCCDP() {
+        const usuario = document.getElementById('despacho_sei_usuario')?.value?.trim();
+        const senha = document.getElementById('despacho_sei_senha')?.value?.trim();
+        const cargo = document.getElementById('despacho_cargo')?.value?.trim();
+        const btn = document.getElementById('btnGerarDespacho');
+        const resultado = document.getElementById('despachoResultado');
+
+        if (!usuario || !senha) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = '<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>Usuário e senha SEI são obrigatórios.</div>';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Gerando despacho...';
+        resultado.style.display = 'none';
+
+        try {
+            const response = await fetch("{{ url_for('financeiro.despacho_ccdp', id=itinerario.id) }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    sei_usuario: usuario,
+                    sei_senha: senha,
+                    cargo: cargo || 'Auxiliar Técnica'
+                })
+            });
+
+            const data = await response.json();
+            resultado.style.display = 'block';
+
+            if (data.sucesso) {
+                let msg = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i><strong>Despacho gerado com sucesso!</strong> Documento: ${data.documento_formatado}`;
+                if (data.aviso) msg += `<br><small class="text-warning">${data.aviso}</small>`;
+                msg += '</div>';
+                resultado.innerHTML = msg;
+                // Recarregar após 2s
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>${data.erro}</div>`;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-send me-1"></i> Gerar Despacho e Assinar';
+            }
+        } catch (err) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>Erro de conexão: ${err.message}</div>`;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Gerar Despacho e Assinar';
+        }
+    }
+
+    // ── Toggle buttons de ciência ──
+    function toggleBtnApoio() {
+        document.getElementById('btnDespachoApoio').disabled = !document.getElementById('cienciaApoio').checked;
+    }
+    function toggleBtnDiretor() {
+        document.getElementById('btnDespachoDiretor').disabled = !document.getElementById('cienciaDiretor').checked;
+    }
+    function toggleBtnGeo() {
+        document.getElementById('btnDespachoGeo').disabled = !document.getElementById('cienciaGeo').checked;
+    }
+
+    // ── Despacho APOIO/DFIN (Superintendente) ──
+    async function enviarDespachoApoio() {
+        const usuario = document.getElementById('apoio_sei_usuario')?.value?.trim();
+        const senha = document.getElementById('apoio_sei_senha')?.value?.trim();
+        const cargo = document.getElementById('apoio_cargo')?.value?.trim();
+        const btn = document.getElementById('btnDespachoApoio');
+        const resultado = document.getElementById('apoioResultado');
+
+        if (!usuario || !senha) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = '<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>Usuário e senha SEI são obrigatórios.</div>';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Gerando despacho...';
+        resultado.style.display = 'none';
+
+        try {
+            const response = await fetch("{{ url_for('financeiro.despacho_apoio', id=itinerario.id) }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ sei_usuario: usuario, sei_senha: senha, cargo: cargo, ciencia: true })
+            });
+            const data = await response.json();
+            resultado.style.display = 'block';
+
+            if (data.sucesso) {
+                let msg = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i><strong>Despacho APOIO gerado!</strong> Documento: ${data.documento_formatado}`;
+                if (data.aviso) msg += `<br><small class="text-warning">${data.aviso}</small>`;
+                msg += '</div>';
+                resultado.innerHTML = msg;
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>${data.erro}</div>`;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-send me-1"></i> Gerar Despacho e Assinar';
+            }
+        } catch (err) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>Erro: ${err.message}</div>`;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Gerar Despacho e Assinar';
+        }
+    }
+
+    // ── Despacho Diretor DFIN ──
+    async function enviarDespachoDiretor() {
+        const usuario = document.getElementById('diretor_sei_usuario')?.value?.trim();
+        const senha = document.getElementById('diretor_sei_senha')?.value?.trim();
+        const cargo = document.getElementById('diretor_cargo')?.value?.trim();
+        const btn = document.getElementById('btnDespachoDiretor');
+        const resultado = document.getElementById('diretorResultado');
+
+        if (!usuario || !senha) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = '<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>Usuário e senha SEI são obrigatórios.</div>';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Gerando despacho...';
+        resultado.style.display = 'none';
+
+        try {
+            const response = await fetch("{{ url_for('financeiro.despacho_diretor', id=itinerario.id) }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ sei_usuario: usuario, sei_senha: senha, cargo: cargo, ciencia: true })
+            });
+            const data = await response.json();
+            resultado.style.display = 'block';
+
+            if (data.sucesso) {
+                let msg = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i><strong>Despacho Diretor gerado!</strong> Documento: ${data.documento_formatado}`;
+                if (data.aviso) msg += `<br><small class="text-warning">${data.aviso}</small>`;
+                msg += '</div>';
+                resultado.innerHTML = msg;
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>${data.erro}</div>`;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-send me-1"></i> Gerar Despacho e Assinar';
+            }
+        } catch (err) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>Erro: ${err.message}</div>`;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Gerar Despacho e Assinar';
+        }
+    }
+
+    // ── Despacho GEO ──
+    async function enviarDespachoGeo() {
+        const usuario = document.getElementById('geo_sei_usuario')?.value?.trim();
+        const senha = document.getElementById('geo_sei_senha')?.value?.trim();
+        const cargo = document.getElementById('geo_cargo')?.value?.trim();
+        const btn = document.getElementById('btnDespachoGeo');
+        const resultado = document.getElementById('geoResultado');
+
+        if (!usuario || !senha) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = '<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>Usuário e senha SEI são obrigatórios.</div>';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Gerando despacho...';
+        resultado.style.display = 'none';
+
+        try {
+            const response = await fetch("{{ url_for('financeiro.despacho_geo', id=itinerario.id) }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ sei_usuario: usuario, sei_senha: senha, cargo: cargo, ciencia: true })
+            });
+            const data = await response.json();
+            resultado.style.display = 'block';
+
+            if (data.sucesso) {
+                let msg = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i><strong>Despacho GEO gerado!</strong> Documento: ${data.documento_formatado}`;
+                if (data.aviso) msg += `<br><small class="text-warning">${data.aviso}</small>`;
+                msg += '</div>';
+                resultado.innerHTML = msg;
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>${data.erro}</div>`;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-send me-1"></i> Gerar Despacho e Assinar';
+            }
+        } catch (err) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>Erro: ${err.message}</div>`;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Gerar Despacho e Assinar';
+        }
+    }
+
+    // ── Inserir NL / PD / OB (sequencial) ──
+    async function inserirDocumento(tipo) {
+        const input = document.getElementById(tipo + '_codigo');
+        const btn = document.getElementById('btn' + tipo.toUpperCase());
+        const resultado = document.getElementById('nlpdob_resultado');
+        const codigo = input?.value?.trim();
+
+        const nomes = { nl: 'NL', pd: 'PD', ob: 'OB' };
+
+        if (!codigo) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>O código da ${nomes[tipo]} é obrigatório.</div>`;
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Inserindo...';
+        resultado.style.display = 'none';
+
+        try {
+            const response = await fetch(`{{ url_for('financeiro.diarias_detalhe', id=itinerario.id) }}/inserir-${tipo}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ codigo: codigo })
+            });
+            const data = await response.json();
+            resultado.style.display = 'block';
+
+            if (data.sucesso) {
+                resultado.innerHTML = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i><strong>${nomes[tipo]} inserida!</strong> Documento: ${data.documento_formatado}</div>`;
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>${data.erro}</div>`;
+                btn.disabled = false;
+                btn.innerHTML = `<i class="bi bi-plus-circle me-1"></i>Inserir ${nomes[tipo]}`;
+            }
+        } catch (err) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i>Erro: ${err.message}</div>`;
+            btn.disabled = false;
+            btn.innerHTML = `<i class="bi bi-plus-circle me-1"></i>Inserir ${nomes[tipo]}`;
+        }
+    }
 </script>
 {% endblock %}
 {% endblock %}

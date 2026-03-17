@@ -28,10 +28,22 @@ ID_SERIE_DESPACHO = "754"              # "SEAD_DESPACHO"
 ID_SERIE_ESCOLHA_PASSAGENS = "2977"    # "SEAD_ESCOLHA_PASSAGENS"
 ID_SERIE_NOTA_EMPENHO = "419"         # "NE - Nota de Empenho"
 ID_SERIE_AUTORIZACAO_SCDP = "264"     # Doc externo para Autorização SCDP
+ID_SERIE_DESPACHO_SGA = "2987"        # "SEAD_DESPACHO_SGA" (Despacho do Superintendente)
+ID_SERIE_ANALISE_PAGAMENTO = "461"    # "SINCIN Análise de Pagamento" (Parecer NCI)
+ID_SERIE_DESPACHO_NCI = "5"           # "Despacho" (Despacho NCI)
+ID_SERIE_NL = "420"               # "NL - Nota de Liquidação"
+ID_SERIE_PD = "421"               # "PD - Programação de Desembolso"
+ID_SERIE_OB = "422"               # "OB - Ordem Bancária"
+ID_SERIE_RELATORIO_VIAGEM = "1908"  # "SEAD_RELATÓRIO DE VIAGEM (DIÁRIA)"
 ID_HIPOTESE_LEGAL_INFO_PESSOAL = "4"  # "Informação Pessoal" - Art. 31 da Lei nº 12.527/2011
 
 # Unidade destino pós-autorização (Diretoria de Planejamento e Finanças)
 UNIDADE_DFIN_APOIO = "110009066"  # "SEAD-PI/GAB/SGACG/DFIN/APOIO"
+UNIDADE_APOIOSGA = "110006213"    # "SEAD-PI/GAB/SGACG/APOIOSGA"
+UNIDADE_NCI = "110006211"         # "SEAD-PI/GAB/NCI"
+UNIDADE_CCDP = "110008607"        # "SEAD-PI/SGACG/DFIN/GEO/CCDP"
+UNIDADE_GEO = "110006439"        # "SEAD-PI/GAB/SGACG/DFIN/GEO"
+UNIDADE_DFIN = "110006438"       # "SEAD-PI/GAB/SGACG/DFIN"
 
 # Meses por extenso para formatação de datas
 MESES_EXTENSO = {
@@ -825,7 +837,7 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
 
 
 def enviar_procedimento(token, protocolo_procedimento, unidades_destino,
-                        manter_aberto=True):
+                        manter_aberto=True, unidade_origem=None):
     """
     Envia (encaminha) um procedimento para uma ou mais unidades no SEI.
 
@@ -836,6 +848,7 @@ def enviar_procedimento(token, protocolo_procedimento, unidades_destino,
         protocolo_procedimento: Protocolo formatado (ex: '00002.009305/2025-23')
         unidades_destino: list de IDs de unidades destino (ex: ['110009066'])
         manter_aberto: se True, mantém o processo aberto na unidade atual
+        unidade_origem: ID da unidade remetente (default: UNIDADE_SEAD)
 
     Returns:
         dict com {sucesso: bool, erro: str ou None}
@@ -846,7 +859,8 @@ def enviar_procedimento(token, protocolo_procedimento, unidades_destino,
         resultado['erro'] = 'Token nao fornecido.'
         return resultado
 
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/procedimentos/enviar"
+    origem = unidade_origem or UNIDADE_SEAD
+    url = f"{BASE_URL}/v1/unidades/{origem}/procedimentos/enviar"
 
     payload = {
         'protocolo': protocolo_procedimento,
@@ -2212,4 +2226,987 @@ def gerar_nota_empenho(token, id_procedimento, sei_protocolo, codigo_ne, dados_e
 
     except Exception as e:
         current_app.logger.error(f"SEI Diarias: Erro ao gerar NE: {e}")
+        return None
+
+
+# ── Despacho CCDP → SGA (idSerie 754, pós Nota de Empenho) ────────────────
+
+
+def gerar_despacho_ccdp(token, id_procedimento, sei_protocolo):
+    """
+    Gera o Despacho CCDP (série 754) após emissão da Nota de Empenho.
+
+    Retorna os autos à Superintendência de Gestão Administrativa para
+    conhecimento e providências referente à concessão de diárias.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        sei_protocolo: Protocolo formatado do processo
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para despacho CCDP.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Interessados: @interessados_virgula_espaco@</p>
+        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
+        <br>
+        <p style="text-align: center;"><b>DESPACHO</b></p>
+        <br>
+        <p style="text-indent: 2em; text-align: justify;">
+            Após a realização de análise técnica e emissão da nota de empenho, retorno os
+            autos à <b>Superintendência de Gestão Administrativa</b>, para conhecimento e
+            providências referente à concessão de diárias.
+        </p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_DESPACHO,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Despacho CCDP - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando despacho CCDP para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar despacho CCDP ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Despacho CCDP gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho CCDP: {e}")
+        return None
+
+
+# ── Despacho SGA → NCI (idSerie 2987) ─────────────────────────────────────
+
+
+def gerar_despacho_sga(token, id_procedimento, sei_protocolo, ref_despacho_ccdp_id,
+                       ref_despacho_ccdp_formatado):
+    """
+    Gera o Despacho SGA (série 2987) assinado pelo Superintendente.
+
+    Encaminha os autos ao NCI para análise, referenciando o despacho CCDP anterior.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        sei_protocolo: Protocolo formatado do processo
+        ref_despacho_ccdp_id: ID do despacho CCDP anterior (para referência)
+        ref_despacho_ccdp_formatado: Número formatado do despacho CCDP
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para despacho SGA.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_APOIOSGA}/documentos"
+
+    ref_texto = ref_despacho_ccdp_formatado or ref_despacho_ccdp_id or ''
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Interessados: @interessados_virgula_espaco@</p>
+        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
+        <br>
+        <p style="text-align: center;"><b>DESPACHO</b></p>
+        <br>
+        <p>PARA: NÚCLEO DE CONTROLE INTERNO - NCI</p>
+        <br>
+        <p style="text-indent: 2em; text-align: justify;">
+            Em atenção ao {ref_texto} ({ref_despacho_ccdp_id}), da COORDENAÇÃO DE
+            CONTROLE DE DIÁRIAS E PASSAGENS, encaminhamos os autos para análise e demais
+            providências necessárias.
+        </p>
+        <br>
+        <p style="text-align: center;">
+            <i>(assinado eletronicamente)</i><br>
+            <b>PEDRO ALEXANDRE CABRAL DE OLIVEIRA</b><br>
+            Superintendente de Gestão Administrativa – SEAD
+        </p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_DESPACHO_SGA,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Despacho SGA → NCI - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando despacho SGA para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar despacho SGA ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Despacho SGA gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho SGA: {e}")
+        return None
+
+
+# ── Análise de Pagamento NCI (idSerie 461) ────────────────────────────────
+
+# Perguntas da Análise de Pagamento (roteiro de diárias)
+PERGUNTAS_ANALISE_PAGAMENTO = [
+    {"id": "q1", "texto": "A(s) diária(s) foi(ram) solicitada(s) para militares, servidores públicos, empregados públicos, ou agentes políticos que, em caráter eventual ou transitório, e no interesse do serviço, deslocarem-se da localidade onde têm exercício para outro ponto do território estadual, nacional ou estrangeiro?",
+     "campos_extras": ["vinculo", "nome_agente"]},
+    {"id": "q2", "texto": "O servidor é o gestor máximo do órgão ou entidade?"},
+    {"id": "q3", "texto": "Foi avaliado a oportunidade e a necessidade da viagem e aptidão do servidor antes da autorização?",
+     "campos_extras": ["quem_analisou"]},
+    {"id": "q4", "texto": "O valor da diária corresponde ao valor do cargo de autoridade superior?",
+     "campos_extras": ["classe_correspondente"]},
+    {"id": "q5", "texto": "O agente é autoridade superior no órgão ou entidade?",
+     "campos_extras": ["cargo_agente"]},
+    {"id": "q6", "texto": "No caso de servidor não ser autoridade superior, a diária é equivalente ao cargo do servidor?"},
+    {"id": "q7", "texto": "O servidor indicado para acompanhar a autoridade possui cargo igual ou inferior ao da autoridade que acompanha?"},
+    {"id": "q8", "texto": "A diária foi majorada em até 30% quando a despesa com hospedagem for coberta pelo servidor?"},
+    {"id": "q9", "texto": "O deslocamento da sede para o aeroporto ou rodoviária, a diária é de 50%?"},
+    {"id": "q10", "texto": "O valor das diárias está com base nos anexos I e II do decreto 20.890/2022 e alterações posteriores?",
+     "campos_extras": ["valor_diaria", "destino_viagem"]},
+    {"id": "q11", "texto": "As diárias a serem concedidas estão dentro do período da viagem?"},
+    {"id": "q12", "texto": "Em caso de prorrogação, a viagem foi comunicada ao concedente?"},
+    {"id": "q13", "texto": "Foi demonstrada a disponibilidade orçamentário-financeira para a execução da despesa?",
+     "campos_extras": ["projeto_natureza", "fonte_recursos"]},
+    {"id": "q14", "texto": "O servidor realizou viagem anterior a serviço do Estado com direito a recebimento de diárias?"},
+    {"id": "q15", "texto": "O servidor prestou contas das diárias recebidas anteriormente?"},
+    {"id": "q16", "texto": "Foi aprovada a prestação de contas da viagem anterior feita pelo servidor?",
+     "campos_extras": ["responsavel_analise"]},
+    {"id": "q17", "texto": "A viagem foi autorizada pelo ordenador de despesa?",
+     "campos_extras": ["quem_autorizou"]},
+    {"id": "q18", "texto": "A publicação da portaria de diárias foi realizada no DOE antes da viagem?"},
+    {"id": "q19", "texto": "Trata-se de despesas de exercícios anteriores?"},
+    {"id": "q20", "texto": "Em caso de DEA, foi apresentada a justificativa para o não pagamento no exercício?"},
+    {"id": "q21", "texto": "Em caso de DEA, a despesa foi reconhecida pela autoridade competente?"},
+]
+
+
+def gerar_analise_pagamento(token, id_procedimento, sei_protocolo, respostas,
+                            observacoes=None):
+    """
+    Gera documento SINCIN Análise de Pagamento (série 461) no processo SEI.
+
+    Cria o parecer do NCI com as 21 perguntas S/N e a conclusão.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        sei_protocolo: Protocolo formatado do processo
+        respostas: dict com respostas {
+            'q1': {'resposta': 'S'/'N', 'observacao': '...', 'vinculo': '...', ...},
+            'q2': {'resposta': 'S'/'N'},
+            ...
+        }
+        observacoes: texto geral de observações
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para análise de pagamento.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_NCI}/documentos"
+
+    hoje = date.today()
+    referencia = f"{MESES_EXTENSO[hoje.month].capitalize()}/{hoje.year}"
+
+    # Monta as linhas da tabela de perguntas
+    linhas_perguntas = ''
+    questoes_na = []  # questões que não se aplicam
+
+    for pergunta in PERGUNTAS_ANALISE_PAGAMENTO:
+        pid = pergunta['id']
+        resp_data = respostas.get(pid, {})
+        resp = resp_data.get('resposta', '')
+        obs = resp_data.get('observacao', '')
+
+        if resp == 'NA':
+            questoes_na.append(pid.replace('q', ''))
+            continue
+
+        sim_x = '<b><i>X</i></b>' if resp == 'S' else ''
+        nao_x = '<b><i>X</i></b>' if resp == 'N' else ''
+
+        # Campos extras (vinculo, nome, etc.)
+        extras_html = ''
+        for campo in pergunta.get('campos_extras', []):
+            valor = resp_data.get(campo, '')
+            if valor:
+                label = campo.replace('_', ' ').title()
+                extras_html += f'<br><i style="margin-left:20px;">{label}: <b>{valor}</b></i>'
+
+        if obs:
+            extras_html += f'<br><i style="margin-left:20px;">Observação: {obs}</i>'
+
+        num = pid.replace('q', '')
+        linhas_perguntas += f"""
+            <tr>
+                <td style="border:1px solid #000; padding:6px; text-align:left;">
+                    {num}. {pergunta['texto']}{extras_html}
+                </td>
+                <td style="border:1px solid #000; padding:6px; text-align:center; width:30px;">{sim_x}</td>
+                <td style="border:1px solid #000; padding:6px; text-align:center; width:30px;">{nao_x}</td>
+            </tr>"""
+
+    # Observação das questões não aplicáveis
+    na_texto = ''
+    if questoes_na:
+        na_texto = f'<p><i>Observação: Conforme estabelecido no roteiro, as seguintes questões não se aplicaram à análise: {", ".join(questoes_na)}.</i></p>'
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 11pt;">
+        <h3 style="text-align: center;">GOVERNO DO ESTADO DO PIAUÍ<br>CONTROLADORIA-GERAL DO ESTADO</h3>
+        <br>
+        <table style="width:100%; border-collapse:collapse; margin-bottom:15px;">
+            <tr>
+                <td style="border:1px solid #000; padding:6px; font-weight:bold; width:30%;">PROCESSO</td>
+                <td style="border:1px solid #000; padding:6px;">{sei_protocolo}</td>
+            </tr>
+            <tr>
+                <td style="border:1px solid #000; padding:6px; font-weight:bold;">REFERÊNCIA</td>
+                <td style="border:1px solid #000; padding:6px;">{referencia}</td>
+            </tr>
+        </table>
+
+        <h4>I. Introdução</h4>
+        <p style="text-align: justify;">
+            Com amparo no Decreto Estadual n. 17.526, de 04/12/2017, analisei o processo nº <b>{sei_protocolo}</b>,
+            referente a <b>PAGAMENTO DE DIÁRIAS</b>, conforme roteiro de Pagamento diárias, previamente definido
+            pela Superintendência de Controladoria Geral do Estado (SUPCGE), com respaldo no art. 21, § 2° da Lei
+            7.884/2022, conforme demonstrado a seguir.
+        </p>
+
+        <h4>II. Análise</h4>
+        <p style="text-align:right;"><small>Legenda: S = Sim &nbsp; N = Não</small></p>
+        <table style="width:100%; border-collapse:collapse; border:2px solid #000;">
+            <thead>
+                <tr style="background-color:#d9e2f3;">
+                    <th style="border:1px solid #000; padding:6px;">Pergunta</th>
+                    <th style="border:1px solid #000; padding:6px; width:30px;">S</th>
+                    <th style="border:1px solid #000; padding:6px; width:30px;">N</th>
+                </tr>
+            </thead>
+            <tbody>
+                {linhas_perguntas}
+            </tbody>
+        </table>
+        {na_texto}
+
+        <h4>III. Conclusão</h4>
+        <p style="text-align: justify;">
+            Em face das constatações apresentadas acima, conclui-se que os requisitos técnico-econômicos da
+            operação foram cumpridos em seus aspectos relevantes, competindo ao gestor decidir sobre a conveniência e
+            oportunidade da autorização.
+        </p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_ANALISE_PAGAMENTO,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Análise de Pagamento - {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando análise de pagamento para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar análise ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Análise de pagamento gerada - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar análise de pagamento: {e}")
+        return None
+
+
+# ── Despacho NCI (idSerie 5) ──────────────────────────────────────────────
+
+
+def gerar_despacho_nci(token, id_procedimento, sei_protocolo,
+                       ref_analise_formatado=None):
+    """
+    Gera o Despacho do NCI (série 5) encaminhando para pagamento.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        sei_protocolo: Protocolo formatado do processo
+        ref_analise_formatado: Número formatado da análise de pagamento (para referência)
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para despacho NCI.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_NCI}/documentos"
+
+    hoje = date.today()
+    data_extenso = f"{hoje.day} DE {MESES_EXTENSO[hoje.month].upper()} DE {hoje.year}"
+
+    ref_analise = ''
+    if ref_analise_formatado:
+        ref_analise = f"""
+        <p style="text-indent: 2em; text-align: justify;">
+            Após exame da documentação inserida no presente processo, foi
+            incluída a Análise do Núcleo de Controle Interno nº {ref_analise_formatado} - Conclusão:
+            Regular.
+        </p>"""
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p><b>PROCESSO Nº: {sei_protocolo}</b></p>
+        <p><b>PARA:</b> SUPERINTENDÊNCIA DE GESTÃO ADMINISTRATIVA E CONTROLE DOS GASTOS - SEAD-PI</p>
+        <br>
+        <p style="text-indent: 2em; text-align: justify;">
+            Trata-se de processo nº {sei_protocolo} relativo ao pagamento de diárias e passagens.
+        </p>
+        {ref_analise}
+        <br>
+        <p style="text-indent: 2em;">Sem mais,</p>
+        <p style="text-indent: 2em;">Encaminha-se para pagamento.</p>
+        <p style="text-indent: 2em;">Atenciosamente,</p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_DESPACHO_NCI,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Despacho NCI - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando despacho NCI para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar despacho NCI ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Despacho NCI gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho NCI: {e}")
+        return None
+
+
+# ── Despacho APOIO/DFIN (idSerie 754) ───────────────────────────────────────
+
+def gerar_despacho_apoio(token, id_procedimento, sei_protocolo, ref_analise_nci_id):
+    """
+    Gera Despacho APOIO/DFIN (série 754) assinado pelo Superintendente.
+
+    Conteúdo: "Considerando a ausência de irregularidades na análise do Núcleo de
+    Controle Interno - NCI ({ref_analise_nci_id}) e a inexistência de óbices para o
+    pagamento, encaminho o processo à Diretoria de Planejamento e Finanças-DFIN
+    para pagamento e demais providências pertinentes, devendo ser observados os
+    procedimentos legais."
+
+    Criado na unidade UNIDADE_DFIN_APOIO.
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para despacho APOIO.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_DFIN_APOIO}/documentos"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Interessados: @interessados_virgula_espaco@</p>
+        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
+        <br>
+        <p style="text-align: center;"><b>DESPACHO</b></p>
+        <br>
+        <p style="text-indent: 2em; text-align: justify;">
+            Considerando a ausência de irregularidades na análise do Núcleo de Controle
+            Interno - NCI ({ref_analise_nci_id}) e a inexistência de óbices para o pagamento, encaminho o
+            processo à <b>Diretoria de Planejamento e Finanças-DFIN</b> para pagamento e demais
+            providências pertinentes, <i>devendo ser observados os procedimentos legais.</i>
+        </p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_DESPACHO,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Despacho APOIO/DFIN - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando despacho APOIO para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar despacho APOIO ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Despacho APOIO gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho APOIO: {e}")
+        return None
+
+
+# ── Despacho Diretor DFIN (idSerie 754) ─────────────────────────────────────
+
+def gerar_despacho_diretor(token, id_procedimento, sei_protocolo, ref_despacho_apoio_id):
+    """
+    Gera Despacho do Diretor de Planejamento e Finanças (série 754).
+
+    Conteúdo: "Considerando o despacho da SGACG ({ref_despacho_apoio_id}), encaminho o processo à
+    GERÊNCIA DE EXECUÇÃO ORÇAMENTÁRIA para liquidação, pagamento e demais
+    providências pertinentes, devendo ser observados os procedimentos legais."
+
+    Criado na unidade UNIDADE_DFIN_APOIO.
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para despacho Diretor.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_DFIN_APOIO}/documentos"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Interessados: @interessados_virgula_espaco@</p>
+        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
+        <br>
+        <p style="text-align: center;"><b>DESPACHO</b></p>
+        <br>
+        <p style="text-indent: 2em; text-align: justify;">
+            Considerando o despacho da <b>SGACG</b> ({ref_despacho_apoio_id}), encaminho o processo à
+            <b>GERÊNCIA DE EXECUÇÃO ORÇAMENTÁRIA</b> para liquidação, pagamento e demais
+            providências pertinentes, devendo ser observados os procedimentos legais.
+        </p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_DESPACHO,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Despacho Diretor DFIN - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando despacho Diretor para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar despacho Diretor ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Despacho Diretor gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho Diretor: {e}")
+        return None
+
+
+# ── Despacho GEO (idSerie 754) ──────────────────────────────────────────────
+
+def gerar_despacho_geo(token, id_procedimento, sei_protocolo):
+    """
+    Gera Despacho GEO (série 754) assinado pelo Gerente de Execução Orçamentária.
+
+    Conteúdo: "Encaminho os autos à Coordenação de Controle de Diárias e Passagens -
+    CCDP para liquidação, pagamento e demais trâmites inerentes ao setor."
+
+    Criado na unidade UNIDADE_GEO.
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para despacho GEO.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_GEO}/documentos"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Interessados: @interessados_virgula_espaco@</p>
+        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
+        <br>
+        <p style="text-align: center;"><b>DESPACHO</b></p>
+        <br>
+        <p style="text-indent: 2em; text-align: justify;">
+            Encaminho os autos à <b>Coordenação de Controle de Diárias e Passagens -
+            CCDP</b> para liquidação, pagamento e demais trâmites inerentes ao setor.
+        </p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_DESPACHO,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Despacho GEO - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando despacho GEO para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar despacho GEO ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Despacho GEO gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho GEO: {e}")
+        return None
+
+
+# ── NL - Nota de Liquidação (idSerie 420) ───────────────────────────────────
+
+def gerar_nl(token, id_procedimento, sei_protocolo, codigo_nl):
+    """Gera documento NL - Nota de Liquidação (série 420) no processo SEI."""
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para NL.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p style="text-align: center;"><b>NOTA DE LIQUIDAÇÃO</b></p>
+        <br>
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Código NL: <b>{codigo_nl}</b></p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_NL,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Numero": codigo_nl,
+        "Descricao": f"NL {codigo_nl} - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(f"SEI Diárias: Gerando NL {codigo_nl}...")
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar NL ({response.status_code}): {response.text}"
+            )
+        response.raise_for_status()
+        retorno = response.json()
+        current_app.logger.info(f"SEI Diárias: NL gerada - {retorno.get('DocumentoFormatado', retorno)}")
+        return retorno
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar NL: {e}")
+        return None
+
+
+# ── PD - Programação de Desembolso (idSerie 421) ────────────────────────────
+
+def gerar_pd(token, id_procedimento, sei_protocolo, codigo_pd):
+    """Gera documento PD - Programação de Desembolso (série 421) no processo SEI."""
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para PD.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p style="text-align: center;"><b>PROGRAMAÇÃO DE DESEMBOLSO</b></p>
+        <br>
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Código PD: <b>{codigo_pd}</b></p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_PD,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Numero": codigo_pd,
+        "Descricao": f"PD {codigo_pd} - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(f"SEI Diárias: Gerando PD {codigo_pd}...")
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar PD ({response.status_code}): {response.text}"
+            )
+        response.raise_for_status()
+        retorno = response.json()
+        current_app.logger.info(f"SEI Diárias: PD gerada - {retorno.get('DocumentoFormatado', retorno)}")
+        return retorno
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar PD: {e}")
+        return None
+
+
+# ── OB - Ordem Bancária (idSerie 422) ───────────────────────────────────────
+
+def gerar_ob(token, id_procedimento, sei_protocolo, codigo_ob):
+    """Gera documento OB - Ordem Bancária (série 422) no processo SEI."""
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para OB.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <p style="text-align: center;"><b>ORDEM BANCÁRIA</b></p>
+        <br>
+        <p>Processo nº <b>{sei_protocolo}</b></p>
+        <p>Código OB: <b>{codigo_ob}</b></p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_OB,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Numero": codigo_ob,
+        "Descricao": f"OB {codigo_ob} - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(f"SEI Diárias: Gerando OB {codigo_ob}...")
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar OB ({response.status_code}): {response.text}"
+            )
+        response.raise_for_status()
+        retorno = response.json()
+        current_app.logger.info(f"SEI Diárias: OB gerada - {retorno.get('DocumentoFormatado', retorno)}")
+        return retorno
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar OB: {e}")
+        return None
+
+
+# ── Relatório de Viagem (idSerie 1908) ────────────────────────────────────
+
+def gerar_relatorio_viagem(token, id_procedimento, sei_protocolo, dados_relatorio):
+    """
+    Gera documento SEAD_RELATÓRIO DE VIAGEM (DIÁRIA) (série 1908) no processo SEI.
+
+    O relatório é preenchido pelo solicitante (servidor/viajante) após a conclusão
+    da viagem, contendo dados pessoais, dados da viagem e o relato.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        sei_protocolo: Protocolo formatado do processo (ex: 00002.009305/2025-23)
+        dados_relatorio: dict com {
+            nome: str (nome do servidor),
+            matricula: str,
+            cpf: str,
+            lotacao: str (setor/orgão),
+            cargo_funcao: str,
+            periodo_inicio: str (dd/mm/yyyy),
+            periodo_fim: str (dd/mm/yyyy),
+            qtd_diarias: float,
+            valor_diaria: str (formatado R$),
+            valor_total: str (formatado R$),
+            trajeto: str (ex: TERESINA-PI/SÃO PAULO-SP/TERESINA-PI),
+            relato: str (texto livre do relato da viagem),
+        }
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para relatório de viagem.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+
+    nome = dados_relatorio.get('nome', '')
+    matricula = dados_relatorio.get('matricula', '')
+    cpf = dados_relatorio.get('cpf', '')
+    lotacao = dados_relatorio.get('lotacao', '')
+    cargo_funcao = dados_relatorio.get('cargo_funcao', '')
+    periodo_inicio = dados_relatorio.get('periodo_inicio', '')
+    periodo_fim = dados_relatorio.get('periodo_fim', '')
+    qtd_diarias = dados_relatorio.get('qtd_diarias', '')
+    valor_diaria = dados_relatorio.get('valor_diaria', '')
+    valor_total = dados_relatorio.get('valor_total', '')
+    trajeto = dados_relatorio.get('trajeto', '')
+    relato = dados_relatorio.get('relato', '')
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+
+        <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <tr>
+                <td colspan="2" style="background-color: #f0f0f0; font-weight: bold;">1 - Dados do Servidor</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Nome:</b> {nome}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Matrícula:</b> {matricula}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>CPF:</b> {cpf}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Lotação:</b> {lotacao}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Cargo/Função:</b> {cargo_funcao}</td>
+            </tr>
+        </table>
+
+        <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td colspan="2" style="background-color: #f0f0f0; font-weight: bold;">2 - Dados da Viagem</td>
+            </tr>
+            <tr>
+                <td style="width: 50%;"><b>Período:</b> {periodo_inicio} A {periodo_fim}</td>
+                <td><b>Quantidade de Diárias:</b> {qtd_diarias}</td>
+            </tr>
+            <tr>
+                <td><b>Valor da Diária (R$):</b> {valor_diaria}</td>
+                <td><b>Valor Total (R$):</b> {valor_total}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Trajeto:</b> {trajeto}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Relato da Viagem:</b> {relato}</td>
+            </tr>
+        </table>
+
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_RELATORIO_VIAGEM,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Relatório de Viagem - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando relatório de viagem para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar relatório de viagem ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Relatório de viagem gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar relatório de viagem: {e}")
         return None

@@ -1,12 +1,21 @@
 """
 Rotas administrativas do módulo de Diárias (gerenciar agências, cargos/valores, administração).
 """
-from flask import render_template, request, redirect, url_for, flash, abort, current_app
+import json
+from datetime import datetime
+from flask import render_template, request, redirect, url_for, flash, abort, current_app, jsonify
 from flask_login import login_required, current_user
 
 from app.diarias.routes import diarias_bp
-from app.utils.permissions import requires_permission
+from app.utils.permissions import requires_permission, usuario_tem_caixa, CAIXA_APOIOSGA, CAIXA_NCI
 from app.services.diaria_service import DiariaService
+from app.services.sei_auth import autenticar_usuario_sei
+from app.services.sei_integration import assinar_documento
+from app.services.diarias_sei_integration import (
+    gerar_token_sei_admin, gerar_despacho_sga, gerar_analise_pagamento,
+    gerar_despacho_nci, enviar_procedimento,
+    UNIDADE_APOIOSGA, UNIDADE_NCI, PERGUNTAS_ANALISE_PAGAMENTO,
+)
 from app.models.diaria import (
     DiariasValorCargo, DiariasCargo,
     DiariasItinerario, DiariasItemItinerario,
@@ -564,3 +573,276 @@ def autorizar_solicitacao(id):
     db.session.commit()
 
     return jsonify(resultado)
+
+
+# ── Ciência Superintendente + Despacho SGA → NCI (Passo 2 pós-NE) ──────────
+
+
+@diarias_bp.route('/administracao/<int:id>/ciencia-sga', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def ciencia_sga(id):
+    """Ciência do Superintendente + Despacho SGA (idSerie 2987) → NCI.
+
+    O Superintendente (usuário com acesso à caixa APOIOSGA) lê o despacho CCDP,
+    marca ciência e gera o despacho SGA assinado, encaminhando ao NCI.
+    """
+    # Verifica acesso à caixa APOIOSGA
+    if not usuario_tem_caixa(CAIXA_APOIOSGA):
+        return jsonify({'sucesso': False, 'erro': 'Você não tem acesso à caixa APOIOSGA.'}), 403
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guards
+    if not itinerario.sei_id_despacho_ccdp:
+        return jsonify({'sucesso': False, 'erro': 'O Despacho CCDP ainda não foi gerado.'}), 400
+
+    if itinerario.sei_id_despacho_sga:
+        return jsonify({'sucesso': False, 'erro': 'O Despacho SGA já foi gerado.'}), 400
+
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Não há processo SEI vinculado.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados não fornecidos.'}), 400
+
+    # Verifica ciência
+    if not dados.get('ciencia'):
+        return jsonify({'sucesso': False, 'erro': 'É necessário confirmar a ciência do despacho.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip() or 'Superintendente'
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Credenciais SEI são obrigatórias.'}), 400
+
+    try:
+        # 1. Autenticar superintendente no SEI
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha)
+        if not auth or not auth.get('token'):
+            return jsonify({'sucesso': False, 'erro': 'Falha na autenticação SEI.'}), 401
+
+        # 2. Token admin
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
+
+        # 3. Gerar Despacho SGA (série 2987)
+        retorno_doc = gerar_despacho_sga(
+            token=token_admin,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=itinerario.sei_protocolo or itinerario.n_processo or '',
+            ref_despacho_ccdp_id=itinerario.sei_id_despacho_ccdp,
+            ref_despacho_ccdp_formatado=itinerario.sei_despacho_ccdp_formatado,
+        )
+
+        if not retorno_doc:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar Despacho SGA no SEI.'}), 500
+
+        doc_id = str(retorno_doc.get('IdDocumento', ''))
+        doc_formatado = retorno_doc.get('DocumentoFormatado', '')
+
+        # 4. Assinar com credenciais do superintendente
+        resultado_assinatura = assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_APOIOSGA,
+            dados_assinatura={
+                'protocolo_doc': doc_id,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': sei_senha,
+            }
+        )
+
+        aviso = None
+        if not resultado_assinatura.get('sucesso'):
+            aviso = f'Documento gerado mas assinatura falhou: {resultado_assinatura.get("erro", "")}'
+
+        # 5. Enviar procedimento para NCI
+        envio = enviar_procedimento(
+            token=token_admin,
+            protocolo_procedimento=itinerario.sei_protocolo,
+            unidades_destino=[UNIDADE_NCI],
+            unidade_origem=UNIDADE_APOIOSGA,
+        )
+
+        # 6. Salvar no banco
+        itinerario.ciencia_superintendente = True
+        itinerario.ciencia_superintendente_data = datetime.now()
+        itinerario.sei_id_despacho_sga = doc_id
+        itinerario.sei_despacho_sga_formatado = doc_formatado
+
+        # 7. Avançar etapa
+        DiariaService.registrar_movimentacao(
+            id_itinerario=id,
+            etapa_nova_id=DiariasEtapaID.CIENCIA_SGA,
+            usuario_id=current_user.id if current_user else None,
+            comentario=f'Ciência Superintendente. Despacho SGA ({doc_formatado}) enviado ao NCI.',
+        )
+
+        db.session.commit()
+
+        resultado = {
+            'sucesso': True,
+            'documento_formatado': doc_formatado,
+            'id_documento': doc_id,
+            'envio_procedimento': envio,
+        }
+        if aviso:
+            resultado['aviso'] = aviso
+        return jsonify(resultado)
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500
+
+
+# ── Análise de Pagamento NCI + Despacho NCI (Passo 3 pós-NE) ──────────────
+
+
+@diarias_bp.route('/administracao/<int:id>/analise-nci', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def analise_nci(id):
+    """Análise de Pagamento (idSerie 461) + Despacho NCI (idSerie 5).
+
+    O usuário do NCI preenche o formulário de 21 perguntas S/N,
+    gera ambos os documentos já assinados no SEI.
+    """
+    # Verifica acesso à caixa NCI
+    if not usuario_tem_caixa(CAIXA_NCI):
+        return jsonify({'sucesso': False, 'erro': 'Você não tem acesso à caixa NCI.'}), 403
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guards
+    if not itinerario.sei_id_despacho_sga:
+        return jsonify({'sucesso': False, 'erro': 'O Despacho SGA ainda não foi gerado.'}), 400
+
+    if itinerario.sei_id_analise_pagamento:
+        return jsonify({'sucesso': False, 'erro': 'A Análise de Pagamento já foi gerada.'}), 400
+
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Não há processo SEI vinculado.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados não fornecidos.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip() or 'Assessora Técnica'
+    respostas = dados.get('respostas', {})
+    observacoes = dados.get('observacoes', '')
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Credenciais SEI são obrigatórias.'}), 400
+
+    if not respostas:
+        return jsonify({'sucesso': False, 'erro': 'As respostas da análise são obrigatórias.'}), 400
+
+    try:
+        # 1. Autenticar usuário NCI no SEI
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha)
+        if not auth or not auth.get('token'):
+            return jsonify({'sucesso': False, 'erro': 'Falha na autenticação SEI.'}), 401
+
+        # 2. Token admin
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
+
+        sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+        # 3. Gerar Análise de Pagamento (série 461)
+        retorno_analise = gerar_analise_pagamento(
+            token=token_admin,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=sei_protocolo,
+            respostas=respostas,
+            observacoes=observacoes,
+        )
+
+        if not retorno_analise:
+            return jsonify({'sucesso': False, 'erro': 'Erro ao gerar Análise de Pagamento no SEI.'}), 500
+
+        analise_id = str(retorno_analise.get('IdDocumento', ''))
+        analise_formatado = retorno_analise.get('DocumentoFormatado', '')
+
+        # 4. Assinar a Análise com credenciais do NCI
+        assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_NCI,
+            dados_assinatura={
+                'protocolo_doc': analise_id,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': sei_senha,
+            }
+        )
+
+        # 5. Gerar Despacho NCI (série 5)
+        retorno_despacho = gerar_despacho_nci(
+            token=token_admin,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=sei_protocolo,
+            ref_analise_formatado=analise_formatado,
+        )
+
+        despacho_id = ''
+        despacho_formatado = ''
+        if retorno_despacho:
+            despacho_id = str(retorno_despacho.get('IdDocumento', ''))
+            despacho_formatado = retorno_despacho.get('DocumentoFormatado', '')
+
+            # 6. Assinar o Despacho NCI
+            assinar_documento(
+                token=auth['token'],
+                unidade_id=UNIDADE_NCI,
+                dados_assinatura={
+                    'protocolo_doc': despacho_id,
+                    'orgao': 'SEAD-PI',
+                    'cargo': cargo,
+                    'id_login': auth['id_login'],
+                    'id_usuario': auth['id_usuario'],
+                    'senha': sei_senha,
+                }
+            )
+
+        # 7. Salvar no banco
+        itinerario.ciencia_nci = True
+        itinerario.ciencia_nci_data = datetime.now()
+        itinerario.analise_pagamento_respostas = json.dumps(respostas, ensure_ascii=False)
+        itinerario.analise_pagamento_observacoes = observacoes
+        itinerario.sei_id_analise_pagamento = analise_id
+        itinerario.sei_analise_pagamento_formatado = analise_formatado
+        itinerario.sei_id_despacho_nci = despacho_id
+        itinerario.sei_despacho_nci_formatado = despacho_formatado
+
+        # 8. Avançar etapa
+        DiariaService.registrar_movimentacao(
+            id_itinerario=id,
+            etapa_nova_id=DiariasEtapaID.ANALISE_NCI,
+            usuario_id=current_user.id if current_user else None,
+            comentario=f'Análise NCI ({analise_formatado}) e Despacho NCI ({despacho_formatado}) gerados.',
+        )
+
+        db.session.commit()
+
+        return jsonify({
+            'sucesso': True,
+            'analise_formatado': analise_formatado,
+            'analise_id': analise_id,
+            'despacho_formatado': despacho_formatado,
+            'despacho_id': despacho_id,
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500

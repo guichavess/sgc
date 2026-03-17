@@ -1152,4 +1152,404 @@ async function autorizarSolicitacao() {
 </script>
 {% endif %}
 
+{# ================================================================ #}
+{# Seção Ciência Superintendente + Despacho SGA (Passo 2 pós-NE)    #}
+{# Visível apenas se o Despacho CCDP já foi gerado                  #}
+{# ================================================================ #}
+{% if itinerario.sei_id_despacho_ccdp %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-3" style="background-color: #1565C0;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-clipboard-check me-2"></i>Ciência do Superintendente — Despacho SGA
+        </h5>
+    </div>
+    <div class="card-body">
+
+        {% if itinerario.sei_id_despacho_sga %}
+            {# Já concluído #}
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Ciência registrada e Despacho SGA gerado!</strong>
+                    {% if itinerario.sei_despacho_sga_formatado %}
+                        <br><small class="text-muted">Documento SEI: {{ itinerario.sei_despacho_sga_formatado }}</small>
+                    {% endif %}
+                    {% if itinerario.ciencia_superintendente_data %}
+                        <br><small class="text-muted">Data: {{ itinerario.ciencia_superintendente_data.strftime('%d/%m/%Y %H:%M') }}</small>
+                    {% endif %}
+                </div>
+            </div>
+
+        {% elif session.get('unidades') and '110006213' in (session.get('unidades') | map(attribute='id') | list | map('string') | list) %}
+            {# Superintendente vê o despacho e pode dar ciência #}
+            <div class="mb-3">
+                <h6 class="fw-bold"><i class="bi bi-file-text me-1"></i>Despacho CCDP (Leitura obrigatória)</h6>
+                <div class="border rounded p-3 bg-light" style="font-family: Arial, sans-serif; font-size: 12pt;">
+                    <p>Processo nº <b>{{ itinerario.sei_protocolo or itinerario.n_processo or '' }}</b></p>
+                    <p>Interessados: @interessados_virgula_espaco@</p>
+                    <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
+                    <br>
+                    <p style="text-align: center;"><b>DESPACHO</b></p>
+                    <br>
+                    <p style="text-indent: 2em; text-align: justify;">
+                        Após a realização de análise técnica e emissão da nota de empenho, retorno os
+                        autos à <b>Superintendência de Gestão Administrativa</b>, para conhecimento e
+                        providências referente à concessão de diárias.
+                    </p>
+                    {% if itinerario.sei_despacho_ccdp_formatado %}
+                        <br><small class="text-muted">Documento SEI: {{ itinerario.sei_despacho_ccdp_formatado }}</small>
+                    {% endif %}
+                </div>
+            </div>
+
+            <hr>
+
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="checkCienciaSGA" onchange="toggleBtnCienciaSGA()">
+                <label class="form-check-label fw-bold" for="checkCienciaSGA">
+                    Declaro ciência do despacho acima e autorizo o encaminhamento ao NCI
+                </label>
+            </div>
+
+            <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label for="sga_sei_usuario" class="form-label fw-bold">Usuário SEI <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="sga_sei_usuario" placeholder="usuario@sead.pi.gov.br">
+                </div>
+                <div class="col-md-4">
+                    <label for="sga_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="sga_sei_senha" placeholder="Sua senha do SEI">
+                </div>
+                <div class="col-md-4">
+                    <label for="sga_cargo" class="form-label fw-bold">Cargo</label>
+                    <input type="text" class="form-control" id="sga_cargo" value="{{ session.get('usuario_cargo', 'Superintendente') }}">
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-primary fw-bold px-4" id="btnCienciaSGA" disabled
+                    onclick="enviarCienciaSGA()">
+                <i class="bi bi-send me-1"></i> Gerar Despacho SGA e Assinar
+            </button>
+            <div id="sgaResultado" class="mt-3" style="display:none;"></div>
+
+        {% else %}
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="bi bi-hourglass-split fs-4 me-3"></i>
+                <div>
+                    <strong>Aguardando ciência do Superintendente.</strong>
+                    <p class="mb-0 mt-1 small text-muted">
+                        O Superintendente de Gestão Administrativa dará ciência do despacho CCDP.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
+{# ================================================================ #}
+{# Seção Análise NCI (Passo 3 pós-NE)                               #}
+{# Visível após o Despacho SGA ter sido gerado                      #}
+{# ================================================================ #}
+{% if itinerario.sei_id_despacho_sga %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-3" style="background-color: #2E7D32;">
+        <h5 class="text-white mb-0">
+            <i class="bi bi-clipboard2-data me-2"></i>Análise de Pagamento — Núcleo de Controle Interno
+        </h5>
+    </div>
+    <div class="card-body">
+
+        {% if itinerario.sei_id_analise_pagamento %}
+            {# Já concluído #}
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Análise de Pagamento e Despacho NCI gerados!</strong>
+                    {% if itinerario.sei_analise_pagamento_formatado %}
+                        <br><small class="text-muted">Análise SEI: {{ itinerario.sei_analise_pagamento_formatado }}</small>
+                    {% endif %}
+                    {% if itinerario.sei_despacho_nci_formatado %}
+                        <br><small class="text-muted">Despacho NCI SEI: {{ itinerario.sei_despacho_nci_formatado }}</small>
+                    {% endif %}
+                    {% if itinerario.ciencia_nci_data %}
+                        <br><small class="text-muted">Data: {{ itinerario.ciencia_nci_data.strftime('%d/%m/%Y %H:%M') }}</small>
+                    {% endif %}
+                </div>
+            </div>
+
+        {% elif session.get('unidades') and '110006211' in (session.get('unidades') | map(attribute='id') | list | map('string') | list) %}
+            {# Usuário NCI preenche a análise #}
+            <p class="text-muted small mb-3">
+                <i class="bi bi-info-circle me-1"></i>
+                Preencha as respostas da Análise de Pagamento (S = Sim, N = Não, NA = Não se aplica).
+                O documento será gerado no SEI junto com o Despacho NCI.
+            </p>
+
+            <div id="formAnaliseNCI">
+                {# Perguntas #}
+                <div class="table-responsive mb-4">
+                    <table class="table table-bordered table-sm">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width:70%">Pergunta</th>
+                                <th class="text-center" style="width:10%">S</th>
+                                <th class="text-center" style="width:10%">N</th>
+                                <th class="text-center" style="width:10%">NA</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set perguntas = [
+                                {"id": "q1", "num": "1", "texto": "A(s) diária(s) foi(ram) solicitada(s) para militares, servidores públicos, empregados públicos, ou agentes políticos?", "extras": ["vinculo", "nome_agente"]},
+                                {"id": "q2", "num": "2", "texto": "O servidor é o gestor máximo do órgão ou entidade?"},
+                                {"id": "q3", "num": "3", "texto": "Foi avaliado a oportunidade e a necessidade da viagem?", "extras": ["quem_analisou"]},
+                                {"id": "q4", "num": "4", "texto": "O valor da diária corresponde ao valor do cargo de autoridade superior?", "extras": ["classe_correspondente"]},
+                                {"id": "q5", "num": "5", "texto": "O agente é autoridade superior no órgão ou entidade?", "extras": ["cargo_agente"]},
+                                {"id": "q6", "num": "6", "texto": "No caso de servidor não ser autoridade superior, a diária é equivalente ao cargo do servidor?"},
+                                {"id": "q7", "num": "7", "texto": "O servidor indicado para acompanhar a autoridade possui cargo igual ou inferior?"},
+                                {"id": "q8", "num": "8", "texto": "A diária foi majorada em até 30% quando a hospedagem for coberta pelo servidor?"},
+                                {"id": "q9", "num": "9", "texto": "O deslocamento da sede para o aeroporto ou rodoviária, a diária é de 50%?"},
+                                {"id": "q10", "num": "10", "texto": "O valor das diárias está com base nos anexos I e II do decreto 20.890/2022?", "extras": ["valor_diaria", "destino_viagem"]},
+                                {"id": "q11", "num": "11", "texto": "As diárias a serem concedidas estão dentro do período da viagem?"},
+                                {"id": "q12", "num": "12", "texto": "Em caso de prorrogação, a viagem foi comunicada ao concedente?"},
+                                {"id": "q13", "num": "13", "texto": "Foi demonstrada a disponibilidade orçamentário-financeira?", "extras": ["projeto_natureza", "fonte_recursos"]},
+                                {"id": "q14", "num": "14", "texto": "O servidor realizou viagem anterior a serviço do Estado?"},
+                                {"id": "q15", "num": "15", "texto": "O servidor prestou contas das diárias recebidas anteriormente?"},
+                                {"id": "q16", "num": "16", "texto": "Foi aprovada a prestação de contas da viagem anterior?", "extras": ["responsavel_analise"]},
+                                {"id": "q17", "num": "17", "texto": "A viagem foi autorizada pelo ordenador de despesa?", "extras": ["quem_autorizou"]},
+                                {"id": "q18", "num": "18", "texto": "A publicação da portaria de diárias foi realizada no DOE antes da viagem?"},
+                                {"id": "q19", "num": "19", "texto": "Trata-se de despesas de exercícios anteriores?"},
+                                {"id": "q20", "num": "20", "texto": "Em caso de DEA, foi apresentada justificativa para o não pagamento no exercício?"},
+                                {"id": "q21", "num": "21", "texto": "Em caso de DEA, a despesa foi reconhecida pela autoridade competente?"}
+                            ] %}
+                            {% for p in perguntas %}
+                            <tr>
+                                <td>
+                                    <strong>{{ p.num }}.</strong> {{ p.texto }}
+                                    {% if p.extras is defined %}
+                                        {% for campo in p.extras %}
+                                        <div class="mt-1">
+                                            <input type="text" class="form-control form-control-sm"
+                                                   id="nci_{{ p.id }}_{{ campo }}"
+                                                   placeholder="{{ campo | replace('_', ' ') | title }}">
+                                        </div>
+                                        {% endfor %}
+                                    {% endif %}
+                                    <div class="mt-1">
+                                        <input type="text" class="form-control form-control-sm"
+                                               id="nci_{{ p.id }}_obs" placeholder="Observação (opcional)">
+                                    </div>
+                                </td>
+                                <td class="text-center align-middle">
+                                    <input class="form-check-input" type="radio" name="nci_{{ p.id }}" value="S">
+                                </td>
+                                <td class="text-center align-middle">
+                                    <input class="form-check-input" type="radio" name="nci_{{ p.id }}" value="N">
+                                </td>
+                                <td class="text-center align-middle">
+                                    <input class="form-check-input" type="radio" name="nci_{{ p.id }}" value="NA">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mb-3">
+                    <label for="nci_observacoes_gerais" class="form-label fw-bold">Observações Gerais</label>
+                    <textarea class="form-control" id="nci_observacoes_gerais" rows="3"
+                              placeholder="Observações adicionais sobre a análise..."></textarea>
+                </div>
+
+                <hr>
+                <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label for="nci_sei_usuario" class="form-label fw-bold">Usuário SEI <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="nci_sei_usuario" placeholder="usuario@sead.pi.gov.br">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="nci_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="nci_sei_senha" placeholder="Sua senha do SEI">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="nci_cargo" class="form-label fw-bold">Cargo</label>
+                        <input type="text" class="form-control" id="nci_cargo" value="{{ session.get('usuario_cargo', 'Assessora Técnica') }}">
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-success fw-bold px-4" id="btnAnaliseNCI"
+                        onclick="enviarAnaliseNCI()">
+                    <i class="bi bi-file-earmark-check me-1"></i> Gerar Análise e Despacho NCI
+                </button>
+                <div id="nciResultado" class="mt-3" style="display:none;"></div>
+            </div>
+
+        {% else %}
+            <div class="alert alert-info d-flex align-items-center" role="alert">
+                <i class="bi bi-hourglass-split fs-4 me-3"></i>
+                <div>
+                    <strong>Aguardando Análise do Núcleo de Controle Interno.</strong>
+                    <p class="mb-0 mt-1 small text-muted">
+                        O NCI realizará a análise de pagamento e emitirá o parecer.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
+{# JavaScript para Passos 2 e 3 #}
+<script>
+    // Toggle botão Ciência SGA
+    function toggleBtnCienciaSGA() {
+        const check = document.getElementById('checkCienciaSGA');
+        const btn = document.getElementById('btnCienciaSGA');
+        if (check && btn) {
+            btn.disabled = !check.checked;
+        }
+    }
+
+    // Passo 2: Ciência SGA + Despacho SGA
+    async function enviarCienciaSGA() {
+        const usuario = document.getElementById('sga_sei_usuario')?.value?.trim();
+        const senha = document.getElementById('sga_sei_senha')?.value?.trim();
+        const cargo = document.getElementById('sga_cargo')?.value?.trim();
+        const btn = document.getElementById('btnCienciaSGA');
+        const resultado = document.getElementById('sgaResultado');
+
+        if (!usuario || !senha) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = '<div class="alert alert-danger py-2">Usuário e senha SEI são obrigatórios.</div>';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Gerando despacho...';
+        resultado.style.display = 'none';
+
+        try {
+            const response = await fetch("{{ url_for('diarias.ciencia_sga', id=itinerario.id) }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    sei_usuario: usuario,
+                    sei_senha: senha,
+                    cargo: cargo || 'Superintendente',
+                    ciencia: true
+                })
+            });
+
+            const data = await response.json();
+            resultado.style.display = 'block';
+
+            if (data.sucesso) {
+                resultado.innerHTML = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i><strong>Despacho SGA gerado!</strong> Documento: ${data.documento_formatado}. Recarregando...</div>`;
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                resultado.innerHTML = `<div class="alert alert-danger py-2">${data.erro}</div>`;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-send me-1"></i> Gerar Despacho SGA e Assinar';
+            }
+        } catch (err) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = `<div class="alert alert-danger py-2">Erro de conexão: ${err.message}</div>`;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send me-1"></i> Gerar Despacho SGA e Assinar';
+        }
+    }
+
+    // Passo 3: Análise NCI + Despacho NCI
+    async function enviarAnaliseNCI() {
+        const usuario = document.getElementById('nci_sei_usuario')?.value?.trim();
+        const senha = document.getElementById('nci_sei_senha')?.value?.trim();
+        const cargo = document.getElementById('nci_cargo')?.value?.trim();
+        const btn = document.getElementById('btnAnaliseNCI');
+        const resultado = document.getElementById('nciResultado');
+
+        if (!usuario || !senha) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = '<div class="alert alert-danger py-2">Usuário e senha SEI são obrigatórios.</div>';
+            return;
+        }
+
+        // Coleta respostas das 21 perguntas
+        const respostas = {};
+        const perguntas = ['q1','q2','q3','q4','q5','q6','q7','q8','q9','q10','q11','q12','q13','q14','q15','q16','q17','q18','q19','q20','q21'];
+        const camposExtras = {
+            q1: ['vinculo','nome_agente'], q3: ['quem_analisou'], q4: ['classe_correspondente'],
+            q5: ['cargo_agente'], q10: ['valor_diaria','destino_viagem'],
+            q13: ['projeto_natureza','fonte_recursos'], q16: ['responsavel_analise'], q17: ['quem_autorizou']
+        };
+
+        for (const pid of perguntas) {
+            const radio = document.querySelector(`input[name="nci_${pid}"]:checked`);
+            if (!radio) continue;
+
+            const respObj = { resposta: radio.value };
+
+            // Campos extras
+            if (camposExtras[pid]) {
+                for (const campo of camposExtras[pid]) {
+                    const el = document.getElementById(`nci_${pid}_${campo}`);
+                    if (el && el.value.trim()) respObj[campo] = el.value.trim();
+                }
+            }
+
+            // Observação
+            const obsEl = document.getElementById(`nci_${pid}_obs`);
+            if (obsEl && obsEl.value.trim()) respObj.observacao = obsEl.value.trim();
+
+            respostas[pid] = respObj;
+        }
+
+        if (Object.keys(respostas).length === 0) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = '<div class="alert alert-danger py-2">Preencha pelo menos uma resposta.</div>';
+            return;
+        }
+
+        const observacoes = document.getElementById('nci_observacoes_gerais')?.value?.trim() || '';
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Gerando documentos...';
+        resultado.style.display = 'none';
+
+        try {
+            const response = await fetch("{{ url_for('diarias.analise_nci', id=itinerario.id) }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    sei_usuario: usuario,
+                    sei_senha: senha,
+                    cargo: cargo || 'Assessora Técnica',
+                    respostas: respostas,
+                    observacoes: observacoes
+                })
+            });
+
+            const data = await response.json();
+            resultado.style.display = 'block';
+
+            if (data.sucesso) {
+                resultado.innerHTML = `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i><strong>Análise e Despacho NCI gerados!</strong><br>Análise: ${data.analise_formatado}<br>Despacho: ${data.despacho_formatado}. Recarregando...</div>`;
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                resultado.innerHTML = `<div class="alert alert-danger py-2">${data.erro}</div>`;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-file-earmark-check me-1"></i> Gerar Análise e Despacho NCI';
+            }
+        } catch (err) {
+            resultado.style.display = 'block';
+            resultado.innerHTML = `<div class="alert alert-danger py-2">Erro de conexão: ${err.message}</div>`;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-file-earmark-check me-1"></i> Gerar Análise e Despacho NCI';
+        }
+    }
+</script>
+
 {% endblock %}

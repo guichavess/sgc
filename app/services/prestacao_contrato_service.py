@@ -955,6 +955,17 @@ class PrestacaoContratoService:
         ).order_by(PD.dataEmissao.desc()).all()
 
     @staticmethod
+    def buscar_competencias_pds(codigo_contrato):
+        """Retorna mapa {num_pd: competencia} a partir das solicitações vinculadas ao contrato."""
+        from app.models.solicitacao import Solicitacao
+        solicitacoes = Solicitacao.query.filter(
+            Solicitacao.codigo_contrato == str(codigo_contrato),
+            Solicitacao.num_pd.isnot(None),
+            Solicitacao.num_pd != ''
+        ).all()
+        return {s.num_pd: s.competencia for s in solicitacoes if s.competencia}
+
+    @staticmethod
     def listar_solicitacoes_contrato(codigo_contrato):
         """Busca solicitações de pagamento vinculadas ao contrato."""
         from app.models.solicitacao import Solicitacao, SolicitacaoEmpenho
