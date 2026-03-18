@@ -108,7 +108,6 @@
                     ('deliberacao', 'Deliberação'),
                     ('tipo_processo', 'Tipo de Processo'),
                     ('data_da_reuniao', 'Data da Reunião'),
-                    ('data_inclusao_fmt', 'Data de Inclusão'),
                 ] %}
                 {% for col_key, col_label in column_filters %}
                 <div class="dropdown">
@@ -199,7 +198,6 @@
                         <th>Deliberação</th>
                         <th>Tipo de Processo</th>
                         <th>Prioridade</th>
-                        <th>Data de Inclusão</th>
                         <th class="text-center">Operações</th>
                     </tr>
                 </thead>
@@ -281,8 +279,20 @@ $(document).ready(function() {
                         return data || '-';
                     },
                 },
-                { data: 'objeto_do_pedido', defaultContent: '<span class="text-muted">-</span>' },
-                { data: 'fornecedor', defaultContent: '<span class="text-muted">-</span>' },
+                { data: 'objeto_do_pedido', defaultContent: '<span class="text-muted">-</span>',
+                    render: function(data) {
+                        if (!data) return '<span class="text-muted">-</span>';
+                        if (data.length > 80) return '<span class="cell-truncate" data-bs-toggle="tooltip" data-bs-placement="top" title="' + data.replace(/"/g, '&quot;') + '">' + data.substring(0, 80) + '...</span>';
+                        return data;
+                    }
+                },
+                { data: 'fornecedor', defaultContent: '<span class="text-muted">-</span>',
+                    render: function(data) {
+                        if (!data) return '<span class="text-muted">-</span>';
+                        if (data.length > 40) return '<span class="cell-truncate" data-bs-toggle="tooltip" data-bs-placement="top" title="' + data.replace(/"/g, '&quot;') + '">' + data.substring(0, 40) + '...</span>';
+                        return data;
+                    }
+                },
                 { data: 'dt_enviado_fmt', defaultContent: '-' },
                 { data: 'data_recebido_cgfr', defaultContent: '-' },
                 { data: 'data_da_reuniao', defaultContent: '-' },
@@ -312,18 +322,6 @@ $(document).ready(function() {
                         var icons = { 'Alto': 'bi-arrow-up-circle-fill', 'Medio': 'bi-dash-circle-fill', 'Baixo': 'bi-arrow-down-circle-fill' };
                         return '<span class="badge ' + (colors[data] || 'bg-secondary') + '" style="font-size:0.70em;">' +
                             '<i class="bi ' + (icons[data] || '') + ' me-1"></i>' + data + '</span>';
-                    },
-                    defaultContent: '-',
-                },
-                {
-                    data: 'data_inclusao_fmt',
-                    render: function(data, type, row) {
-                        if (type !== 'display') return data || '';
-                        if (!data || data === '-') return '<span class="text-muted">-</span>';
-                        if (row.is_novo) {
-                            return data + ' <span class="badge bg-info text-dark" style="font-size:0.60em;">Novo</span>';
-                        }
-                        return data;
                     },
                     defaultContent: '-',
                 },
@@ -400,6 +398,11 @@ $(document).ready(function() {
 
         dataTable.on('draw', function() {
             recalcKPIs(dataTable.rows({ search: 'applied' }).data().toArray());
+            /* Inicializar tooltips Bootstrap nas células truncadas */
+            $('#tabelaProcessos [data-bs-toggle="tooltip"]').each(function() {
+                var el = this;
+                if (!bootstrap.Tooltip.getInstance(el)) new bootstrap.Tooltip(el, { trigger: 'hover', html: false });
+            });
         });
 
         window.cgfrTable = dataTable;
@@ -604,7 +607,7 @@ $(document).ready(function() {
         var parts = [], labels = {
             'processo_formatado':'Processo','objeto_do_pedido':'Objeto','fornecedor':'Fornecedor',
             'natureza_despesa':'Natureza','deliberacao':'Deliberação','tipo_processo':'Tipo de Processo',
-            'data_da_reuniao':'Data da Reunião','data_inclusao_fmt':'Data de Inclusão'
+            'data_da_reuniao':'Data da Reunião'
         };
         for (var c in activeColumnFilters) {
             var v = activeColumnFilters[c];

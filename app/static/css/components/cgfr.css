@@ -326,6 +326,44 @@
     padding-right: 2rem;
 }
 
+/* ---------- Célula truncada com tooltip ---------- */
+.cell-truncate {
+    cursor: help;
+    border-bottom: 1px dashed #cbd5e1;
+    transition: color 0.2s, border-color 0.2s;
+}
+.cell-truncate:hover {
+    color: #343990;
+    border-bottom-color: #343990;
+}
+
+/* Tooltip customizado — tema do sistema */
+.tooltip .tooltip-inner {
+    background: linear-gradient(135deg, #282c6e, #343990);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 400;
+    line-height: 1.5;
+    padding: 10px 14px;
+    border-radius: 8px;
+    max-width: 360px;
+    text-align: left;
+    box-shadow: 0 4px 16px rgba(40, 44, 110, 0.25);
+    letter-spacing: 0.01em;
+}
+.tooltip .tooltip-arrow::before {
+    border-top-color: #343990;
+}
+.bs-tooltip-bottom .tooltip-arrow::before {
+    border-bottom-color: #343990;
+}
+.bs-tooltip-start .tooltip-arrow::before {
+    border-left-color: #343990;
+}
+.bs-tooltip-end .tooltip-arrow::before {
+    border-right-color: #343990;
+}
+
 /* ---------- DataTable controles ---------- */
 .table-card .dataTables_info { font-size: 0.80rem; color: var(--text-muted, #94a3b8); padding-top: 8px; }
 .table-card .dataTables_paginate { padding-top: 4px; }
