@@ -24,7 +24,7 @@ from app import create_app
 from app.extensions import db
 
 
-DUMP_PATH = r'C:\Users\guilh\OneDrive\Documentos\dumps\Dump20260313.sql'
+DUMP_PATH_DEFAULT = r'C:\Users\guilh\OneDrive\Documentos\dumps\Dump20260313.sql'
 
 # Colunas que precisam ser adicionadas ao cgfr_processo_enviado
 COLUNAS_NOVAS = [
@@ -497,7 +497,10 @@ def main():
     parser = argparse.ArgumentParser(description='Importa dump do sistema CGFR original')
     parser.add_argument('--executar', action='store_true', help='Executa de verdade (sem flag = dry-run)')
     parser.add_argument('--truncar', action='store_true', help='Limpa tabela antes de importar')
+    parser.add_argument('--dump', type=str, default=DUMP_PATH_DEFAULT, help='Caminho do arquivo dump SQL')
     args = parser.parse_args()
+
+    DUMP_PATH = args.dump
 
     dry_run = not args.executar
 
