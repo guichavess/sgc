@@ -81,8 +81,10 @@ class BaseRepository(Generic[T]):
 
     @classmethod
     def exists(cls, **filters) -> bool:
-        """Verifica se existe algum registro com os filtros."""
-        return cls.model.query.filter_by(**filters).first() is not None
+        """Verifica se existe algum registro com os filtros (usa EXISTS subquery)."""
+        return db.session.query(
+            cls.model.query.filter_by(**filters).exists()
+        ).scalar()
 
     @classmethod
     def paginate(cls, page: int = 1, per_page: int = 20, **filters):

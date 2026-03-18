@@ -27,7 +27,7 @@ from app.services.sei_integration import (
     assinar_documento, consultar_procedimento_sei,
     criar_procedimento_pagamento, gerar_documento_pagamento
 )
-from app.constants import SerieDocumentoSEI
+from app.constants import SerieDocumentoSEI, MAPA_ORDEM_ETAPAS
 from app.utils.permissions import requires_permission
 
 
@@ -152,14 +152,23 @@ def assinar_ajax():
     protocolo_doc = dados.get('protocolo')
     unidade = dados.get('unidade')
 
+    solicitacao_id = dados.get('solicitacao_id')
+
     if not senha:
         return jsonify({'sucesso': False, 'erro': 'Senha obrigatória'})
 
-    # Recupera a solicitação pendente de assinatura do usuário logado
-    solicitacao = Solicitacao.query.filter_by(
-        id_usuario_solicitante=current_user.id,
-        status_geral='AGUARDANDO_ASSINATURA'
-    ).order_by(Solicitacao.id.desc()).first()
+    # Recupera a solicitação por ID (se fornecido) ou pela mais recente pendente
+    if solicitacao_id:
+        solicitacao = Solicitacao.query.filter_by(
+            id=solicitacao_id,
+            id_usuario_solicitante=current_user.id,
+            status_geral='AGUARDANDO_ASSINATURA'
+        ).first()
+    else:
+        solicitacao = Solicitacao.query.filter_by(
+            id_usuario_solicitante=current_user.id,
+            status_geral='AGUARDANDO_ASSINATURA'
+        ).order_by(Solicitacao.id.desc()).first()
 
     if not solicitacao:
         return jsonify({'sucesso': False, 'erro': 'Solicitação não encontrada para registrar histórico.'})
@@ -303,8 +312,10 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
     Baixa documentos da API SEI para um protocolo e popula a tabela seimovimentacao.
     Executa em thread separada com contexto Flask próprio.
     Possui retry automático para erros transientes de SSL/rede.
+    Thread-safe: limpa a sessão ao sair.
     """
     with app_obj.app_context():
+      try:
         start_time = time.time()
         protocolo_limpo = "".join(filter(str.isdigit, protocolo))
 
@@ -392,14 +403,19 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
             db.session.rollback()
             app_obj.logger.error(f"ERRO DOWNLOAD SEI (Protocolo {protocolo}): {str(e)}", exc_info=True)
             return (False, f"Erro {protocolo}: {str(e)}")
+      finally:
+        # Limpa a sessão da thread para evitar vazamento entre threads no pool
+        db.session.remove()
 
 
 def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem):
     """
     Lê a tabela seimovimentacao e aplica as regras de negócio
     para avançar etapas na timeline de cada solicitação.
+    Thread-safe: limpa a sessão ao sair para evitar vazamento entre threads.
     """
     with app_obj.app_context():
+      try:
         sol = Solicitacao.query.get(sol_id)
         if not sol or not sol.protocolo_gerado_sei:
             return None
@@ -417,18 +433,8 @@ def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem):
         SERIE_PD = SerieDocumentoSEI.PD
         SERIE_OB = SerieDocumentoSEI.OB
 
-        MAPA_ORDEM_LOCAL = {
-            1: 1,    # Solicitação Criada
-            2: 2,    # Documentação Solicitada
-            8: 3,    # Documentação Recebida
-            15: 4,   # Solicitação da NF
-            12: 5,   # Fiscais Notificados
-            13: 6,   # Contrato Fiscalizado
-            14: 7,   # Atestado pelo Controle Interno
-            11: 8,   # NF Atestada
-            5: 9,    # Liquidado
-            6: 10    # Pago
-        }
+        # Usa a constante global centralizada (fonte única de verdade)
+        MAPA_ORDEM_LOCAL = MAPA_ORDEM_ETAPAS
 
         mudou = False
 
@@ -701,7 +707,7 @@ def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem):
                                 ref_url=ref_url,
                             )
                 except Exception as notif_err:
-                    print(f"Aviso: erro notificacao SEI {sol_id}: {notif_err}")
+                    app_obj.logger.warning(f"Erro notificacao SEI {sol_id}: {notif_err}")
 
                 return sol.protocolo_gerado_sei
 
@@ -709,8 +715,11 @@ def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem):
 
         except Exception as e:
             db.session.rollback()
-            print(f"Erro processamento {sol_id}: {e}")
+            app_obj.logger.error(f"Erro processamento SEI {sol_id}: {e}")
             return None
+      finally:
+        # Limpa a sessão da thread para evitar vazamento entre threads no pool
+        db.session.remove()
 
 
 # =============================================================================
@@ -889,7 +898,7 @@ def api_atualizar_etapas():
                                 yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Analisando... {completed_count}/{total}'})}\n\n"
 
                     except Exception as exc:
-                        print(f"Erro na thread: {exc}")
+                        app_real.logger.error(f"Erro na thread de processamento SEI: {exc}")
                         yield f"data: {json.dumps({'progresso': percentual, 'msg': 'Erro ao processar um item.'})}\n\n"
 
             yield f"data: {json.dumps({'progresso': 100, 'msg': f'Concluído! {atualizados_count} processos avançaram de etapa.', 'concluido': True})}\n\n"

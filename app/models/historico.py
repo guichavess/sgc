@@ -11,11 +11,11 @@ class HistoricoMovimentacao(db.Model):
     __tablename__ = 'sis_historico_movimentacoes'
 
     id = db.Column(db.BigInteger, primary_key=True)
-    id_solicitacao = db.Column(db.BigInteger, db.ForeignKey('sis_solicitacoes.id'), nullable=False)
+    id_solicitacao = db.Column(db.BigInteger, db.ForeignKey('sis_solicitacoes.id'), nullable=False, index=True)
     id_etapa_anterior = db.Column(db.Integer)
     id_etapa_nova = db.Column(db.Integer, db.ForeignKey('sis_etapas_fluxo.id'), nullable=False)
     id_usuario_responsavel = db.Column(db.BigInteger, db.ForeignKey('sis_usuarios.id'))
-    data_movimentacao = db.Column(db.DateTime, default=datetime.now)
+    data_movimentacao = db.Column(db.DateTime, default=datetime.now, index=True)
     comentario = db.Column(db.Text)
 
     # Relacionamentos

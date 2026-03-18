@@ -13,18 +13,18 @@ class Solicitacao(db.Model):
     id = db.Column(db.BigInteger, primary_key=True)
     codigo_contrato = db.Column(db.String(20), db.ForeignKey('contratos.codigo'), nullable=False)
     id_usuario_solicitante = db.Column(db.BigInteger, db.ForeignKey('sis_usuarios.id'), nullable=False)
-    etapa_atual_id = db.Column(db.Integer, db.ForeignKey('sis_etapas_fluxo.id'), default=1)
+    etapa_atual_id = db.Column(db.Integer, db.ForeignKey('sis_etapas_fluxo.id'), default=1, index=True)
     status_empenho_id = db.Column(db.Integer, db.ForeignKey('sis_status_empenho.id'), nullable=True, default=3)
     id_tipo_pagamento = db.Column(db.Integer, db.ForeignKey('tipo_pagamento.id'), nullable=True)
-    data_solicitacao = db.Column(db.DateTime, default=datetime.now)
-    protocolo_gerado_sei = db.Column(db.String(50))
+    data_solicitacao = db.Column(db.DateTime, default=datetime.now, index=True)
+    protocolo_gerado_sei = db.Column(db.String(50), index=True)
     id_procedimento_sei = db.Column(db.String(50))
     link_processo_sei = db.Column(db.Text)
-    competencia = db.Column(db.String(25))
+    competencia = db.Column(db.String(25), index=True)
     especificacao = db.Column(db.Text)
     descricao = db.Column(db.Text)
     id_caixa_sei = db.Column(db.String(50))
-    status_geral = db.Column(db.String(100), default='ABERTO')
+    status_geral = db.Column(db.String(100), default='ABERTO', index=True)
     num_ne = db.Column(db.String(50))
     num_nl = db.Column(db.String(50))
     num_pd = db.Column(db.String(50))
@@ -51,7 +51,9 @@ class Solicitacao(db.Model):
     @property
     def valor_empenho_solicitado(self):
         """Retorna o valor da última solicitação de empenho vinculada."""
-        sol = SolicitacaoEmpenho.query.filter_by(id_solicitacao=self.id).first()
+        sol = SolicitacaoEmpenho.query.filter_by(
+            id_solicitacao=self.id
+        ).order_by(SolicitacaoEmpenho.data.desc()).first()
         return sol.valor if sol else None
 
     @property
@@ -129,7 +131,7 @@ class SolicitacaoEmpenho(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     data = db.Column(db.DateTime, default=datetime.now)
-    id_solicitacao = db.Column(db.BigInteger, db.ForeignKey('sis_solicitacoes.id'), nullable=False)
+    id_solicitacao = db.Column(db.BigInteger, db.ForeignKey('sis_solicitacoes.id'), nullable=False, index=True)
     valor = db.Column(db.Numeric(10, 2), nullable=False)
     competencia = db.Column(db.String(30))
     id_user = db.Column(db.BigInteger, db.ForeignKey('sis_usuarios.id'), nullable=False)

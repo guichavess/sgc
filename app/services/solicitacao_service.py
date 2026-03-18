@@ -185,7 +185,8 @@ class SolicitacaoService:
         usuario_id: int,
         etapa_anterior_id: int = None,
         comentario: str = None,
-        data: datetime = None
+        data: datetime = None,
+        auto_commit: bool = True
     ) -> HistoricoMovimentacao:
         """
         Registra uma movimentação no histórico.
@@ -197,6 +198,8 @@ class SolicitacaoService:
             etapa_anterior_id: ID da etapa anterior (opcional)
             comentario: Comentário da movimentação
             data: Data da movimentação (default: agora)
+            auto_commit: Se True, faz commit imediato. Se False,
+                         deixa o commit para o chamador (atomicidade).
 
         Returns:
             Registro de histórico criado
@@ -211,7 +214,8 @@ class SolicitacaoService:
         )
 
         db.session.add(historico)
-        db.session.commit()
+        if auto_commit:
+            db.session.commit()
 
         return historico
 
@@ -249,7 +253,8 @@ class SolicitacaoService:
             etapa_nova_id=nova_etapa_id,
             etapa_anterior_id=etapa_anterior_id,
             usuario_id=usuario_id,
-            comentario=comentario
+            comentario=comentario,
+            auto_commit=False  # Commit atômico: etapa + histórico juntos
         )
 
         db.session.commit()

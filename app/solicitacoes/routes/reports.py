@@ -135,9 +135,29 @@ def _gerar_dados_metricas(filtro_competencia, filtro_contratado, data_inicio, da
     query_base = Solicitacao.query.join(Etapa).join(Contrato)
     query_base = _aplicar_filtros(query_base, filtro_competencia, filtro_contratado, data_inicio, data_fim, tipo_pagamento_ids)
 
+    # Timeline global (todos os processos)
+    todos_processos = query_base.all()
+
+    # PRE-LOAD: batch load de todo o histórico para evitar N+1
+    # Uma única query ao invés de uma por solicitação
+    sol_ids = [s.id for s in todos_processos]
+    todos_historicos = []
+    if sol_ids:
+        todos_historicos = HistoricoMovimentacao.query.filter(
+            HistoricoMovimentacao.id_solicitacao.in_(sol_ids)
+        ).order_by(
+            HistoricoMovimentacao.id_solicitacao,
+            HistoricoMovimentacao.data_movimentacao.asc()
+        ).all()
+
+    # Agrupa históricos por solicitação (dict de listas ordenadas)
+    from collections import defaultdict
+    hist_por_sol = defaultdict(list)
+    for h in todos_historicos:
+        hist_por_sol[h.id_solicitacao].append(h)
+
     def calcular_tempos_processo(sol):
-        hist = HistoricoMovimentacao.query.filter_by(id_solicitacao=sol.id) \
-            .order_by(HistoricoMovimentacao.data_movimentacao.asc()).all()
+        hist = hist_por_sol.get(sol.id, [])
         tempos = {}
 
         idx_fase_atual = mapa_cp_idx.get(sol.etapa_atual_id)
@@ -177,8 +197,6 @@ def _gerar_dados_metricas(filtro_competencia, filtro_contratado, data_inicio, da
 
         return tempos
 
-    # Timeline global (todos os processos)
-    todos_processos = query_base.all()
     acumulador_medias = {i: [] for i in range(len(CHECKPOINTS_RELATORIO))}
 
     for sol in todos_processos:
@@ -240,33 +258,36 @@ def relatorios():
 
     data_inicio, data_fim = _parse_datas(data_inicio_str, data_fim_str)
 
-    # Visão Geral
-    resumo, detalhes, pagination, contagem_etapa = _gerar_dados_visao_geral(
-        filtro_competencia or None, filtro_contratado or None,
-        data_inicio, data_fim, page_estoque,
-        tipo_pagamento_ids=filtro_tipos or None
-    )
-
-    # Métricas
-    timeline_medias, matriz_tempos, colunas_etapas, pagination_matriz = _gerar_dados_metricas(
-        filtro_competencia or None, filtro_contratado or None,
-        data_inicio, data_fim, page_matriz,
-        tipo_pagamento_ids=filtro_tipos or None
-    )
-
     todas_competencias = ReportService.listar_competencias()
     todos_tipos = TipoPagamento.query.order_by(TipoPagamento.id).all()
+
+    # Lazy loading: só computa dados da aba ativa (evita queries pesadas desnecessárias)
+    resumo = detalhes = pagination = contagem_etapa = None
+    timeline_medias = matriz_tempos = colunas_etapas = pagination_matriz = None
+
+    if aba_ativa == 'geral':
+        resumo, detalhes, pagination, contagem_etapa = _gerar_dados_visao_geral(
+            filtro_competencia or None, filtro_contratado or None,
+            data_inicio, data_fim, page_estoque,
+            tipo_pagamento_ids=filtro_tipos or None
+        )
+    elif aba_ativa == 'metricas':
+        timeline_medias, matriz_tempos, colunas_etapas, pagination_matriz = _gerar_dados_metricas(
+            filtro_competencia or None, filtro_contratado or None,
+            data_inicio, data_fim, page_matriz,
+            tipo_pagamento_ids=filtro_tipos or None
+        )
 
     return render_template(
         'solicitacoes/relatorios.html',
         aba_ativa=aba_ativa,
-        resumo=resumo,
-        detalhes=detalhes,
+        resumo=resumo or [],
+        detalhes=detalhes or [],
         pagination=pagination,
-        contagem_etapa=contagem_etapa,
-        timeline_medias=timeline_medias,
-        matriz_tempos=matriz_tempos,
-        colunas_etapas=colunas_etapas,
+        contagem_etapa=contagem_etapa or {},
+        timeline_medias=timeline_medias or [],
+        matriz_tempos=matriz_tempos or [],
+        colunas_etapas=colunas_etapas or [],
         pagination_matriz=pagination_matriz,
         todas_competencias=todas_competencias,
         todos_tipos=todos_tipos,
@@ -355,27 +376,34 @@ def _gerar_dados_auditoria():
         .all()
     )
 
-    # Pré-carregar empenhos (último por solicitação)
-    todos_empenhos = (
-        db.session.query(SolicitacaoEmpenho)
-        .order_by(SolicitacaoEmpenho.data.desc())
-        .all()
-    )
+    # Pré-carregar empenhos apenas das solicitações carregadas (não todos do banco)
+    sol_ids = [s.id for s in solicitacoes]
     mapa_empenho = {}
-    for emp in todos_empenhos:
-        if emp.id_solicitacao not in mapa_empenho:
-            mapa_empenho[emp.id_solicitacao] = emp
+    if sol_ids:
+        empenhos_relevantes = (
+            db.session.query(SolicitacaoEmpenho)
+            .filter(SolicitacaoEmpenho.id_solicitacao.in_(sol_ids))
+            .order_by(SolicitacaoEmpenho.data.desc())
+            .all()
+        )
+        for emp in empenhos_relevantes:
+            if emp.id_solicitacao not in mapa_empenho:
+                mapa_empenho[emp.id_solicitacao] = emp
 
-    # Pré-carregar documentos SEI (NE, NL, PD, OB) por protocolo
+    # Pré-carregar documentos SEI (NE, NL, PD, OB) apenas dos protocolos relevantes
     series_financeiras = [
         SerieDocumentoSEI.NOTA_EMPENHO,
         SerieDocumentoSEI.LIQUIDACAO,
         SerieDocumentoSEI.PD,
         SerieDocumentoSEI.OB
     ]
-    docs_sei = SeiMovimentacao.query.filter(
-        SeiMovimentacao.id_serie.in_([int(s) for s in series_financeiras])
-    ).all()
+    protocolos_validos = [s.protocolo_gerado_sei for s in solicitacoes if s.protocolo_gerado_sei]
+    docs_sei = []
+    if protocolos_validos:
+        docs_sei = SeiMovimentacao.query.filter(
+            SeiMovimentacao.id_serie.in_([int(s) for s in series_financeiras]),
+            SeiMovimentacao.protocolo_procedimento.in_(protocolos_validos)
+        ).all()
 
     # Agrupar por protocolo_procedimento
     mapa_docs = {}
