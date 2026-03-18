@@ -326,6 +326,28 @@
     padding-right: 2rem;
 }
 
+/* ---------- Célula Contrato/Especificação (2 linhas) ---------- */
+.cell-contrato { line-height: 1.4; }
+.cell-contrato-titulo {
+    font-weight: 600;
+    font-size: 0.76rem;
+    color: #1e293b;
+}
+.cell-contrato-sub {
+    font-size: 0.70rem;
+    color: #64748b;
+    margin-top: 2px;
+}
+.cell-contrato-sub[data-bs-toggle="tooltip"] {
+    cursor: help;
+    border-bottom: 1px dashed #cbd5e1;
+    display: inline;
+}
+.cell-contrato-sub[data-bs-toggle="tooltip"]:hover {
+    color: #343990;
+    border-bottom-color: #343990;
+}
+
 /* ---------- Célula truncada com tooltip ---------- */
 .cell-truncate {
     cursor: help;

@@ -187,8 +187,7 @@
                 <thead>
                     <tr>
                         <th>Processo</th>
-                        <th>Objeto do Pedido</th>
-                        <th>Fornecedor</th>
+                        <th>Fornecedor / Objeto</th>
                         <th>Data de Envio</th>
                         <th>Data de Recebimento</th>
                         <th>Data da Reunião</th>
@@ -279,19 +278,27 @@ $(document).ready(function() {
                         return data || '-';
                     },
                 },
-                { data: 'objeto_do_pedido', defaultContent: '<span class="text-muted">-</span>',
-                    render: function(data) {
-                        if (!data) return '<span class="text-muted">-</span>';
-                        if (data.length > 80) return '<span class="cell-truncate" data-bs-toggle="tooltip" data-bs-placement="top" title="' + data.replace(/"/g, '&quot;') + '">' + data.substring(0, 80) + '...</span>';
-                        return data;
-                    }
-                },
-                { data: 'fornecedor', defaultContent: '<span class="text-muted">-</span>',
-                    render: function(data) {
-                        if (!data) return '<span class="text-muted">-</span>';
-                        if (data.length > 40) return '<span class="cell-truncate" data-bs-toggle="tooltip" data-bs-placement="top" title="' + data.replace(/"/g, '&quot;') + '">' + data.substring(0, 40) + '...</span>';
-                        return data;
-                    }
+                { data: 'fornecedor',
+                    render: function(data, type, row) {
+                        if (type !== 'display') return (data || '') + ' ' + (row.objeto_do_pedido || '');
+                        var forn = data || '';
+                        var obj = row.objeto_do_pedido || '';
+                        var especif = row.especificacao || '';
+                        var sub = obj || especif;
+                        var h = '<div class="cell-contrato">';
+                        if (forn) {
+                            h += '<div class="cell-contrato-titulo">' + esc(forn) + '</div>';
+                        } else {
+                            h += '<div class="cell-contrato-titulo text-muted">Fornecedor não informado</div>';
+                        }
+                        if (sub) {
+                            var subTrunc = sub.length > 90 ? sub.substring(0, 90) + '...' : sub;
+                            h += '<div class="cell-contrato-sub"' + (sub.length > 90 ? ' data-bs-toggle="tooltip" data-bs-placement="top" title="' + sub.replace(/"/g, '&quot;') + '"' : '') + '>' + esc(subTrunc) + '</div>';
+                        }
+                        h += '</div>';
+                        return h;
+                    },
+                    defaultContent: '-',
                 },
                 { data: 'dt_enviado_fmt', defaultContent: '-' },
                 { data: 'data_recebido_cgfr', defaultContent: '-' },
