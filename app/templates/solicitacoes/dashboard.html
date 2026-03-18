@@ -763,16 +763,18 @@
             html422 += '<div id="lista422" style="max-height: 200px; overflow-y: auto;" class="custom-scrollbar">';
 
             protocolos422.forEach(function(item, idx) {
+                var prot = escapeHtml(item.protocolo);
+                var link = escapeHtml(item.link_sei || '');
                 html422 += '<div class="small py-2 border-bottom d-flex align-items-center justify-content-between" id="item422_' + idx + '">';
                 html422 += '<div class="d-flex align-items-center">';
                 html422 += '<i class="bi bi-file-earmark-x text-danger me-2"></i>';
                 if (item.link_sei) {
-                    html422 += '<a href="' + item.link_sei + '" target="_blank" class="text-primary text-decoration-none fw-semibold">' + item.protocolo + ' <i class="bi bi-box-arrow-up-right" style="font-size:0.7rem;"></i></a>';
+                    html422 += '<a href="' + link + '" target="_blank" class="text-primary text-decoration-none fw-semibold">' + prot + ' <i class="bi bi-box-arrow-up-right" style="font-size:0.7rem;"></i></a>';
                 } else {
-                    html422 += '<span class="fw-semibold">' + item.protocolo + '</span>';
+                    html422 += '<span class="fw-semibold">' + prot + '</span>';
                 }
                 html422 += '</div>';
-                html422 += '<button class="btn btn-outline-danger btn-sm px-2 py-0" onclick="excluirSolicitacao422(\'' + item.protocolo + '\', ' + idx + ')" title="Excluir do banco">';
+                html422 += '<button class="btn btn-outline-danger btn-sm px-2 py-0" data-protocolo="' + prot + '" data-idx="' + idx + '" onclick="excluirSolicitacao422(this.dataset.protocolo, parseInt(this.dataset.idx))" title="Excluir do banco">';
                 html422 += '<i class="bi bi-trash"></i> Excluir</button>';
                 html422 += '</div>';
             });
@@ -895,9 +897,14 @@
         }
     }
 
-    // --- HELPERS (CORRIGIDOS) ---
-    
-    // Função corrigida: 'atualizarProgresso' (sem 'c' antes do t)
+    // --- HELPERS ---
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
+
     function atualizarProgresso(barra, msgEl, pct, texto) {
         barra.style.width = pct + '%';
         barra.innerText = pct + '%';

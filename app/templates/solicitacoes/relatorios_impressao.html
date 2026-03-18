@@ -281,16 +281,17 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Gerando PDF...';
 
+        var noPrintEls = document.querySelectorAll('.no-print');
+        var scrollEls, estilosOriginais = [];
+
         try {
             var conteudo = document.querySelector('.container-fluid');
 
             // Esconde botões durante geração
-            var noPrintEls = document.querySelectorAll('.no-print');
             noPrintEls.forEach(function(el) { el.style.display = 'none'; });
 
             // Remove scroll/overflow constraints para captura completa
-            var scrollEls = conteudo.querySelectorAll('.overflow-auto, .custom-scrollbar, .table-responsive');
-            var estilosOriginais = [];
+            scrollEls = conteudo.querySelectorAll('.overflow-auto, .custom-scrollbar, .table-responsive');
             scrollEls.forEach(function(el) {
                 estilosOriginais.push({ element: el, maxHeight: el.style.maxHeight, overflow: el.style.overflow });
                 el.style.maxHeight = 'none';
@@ -299,26 +300,27 @@
 
             var dataHoje = new Date().toISOString().slice(0, 10);
 
+            // scale: 1 evita canvas gigante em documentos grandes (54+ páginas)
+            // quality: 0.85 suficiente para tabelas de texto
             await html2pdf().set({
                 margin:      [8, 8, 8, 8],
                 filename:    'Relatorio_SGC_' + dataHoje + '.pdf',
-                image:       { type: 'jpeg', quality: 0.95 },
-                html2canvas: { scale: 1.5, useCORS: true, scrollY: 0, windowWidth: conteudo.scrollWidth },
+                image:       { type: 'jpeg', quality: 0.85 },
+                html2canvas: { scale: 1, useCORS: true, scrollY: 0, windowWidth: conteudo.scrollWidth },
                 jsPDF:       { unit: 'mm', format: 'a4', orientation: 'landscape' },
                 pagebreak:   { mode: ['avoid-all', 'css', 'legacy'] }
             }).from(conteudo).save();
-
-            // Restaura estilos
-            estilosOriginais.forEach(function(item) {
-                item.element.style.maxHeight = item.maxHeight;
-                item.element.style.overflow = item.overflow;
-            });
-            noPrintEls.forEach(function(el) { el.style.display = ''; });
 
         } catch (err) {
             console.error('Erro ao gerar PDF:', err);
             alert('Erro ao gerar PDF: ' + err.message);
         } finally {
+            // Restaura estilos sempre (mesmo em caso de erro)
+            estilosOriginais.forEach(function(item) {
+                item.element.style.maxHeight = item.maxHeight;
+                item.element.style.overflow = item.overflow;
+            });
+            noPrintEls.forEach(function(el) { el.style.display = ''; });
             btn.disabled = false;
             btn.innerHTML = textoOriginal;
         }

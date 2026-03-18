@@ -28,7 +28,7 @@ from app.services.sei_integration import (
     criar_procedimento_pagamento, gerar_documento_pagamento
 )
 from app.constants import SerieDocumentoSEI, MAPA_ORDEM_ETAPAS
-from app.utils.permissions import requires_permission
+from app.utils.permissions import requires_permission, requires_admin
 
 
 # =============================================================================
@@ -1194,15 +1194,15 @@ def api_criar_lote():
 
 @solicitacoes_bp.route('/api/excluir-solicitacao', methods=['POST'])
 @login_required
-@requires_permission('solicitacoes.aprovar')
+@requires_admin
 def api_excluir_solicitacao():
     """
     Exclui solicitação(ões) e todos os dados relacionados em cascata.
     Aceita { protocolo: "..." } para exclusão individual
     ou { protocolos: [...] } para exclusão em lote.
+    Operação atômica: ou exclui tudo ou faz rollback total.
     """
-    if not current_user.is_admin:
-        return jsonify({'sucesso': False, 'msg': 'Acesso restrito a administradores.'}), 403
+    from app.models.saldo import SaldoEmpenho
 
     dados = request.get_json() or {}
     protocolo_unico = dados.get('protocolo')
@@ -1218,36 +1218,51 @@ def api_excluir_solicitacao():
     excluidos = []
     erros = []
 
-    for protocolo in protocolos:
-        try:
+    try:
+        for protocolo in protocolos:
             sol = Solicitacao.query.filter_by(protocolo_gerado_sei=protocolo).first()
             if not sol:
                 erros.append(f'{protocolo}: não encontrado no banco')
                 continue
 
             sol_id = sol.id
-            cod_contrato = sol.codigo_contrato
-            competencia = sol.competencia
 
-            # Cascata: tabelas filhas primeiro
+            # Cascata: tabelas filhas primeiro (por id_solicitacao, não por contrato)
             SeiMovimentacao.query.filter_by(protocolo_procedimento=protocolo).delete(synchronize_session=False)
             SolicitacaoEmpenho.query.filter_by(id_solicitacao=sol_id).delete(synchronize_session=False)
             HistoricoMovimentacao.query.filter_by(id_solicitacao=sol_id).delete(synchronize_session=False)
 
-            from app.models.saldo import SaldoEmpenho
-            if cod_contrato and competencia:
-                SaldoEmpenho.query.filter_by(cod_contrato=cod_contrato, competencia=competencia).delete(synchronize_session=False)
+            # Saldo: só deleta se não houver outra solicitação para o mesmo contrato/competência
+            if sol.codigo_contrato and sol.competencia:
+                outra_sol = Solicitacao.query.filter(
+                    Solicitacao.codigo_contrato == sol.codigo_contrato,
+                    Solicitacao.competencia == sol.competencia,
+                    Solicitacao.id != sol_id
+                ).first()
+                if not outra_sol:
+                    SaldoEmpenho.query.filter_by(
+                        cod_contrato=sol.codigo_contrato,
+                        competencia=sol.competencia
+                    ).delete(synchronize_session=False)
 
             db.session.delete(sol)
-            db.session.commit()
-
             excluidos.append(protocolo)
-            current_app.logger.info(f"[EXCLUSAO] Solicitacao {sol_id} (protocolo {protocolo}) excluida em cascata por {current_user.id}")
+            current_app.logger.info(f"[EXCLUSAO] Solicitacao {sol_id} (protocolo {protocolo}) marcada para exclusão por {current_user.id}")
 
-        except Exception as e:
-            db.session.rollback()
-            erros.append(f'{protocolo}: {str(e)[:80]}')
-            current_app.logger.error(f"[EXCLUSAO] Erro ao excluir {protocolo}: {e}")
+        # Commit atômico: tudo ou nada
+        if excluidos:
+            db.session.commit()
+            current_app.logger.info(f"[EXCLUSAO] {len(excluidos)} solicitação(ões) excluída(s) com sucesso")
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"[EXCLUSAO] Rollback total. Erro: {e}")
+        return jsonify({
+            'sucesso': False,
+            'excluidos': [],
+            'erros': [f'Erro ao processar exclusão: {str(e)[:120]}'],
+            'msg': 'Falha na exclusão. Nenhum registro foi removido.'
+        })
 
     return jsonify({
         'sucesso': len(erros) == 0,
