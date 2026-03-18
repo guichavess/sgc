@@ -113,7 +113,7 @@
         }
     </style>
 </head>
-<body onload="setTimeout(window.print, 500)"> 
+<body>
 <div class="container-fluid mt-2">
         <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
             <div>
@@ -126,6 +126,7 @@
                 </div>
             </div>
             <div class="no-print">
+                <button onclick="baixarPDF()" id="btnBaixarPdf" class="btn btn-danger btn-sm"><i class="fas fa-file-pdf me-2"></i>Baixar PDF</button>
                 <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="fas fa-print me-2"></i>Imprimir</button>
                 <button onclick="window.close()" class="btn btn-secondary btn-sm">Fechar</button>
             </div>
@@ -271,5 +272,57 @@
             </table>
         {% endif %}
     </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+    async function baixarPDF() {
+        var btn = document.getElementById('btnBaixarPdf');
+        var textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Gerando PDF...';
+
+        try {
+            var conteudo = document.querySelector('.container-fluid');
+
+            // Esconde botões durante geração
+            var noPrintEls = document.querySelectorAll('.no-print');
+            noPrintEls.forEach(function(el) { el.style.display = 'none'; });
+
+            // Remove scroll/overflow constraints para captura completa
+            var scrollEls = conteudo.querySelectorAll('.overflow-auto, .custom-scrollbar, .table-responsive');
+            var estilosOriginais = [];
+            scrollEls.forEach(function(el) {
+                estilosOriginais.push({ element: el, maxHeight: el.style.maxHeight, overflow: el.style.overflow });
+                el.style.maxHeight = 'none';
+                el.style.overflow = 'visible';
+            });
+
+            var dataHoje = new Date().toISOString().slice(0, 10);
+
+            await html2pdf().set({
+                margin:      [8, 8, 8, 8],
+                filename:    'Relatorio_SGC_' + dataHoje + '.pdf',
+                image:       { type: 'jpeg', quality: 0.95 },
+                html2canvas: { scale: 1.5, useCORS: true, scrollY: 0, windowWidth: conteudo.scrollWidth },
+                jsPDF:       { unit: 'mm', format: 'a4', orientation: 'landscape' },
+                pagebreak:   { mode: ['avoid-all', 'css', 'legacy'] }
+            }).from(conteudo).save();
+
+            // Restaura estilos
+            estilosOriginais.forEach(function(item) {
+                item.element.style.maxHeight = item.maxHeight;
+                item.element.style.overflow = item.overflow;
+            });
+            noPrintEls.forEach(function(el) { el.style.display = ''; });
+
+        } catch (err) {
+            console.error('Erro ao gerar PDF:', err);
+            alert('Erro ao gerar PDF: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+        }
+    }
+</script>
 </body>
 </html>
