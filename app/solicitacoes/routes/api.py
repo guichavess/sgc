@@ -328,18 +328,21 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
         }
 
         max_tentativas = 3
+        timeouts = [60, 120, 180]  # escala progressiva: 60s → 120s → 180s
         resp = None
         for tentativa in range(1, max_tentativas + 1):
             try:
-                resp = _sei_session.get(base_url, headers=headers, params=params, timeout=60)
+                timeout_atual = timeouts[tentativa - 1]
+                resp = _sei_session.get(base_url, headers=headers, params=params, timeout=timeout_atual)
                 break  # sucesso, sai do loop
             except (http_requests.exceptions.SSLError,
-                    http_requests.exceptions.ConnectionError) as e_retry:
+                    http_requests.exceptions.ConnectionError,
+                    http_requests.exceptions.ReadTimeout) as e_retry:
                 if tentativa < max_tentativas:
                     wait_secs = tentativa * 5
                     app_obj.logger.warning(
-                        f"[Tentativa {tentativa}/{max_tentativas}] Erro SSL/conexão para {protocolo}: {e_retry}. "
-                        f"Aguardando {wait_secs}s..."
+                        f"[Tentativa {tentativa}/{max_tentativas}] Erro para {protocolo} (timeout={timeout_atual}s): {type(e_retry).__name__}. "
+                        f"Aguardando {wait_secs}s antes de retry com timeout={timeouts[tentativa]}s..."
                     )
                     time.sleep(wait_secs)
                 else:
@@ -348,7 +351,7 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
                         f"ERRO DOWNLOAD SEI (Protocolo {protocolo}): Falhou após {max_tentativas} tentativas. Último erro: {e_retry}",
                         exc_info=True
                     )
-                    return (False, f"Erro SSL {protocolo}: {str(e_retry)}")
+                    return (False, f"Erro {protocolo}: {type(e_retry).__name__}")
 
         try:
             tempo_total = round(time.time() - start_time, 3)
