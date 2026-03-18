@@ -23,6 +23,14 @@ class SerieDocumentoSEI:
     MEMORANDO_SGA = '2986'  # SEAD_MEMORANDO_SGA (Diárias)
 
 
+class SerieDocumentoCGFR:
+    """IDs das séries de documentos SEI relevantes para timeline CGFR."""
+    CGFR_DESPACHO = '3639'   # Etapa 2: CGFR
+    SEFAZ_UGGP = '1179'      # Etapa 3: SEFAZ - UGGP
+    NOTA_RESERVA = '425'     # NR - Nota de Reserva (link na Etapa 3 + lógica orçamento)
+    CONTRATO = '103'          # Etapa 4: Contrato
+
+
 # =============================================================================
 # ETAPAS DO PROCESSO
 # =============================================================================

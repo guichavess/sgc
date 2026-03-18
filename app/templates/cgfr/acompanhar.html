@@ -1,0 +1,236 @@
+{% extends "cgfr/base_cgfr.html" %}
+
+{% block title %}CGFR - Acompanhar Processo{% endblock %}
+
+{% block cgfr_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/timeline.css') }}">
+<style>
+    .info-label { font-size: 0.70rem; font-weight: 600; text-transform: uppercase; color: #64748b; letter-spacing: 0.03em; margin-bottom: 2px; }
+    .info-value { font-size: 0.88rem; font-weight: 500; color: #1e293b; }
+    .info-value.muted { color: #94a3b8; font-style: italic; }
+    .sync-btn { transition: all 0.2s; }
+    .sync-btn:disabled { opacity: 0.6; }
+    .sync-btn .spinner-border { width: 14px; height: 14px; border-width: 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{# Header com botões #}
+<div class="d-flex justify-content-start mb-3">
+    <a href="{{ url_for('cgfr.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i> Voltar ao Dashboard
+    </a>
+</div>
+
+{# Card principal #}
+<div class="card shadow-sm mb-4" style="border-radius: 12px;">
+    <div class="card-body p-0">
+        {# Identificação do processo #}
+        <div class="p-3 border-bottom" style="background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius: 12px 12px 0 0;">
+            <div class="d-flex align-items-start justify-content-between">
+                <div>
+                    <h5 class="fw-bold text-dark mb-1">
+                        <i class="bi bi-file-earmark-text me-2" style="color: #343990;"></i>
+                        Processo: {% if processo.link_acesso %}<a href="{{ processo.link_acesso }}" target="_blank" class="text-decoration-none" style="color: #343990;">{{ processo.processo_formatado }} <i class="bi bi-box-arrow-up-right" style="font-size: 0.75rem;"></i></a>{% else %}{{ processo.processo_formatado }}{% endif %}
+                    </h5>
+                    {% if processo.fornecedor %}
+                    <h6 class="text-muted mb-1">{{ processo.fornecedor }}</h6>
+                    {% endif %}
+                    {% if processo.objeto_do_pedido %}
+                    <p class="text-secondary mb-0 small">{{ processo.objeto_do_pedido }}</p>
+                    {% endif %}
+                </div>
+                <div class="text-end">
+                    {% if processo.link_acesso %}
+                    <a href="{{ processo.link_acesso }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-box-arrow-up-right me-1"></i> Abrir no SEI
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# Timeline #}
+        <div class="p-3">
+            <div class="mb-3">
+                <h6 class="text-uppercase text-muted fw-bold mb-1 small">
+                    <i class="bi bi-signpost-2 me-1"></i> Fluxo do Processo
+                </h6>
+            </div>
+
+            {% include 'cgfr/partials/timeline_cgfr.html' %}
+        </div>
+    </div>
+</div>
+
+{# Botão sincronizar documentos — entre timeline e cards #}
+<div class="d-flex justify-content-end mb-4">
+    <button id="btnSyncDocs" class="btn btn-primary btn-sm sync-btn" onclick="sincronizarDocumentos()">
+        <i class="bi bi-arrow-repeat me-1"></i> Sincronizar Documentos deste Processo
+    </button>
+</div>
+
+{# Cards de informações #}
+<div class="row g-3 mb-4">
+    {# Dados do Processo #}
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100" style="border-radius: 10px;">
+            <div class="card-header bg-light fw-bold text-muted small text-uppercase" style="border-radius: 10px 10px 0 0;">
+                <i class="bi bi-info-circle me-1"></i> Dados do Processo
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="info-label">Tipo de Processo</div>
+                        <div class="info-value {{ 'muted' if not processo.tipo_processo }}">{{ processo.tipo_processo or 'Não informado' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Especificação</div>
+                        <div class="info-value {{ 'muted' if not processo.especificacao }}">{{ processo.especificacao or 'Não informado' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Status CGFR</div>
+                        <div><span class="badge {{ processo.status_cgfr_badge }}">{{ processo.status_cgfr }}</span></div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Data de Inclusão</div>
+                        <div class="info-value">{{ processo.data_inclusao_fmt or '-' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Data de Envio</div>
+                        <div class="info-value">{{ processo.dt_enviado_fmt or '-' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Data Receb. CGFR</div>
+                        <div class="info-value">{{ processo.data_recebido_cgfr or '-' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Classificação Orçamentária #}
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100" style="border-radius: 10px;">
+            <div class="card-header bg-light fw-bold text-muted small text-uppercase" style="border-radius: 10px 10px 0 0;">
+                <i class="bi bi-currency-dollar me-1"></i> Classificação Orçamentária
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="info-label">Valor Solicitado</div>
+                        <div class="info-value fw-bold" style="color: #1e40af;">{{ processo.valor_solicitado_fmt or '-' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Valor Aprovado</div>
+                        <div class="info-value fw-bold" style="color: #059669;">{{ processo.valor_acordado_fmt or '-' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Natureza de Despesa</div>
+                        <div class="info-value {{ 'muted' if not processo.natureza_despesa }}">{{ processo.natureza_despesa or 'Pendente' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Fonte</div>
+                        <div class="info-value {{ 'muted' if not processo.fonte }}">{{ processo.fonte or 'Pendente' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Ação</div>
+                        <div class="info-value {{ 'muted' if not processo.acao }}">{{ processo.acao or 'Pendente' }}</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label">Deliberação</div>
+                        <div class="info-value {{ 'muted' if not processo.deliberacao }}">{{ processo.deliberacao or 'Pendente' }}</div>
+                    </div>
+                    {% if processo.possui_reserva == 1 %}
+                    <div class="col-6">
+                        <div class="info-label">Reserva</div>
+                        <div class="info-value">{{ processo.valor_reserva or 'Sim' }}</div>
+                    </div>
+                    {% endif %}
+                    {% if processo.nivel_prioridade %}
+                    <div class="col-6">
+                        <div class="info-label">Prioridade</div>
+                        <div>
+                            {% if processo.nivel_prioridade == 'Alto' %}
+                            <span class="badge bg-danger">Alto</span>
+                            {% elif processo.nivel_prioridade == 'Medio' or processo.nivel_prioridade == 'Médio' %}
+                            <span class="badge bg-warning text-dark">Médio</span>
+                            {% else %}
+                            <span class="badge bg-info">Baixo</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if processo.observacao %}
+<div class="card shadow-sm mb-4" style="border-radius: 10px;">
+    <div class="card-header bg-light fw-bold text-muted small text-uppercase" style="border-radius: 10px 10px 0 0;">
+        <i class="bi bi-chat-left-text me-1"></i> Observações
+    </div>
+    <div class="card-body">
+        <p class="mb-0" style="font-size: 0.88rem;">{{ processo.observacao }}</p>
+    </div>
+</div>
+{% endif %}
+
+{# Botão Abrir no SEI — final da página #}
+{% if processo.link_acesso %}
+<div class="d-flex justify-content-center mb-4">
+    <a href="{{ processo.link_acesso }}" target="_blank" class="btn btn-primary">
+        <i class="bi bi-box-arrow-up-right me-2"></i> Abrir Processo no SEI
+    </a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block cgfr_js %}
+<script>
+function sincronizarDocumentos() {
+    var btn = document.getElementById('btnSyncDocs');
+    var originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sincronizando...';
+
+    fetch('{{ url_for("cgfr.sync_documentos", protocolo=processo.processo_formatado) }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Sincronização concluída',
+                text: data.message || 'Documentos sincronizados com sucesso!',
+                timer: 2000,
+                showConfirmButton: false,
+            }).then(function() {
+                window.location.reload();
+            });
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Erro na sincronização',
+                text: data.error || 'Erro desconhecido',
+            });
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        Swal.fire({
+            icon: 'error',
+            title: 'Erro de conexão',
+            text: 'Não foi possível conectar ao servidor: ' + err.message,
+        });
+    });
+}
+</script>
+{% endblock %}

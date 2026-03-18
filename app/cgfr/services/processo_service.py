@@ -127,6 +127,9 @@ class ProcessoService:
 
             records = [_format_record(p, acao_map) for p in processos]
 
+            # Computar etapa atual de cada processo via cgfrmovimentacao
+            _enrich_etapa_atual(records)
+
             total = len(records)
             kpi_solicitado = sum(_to_float(r.get('valor_solicitado')) for r in records)
             kpi_aprovado = sum(_to_float(r.get('valor_aprovado')) for r in records)
@@ -466,3 +469,188 @@ def _to_float(value):
         return float(value)
     except (ValueError, TypeError):
         return 0.0
+
+
+# =============================================================================
+# Timeline de Acompanhamento CGFR
+# =============================================================================
+
+def _parse_date(value):
+    """Parseia string de data DD/MM/YYYY (opcionalmente com hora) para date."""
+    if not value or value == '-':
+        return None
+    s = str(value).strip()
+    if ' ' in s:
+        s = s.split(' ')[0]
+    for fmt in ('%d/%m/%Y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def obter_timeline_acompanhamento(protocolo):
+    """Constroi dados de timeline para acompanhamento de processo CGFR.
+
+    Args:
+        protocolo: processo_formatado do processo.
+
+    Returns:
+        dict com processo, timeline_data, mov_nr, tem_orcamento ou None se nao encontrado.
+    """
+    from app.cgfr.models import CgfrMovimentacao
+    from app.constants import SerieDocumentoCGFR
+
+    processo = CgfrProcessoEnviado.query.get(protocolo)
+    if not processo:
+        return None
+
+    # Buscar todos os documentos do processo
+    docs = CgfrMovimentacao.query.filter_by(
+        protocolo_procedimento=protocolo
+    ).all()
+
+    # Separar documentos por IdSerie
+    doc_cgfr = next((d for d in docs if str(d.id_serie) == SerieDocumentoCGFR.CGFR_DESPACHO), None)
+    doc_sefaz = next((d for d in docs if str(d.id_serie) == SerieDocumentoCGFR.SEFAZ_UGGP), None)
+    doc_nr = next((d for d in docs if str(d.id_serie) == SerieDocumentoCGFR.NOTA_RESERVA), None)
+    doc_contrato = next((d for d in docs if str(d.id_serie) == SerieDocumentoCGFR.CONTRATO), None)
+
+    # Datas
+    data_envio = _parse_date(processo.tramitado_sead_cgfr)
+    data_cgfr = _parse_date(doc_cgfr.data) if doc_cgfr else None
+    data_sefaz = _parse_date(doc_sefaz.data) if doc_sefaz else None
+    data_nr = _parse_date(doc_nr.data) if doc_nr else None
+    data_contrato = _parse_date(doc_contrato.data) if doc_contrato else None
+
+    # Lógica de tag orçamento
+    tem_orcamento = False
+    if data_nr and data_envio:
+        tem_orcamento = data_nr < data_envio
+
+    # Montar NR info
+    mov_nr = None
+    if doc_nr:
+        mov_nr = {
+            'numero': doc_nr.numero or '',
+            'link_acesso': doc_nr.link_acesso or '',
+            'data': _strip_time(doc_nr.data) or '-',
+        }
+
+    # Construir etapas da timeline
+    datas = [data_envio, data_cgfr, data_sefaz, data_contrato]
+
+    # Determinar etapa atual (primeira sem data)
+    etapa_atual_idx = None
+    for i, d in enumerate(datas):
+        if d is None:
+            etapa_atual_idx = i
+            break
+
+    etapas_config = [
+        {'nome': 'Envio do Processo', 'icone': 'bi-send', 'data': data_envio},
+        {'nome': 'CGFR', 'icone': 'bi-clipboard-check', 'data': data_cgfr},
+        {'nome': 'SEFAZ - UGGP', 'icone': 'bi-bank', 'data': data_sefaz},
+        {'nome': 'Contrato', 'icone': 'bi-file-earmark-text', 'data': data_contrato},
+    ]
+
+    timeline_data = []
+    prev_date = None
+    for i, cfg in enumerate(etapas_config):
+        d = cfg['data']
+        concluida = d is not None
+        atual = (i == etapa_atual_idx)
+
+        # Calcular tempo decorrido entre etapas
+        tempo_decorrido = None
+        if d and prev_date:
+            diff = (d - prev_date).days
+            if diff >= 0:
+                tempo_decorrido = f'{diff}d'
+
+        timeline_data.append({
+            'nome': cfg['nome'],
+            'icone': cfg['icone'],
+            'data': d.strftime('%d/%m/%Y') if d else None,
+            'concluida': concluida,
+            'atual': atual,
+            'tempo_decorrido': tempo_decorrido,
+        })
+
+        if d:
+            prev_date = d
+
+    # Formatar dados do processo para exibição
+    acao_map = {}
+    if processo.acao_id:
+        acao = Acao.query.get(processo.acao_id)
+        if acao:
+            acao_map[acao.id] = acao
+    processo_dict = _format_record(processo, acao_map)
+
+    return {
+        'processo': processo_dict,
+        'timeline_data': timeline_data,
+        'mov_nr': mov_nr,
+        'tem_orcamento': tem_orcamento,
+    }
+
+
+def _enrich_etapa_atual(records):
+    """Adiciona campo etapa_atual a cada record baseado nos documentos em cgfrmovimentacao.
+
+    Etapas: 1=Envio, 2=CGFR (3639), 3=SEFAZ-UGGP (1179), 4=Contrato (103).
+    etapa_atual = última etapa concluída. Se nenhum doc existe, usa etapa 1 se há data de envio.
+    """
+    from app.cgfr.models import CgfrMovimentacao
+    from app.constants import SerieDocumentoCGFR
+    from sqlalchemy import func
+
+    protocolos = [r['processo_formatado'] for r in records]
+    if not protocolos:
+        return
+
+    # Batch query: buscar id_serie distintos por protocolo
+    etapa_series = {
+        SerieDocumentoCGFR.CGFR_DESPACHO: 2,
+        SerieDocumentoCGFR.SEFAZ_UGGP: 3,
+        SerieDocumentoCGFR.CONTRATO: 4,
+    }
+    target_series = list(etapa_series.keys())
+
+    try:
+        rows = db.session.query(
+            CgfrMovimentacao.protocolo_procedimento,
+            CgfrMovimentacao.id_serie,
+        ).filter(
+            CgfrMovimentacao.protocolo_procedimento.in_(protocolos),
+            CgfrMovimentacao.id_serie.in_([int(s) for s in target_series]),
+        ).all()
+    except Exception:
+        rows = []
+
+    # Mapear protocolo → set de etapas concluídas
+    proto_etapas = {}
+    for proto, id_serie in rows:
+        s = str(id_serie)
+        if s in etapa_series:
+            proto_etapas.setdefault(proto, set()).add(etapa_series[s])
+
+    etapa_nomes = {1: 'Envio do Processo', 2: 'CGFR', 3: 'SEFAZ - UGGP', 4: 'Contrato'}
+
+    for r in records:
+        proto = r['processo_formatado']
+        etapas_concluidas = proto_etapas.get(proto, set())
+
+        # Etapa 1 concluída se tem data de envio
+        if r.get('tramitado_sead_cgfr') and r['tramitado_sead_cgfr'] != '-':
+            etapas_concluidas.add(1)
+
+        if etapas_concluidas:
+            max_etapa = max(etapas_concluidas)
+            r['etapa_atual'] = etapa_nomes.get(max_etapa, f'Etapa {max_etapa}')
+            r['etapa_atual_num'] = max_etapa
+        else:
+            r['etapa_atual'] = 'Não iniciado'
+            r['etapa_atual_num'] = 0

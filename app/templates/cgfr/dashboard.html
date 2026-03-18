@@ -85,7 +85,11 @@
                 <option value="Medio">Médio</option>
                 <option value="Baixo">Baixo</option>
             </select>
-            <span class="total-records">
+            <select id="filterEtapa" class="form-select form-select-sm fw-semibold"
+                    style="width: auto; font-size: 0.82rem;">
+                <option value="">Etapa: Todas</option>
+            </select>
+            <span class="total-records" style="color: #1e293b; font-weight: 700;">
                 Total de registros: <strong id="totalRecords">0</strong>
             </span>
             <button class="btn btn-outline-danger btn-sm" id="btnClearAll" style="display:none;">
@@ -131,42 +135,45 @@
         <div class="d-flex align-items-center justify-content-between w-100">
             {# Filtros de status — segmented control #}
             <div class="status-filter-group" role="group">
-                <input type="radio" class="btn-check" name="statusFilter" id="filterAll" value="all" checked autocomplete="off">
+                <input type="radio" class="btn-check" name="statusFilter" id="filterAll" value="all" autocomplete="off">
                 <label class="status-filter-btn" for="filterAll">
                     <span class="status-filter-icon"><i class="bi bi-grid-3x3-gap"></i></span>
-                    <span class="status-filter-label">Todos</span>
+                    <span class="status-filter-label">Todos <span class="badge bg-secondary bg-opacity-25 text-dark ms-1 filter-count" id="countAll" style="font-size:0.65rem;">0</span></span>
                 </label>
 
                 <input type="radio" class="btn-check" name="statusFilter" id="filterClassified" value="classified" autocomplete="off">
                 <label class="status-filter-btn sf-success" for="filterClassified">
                     <span class="status-filter-icon"><i class="bi bi-check-circle-fill"></i></span>
-                    <span class="status-filter-label">Classificados</span>
+                    <span class="status-filter-label">Classificados <span class="badge bg-success bg-opacity-25 text-success ms-1 filter-count" id="countClassified" style="font-size:0.65rem;">0</span></span>
                 </label>
 
                 <input type="radio" class="btn-check" name="statusFilter" id="filterPending" value="pending" autocomplete="off">
                 <label class="status-filter-btn sf-warning" for="filterPending">
                     <span class="status-filter-icon"><i class="bi bi-clock-fill"></i></span>
-                    <span class="status-filter-label">Pendentes</span>
+                    <span class="status-filter-label">Pendentes <span class="badge bg-warning bg-opacity-25 text-dark ms-1 filter-count" id="countPending" style="font-size:0.65rem;">0</span></span>
                 </label>
 
                 <input type="radio" class="btn-check" name="statusFilter" id="filterNovos" value="novos" autocomplete="off">
                 <label class="status-filter-btn sf-info" for="filterNovos">
                     <span class="status-filter-icon"><i class="bi bi-stars"></i></span>
-                    <span class="status-filter-label">Novos</span>
+                    <span class="status-filter-label">Novos <span class="badge bg-info bg-opacity-25 text-info ms-1 filter-count" id="countNovos" style="font-size:0.65rem;">0</span></span>
                 </label>
 
-                <input type="radio" class="btn-check" name="statusFilter" id="filterPrioritarios" value="prioritarios" autocomplete="off">
+                <input type="radio" class="btn-check" name="statusFilter" id="filterPrioritarios" value="prioritarios" checked autocomplete="off">
                 <label class="status-filter-btn sf-danger" for="filterPrioritarios">
                     <span class="status-filter-icon"><i class="bi bi-exclamation-triangle-fill"></i></span>
-                    <span class="status-filter-label">Prioritários</span>
+                    <span class="status-filter-label">Prioritários <span class="badge bg-danger bg-opacity-25 text-danger ms-1 filter-count" id="countPrioritarios" style="font-size:0.65rem;">0</span></span>
                 </label>
             </div>
 
             {# Label dinâmica + Ações à direita #}
-            <div class="d-flex align-items-center gap-2">
-                <span class="text-muted me-2 d-none d-lg-inline" style="font-size: 0.78rem;" id="tableTitle">Todos os Processos</span>
+            <div class="d-flex align-items-center gap-2 ms-auto">
+                <span class="text-muted me-2 d-none d-lg-inline" style="font-size: 0.78rem;" id="tableTitle">Prioritários</span>
                 <button class="btn btn-sm btn-outline-primary" id="btnSync" title="Sincronizar com Data Lake">
                     <i class="bi bi-arrow-repeat me-1"></i>Sincronizar
+                </button>
+                <button class="btn btn-sm btn-outline-info" id="btnSyncDocs" title="Sincronizar documentos SEI dos processos até a 3ª etapa">
+                    <i class="bi bi-file-earmark-arrow-down me-1"></i>Sync Docs
                 </button>
                 <a href="{{ url_for('cgfr.api_export_excel') }}" class="btn btn-sm btn-success"
                    title="Exportar Excel">
@@ -221,7 +228,8 @@ window.cgfrFilterOptions = {{ filter_options|tojson }};
 $(document).ready(function() {
     var dataTable;
     var searchTerm = '';
-    var statusFilter = 'all';
+    var statusFilter = 'prioritarios';
+    var etapaFilter = '';
     var showOnlyEdited = false;
     var allRecords = [];
     var activeColumnFilters = {};
@@ -236,7 +244,9 @@ $(document).ready(function() {
     initReservaFilter();
     initPrioridadeFilter();
     initClearFilters();
+    initEtapaFilter();
     initSyncButton();
+    initSyncDocsButton();
     initEditModal();
 
     /* ===== DataTable ===== */
@@ -254,6 +264,9 @@ $(document).ready(function() {
                     updateKPIs(json);
                     populateColumnFilters(allRecords);
                     updateTotalRecords(allRecords.length);
+                    updateFilterCounts(allRecords);
+                    populateEtapaFilter(allRecords);
+                    populateSelectCounts(allRecords);
                     return allRecords;
                 },
             },
@@ -273,8 +286,12 @@ $(document).ready(function() {
                 { data: 'dt_enviado_fmt', defaultContent: '-' },
                 { data: 'data_recebido_cgfr', defaultContent: '-' },
                 { data: 'data_da_reuniao', defaultContent: '-' },
-                { data: 'valor_solicitado_fmt', className: 'text-end', defaultContent: '-' },
-                { data: 'valor_acordado_fmt', className: 'text-end', defaultContent: '-' },
+                { data: 'valor_solicitado_fmt', className: 'text-end', defaultContent: '-',
+                    render: function(data) { return data && data !== '-' ? '<span style="color:#059669;font-weight:600;">' + data + '</span>' : '-'; }
+                },
+                { data: 'valor_acordado_fmt', className: 'text-end', defaultContent: '-',
+                    render: function(data) { return data && data !== '-' ? '<span style="color:#059669;font-weight:600;">' + data + '</span>' : '-'; }
+                },
                 { data: 'natureza_despesa', defaultContent: '<span class="text-muted">-</span>' },
                 {
                     data: 'deliberacao',
@@ -316,8 +333,13 @@ $(document).ready(function() {
                     orderable: false,
                     searchable: false,
                     render: function(data) {
-                        return '<button class="btn btn-primary btn-sm btn-edit" data-protocolo="' + (data || '') + '">' +
-                            '<i class="bi bi-pencil-square me-1"></i>Editar</button>';
+                        var proto = data || '';
+                        return '<div class="d-flex flex-column gap-1">' +
+                            '<button class="btn btn-primary btn-sm btn-edit" data-protocolo="' + proto + '">' +
+                                '<i class="bi bi-pencil-square me-1"></i>Editar</button>' +
+                            '<a href="/cgfr/acompanhar/' + proto + '" class="btn btn-success btn-sm">' +
+                                '<i class="bi bi-signpost-2 me-1"></i>Acompanhar</a>' +
+                        '</div>';
                     },
                 },
             ],
@@ -354,6 +376,8 @@ $(document).ready(function() {
             if (reservaFilter === 'nao' && rowData.possui_reserva == 1) return false;
             /* Prioridade */
             if (prioridadeFilter && (rowData.nivel_prioridade || '') !== prioridadeFilter) return false;
+            /* Etapa */
+            if (etapaFilter && (rowData.etapa_atual || '') !== etapaFilter) return false;
             /* Busca textual client-side */
             if (searchTerm) {
                 var q = searchTerm.toLowerCase();
@@ -460,6 +484,60 @@ $(document).ready(function() {
         $('#filterPrioridade').on('change', function() { prioridadeFilter = this.value; updateClearVis(); drawLocal(); });
     }
 
+    function initEtapaFilter() {
+        $('#filterEtapa').on('change', function() { etapaFilter = this.value; updateClearVis(); drawLocal(); });
+    }
+
+    function updateFilterCounts(records) {
+        var cAll = records.length, cClassified = 0, cPending = 0, cNovos = 0, cPrioritarios = 0;
+        records.forEach(function(r) {
+            if (r.is_classified) cClassified++; else cPending++;
+            if (r.is_novo) cNovos++;
+            if ((r.nivel_prioridade || '') === 'Alto') cPrioritarios++;
+        });
+        $('#countAll').text(cAll);
+        $('#countClassified').text(cClassified);
+        $('#countPending').text(cPending);
+        $('#countNovos').text(cNovos);
+        $('#countPrioritarios').text(cPrioritarios);
+    }
+
+    function populateEtapaFilter(records) {
+        var counts = {};
+        records.forEach(function(r) {
+            var e = r.etapa_atual || 'Não iniciado';
+            counts[e] = (counts[e] || 0) + 1;
+        });
+        var sel = $('#filterEtapa');
+        var prev = sel.val();
+        sel.find('option:not(:first)').remove();
+        var order = ['Envio do Processo', 'CGFR', 'SEFAZ - UGGP', 'Contrato', 'Não iniciado'];
+        order.forEach(function(name) {
+            if (counts[name]) {
+                sel.append('<option value="' + name + '">' + name + ' (' + counts[name] + ')</option>');
+            }
+        });
+        if (prev) sel.val(prev);
+    }
+
+    function populateSelectCounts(records) {
+        /* Tipo de Processo */
+        var tipoCounts = {}, delibCounts = {}, reservaCounts = {sim: 0, nao: 0}, prioCounts = {};
+        records.forEach(function(r) {
+            var tp = r.tipo_processo || ''; if (tp) tipoCounts[tp] = (tipoCounts[tp] || 0) + 1;
+            var dl = r.deliberacao || ''; if (dl) delibCounts[dl] = (delibCounts[dl] || 0) + 1;
+            if (r.possui_reserva == 1) reservaCounts.sim++; else reservaCounts.nao++;
+            var pr = r.nivel_prioridade || ''; if (pr) prioCounts[pr] = (prioCounts[pr] || 0) + 1;
+        });
+        /* Reserva */
+        $('#filterReserva option[value="sim"]').text('Com Reserva (' + reservaCounts.sim + ')');
+        $('#filterReserva option[value="nao"]').text('Sem Reserva (' + reservaCounts.nao + ')');
+        /* Prioridade */
+        $('#filterPrioridade option[value="Alto"]').text('Alto (' + (prioCounts['Alto'] || 0) + ')');
+        $('#filterPrioridade option[value="Medio"]').text('Médio (' + (prioCounts['Medio'] || prioCounts['Médio'] || 0) + ')');
+        $('#filterPrioridade option[value="Baixo"]').text('Baixo (' + (prioCounts['Baixo'] || 0) + ')');
+    }
+
     function reloadTable(cb) { if (dataTable) dataTable.ajax.reload(cb || null, false); }
 
     /* ===== Column Filters ===== */
@@ -548,6 +626,7 @@ $(document).ready(function() {
             $('#showOnlyEdited').prop('checked', false); showOnlyEdited = false;
             $('#filterReserva').val(''); reservaFilter = '';
             $('#filterPrioridade').val(''); prioridadeFilter = '';
+            $('#filterEtapa').val(''); etapaFilter = '';
             $('#searchGlobal').val(''); searchTerm = '';
             $('#filterAll').prop('checked', true); statusFilter = 'all';
             $('#tableTitle').text('Todos os Processos');
@@ -593,6 +672,48 @@ $(document).ready(function() {
             if (d.sucesso) reloadTable();
         })
         .catch(function(){ Swal.fire('Erro','Falha na comunicação.','error'); });
+    }
+
+    /* ===== Sync Docs (bulk — processos até 3ª etapa) ===== */
+    function initSyncDocsButton() {
+        $('#btnSyncDocs').on('click', function() {
+            var processosSync = allRecords.filter(function(r) {
+                return (r.etapa_atual_num || 0) < 4;
+            }).map(function(r) { return r.processo_formatado; });
+            if (!processosSync.length) {
+                Swal.fire('Info', 'Nenhum processo pendente de sincronização.', 'info');
+                return;
+            }
+            Swal.fire({
+                title: 'Sincronizar documentos SEI?',
+                text: processosSync.length + ' processos até a 3ª etapa serão sincronizados.',
+                icon: 'question', showCancelButton: true,
+                confirmButtonColor: '#343990', confirmButtonText: 'Sincronizar', cancelButtonText: 'Cancelar'
+            }).then(function(r) { if (r.isConfirmed) doSyncDocs(processosSync); });
+        });
+    }
+
+    function doSyncDocs(protocolos) {
+        var total = protocolos.length, done = 0, errs = 0;
+        Swal.fire({ title: 'Sincronizando documentos...', html: '0/' + total, allowOutsideClick: false, didOpen: function(){ Swal.showLoading(); } });
+        var chain = Promise.resolve();
+        protocolos.forEach(function(proto) {
+            chain = chain.then(function() {
+                return fetch('/cgfr/acompanhar/' + proto + '/sync', { method: 'POST', headers: {'Content-Type':'application/json'} })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    done++;
+                    if (!d.success) errs++;
+                    Swal.getHtmlContainer().textContent = done + '/' + total + (errs ? ' (' + errs + ' erros)' : '');
+                })
+                .catch(function() { done++; errs++; Swal.getHtmlContainer().textContent = done + '/' + total; });
+            });
+        });
+        chain.then(function() {
+            Swal.fire({ icon: errs ? 'warning' : 'success', title: 'Concluído!',
+                html: 'Sincronizados: <b>' + (total - errs) + '</b><br>Erros: <b>' + errs + '</b>' });
+            reloadTable();
+        });
     }
 
     /* ===== Modal Edicao ===== */

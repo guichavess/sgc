@@ -1,0 +1,73 @@
+{# Timeline horizontal CGFR — 4 etapas #}
+<div class="timeline-horizontal-wrapper mb-4">
+    <div class="timeline-flex-container">
+        {% for etapa in timeline_data %}
+        <div class="timeline-item">
+            {# Conector (não aparece na primeira etapa) #}
+            {% if not loop.first %}
+            <div class="timeline-connector">
+                <div class="connector-fill {{ 'active' if (etapa.concluida or etapa.atual) }}"></div>
+                {% if etapa.tempo_decorrido %}
+                <div class="duration-pill"><i class="bi bi-clock-history"></i> {{ etapa.tempo_decorrido }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {# Data completa acima do círculo #}
+            <div class="timeline-date-block">
+                {% if etapa.data %}
+                <span class="date-day" style="font-size: 0.72rem;">{{ etapa.data }}</span>
+                {% endif %}
+            </div>
+
+            {# Círculo #}
+            <div class="step-circle {{ 'completed' if etapa.concluida }} {{ 'current' if etapa.atual }}" style="position: relative; z-index: 5;">
+                <i class="bi {{ etapa.icone }} fs-6"></i>
+            </div>
+
+            {# Info abaixo do círculo #}
+            <div class="step-info">
+                <span class="step-title {{ 'active-text' if etapa.atual }}">
+                    {{ etapa.nome }}
+                </span>
+
+                {% if not etapa.data %}
+                <div class="mt-1" style="font-size: 0.72rem; color: #94a3b8;">
+                    Aguardando
+                </div>
+                {% endif %}
+
+                {# Tag orçamento na 1ª etapa #}
+                {% if loop.first %}
+                <div class="mt-2">
+                    {% if tem_orcamento %}
+                    <span class="badge bg-success" style="font-size: 0.68rem; letter-spacing: 0.02em;">
+                        <i class="bi bi-check-circle me-1"></i>TEM ORÇAMENTO
+                    </span>
+                    {% else %}
+                    <span class="badge bg-danger" style="font-size: 0.68rem; letter-spacing: 0.02em;">
+                        <i class="bi bi-x-circle me-1"></i>NÃO TEM ORÇAMENTO
+                    </span>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {# Link NR na etapa SEFAZ - UGGP (3ª etapa) #}
+                {% if loop.index == 3 and mov_nr %}
+                <div class="mt-2">
+                    <a href="{{ mov_nr.link_acesso }}" target="_blank"
+                       class="text-decoration-none d-inline-block"
+                       style="font-size: 0.75rem; color: #0d6efd;">
+                        <i class="bi bi-file-earmark-text me-1"></i>
+                        <strong>NR:</strong> {{ mov_nr.numero }}
+                    </a>
+                    {% if mov_nr.data and mov_nr.data != '-' %}
+                    <div style="font-size: 0.68rem; color: #64748b;">{{ mov_nr.data }}</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
