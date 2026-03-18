@@ -161,7 +161,7 @@
                         <i class="fas fa-list me-2"></i>Detalhamento de Processos de Pagamento
                     </h5>
                     <span class="badge bg-white text-primary border border-primary">
-                        Total: {{ pagination.total }} processos
+                        Total: {{ pagination.total if pagination else 0 }} processos
                     </span>
                 </div>
                 <div class="card-body p-0">
@@ -252,7 +252,7 @@
                     </div>
                 </div>
 
-                {% if pagination.pages > 1 %}
+                {% if pagination and pagination.pages > 1 %}
                 <div class="card-footer bg-white py-3">
                     <nav aria-label="Navegação de páginas">
                         <ul class="pagination justify-content-center mb-0">
@@ -420,7 +420,7 @@
                     </div>
                 </div>
                 
-                {% if pagination_matriz.pages > 1 %}
+                {% if pagination_matriz and pagination_matriz.pages > 1 %}
                 <div class="card-footer bg-white py-3">
                     <nav aria-label="Navegação de páginas">
                         <ul class="pagination justify-content-center mb-0">
