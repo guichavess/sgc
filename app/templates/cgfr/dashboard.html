@@ -677,43 +677,36 @@ $(document).ready(function() {
     /* ===== Sync Docs (bulk — processos até 3ª etapa) ===== */
     function initSyncDocsButton() {
         $('#btnSyncDocs').on('click', function() {
-            var processosSync = allRecords.filter(function(r) {
-                return (r.etapa_atual_num || 0) < 4;
-            }).map(function(r) { return r.processo_formatado; });
-            if (!processosSync.length) {
-                Swal.fire('Info', 'Nenhum processo pendente de sincronização.', 'info');
-                return;
-            }
             Swal.fire({
                 title: 'Sincronizar documentos SEI?',
-                text: processosSync.length + ' processos até a 3ª etapa serão sincronizados.',
+                text: 'Processos sem contrato serão sincronizados em paralelo.',
                 icon: 'question', showCancelButton: true,
                 confirmButtonColor: '#343990', confirmButtonText: 'Sincronizar', cancelButtonText: 'Cancelar'
-            }).then(function(r) { if (r.isConfirmed) doSyncDocs(processosSync); });
+            }).then(function(r) { if (r.isConfirmed) doSyncDocs(); });
         });
     }
 
-    function doSyncDocs(protocolos) {
-        var total = protocolos.length, done = 0, errs = 0;
-        Swal.fire({ title: 'Sincronizando documentos...', html: '0/' + total, allowOutsideClick: false, didOpen: function(){ Swal.showLoading(); } });
-        var chain = Promise.resolve();
-        protocolos.forEach(function(proto) {
-            chain = chain.then(function() {
-                return fetch('/cgfr/acompanhar/' + proto + '/sync', { method: 'POST', headers: {'Content-Type':'application/json'} })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    done++;
-                    if (!d.success) errs++;
-                    Swal.getHtmlContainer().textContent = done + '/' + total + (errs ? ' (' + errs + ' erros)' : '');
-                })
-                .catch(function() { done++; errs++; Swal.getHtmlContainer().textContent = done + '/' + total; });
-            });
-        });
-        chain.then(function() {
-            Swal.fire({ icon: errs ? 'warning' : 'success', title: 'Concluído!',
-                html: 'Sincronizados: <b>' + (total - errs) + '</b><br>Erros: <b>' + errs + '</b>' });
-            reloadTable();
-        });
+    function doSyncDocs() {
+        Swal.fire({ title: 'Sincronizando documentos...', html: 'Conectando ao SEI...', allowOutsideClick: false, didOpen: function(){ Swal.showLoading(); } });
+
+        var es = new EventSource('/cgfr/acompanhar/sync-bulk');
+        es.onmessage = function(e) {
+            var d = JSON.parse(e.data);
+            if (Swal.getHtmlContainer()) Swal.getHtmlContainer().textContent = d.msg || '';
+            if (d.concluido) {
+                es.close();
+                Swal.fire({
+                    icon: d.erros > 0 ? 'warning' : 'success',
+                    title: 'Concluído!',
+                    html: 'Sincronizados: <b>' + d.ok + '</b> de <b>' + d.total + '</b><br>Erros: <b>' + d.erros + '</b>'
+                });
+                reloadTable();
+            }
+        };
+        es.onerror = function() {
+            es.close();
+            Swal.fire('Erro', 'Conexão perdida com o servidor.', 'error');
+        };
     }
 
     /* ===== Modal Edicao ===== */
