@@ -400,6 +400,9 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
                     return (True, f"Vazio: {protocolo}")
             else:
                 app_obj.logger.warning(f"API SEI retornou status {resp.status_code} para o protocolo {protocolo}")
+                # Flag especial para 422 (processo inexistente no SEI)
+                if resp.status_code == 422:
+                    return (False, f"422:{protocolo}")
                 return (False, f"Erro API {protocolo}: {resp.status_code}")
 
         except Exception as e:
@@ -781,8 +784,13 @@ def api_sincronizar_documentos():
 
             base_url = "https://api.sei.pi.gov.br/v1/unidades/110006213/procedimentos/documentos"
 
+            # Mapa protocolo → link SEI (para enviar no evento de 422)
+            mapa_link_sei = {s.protocolo_gerado_sei: (s.link_processo_sei or '') for s in solicitacoes_pendentes}
+
             # Download via threads paralelas
             yield f"data: {json.dumps({'msg': 'Iniciando download dos documentos...', 'progresso': 15})}\n\n"
+
+            protocolos_422 = []  # Protocolos que não existem mais no SEI
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                 future_to_prot = {
@@ -812,12 +820,26 @@ def api_sincronizar_documentos():
                             if completed % 5 == 0:
                                 yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Baixando... ({completed}/{total})'})}\n\n"
                         else:
-                            yield f"data: {json.dumps({'progresso': percentual, 'msg': f'[ALERTA] {mensagem}'})}\n\n"
+                            # Detecta erro 422 (processo inexistente no SEI)
+                            if mensagem.startswith('422:'):
+                                prot_422 = mensagem.split(':', 1)[1]
+                                link_sei = mapa_link_sei.get(prot_422, '')
+                                protocolos_422.append({'protocolo': prot_422, 'link_sei': link_sei})
+                                yield f"data: {json.dumps({'progresso': percentual, 'msg': f'[422] Processo inexistente: {prot_422}', 'tipo': 'processo_inexistente', 'protocolo': prot_422, 'link_sei': link_sei})}\n\n"
+                            else:
+                                yield f"data: {json.dumps({'progresso': percentual, 'msg': f'[ALERTA] {mensagem}'})}\n\n"
 
                     except Exception as exc:
                         yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Erro thread {protocolo}: {str(exc)}'})}\n\n"
 
-            yield f"data: {json.dumps({'msg': f'Download concluído! {sucessos}/{total} protocolos atualizados.', 'progresso': 100, 'concluido': True})}\n\n"
+            # Evento final com lista de 422s
+            evento_final = {
+                'msg': f'Download concluído! {sucessos}/{total} protocolos atualizados.',
+                'progresso': 100,
+                'concluido': True,
+                'protocolos_422': protocolos_422
+            }
+            yield f"data: {json.dumps(evento_final)}\n\n"
 
     return Response(
         stream_with_context(generate()),
@@ -1166,3 +1188,70 @@ def api_criar_lote():
     )
 
 
+# =============================================================================
+# EXCLUSÃO DE SOLICITAÇÕES INEXISTENTES NO SEI
+# =============================================================================
+
+@solicitacoes_bp.route('/api/excluir-solicitacao', methods=['POST'])
+@login_required
+@requires_permission('solicitacoes.aprovar')
+def api_excluir_solicitacao():
+    """
+    Exclui solicitação(ões) e todos os dados relacionados em cascata.
+    Aceita { protocolo: "..." } para exclusão individual
+    ou { protocolos: [...] } para exclusão em lote.
+    """
+    if not current_user.is_admin:
+        return jsonify({'sucesso': False, 'msg': 'Acesso restrito a administradores.'}), 403
+
+    dados = request.get_json() or {}
+    protocolo_unico = dados.get('protocolo')
+    protocolos_lista = dados.get('protocolos', [])
+
+    if protocolo_unico:
+        protocolos = [protocolo_unico]
+    elif protocolos_lista:
+        protocolos = protocolos_lista
+    else:
+        return jsonify({'sucesso': False, 'msg': 'Nenhum protocolo informado.'})
+
+    excluidos = []
+    erros = []
+
+    for protocolo in protocolos:
+        try:
+            sol = Solicitacao.query.filter_by(protocolo_gerado_sei=protocolo).first()
+            if not sol:
+                erros.append(f'{protocolo}: não encontrado no banco')
+                continue
+
+            sol_id = sol.id
+            cod_contrato = sol.codigo_contrato
+            competencia = sol.competencia
+
+            # Cascata: tabelas filhas primeiro
+            SeiMovimentacao.query.filter_by(protocolo_procedimento=protocolo).delete(synchronize_session=False)
+            SolicitacaoEmpenho.query.filter_by(id_solicitacao=sol_id).delete(synchronize_session=False)
+            HistoricoMovimentacao.query.filter_by(id_solicitacao=sol_id).delete(synchronize_session=False)
+
+            from app.models.saldo import SaldoEmpenho
+            if cod_contrato and competencia:
+                SaldoEmpenho.query.filter_by(cod_contrato=cod_contrato, competencia=competencia).delete(synchronize_session=False)
+
+            db.session.delete(sol)
+            db.session.commit()
+
+            excluidos.append(protocolo)
+            current_app.logger.info(f"[EXCLUSAO] Solicitacao {sol_id} (protocolo {protocolo}) excluida em cascata por {current_user.id}")
+
+        except Exception as e:
+            db.session.rollback()
+            erros.append(f'{protocolo}: {str(e)[:80]}')
+            current_app.logger.error(f"[EXCLUSAO] Erro ao excluir {protocolo}: {e}")
+
+    return jsonify({
+        'sucesso': len(erros) == 0,
+        'excluidos': excluidos,
+        'erros': erros,
+        'msg': f'{len(excluidos)} excluído(s)' + (f', {len(erros)} erro(s)' if erros else '')
+    })

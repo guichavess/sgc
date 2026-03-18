@@ -581,12 +581,14 @@
        2. SINCRONIZAÇÃO UNIFICADA (3 FASES: Docs -> Etapas -> Saldos)
        ========================================================================== */
     
-    // Acumulador global de erros durante sincronização
+    // Acumuladores globais durante sincronização
     var errosSincronizacao = [];
+    var protocolos422 = [];  // Processos inexistentes no SEI (422)
 
     function iniciarSincronizacaoUnificada() {
-        // Limpa erros de execuções anteriores
+        // Limpa dados de execuções anteriores
         errosSincronizacao = [];
+        protocolos422 = [];
 
         // Elementos do Modal
         var modalEl = document.getElementById('modalSyncSei');
@@ -626,9 +628,18 @@
             atualizarProgresso(barra, msg, dados.progresso, "[Docs] " + dados.msg);
             logarDetalhe(logDiv, dados.msg);
 
-            // Coleta erros/alertas da Fase 1
-            if (dados.msg && (dados.msg.includes('[ALERTA]') || dados.msg.includes('Erro'))) {
+            // Coleta processos 422 (inexistentes no SEI) separadamente
+            if (dados.tipo === 'processo_inexistente') {
+                protocolos422.push({ protocolo: dados.protocolo, link_sei: dados.link_sei });
+            }
+            // Coleta outros erros/alertas da Fase 1
+            else if (dados.msg && (dados.msg.includes('[ALERTA]') || dados.msg.includes('Erro'))) {
                 errosSincronizacao.push({ fase: 'Download SEI', msg: dados.msg });
+            }
+
+            // Coleta lista de 422 do evento final (caso tenha)
+            if (dados.protocolos_422 && dados.protocolos_422.length > 0 && protocolos422.length === 0) {
+                protocolos422 = dados.protocolos_422;
             }
 
             if (dados.concluido) {
@@ -732,21 +743,57 @@
     // --- FINALIZAÇÃO ---
     function finalizarTudo(barra, msg, logDiv, btnFechar, titulo) {
         var temErros = errosSincronizacao.length > 0;
+        var tem422 = protocolos422.length > 0;
+        var temProblemas = temErros || tem422;
 
-        titulo.innerText = temErros ? "Sincronização Concluída (com alertas)" : "Sincronização Completa!";
-        titulo.className = temErros ? "fw-bold text-warning mb-2" : "fw-bold text-success mb-2";
+        titulo.innerText = temProblemas ? "Sincronização Concluída (com alertas)" : "Sincronização Completa!";
+        titulo.className = temProblemas ? "fw-bold text-warning mb-2" : "fw-bold text-success mb-2";
 
-        barra.className = temErros ? "progress-bar bg-warning" : "progress-bar bg-success";
+        barra.className = temProblemas ? "progress-bar bg-warning" : "progress-bar bg-success";
         barra.style.width = '100%';
         barra.innerText = '100%';
 
-        if (temErros) {
-            msg.innerText = errosSincronizacao.length + " processo(s) não foram atualizados.";
+        // --- POPUP DE PROCESSOS INEXISTENTES NO SEI (422) ---
+        if (tem422) {
+            var total422 = protocolos422.length;
+            msg.innerText = total422 + " processo(s) não existem mais no SEI.";
 
-            // Monta lista de erros agrupados por fase
+            var html422 = '<div class="mt-3 p-3 border border-danger rounded bg-white">';
+            html422 += '<div class="fw-bold text-danger mb-2"><i class="bi bi-trash me-1"></i> Processos inexistentes no SEI (' + total422 + '):</div>';
+            html422 += '<div id="lista422" style="max-height: 200px; overflow-y: auto;" class="custom-scrollbar">';
+
+            protocolos422.forEach(function(item, idx) {
+                html422 += '<div class="small py-2 border-bottom d-flex align-items-center justify-content-between" id="item422_' + idx + '">';
+                html422 += '<div class="d-flex align-items-center">';
+                html422 += '<i class="bi bi-file-earmark-x text-danger me-2"></i>';
+                if (item.link_sei) {
+                    html422 += '<a href="' + item.link_sei + '" target="_blank" class="text-primary text-decoration-none fw-semibold">' + item.protocolo + ' <i class="bi bi-box-arrow-up-right" style="font-size:0.7rem;"></i></a>';
+                } else {
+                    html422 += '<span class="fw-semibold">' + item.protocolo + '</span>';
+                }
+                html422 += '</div>';
+                html422 += '<button class="btn btn-outline-danger btn-sm px-2 py-0" onclick="excluirSolicitacao422(\'' + item.protocolo + '\', ' + idx + ')" title="Excluir do banco">';
+                html422 += '<i class="bi bi-trash"></i> Excluir</button>';
+                html422 += '</div>';
+            });
+
+            html422 += '</div>';
+            html422 += '<button class="btn btn-danger btn-sm w-100 mt-2 fw-bold" onclick="excluirTodos422()" id="btnExcluirTodos422">';
+            html422 += '<i class="bi bi-trash me-1"></i> Excluir Todos (' + total422 + ')</button>';
+            html422 += '</div>';
+
+            logDiv.innerHTML += html422;
+        }
+
+        // --- ERROS GENÉRICOS ---
+        if (temErros) {
+            if (!tem422) {
+                msg.innerText = errosSincronizacao.length + " processo(s) não foram atualizados.";
+            }
+
             var htmlErros = '<div class="mt-3 p-2 border border-warning rounded bg-white">';
-            htmlErros += '<div class="fw-bold text-warning mb-2"><i class="bi bi-exclamation-triangle me-1"></i> Processos com falha (' + errosSincronizacao.length + '):</div>';
-            htmlErros += '<div style="max-height: 180px; overflow-y: auto;" class="custom-scrollbar">';
+            htmlErros += '<div class="fw-bold text-warning mb-2"><i class="bi bi-exclamation-triangle me-1"></i> Outros alertas (' + errosSincronizacao.length + '):</div>';
+            htmlErros += '<div style="max-height: 120px; overflow-y: auto;" class="custom-scrollbar">';
 
             errosSincronizacao.forEach(function(erro) {
                 htmlErros += '<div class="small py-1 border-bottom d-flex align-items-start">';
@@ -757,17 +804,95 @@
 
             htmlErros += '</div></div>';
             logDiv.innerHTML += htmlErros;
-        } else {
+        }
+
+        if (!temProblemas) {
             msg.innerText = "Processo finalizado com sucesso.";
-            logDiv.innerHTML += '<div class="text-success fw-bold mt-3 p-2 border border-success rounded bg-white">✅ TUDO ATUALIZADO!</div>';
+            logDiv.innerHTML += '<div class="text-success fw-bold mt-3 p-2 border border-success rounded bg-white">TUDO ATUALIZADO!</div>';
         }
 
         logDiv.scrollTop = logDiv.scrollHeight;
 
         btnFechar.removeAttribute('disabled');
-        btnFechar.className = temErros ? 'btn btn-warning fw-bold w-100' : 'btn btn-success fw-bold w-100';
+        btnFechar.className = temProblemas ? 'btn btn-warning fw-bold w-100' : 'btn btn-success fw-bold w-100';
         btnFechar.innerText = 'Concluir e Atualizar Página';
         btnFechar.onclick = function() { window.location.reload(); };
+    }
+
+    // --- FUNÇÕES DE EXCLUSÃO DE PROCESSOS 422 ---
+
+    async function excluirSolicitacao422(protocolo, idx) {
+        var item = document.getElementById('item422_' + idx);
+        var btn = item ? item.querySelector('button') : null;
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>'; }
+
+        try {
+            var resp = await fetch("{{ url_for('solicitacoes.api_excluir_solicitacao') }}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ protocolo: protocolo })
+            });
+            var dados = await resp.json();
+
+            if (dados.sucesso || (dados.excluidos && dados.excluidos.length > 0)) {
+                if (item) {
+                    item.style.textDecoration = 'line-through';
+                    item.style.opacity = '0.5';
+                    item.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>' + protocolo + ' — excluído</span>';
+                }
+            } else {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-trash"></i> Erro'; btn.classList.add('btn-danger'); }
+                alert('Erro ao excluir: ' + (dados.msg || 'erro desconhecido'));
+            }
+        } catch (err) {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-trash"></i> Erro'; }
+            alert('Erro de conexão: ' + err.message);
+        }
+    }
+
+    async function excluirTodos422() {
+        var btn = document.getElementById('btnExcluirTodos422');
+        if (!confirm('Confirma exclusão de ' + protocolos422.length + ' processo(s) do banco de dados?')) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Excluindo...';
+
+        try {
+            var todosProtocolos = protocolos422.map(function(p) { return p.protocolo; });
+            var resp = await fetch("{{ url_for('solicitacoes.api_excluir_solicitacao') }}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ protocolos: todosProtocolos })
+            });
+            var dados = await resp.json();
+
+            if (dados.excluidos && dados.excluidos.length > 0) {
+                // Risca todos os itens excluídos
+                dados.excluidos.forEach(function(prot) {
+                    var idx = protocolos422.findIndex(function(p) { return p.protocolo === prot; });
+                    if (idx >= 0) {
+                        var item = document.getElementById('item422_' + idx);
+                        if (item) {
+                            item.style.textDecoration = 'line-through';
+                            item.style.opacity = '0.5';
+                            item.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>' + prot + ' — excluído</span>';
+                        }
+                    }
+                });
+
+                btn.className = 'btn btn-success btn-sm w-100 mt-2 fw-bold';
+                btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> ' + dados.msg;
+            }
+
+            if (dados.erros && dados.erros.length > 0) {
+                btn.className = 'btn btn-warning btn-sm w-100 mt-2 fw-bold';
+                btn.innerHTML = dados.msg;
+            }
+        } catch (err) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-trash me-1"></i> Erro — tentar novamente';
+            alert('Erro: ' + err.message);
+        }
     }
 
     // --- HELPERS (CORRIGIDOS) ---
