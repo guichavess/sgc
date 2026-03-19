@@ -128,10 +128,26 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
                 elif campo in ('natureza_despesa_id', 'fonte_id', 'acao_id') and valor is not None:
                     valor = int(valor)
                 elif campo in ('valor_solicitado', 'valor_aprovado') and valor:
-                    from decimal import Decimal
-                    # Formato BR: "1.234,56" → Decimal
-                    valor = str(valor).replace('.', '').replace(',', '.')
-                    valor = Decimal(valor) if valor else None
+                    from decimal import Decimal, InvalidOperation
+                    s = str(valor).strip()
+                    if ',' in s:
+                        # Formato BR: "1.234,56" → remove pontos de milhar, troca vírgula
+                        s = s.replace('.', '').replace(',', '.')
+                    # Formato numérico direto: "1234.56"
+                    try:
+                        valor = Decimal(s) if s else None
+                    except (InvalidOperation, ValueError):
+                        valor = None
+                elif campo == 'data_da_reuniao':
+                    from datetime import date as dt_date
+                    if valor and valor != '-':
+                        try:
+                            # ISO: "YYYY-MM-DD"
+                            valor = dt_date.fromisoformat(str(valor))
+                        except (ValueError, TypeError):
+                            valor = None
+                    else:
+                        valor = None
                 elif campo == 'possui_reserva' and valor is not None:
                     valor = int(valor) if valor != '' else 0
                 setattr(processo, campo, valor)

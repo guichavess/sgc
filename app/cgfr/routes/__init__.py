@@ -5,4 +5,4 @@ from flask import Blueprint
 
 cgfr_bp = Blueprint('cgfr', __name__)
 
-from app.cgfr.routes import dashboard, api, detalhes, reports, acompanhar  # noqa: E402, F401
+from app.cgfr.routes import dashboard, api, detalhes, reports, acompanhar, vincular  # noqa: E402, F401

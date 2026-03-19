@@ -125,6 +125,22 @@
 </div>
 
 <script>
+function formatarMonetarioBR(valor) {
+    if (valor === null || valor === undefined || valor === '') return '';
+    var v = parseFloat(valor);
+    if (isNaN(v)) return '';
+    return v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function converterDataParaISO(dataStr) {
+    if (!dataStr || dataStr === '-') return '';
+    // DD/MM/YYYY → YYYY-MM-DD
+    var parts = dataStr.split('/');
+    if (parts.length === 3) return parts[2] + '-' + parts[1] + '-' + parts[0];
+    // Já está em formato ISO ou outro
+    return dataStr;
+}
+
 function abrirModalEdicao(protocolo) {
     // Buscar dados do registro via DataTable cache
     const table = window.cgfrTable;
@@ -143,9 +159,11 @@ function abrirModalEdicao(protocolo) {
     $('#modal-necessidade').val(data.necessidade || '');
     $('#modal-deliberacao').val(data.deliberacao || '');
     $('#modal-tipo-despesa').val(data.tipo_despesa);
-    $('#modal-valor-solicitado').val(data.valor_solicitado);
-    $('#modal-valor-aprovado').val(data.valor_aprovado);
-    $('#modal-data-reuniao').val(data.data_da_reuniao || '');
+    // Valores monetários: formatar como BR (1.234,56) para exibição no input
+    $('#modal-valor-solicitado').val(formatarMonetarioBR(data.valor_solicitado));
+    $('#modal-valor-aprovado').val(formatarMonetarioBR(data.valor_aprovado));
+    // Data da reunião: converter de DD/MM/YYYY para YYYY-MM-DD (formato HTML date input)
+    $('#modal-data-reuniao').val(converterDataParaISO(data.data_da_reuniao));
     $('#modal-prioridade').val(data.nivel_prioridade);
     $('#modal-reserva').val(data.possui_reserva || 0);
     $('#modal-valor-reserva').val(data.valor_reserva);

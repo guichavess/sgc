@@ -1,0 +1,410 @@
+{% extends "cgfr/base_cgfr.html" %}
+
+{% block title %}CGFR - Vincular Processo{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+<div class="row justify-content-center">
+<div class="col-lg-10 col-xl-9">
+
+    <div class="d-flex align-items-center mb-4">
+        <a href="{{ url_for('cgfr.dashboard') }}" class="btn btn-outline-secondary me-3 shadow-sm rounded-circle"
+           style="width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center;">
+            <i class="bi bi-arrow-left"></i>
+        </a>
+        <div>
+            <h4 class="fw-bold mb-0 text-dark">Vincular Processo CGFR</h4>
+            <small class="text-muted">Vincule um processo SEI que nao aparece no Data Lake.</small>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body p-4">
+
+            {# === PASSO 1: Buscar Processo SEI === #}
+            <div class="mb-4">
+                <label class="step-label">
+                    <span class="badge bg-primary rounded-pill me-2">1</span> Buscar Processo no SEI
+                </label>
+                <div class="input-group input-group-lg">
+                    <input type="text" class="form-control bg-light" id="protocolo_input"
+                           placeholder="Digite o protocolo (ex: 00002.000864/2025-78)">
+                    <button class="btn btn-primary px-4" type="button" id="btn-consultar-sei">
+                        <i class="bi bi-search me-2"></i> Consultar
+                    </button>
+                </div>
+            </div>
+
+            {# === Preview SEI === #}
+            <div id="resultado-sei" class="d-none mb-4">
+                {# Sucesso #}
+                <div id="sei-sucesso" class="alert alert-success d-none">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-check-circle-fill fs-4 me-3 mt-1"></i>
+                        <div class="flex-grow-1">
+                            <strong>Processo localizado no SEI!</strong>
+                            <div class="mt-2 row g-2">
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">Protocolo</small>
+                                    <span id="prev-protocolo" class="fw-bold"></span>
+                                </div>
+                                <div class="col-md-3">
+                                    <small class="text-muted d-block">Tipo</small>
+                                    <span id="prev-tipo" class="small"></span>
+                                </div>
+                                <div class="col-md-3">
+                                    <a id="prev-link" href="#" target="_blank" class="btn btn-sm btn-outline-primary mt-1">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i> Abrir no SEI
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted d-block">Especificacao</small>
+                                <span id="prev-especificacao" class="small"></span>
+                            </div>
+                            <div class="row g-2 mt-1">
+                                <div class="col-md-4">
+                                    <small class="text-muted d-block">Unidade Geradora</small>
+                                    <span id="prev-geracao-sigla" class="small"></span>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted d-block">Data Autuacao</small>
+                                    <span id="prev-data-autuacao" class="small"></span>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted d-block">Ultimo Andamento</small>
+                                    <span id="prev-ultimo-sigla" class="small"></span>
+                                    <span id="prev-ultimo-data" class="small text-muted ms-1"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {# Erro #}
+                <div id="sei-erro" class="alert alert-danger d-none">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <span id="sei-erro-msg"></span>
+                </div>
+            </div>
+
+            {# === PASSO 2: Dados Manuais === #}
+            <form method="POST" action="{{ url_for('cgfr.vincular_processo_post') }}" id="form-vincular">
+                <input type="hidden" name="processo_formatado" id="hdn_processo_formatado">
+
+                <div id="secao-manual" style="opacity: 0.5; pointer-events: none;">
+
+                    <label class="step-label mb-3">
+                        <span class="badge bg-primary rounded-pill me-2">2</span> Dados do Processo (opcional)
+                    </label>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="fornecedor" class="form-label">Fornecedor</label>
+                            <input type="text" class="form-control" id="fornecedor" name="fornecedor"
+                                   placeholder="Nome do fornecedor">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="tipo_despesa" class="form-label">Tipo de Despesa</label>
+                            <select class="form-select" id="tipo_despesa" name="tipo_despesa">
+                                <option value="">Selecione...</option>
+                                <option value="Custeio">Custeio</option>
+                                <option value="Investimento">Investimento</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="objeto_do_pedido" class="form-label">Objeto do Pedido</label>
+                        <textarea class="form-control" id="objeto_do_pedido" name="objeto_do_pedido"
+                                  rows="2" placeholder="Descricao do objeto"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="necessidade" class="form-label">Necessidade</label>
+                        <textarea class="form-control" id="necessidade" name="necessidade"
+                                  rows="2" placeholder="Justificativa/necessidade"></textarea>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label for="valor_solicitado" class="form-label">Valor Solicitado</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="text" class="form-control money-mask" id="valor_solicitado"
+                                       name="valor_solicitado" placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="valor_aprovado" class="form-label">Valor Aprovado</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="text" class="form-control money-mask" id="valor_aprovado"
+                                       name="valor_aprovado" placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="data_da_reuniao" class="form-label">Data da Reuniao</label>
+                            <input type="date" class="form-control" id="data_da_reuniao" name="data_da_reuniao">
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="deliberacao" class="form-label">Deliberacao</label>
+                            <textarea class="form-control" id="deliberacao" name="deliberacao"
+                                      rows="2" placeholder="Deliberacao da reuniao"></textarea>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="nivel_prioridade" class="form-label">Prioridade</label>
+                            <select class="form-select" id="nivel_prioridade" name="nivel_prioridade">
+                                <option value="">Selecione...</option>
+                                <option value="Alto">Alto</option>
+                                <option value="Medio">Medio</option>
+                                <option value="Baixo">Baixo</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Possui Reserva?</label>
+                            <select class="form-select" id="possui_reserva" name="possui_reserva">
+                                <option value="0">Nao</option>
+                                <option value="1">Sim</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3" id="row-valor-reserva" style="display: none;">
+                        <div class="col-md-4">
+                            <label for="valor_reserva" class="form-label">Valor da Reserva</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="text" class="form-control money-mask" id="valor_reserva"
+                                       name="valor_reserva" placeholder="0,00">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="observacao" class="form-label">Observacao</label>
+                        <textarea class="form-control" id="observacao" name="observacao"
+                                  rows="2" placeholder="Observacoes adicionais"></textarea>
+                    </div>
+
+                </div>
+
+                <div class="alert alert-light border-start border-4 border-primary shadow-sm py-3 mt-3">
+                    <div class="d-flex">
+                        <i class="bi bi-info-circle-fill text-primary fs-4 me-3"></i>
+                        <div>
+                            <strong>Vinculacao de Processo CGFR:</strong>
+                            O sistema ira importar os dados do SEI e sincronizar automaticamente os documentos do processo.
+                            Os campos do passo 2 sao opcionais e podem ser preenchidos depois pelo modal de edicao.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end pt-3 border-top mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg px-5 shadow fw-bold" id="btn-vincular" disabled>
+                        <i class="bi bi-link-45deg me-2"></i> Vincular Processo
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+
+</div>
+</div>
+</div>
+
+{# === Modal de Carregamento === #}
+<div class="modal fade" id="modalVincular" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-primary text-white border-0">
+                <h5 class="modal-title"><i class="bi bi-link-45deg me-2"></i>Vinculando Processo</h5>
+            </div>
+            <div class="modal-body py-4">
+                <div class="progress mb-4" style="height: 8px; border-radius: 4px;">
+                    <div id="vincularProgresso" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                         role="progressbar" style="width: 0%; transition: width 0.5s ease;"></div>
+                </div>
+                <div id="vincularEtapas">
+                    <div class="d-flex align-items-center mb-3 etapa-item" id="etapaV1">
+                        <div class="etapa-icone me-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status" style="display: none;"></div>
+                            <i class="bi bi-circle text-muted" style="font-size: 1.1rem;"></i>
+                        </div>
+                        <span class="fw-bold text-muted">Autenticando no SEI...</span>
+                    </div>
+                    <div class="d-flex align-items-center mb-3 etapa-item" id="etapaV2">
+                        <div class="etapa-icone me-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status" style="display: none;"></div>
+                            <i class="bi bi-circle text-muted" style="font-size: 1.1rem;"></i>
+                        </div>
+                        <span class="fw-bold text-muted">Consultando processo no SEI...</span>
+                    </div>
+                    <div class="d-flex align-items-center mb-3 etapa-item" id="etapaV3">
+                        <div class="etapa-icone me-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status" style="display: none;"></div>
+                            <i class="bi bi-circle text-muted" style="font-size: 1.1rem;"></i>
+                        </div>
+                        <span class="fw-bold text-muted">Salvando registro e sincronizando documentos...</span>
+                    </div>
+                    <div class="d-flex align-items-center etapa-item" id="etapaV4">
+                        <div class="etapa-icone me-3">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status" style="display: none;"></div>
+                            <i class="bi bi-circle text-muted" style="font-size: 1.1rem;"></i>
+                        </div>
+                        <span class="fw-bold text-muted">Finalizando vinculacao...</span>
+                    </div>
+                </div>
+                <div class="text-center mt-4">
+                    <small class="text-muted">Isso pode levar alguns segundos. Nao feche esta janela.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block cgfr_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Mascara monetaria
+    $('.money-mask').mask('#.##0,00', {reverse: true});
+
+    // Toggle valor reserva
+    $('#possui_reserva').on('change', function() {
+        $('#row-valor-reserva').toggle($(this).val() === '1');
+    });
+
+    // ==========================================
+    // PASSO 1: Consultar SEI
+    // ==========================================
+    $('#btn-consultar-sei').click(consultarSEI);
+    $('#protocolo_input').keypress(function(e) { if (e.which === 13) consultarSEI(); });
+
+    function consultarSEI() {
+        var protocolo = $('#protocolo_input').val().trim();
+        if (protocolo.length < 5) {
+            Swal.fire('Atenção', 'Digite um protocolo válido.', 'warning');
+            return;
+        }
+
+        var btn = $('#btn-consultar-sei');
+        var originalHtml = btn.html();
+        btn.html('<span class="spinner-border spinner-border-sm"></span> Consultando...').prop('disabled', true);
+
+        $('#resultado-sei').removeClass('d-none');
+        $('#sei-sucesso, #sei-erro').addClass('d-none');
+
+        $.ajax({
+            url: "{{ url_for('cgfr.api_consultar_sei') }}",
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ protocolo: protocolo }),
+            success: function(resp) {
+                if (resp.sucesso) {
+                    var p = resp.preview;
+                    $('#prev-protocolo').text(p.processo_formatado);
+                    $('#prev-tipo').text(p.tipo_processo || '-');
+                    $('#prev-especificacao').text(p.especificacao || '-');
+                    $('#prev-geracao-sigla').text(p.geracao_sigla || '-');
+                    $('#prev-data-autuacao').text(p.data_hora_processo || '-');
+                    $('#prev-ultimo-sigla').text(p.ultimo_andamento_sigla || '-');
+                    $('#prev-ultimo-data').text(p.ultimo_andamento_data ? '(' + p.ultimo_andamento_data + ')' : '');
+
+                    if (p.link_acesso) {
+                        $('#prev-link').attr('href', p.link_acesso).show();
+                    } else {
+                        $('#prev-link').hide();
+                    }
+
+                    $('#sei-sucesso').removeClass('d-none');
+                    $('#hdn_processo_formatado').val(p.processo_formatado);
+
+                    // Habilita passo 2
+                    $('#secao-manual').css({'opacity': '1', 'pointer-events': 'auto'});
+                    $('#btn-vincular').prop('disabled', false);
+                } else {
+                    $('#sei-erro-msg').text(resp.erro);
+                    $('#sei-erro').removeClass('d-none');
+                    $('#secao-manual').css({'opacity': '0.5', 'pointer-events': 'none'});
+                    $('#btn-vincular').prop('disabled', true);
+                    $('#hdn_processo_formatado').val('');
+                }
+            },
+            error: function(xhr) {
+                var msg = 'Erro de comunicacao com o servidor.';
+                try { msg = xhr.responseJSON.erro || msg; } catch(e) {}
+                $('#sei-erro-msg').text(msg);
+                $('#sei-erro').removeClass('d-none');
+            },
+            complete: function() {
+                btn.html(originalHtml).prop('disabled', false);
+            }
+        });
+    }
+
+    // ==========================================
+    // Modal de Carregamento ao Vincular
+    // ==========================================
+    var etapas = [
+        { id: 'etapaV1', progresso: 15, delay: 0 },
+        { id: 'etapaV2', progresso: 40, delay: 1500 },
+        { id: 'etapaV3', progresso: 70, delay: 3500 },
+        { id: 'etapaV4', progresso: 95, delay: 6000 }
+    ];
+
+    function ativarEtapa(idx) {
+        var el = document.getElementById(etapas[idx].id);
+        if (!el) return;
+
+        for (var i = 0; i < idx; i++) {
+            var prev = document.getElementById(etapas[i].id);
+            if (prev) {
+                prev.querySelector('.spinner-border').style.display = 'none';
+                var icone = prev.querySelector('.bi');
+                icone.className = 'bi bi-check-circle-fill text-success';
+                icone.style.fontSize = '1.1rem';
+                prev.querySelector('.fw-bold').classList.remove('text-muted');
+                prev.querySelector('.fw-bold').classList.add('text-success');
+            }
+        }
+
+        el.querySelector('.spinner-border').style.display = 'inline-block';
+        el.querySelector('.bi').style.display = 'none';
+        el.querySelector('.fw-bold').classList.remove('text-muted');
+        el.querySelector('.fw-bold').classList.add('text-dark');
+
+        document.getElementById('vincularProgresso').style.width = etapas[idx].progresso + '%';
+    }
+
+    document.getElementById('form-vincular').addEventListener('submit', function(e) {
+        if (!$('#hdn_processo_formatado').val()) {
+            e.preventDefault();
+            Swal.fire('Atenção', 'Consulte um processo no SEI antes de vincular.', 'warning');
+            return;
+        }
+
+        // Converter data_da_reuniao de YYYY-MM-DD (input date) para DD/MM/YYYY (backend parse)
+        var dataInput = document.getElementById('data_da_reuniao');
+        if (dataInput && dataInput.value) {
+            var parts = dataInput.value.split('-');
+            if (parts.length === 3) {
+                dataInput.value = parts[2] + '/' + parts[1] + '/' + parts[0];
+            }
+        }
+
+        var modal = new bootstrap.Modal(document.getElementById('modalVincular'));
+        modal.show();
+        document.getElementById('btn-vincular').disabled = true;
+
+        etapas.forEach(function(etapa, idx) {
+            setTimeout(function() { ativarEtapa(idx); }, etapa.delay);
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -18,6 +18,12 @@
             <i class="bi bi-file-earmark-bar-graph"></i> Relatório
         </a>
     </li>
+    <li>
+        <a class="sidebar-link {{ 'active' if request.endpoint in ('cgfr.vincular_processo', 'cgfr.vincular_processo_post') }}"
+           href="{{ url_for('cgfr.vincular_processo') }}">
+            <i class="bi bi-link-45deg"></i> Vincular Processo
+        </a>
+    </li>
 </ul>
 {% endblock %}
 
