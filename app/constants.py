@@ -28,7 +28,7 @@ class SerieDocumentoCGFR:
     CGFR_DESPACHO = '3639'   # Etapa 2: CGFR
     SEFAZ_UGGP = '1179'      # Etapa 3: SEFAZ - UGGP
     NOTA_RESERVA = '425'     # NR - Nota de Reserva (link na Etapa 3 + lógica orçamento)
-    CONTRATO = '103'          # Etapa 4: Contrato
+    CONTRATO = '37'            # Etapa 4: Contrato
 
 
 # =============================================================================

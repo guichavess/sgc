@@ -48,7 +48,7 @@ def store():
     """Salva nova solicitação de diária."""
     try:
         tipo = int(request.form.get('tipo_itinerario', 0))
-        if tipo not in (1, 2):
+        if tipo not in (1, 2, 3):
             flash('Tipo de itinerário inválido.', 'danger')
             return redirect(url_for('diarias.nova'))
 
@@ -128,16 +128,16 @@ def store():
             'Solicitacao criada pelo usuario',
         )
 
-        # ── Integração SEI: Nacional + Passagens (Diárias+Passagens ou Apenas Passagens) ──
-        if tipo == 2 and tipo_solicitacao_id in (TIPO_SOL_DIARIAS_PASSAGENS, TIPO_SOL_APENAS_PASSAGENS):
+        # ── Integração SEI: Nacional/Internacional + Passagens (Diárias+Passagens ou Apenas Passagens) ──
+        if tipo in (2, 3) and tipo_solicitacao_id in (TIPO_SOL_DIARIAS_PASSAGENS, TIPO_SOL_APENAS_PASSAGENS):
             _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
                                   justificativa_memorando, objetivo, arquivo_externo)
 
         flash('Solicitação de diária criada com sucesso!', 'success')
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'nova_solicitacao', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
         return redirect(url_for('diarias.dashboard'))
 
     except Exception as e:
@@ -229,9 +229,10 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
         if estado_orig and estado_dest:
             trecho = estado_orig.nome + ' - ' + estado_dest.nome
 
+        tipo_itinerario = dados.get('tipo_itinerario', 2)
         dados_itinerario = {
             'tipo_solicitacao_nome': tipo_sol_nome,
-            'tipo_itinerario_nome': 'Nacional',
+            'tipo_itinerario_nome': 'Internacional' if tipo_itinerario == 3 else 'Nacional',
             'data_viagem': dados.get('data_viagem'),
             'data_retorno': dados.get('data_retorno'),
         }
@@ -507,8 +508,8 @@ def gerar_relatorio(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'relatorio_viagem', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
 
         resp = {
             'success': True,
@@ -587,20 +588,20 @@ def upload_comprovante(id):
             itinerario.sei_id_comprovante_viagem = str(retorno.get('IdDocumento', ''))
             itinerario.sei_comprovante_viagem_formatado = retorno.get('DocumentoFormatado', '')
 
-            # Avança etapa para Comprovante de Viagem
-            itinerario.etapa_atual_id = DiariasEtapaID.COMPROVANTE_VIAGEM
+            # Avança etapa para Comprovante de Viagem (§1.1 — commit único)
             DiariaService.registrar_movimentacao(
                 itinerario.id,
                 DiariasEtapaID.COMPROVANTE_VIAGEM,
                 current_user.id,
                 'Comprovante de viagem enviado pelo solicitante',
+                auto_commit=False,
             )
 
             db.session.commit()
             try:
                 DiariasNotifier.notificar_etapa(itinerario, 'comprovante_viagem', current_user.id)
-            except Exception:
-                pass  # Notificacao nao deve bloquear o fluxo
+            except Exception as exc_notif:
+                current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
             flash('Comprovante de viagem enviado ao SEI com sucesso!', 'success')
         else:
             flash('Erro ao enviar comprovante ao SEI.', 'danger')

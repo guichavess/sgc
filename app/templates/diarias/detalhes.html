@@ -37,7 +37,7 @@
                     <tr>
                         <th class="bg-light" style="width:40%">Tipo de Itinerário</th>
                         <td>
-                            <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else 'bg-warning text-dark' }}">
+                            <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else ('bg-danger' if itinerario.tipo_itinerario == 3 else 'bg-warning text-dark') }}">
                                 {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
                             </span>
                         </td>

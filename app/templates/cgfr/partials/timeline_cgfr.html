@@ -37,20 +37,7 @@
                 </div>
                 {% endif %}
 
-                {# Tag orçamento na 1ª etapa #}
-                {% if loop.first %}
-                <div class="mt-2">
-                    {% if tem_orcamento %}
-                    <span class="badge bg-success" style="font-size: 0.68rem; letter-spacing: 0.02em;">
-                        <i class="bi bi-check-circle me-1"></i>TEM ORÇAMENTO
-                    </span>
-                    {% else %}
-                    <span class="badge bg-danger" style="font-size: 0.68rem; letter-spacing: 0.02em;">
-                        <i class="bi bi-x-circle me-1"></i>NÃO TEM ORÇAMENTO
-                    </span>
-                    {% endif %}
-                </div>
-                {% endif %}
+                {# Tag orçamento movida para cabeçalho da página #}
 
                 {# Link NR na etapa SEFAZ - UGGP (3ª etapa) #}
                 {% if loop.index == 3 and mov_nr %}

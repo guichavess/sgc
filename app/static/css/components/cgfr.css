@@ -107,7 +107,7 @@
 }
 
 #tabelaProcessos td {
-    font-size: 0.73rem;
+    font-size: 0.78rem;
     white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;
@@ -327,7 +327,10 @@
 }
 
 /* ---------- Célula Contrato/Especificação (2 linhas) ---------- */
-.cell-contrato { line-height: 1.4; }
+.cell-contrato { line-height: 1.4; max-width: 420px; }
+#tabelaProcessos td:last-child { white-space: nowrap; width: 88px; }
+#tabelaProcessos td:last-child .d-flex { gap: 3px !important; }
+#tabelaProcessos td:last-child .btn { white-space: nowrap; font-size: 0.68rem; padding: 5px 6px; line-height: 1.4; width: 100%; }
 .cell-contrato-titulo {
     font-weight: 600;
     font-size: 0.76rem;

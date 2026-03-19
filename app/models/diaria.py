@@ -178,13 +178,13 @@ class DiariasItinerario(db.Model):
     __tablename__ = 'diarias_itinerario'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    usuario_gerador = db.Column(db.String(100), nullable=False)
+    usuario_gerador = db.Column(db.String(100), nullable=False, index=True)
     tipo_solicitacao_id = db.Column(db.Integer, db.ForeignKey('diarias_tipo_solicitacao.id'), nullable=False)
     qtd_diarias_solicitadas = db.Column(db.Float, nullable=False)
     tipo_itinerario = db.Column(db.Integer, db.ForeignKey('diarias_tipo_itinerario.id'), nullable=False)
     n_processo = db.Column(db.String(100))
-    status_id = db.Column(db.Integer, db.ForeignKey('diarias_status_viagens.id'), nullable=False, default=1)
-    data_solicitacao = db.Column(db.Date, nullable=False, default=date.today)
+    status_id = db.Column(db.Integer, db.ForeignKey('diarias_status_viagens.id'), nullable=False, default=1, index=True)
+    data_solicitacao = db.Column(db.Date, nullable=False, default=date.today, index=True)
     data_viagem = db.Column(db.DateTime, nullable=False)
     data_retorno = db.Column(db.DateTime, nullable=False)
     origem = db.Column(db.String(255))
@@ -329,7 +329,7 @@ class DiariasItinerario(db.Model):
     sei_despacho_final_formatado = db.Column(db.String(50), nullable=True)
 
     # Timeline / Etapa atual
-    etapa_atual_id = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), default=1)
+    etapa_atual_id = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), default=1, index=True)
 
     # Timestamps
     created_at = db.Column(db.TIMESTAMP, default=datetime.now)
@@ -394,7 +394,7 @@ class DiariasItemItinerario(db.Model):
     __tablename__ = 'diarias_itens_itinerario'
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-    id_itinerario = db.Column(db.Integer, db.ForeignKey('diarias_itinerario.id'), nullable=False)
+    id_itinerario = db.Column(db.Integer, db.ForeignKey('diarias_itinerario.id'), nullable=False, index=True)
     cpf_pessoa = db.Column(db.String(20), nullable=False)
     matricula_pessoa = db.Column(db.String(20), nullable=True)
     nome_pessoa = db.Column(db.String(255), nullable=True)
@@ -478,7 +478,7 @@ class DiariasHistoricoMovimentacao(db.Model):
     __tablename__ = 'diarias_historico_movimentacoes'
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-    id_itinerario = db.Column(db.Integer, db.ForeignKey('diarias_itinerario.id'), nullable=False)
+    id_itinerario = db.Column(db.Integer, db.ForeignKey('diarias_itinerario.id'), nullable=False, index=True)
     id_etapa_anterior = db.Column(db.Integer, nullable=True)
     id_etapa_nova = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), nullable=False)
     id_usuario_responsavel = db.Column(db.BigInteger, db.ForeignKey('sis_usuarios.id'), nullable=True)

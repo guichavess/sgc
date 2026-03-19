@@ -22,7 +22,7 @@
         <div class="card kpi-card kpi-blue">
             <div class="card-body position-relative">
                 <div class="kpi-title">Total de Processos</div>
-                <div class="kpi-value" id="kpiTotal">{{ stats.total|default(0) }}</div>
+                <div class="kpi-value" id="kpiTotal">{{ '{:,}'.format(stats.total|default(0)).replace(',', '.') }}</div>
                 <i class="bi bi-files kpi-icon"></i>
             </div>
         </div>
@@ -49,7 +49,7 @@
         <div class="card kpi-card kpi-red">
             <div class="card-body position-relative">
                 <div class="kpi-title">Pendentes de Análise</div>
-                <div class="kpi-value" id="kpiPendentes">{{ stats.pendentes_classificacao|default(0) }}</div>
+                <div class="kpi-value" id="kpiPendentes">{{ '{:,}'.format(stats.pendentes_classificacao|default(0)).replace(',', '.') }}</div>
                 <i class="bi bi-exclamation-circle kpi-icon"></i>
             </div>
         </div>
@@ -171,8 +171,8 @@
                 <button class="btn btn-sm btn-outline-primary" id="btnSync" title="Sincronizar com Data Lake">
                     <i class="bi bi-arrow-repeat me-1"></i>Sincronizar
                 </button>
-                <button class="btn btn-sm btn-outline-info" id="btnSyncDocs" title="Sincronizar documentos SEI dos processos até a 3ª etapa">
-                    <i class="bi bi-file-earmark-arrow-down me-1"></i>Sync Docs
+                <button class="btn btn-sm btn-primary" id="btnSyncDocs" title="Sincronizar documentos SEI de todos os processos">
+                    <i class="bi bi-cloud-arrow-down-fill me-1"></i>Sincronizar SEI
                 </button>
                 <a href="{{ url_for('cgfr.api_export_excel') }}" class="btn btn-sm btn-success"
                    title="Exportar Excel">
@@ -207,6 +207,34 @@
 
 {# Modal de Edicao #}
 {% include 'cgfr/partials/modal_edicao.html' %}
+
+{# Modal Sincronização SEI — idêntico ao módulo de Pagamentos #}
+<div class="modal fade" id="modalSyncSeiCgfr" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>Sincronização de Documentos SEI</h5>
+            </div>
+            <div class="modal-body">
+                <h6 id="tituloFaseSeiCgfr" class="fw-bold text-primary mb-2">Preparando...</h6>
+                <div class="progress mb-3" style="height: 25px;">
+                    <div id="barraProgressoSeiCgfr" class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+                         role="progressbar" style="width: 0%;">0%</div>
+                </div>
+                <p id="msgProgressoSeiCgfr" class="text-center text-muted small mb-2">Aguardando início...</p>
+                <div id="logDetalhesSeiCgfr" class="border rounded p-2 bg-light"
+                     style="height: 150px; overflow-y: auto; font-size: 11px; font-family: monospace;">
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled id="btnFecharSeiCgfr">
+                    Aguarde...
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block cgfr_js %}
@@ -289,8 +317,8 @@ $(document).ready(function() {
                             h += '<div class="cell-contrato-titulo text-muted">Fornecedor não informado</div>';
                         }
                         if (sub) {
-                            var subTrunc = sub.length > 140 ? sub.substring(0, 140) + '...' : sub;
-                            h += '<div class="cell-contrato-sub"' + (sub.length > 140 ? ' data-bs-toggle="tooltip" data-bs-placement="top" title="' + sub.replace(/"/g, '&quot;') + '"' : '') + '>' + esc(subTrunc) + '</div>';
+                            var subTrunc = sub.length > 500 ? sub.substring(0, 500) + '...' : sub;
+                            h += '<div class="cell-contrato-sub"' + (sub.length > 500 ? ' data-bs-toggle="tooltip" data-bs-placement="top" title="' + sub.replace(/"/g, '&quot;') + '"' : '') + '>' + esc(subTrunc) + '</div>';
                         }
                         h += '</div>';
                         return h;
@@ -462,16 +490,17 @@ $(document).ready(function() {
 
     function updateTotalRecords(c) { $('#totalRecords').text(c); }
 
+    function fmtMilhar(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
     function animateCounter(id, target) {
         var el = document.getElementById(id);
         if (!el) return;
-        var start = parseInt(el.textContent) || 0, diff = target - start;
-        if (diff === 0) { el.textContent = target; return; }
+        var start = parseInt(el.textContent.replace(/\./g, '')) || 0, diff = target - start;
+        if (diff === 0) { el.textContent = fmtMilhar(target); return; }
         var dur = 400, t0 = null;
         function step(ts) {
             if (!t0) t0 = ts;
             var p = Math.min((ts - t0) / dur, 1);
-            el.textContent = Math.round(start + diff * (1 - Math.pow(1 - p, 3)));
+            el.textContent = fmtMilhar(Math.round(start + diff * (1 - Math.pow(1 - p, 3))));
             if (p < 1) requestAnimationFrame(step);
         }
         requestAnimationFrame(step);
@@ -701,12 +730,21 @@ $(document).ready(function() {
         .catch(function(){ Swal.fire('Erro','Falha na comunicação.','error'); });
     }
 
-    /* ===== Sync Docs (bulk — processos até 3ª etapa) ===== */
+    /* ===== Sync Docs SEI (bulk — todos os processos, com modal estilo Pagamentos) ===== */
+    function _logSei(logDiv, msg) {
+        var line = document.createElement('div');
+        var now = new Date();
+        var ts = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
+        line.innerHTML = '<span class="text-muted">[' + ts + ']</span> ' + msg;
+        logDiv.appendChild(line);
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
     function initSyncDocsButton() {
         $('#btnSyncDocs').on('click', function() {
             Swal.fire({
                 title: 'Sincronizar documentos SEI?',
-                text: 'Processos sem contrato serão sincronizados em paralelo.',
+                text: 'Todos os processos sem contrato serão sincronizados via API SEI.',
                 icon: 'question', showCancelButton: true,
                 confirmButtonColor: '#343990', confirmButtonText: 'Sincronizar', cancelButtonText: 'Cancelar'
             }).then(function(r) { if (r.isConfirmed) doSyncDocs(); });
@@ -714,25 +752,74 @@ $(document).ready(function() {
     }
 
     function doSyncDocs() {
-        Swal.fire({ title: 'Sincronizando documentos...', html: 'Conectando ao SEI...', allowOutsideClick: false, didOpen: function(){ Swal.showLoading(); } });
+        var modalEl = document.getElementById('modalSyncSeiCgfr');
+        var barra = document.getElementById('barraProgressoSeiCgfr');
+        var titulo = document.getElementById('tituloFaseSeiCgfr');
+        var msg = document.getElementById('msgProgressoSeiCgfr');
+        var logDiv = document.getElementById('logDetalhesSeiCgfr');
+        var btnFechar = document.getElementById('btnFecharSeiCgfr');
+
+        // Reset
+        titulo.innerText = 'Baixando Documentos SEI';
+        titulo.className = 'fw-bold text-primary mb-2';
+        barra.className = 'progress-bar progress-bar-striped progress-bar-animated bg-info';
+        barra.style.width = '0%'; barra.innerText = '0%';
+        msg.innerText = 'Conectando ao SEI...';
+        logDiv.innerHTML = '<div class="text-primary fw-bold">--- INÍCIO: SINCRONIZAÇÃO DE DOCUMENTOS ---</div>';
+        btnFechar.setAttribute('disabled', 'true');
+        btnFechar.innerText = 'Processando...';
+        btnFechar.className = 'btn btn-secondary';
+        btnFechar.onclick = null;
+
+        var modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        _logSei(logDiv, 'Conectando à API SEI...');
 
         var es = new EventSource('/cgfr/acompanhar/sync-bulk');
         es.onmessage = function(e) {
             var d = JSON.parse(e.data);
-            if (Swal.getHtmlContainer()) Swal.getHtmlContainer().textContent = d.msg || '';
+            var pct = Math.min(Math.round(d.progresso || 0), 100);
+            barra.style.width = pct + '%'; barra.innerText = pct + '%';
+            msg.innerText = d.msg || '';
+            _logSei(logDiv, d.msg || '...');
+
             if (d.concluido) {
                 es.close();
-                Swal.fire({
-                    icon: d.erros > 0 ? 'warning' : 'success',
-                    title: 'Concluído!',
-                    html: 'Sincronizados: <b>' + d.ok + '</b> de <b>' + d.total + '</b><br>Erros: <b>' + d.erros + '</b>'
-                });
-                reloadTable();
+                barra.style.width = '100%'; barra.innerText = '100%';
+
+                if (d.erros > 0) {
+                    barra.className = 'progress-bar progress-bar-striped bg-warning';
+                    titulo.innerText = 'Concluído com alertas';
+                    titulo.className = 'fw-bold text-warning mb-2';
+                } else {
+                    barra.className = 'progress-bar progress-bar-striped progress-bar-animated bg-success';
+                    titulo.innerText = 'Sincronização Concluída!';
+                    titulo.className = 'fw-bold text-success mb-2';
+                }
+
+                msg.innerText = 'Sincronizados: ' + d.ok + ' de ' + d.total + ' | Erros: ' + d.erros;
+                _logSei(logDiv, '<span class="' + (d.erros > 0 ? 'text-warning' : 'text-success') + ' fw-bold">Resultado: ' + d.ok + '/' + d.total + ' OK, ' + d.erros + ' erros</span>');
+                logDiv.innerHTML += '<div class="text-success fw-bold mt-2">--- FIM ---</div>';
+
+                btnFechar.removeAttribute('disabled');
+                btnFechar.innerText = 'OK — Recarregar';
+                btnFechar.className = 'btn btn-success';
+                btnFechar.onclick = function() { window.location.reload(); };
             }
         };
         es.onerror = function() {
             es.close();
-            Swal.fire('Erro', 'Conexão perdida com o servidor.', 'error');
+            barra.style.width = '100%'; barra.innerText = 'Erro';
+            barra.className = 'progress-bar progress-bar-striped bg-danger';
+            titulo.innerText = 'Erro de Conexão';
+            titulo.className = 'fw-bold text-danger mb-2';
+            msg.innerText = 'Conexão perdida com o servidor.';
+            _logSei(logDiv, '<span class="text-danger fw-bold">ERRO: Conexão perdida com o servidor</span>');
+
+            btnFechar.removeAttribute('disabled');
+            btnFechar.innerText = 'Fechar';
+            btnFechar.className = 'btn btn-danger';
         };
     }
 

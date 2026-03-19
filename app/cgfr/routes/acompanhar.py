@@ -8,8 +8,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests as http_requests
+import urllib3
 from flask import render_template, abort, jsonify, current_app, Response, stream_with_context
 from flask_login import login_required
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from app.cgfr.routes import cgfr_bp
 from app.cgfr.models import CgfrProcessoEnviado, CgfrMovimentacao
@@ -22,8 +25,9 @@ logger = logging.getLogger(__name__)
 
 # Constantes
 _SEI_BASE_URL = "https://api.sei.pi.gov.br/v1/unidades/110006213/procedimentos/documentos"
-_SEI_TIMEOUT = 30  # 30s ao invés de 60s
-_MAX_WORKERS = 8   # threads paralelas para bulk sync
+_SEI_TIMEOUT = 60   # 60s — API SEI é lenta
+_MAX_RETRIES = 3    # 3 tentativas com backoff progressivo
+_MAX_WORKERS = 8    # threads paralelas para bulk sync
 
 
 @cgfr_bp.route('/acompanhar/<path:protocolo>')
@@ -47,31 +51,38 @@ def acompanhar(protocolo):
 def _fetch_and_save_docs(protocolo, token_sei, app_obj):
     """Busca documentos de um processo na API SEI e salva em cgfrmovimentacao.
     Executada em thread separada para paralelismo.
+    Usa mesma lógica robusta do script sync_cgfr_prioritarios.py:
+      - timeout 60s, 3 retries com backoff progressivo, verify=False
     Retorna (success: bool, msg: str).
     """
     protocolo_limpo = "".join(filter(str.isdigit, protocolo))
-    session = http_requests.Session()
-    session.verify = False
-
     headers = {'token': token_sei, 'Accept': 'application/json'}
     params = {
         "protocolo_procedimento": protocolo_limpo,
         "pagina": 1, "quantidade": 1000, "sinal_completo": "N"
     }
 
-    # Tentar até 2 vezes (reduzido de 3)
+    # 3 tentativas com backoff progressivo (5s, 10s, 15s)
     resp = None
-    for tentativa in range(1, 3):
+    for tentativa in range(1, _MAX_RETRIES + 1):
         try:
-            resp = session.get(_SEI_BASE_URL, headers=headers, params=params, timeout=_SEI_TIMEOUT)
-            break
+            resp = http_requests.get(
+                _SEI_BASE_URL, headers=headers, params=params,
+                timeout=_SEI_TIMEOUT, verify=False,
+            )
+            if resp.status_code == 200:
+                break
+            logger.warning(f"[{protocolo}] API retornou {resp.status_code} (tentativa {tentativa}/{_MAX_RETRIES})")
+        except http_requests.exceptions.ReadTimeout:
+            logger.warning(f"[{protocolo}] Timeout (tentativa {tentativa}/{_MAX_RETRIES})")
         except (http_requests.exceptions.SSLError,
-                http_requests.exceptions.ConnectionError,
-                http_requests.exceptions.ReadTimeout) as e:
-            if tentativa < 2:
-                time.sleep(3)
-            else:
-                return (False, f'Timeout: {protocolo}')
+                http_requests.exceptions.ConnectionError) as e:
+            logger.warning(f"[{protocolo}] Conexão: {e} (tentativa {tentativa}/{_MAX_RETRIES})")
+
+        if tentativa < _MAX_RETRIES:
+            time.sleep(tentativa * 5)
+        else:
+            return (False, f'API SEI não respondeu após {_MAX_RETRIES} tentativas: {protocolo}')
 
     if not resp or resp.status_code != 200:
         return (False, f'API {resp.status_code if resp else "?"}: {protocolo}')
@@ -128,7 +139,7 @@ def _fetch_and_save_docs(protocolo, token_sei, app_obj):
         finally:
             db.session.remove()
 
-    return (True, f'OK: {protocolo} ({len(items_found)} docs)')
+    return (True, f'{len(items_found)} documentos sincronizados')
 
 
 @cgfr_bp.route('/acompanhar/<path:protocolo>/sync', methods=['POST'])
@@ -153,11 +164,13 @@ def sync_documentos(protocolo):
     return jsonify({'success': success, 'message': msg})
 
 
-@cgfr_bp.route('/acompanhar/sync-bulk', methods=['POST'])
+@cgfr_bp.route('/acompanhar/sync-bulk')
 @login_required
 @requires_admin
 def sync_documentos_bulk():
-    """Sincroniza documentos SEI em lote (paralelo) via SSE para progresso em tempo real."""
+    """Sincroniza documentos SEI de TODOS os processos via SSE para progresso em tempo real.
+    Usa mesma lógica robusta do script sync_cgfr_prioritarios.py (60s timeout, 3 retries, verify=False).
+    """
     try:
         token_sei = gerar_token_sei_admin()
         if not token_sei:
@@ -165,19 +178,12 @@ def sync_documentos_bulk():
     except Exception as e:
         return jsonify({'success': False, 'error': f'Erro autenticação SEI: {str(e)}'}), 500
 
-    # Buscar processos que não estão na etapa final (Contrato)
-    from app.constants import SerieDocumentoCGFR
+    # Todos os processos
     all_processos = CgfrProcessoEnviado.query.all()
-    protocolos_com_contrato = set(
-        r[0] for r in db.session.query(CgfrMovimentacao.protocolo_procedimento)
-        .filter(CgfrMovimentacao.id_serie == int(SerieDocumentoCGFR.CONTRATO))
-        .all()
-    )
-    protocolos = [p.processo_formatado for p in all_processos
-                  if p.processo_formatado not in protocolos_com_contrato]
+    protocolos = [p.processo_formatado for p in all_processos]
 
     if not protocolos:
-        return jsonify({'success': True, 'message': 'Nenhum processo pendente', 'total': 0, 'ok': 0, 'erros': 0})
+        return jsonify({'success': True, 'message': 'Nenhum processo encontrado', 'total': 0, 'ok': 0, 'erros': 0})
 
     app_obj = current_app._get_current_object()
 
@@ -197,12 +203,13 @@ def sync_documentos_bulk():
             for future in as_completed(futures):
                 done += 1
                 success, msg = future.result()
+                proto = futures[future]
                 if not success:
                     erros += 1
 
                 progresso = int((done / total) * 100)
-                if done % 10 == 0 or done == total:
-                    yield f"data: {json.dumps({'msg': f'{done}/{total} ({erros} erros)', 'progresso': progresso})}\n\n"
+                status = 'OK' if success else 'ERRO'
+                yield f"data: {json.dumps({'msg': f'[{status}] {proto} ({done}/{total})', 'progresso': progresso})}\n\n"
 
         yield f"data: {json.dumps({'msg': f'Concluído! {done - erros}/{total} sincronizados, {erros} erros', 'progresso': 100, 'concluido': True, 'total': total, 'ok': done - erros, 'erros': erros})}\n\n"
 

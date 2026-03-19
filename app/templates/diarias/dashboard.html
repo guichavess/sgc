@@ -28,6 +28,7 @@
                         <option value="">Tipo: Todos</option>
                         <option value="1" {{ 'selected' if filtros.tipo_itinerario == '1' }}>Estadual</option>
                         <option value="2" {{ 'selected' if filtros.tipo_itinerario == '2' }}>Nacional</option>
+                        <option value="3" {{ 'selected' if filtros.tipo_itinerario == '3' }}>Internacional</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -97,6 +98,8 @@
                         <td class="ps-4">
                             {% if it.tipo_itinerario == 1 %}
                                 <span class="badge rounded-pill bg-info text-white">Estadual</span>
+                            {% elif it.tipo_itinerario == 3 %}
+                                <span class="badge rounded-pill bg-danger text-white">Internacional</span>
                             {% else %}
                                 <span class="badge rounded-pill bg-warning text-dark">Nacional</span>
                             {% endif %}
@@ -127,7 +130,7 @@
                             </div>
                         </td>
                         <td>
-                            {{ it.estado_destino_obj.nome if it.estado_destino_obj else '-' }}
+                            {{ estados_destino.get(it.estado_destino, '-') }}
                         </td>
                         <td class="text-end">
                             {% if it.valor_total %}

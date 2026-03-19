@@ -25,6 +25,7 @@ class DiariaService:
 
     TIPO_ESTADUAL = 1
     TIPO_NACIONAL = 2
+    TIPO_INTERNACIONAL = 3
     COD_IBGE_PIAUI = 22
     COD_IBGE_TERESINA = 2211001
     NATUREZA_FORA_ESTADO = 1
@@ -248,7 +249,7 @@ class DiariaService:
         if itinerario.tipo_itinerario == DiariaService.TIPO_ESTADUAL:
             itinerario.valor_total = DiariaService.calcular_valor_total_estadual(itinerario_id)
         else:
-            # Nacional: precisa selecionar cotações para cada pessoa
+            # Nacional/Internacional: precisa selecionar cotações para cada pessoa
             if not cotacoes_pessoas:
                 raise ValueError('Selecione uma cotação para cada pessoa.')
 
@@ -334,7 +335,7 @@ class DiariaService:
     # ── Cotações ─────────────────────────────────────────────────────────
 
     @staticmethod
-    def criar_cotacao(itinerario_id, contrato_codigo, valor, data_hora=None):
+    def criar_cotacao(itinerario_id, contrato_codigo, valor, data_hora=None, auto_commit=True):
         """Cria uma nova cotação para um itinerário."""
         cotacao = DiariasCotacao(
             itinerario_id=itinerario_id,
@@ -343,7 +344,8 @@ class DiariaService:
             data_hora=data_hora or datetime.now(),
         )
         db.session.add(cotacao)
-        db.session.commit()
+        if auto_commit:
+            db.session.commit()
         return cotacao
 
     @staticmethod
@@ -357,7 +359,8 @@ class DiariaService:
     def criar_cotacao_voo(itinerario_id, contrato_codigo, tipo_trecho, cia, voo,
                           saida, chegada, origem, destino, valor, bagagem=None,
                           cia_conexao=None, voo_conexao=None, saida_conexao=None,
-                          chegada_conexao=None, origem_conexao=None, destino_conexao=None):
+                          chegada_conexao=None, origem_conexao=None, destino_conexao=None,
+                          auto_commit=True):
         """Cria uma cotacao de voo detalhada (com suporte a conexao)."""
         cotacao = DiariasCotacaoVoo(
             itinerario_id=itinerario_id,
@@ -379,7 +382,8 @@ class DiariaService:
             destino_conexao=destino_conexao or None,
         )
         db.session.add(cotacao)
-        db.session.commit()
+        if auto_commit:
+            db.session.commit()
         return cotacao
 
     @staticmethod
@@ -393,19 +397,20 @@ class DiariaService:
         return {'ida': ida, 'volta': volta, 'todas': todas}
 
     @staticmethod
-    def excluir_cotacao_voo(cotacao_id):
+    def excluir_cotacao_voo(cotacao_id, auto_commit=True):
         """Exclui uma cotacao de voo pelo ID."""
         cotacao = DiariasCotacaoVoo.query.get(cotacao_id)
         if not cotacao:
             return False
         db.session.delete(cotacao)
-        db.session.commit()
+        if auto_commit:
+            db.session.commit()
         return True
 
     # ── Timeline / Movimentações ──────────────────────────────────────────
 
     @staticmethod
-    def registrar_movimentacao(id_itinerario, etapa_nova_id, usuario_id=None, comentario=None):
+    def registrar_movimentacao(id_itinerario, etapa_nova_id, usuario_id=None, comentario=None, auto_commit=True):
         """
         Registra uma transição de etapa no histórico e atualiza a etapa atual.
 
@@ -414,6 +419,7 @@ class DiariaService:
             etapa_nova_id: ID da nova etapa (DiariasEtapaID)
             usuario_id: ID do usuário responsável (opcional)
             comentario: comentário sobre a movimentação (opcional)
+            auto_commit: se True, faz commit; se False, deixa para o chamador (§1.1)
         """
         itinerario = DiariasItinerario.query.get(id_itinerario)
         if not itinerario:
@@ -432,7 +438,8 @@ class DiariaService:
         db.session.add(historico)
 
         itinerario.etapa_atual_id = int(etapa_nova_id)
-        db.session.commit()
+        if auto_commit:
+            db.session.commit()
         return historico
 
     @staticmethod
@@ -531,7 +538,7 @@ class DiariaService:
 
     @staticmethod
     def get_status_list():
-        return DiariasStatusViagem.query.all()
+        return DiariasStatusViagem.query.order_by(DiariasStatusViagem.id).all()
 
     @staticmethod
     def get_cargos():

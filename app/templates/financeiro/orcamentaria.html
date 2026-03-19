@@ -491,11 +491,12 @@
                         <th class="text-end sortable" data-col="2" data-type="num">Dotação<br>Atualizada <i class="bi bi-arrow-down-up sort-icon"></i></th>
                         <th class="text-end sortable" data-col="3" data-type="num">Créd.<br>Disponível <i class="bi bi-arrow-down-up sort-icon"></i></th>
                         <th class="text-end sortable" data-col="4" data-type="num">Exec.<br>Gerencial <i class="bi bi-arrow-down-up sort-icon"></i></th>
-                        <th class="text-end sortable" data-col="5" data-type="num">Reservado <i class="bi bi-arrow-down-up sort-icon"></i></th>
-                        <th class="text-end sortable" data-col="6" data-type="num">Empenhado <i class="bi bi-arrow-down-up sort-icon"></i></th>
-                        <th class="text-end sortable" data-col="7" data-type="num">Liquidado <i class="bi bi-arrow-down-up sort-icon"></i></th>
-                        <th class="text-end sortable" data-col="8" data-type="num">PD <i class="bi bi-arrow-down-up sort-icon"></i></th>
-                        <th class="text-end sortable" data-col="9" data-type="num">Pago <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="5" data-type="num">Novas<br>Contratações <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="6" data-type="num">Reservado <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="7" data-type="num">Empenhado <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="8" data-type="num">Liquidado <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="9" data-type="num">PD <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="text-end sortable" data-col="10" data-type="num">Pago <i class="bi bi-arrow-down-up sort-icon"></i></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -509,6 +510,7 @@
                         <td class="text-end fw-bold">{{ format_num(item.dot_atualizada) }}</td>
                         <td class="text-end">{{ format_num(item.credito_disponivel) }}</td>
                         <td class="text-end">{{ format_num(item.exec_gerencial) }}</td>
+                        <td class="text-end" style="color: #7c3aed; font-weight: 600;">{{ format_num(item.novas_contratacoes) }}</td>
                         <td class="text-end">
                             {{ format_num(item.reservado) }}
                             <div class="pct-mini-wrap">
@@ -569,6 +571,7 @@
                         <td class="text-end">{{ format_num(acoes.totais.dot_atualizada) }}</td>
                         <td class="text-end">{{ format_num(acoes.totais.credito_disponivel) }}</td>
                         <td class="text-end">{{ format_num(acoes.totais.exec_gerencial) }}</td>
+                        <td class="text-end" style="color: #7c3aed; font-weight: 600;">{{ format_num(acoes.totais.novas_contratacoes) }}</td>
                         <td class="text-end">
                             {{ format_num(acoes.totais.reservado) }}
                             <div class="pct-mini-wrap">
@@ -686,7 +689,7 @@ function toggleAcao(rowEl, acao) {
     if (!data.length) {
         const empty = document.createElement('tr');
         empty.className = `row-natureza child-acao-${acao}`;
-        empty.innerHTML = `<td colspan="10" class="text-center text-muted py-2" style="padding-left:36px;">Nenhuma natureza encontrada</td>`;
+        empty.innerHTML = `<td colspan="11" class="text-center text-muted py-2" style="padding-left:36px;">Nenhuma natureza encontrada</td>`;
         rowEl.after(empty);
         return;
     }
@@ -703,6 +706,7 @@ function toggleAcao(rowEl, acao) {
             <td class="text-end fw-bold">${formatBRL(nat.dot_atualizada)}</td>
             <td class="text-end">${formatBRL(nat.credito_disponivel)}</td>
             <td class="text-end">${formatBRL(nat.exec_gerencial || 0)}</td>
+            <td class="text-end" style="color:#7c3aed;font-weight:600;">${formatBRL(nat.novas_contratacoes || 0)}</td>
             <td class="text-end">${formatBRL(nat.reservado || 0)}${miniPctHtml(nat.pct_res || 0)}</td>
             <td class="text-end">${formatBRL(nat.empenhado)}${miniPctHtml(nat.pct_emp)}</td>
             <td class="text-end">${formatBRL(nat.liquidado)}${miniPctHtml(nat.pct_liq)}</td>
@@ -730,7 +734,7 @@ function toggleNatureza(rowEl, acao, natureza) {
 
     const loadingRow = document.createElement('tr');
     loadingRow.className = `loading-row child-nat-${acao}-${natureza}`;
-    loadingRow.innerHTML = `<td colspan="10"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Carregando contratos...</td>`;
+    loadingRow.innerHTML = `<td colspan="11"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Carregando contratos...</td>`;
     rowEl.after(loadingRow);
 
     fetch(`/financeiro/api/orcamentaria/contratos/${acao}/${natureza}?${buildQueryParams()}`)
@@ -741,7 +745,7 @@ function toggleNatureza(rowEl, acao, natureza) {
             if (!data.length) {
                 const empty = document.createElement('tr');
                 empty.className = `row-contrato child-nat-${acao}-${natureza}`;
-                empty.innerHTML = `<td colspan="10" class="text-center text-muted py-2" style="padding-left:56px;">Nenhum contrato encontrado</td>`;
+                empty.innerHTML = `<td colspan="11" class="text-center text-muted py-2" style="padding-left:56px;">Nenhum contrato encontrado</td>`;
                 rowEl.after(empty);
                 return;
             }
@@ -785,7 +789,7 @@ function toggleNatureza(rowEl, acao, natureza) {
             });
         })
         .catch(() => {
-            loadingRow.innerHTML = `<td colspan="10" class="text-center text-danger py-2">Erro ao carregar contratos</td>`;
+            loadingRow.innerHTML = `<td colspan="11" class="text-center text-danger py-2">Erro ao carregar contratos</td>`;
         });
 }
 

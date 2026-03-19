@@ -83,8 +83,9 @@
                         <label for="tipo_itinerario" class="form-label fw-semibold">Tipo de Itinerário <span class="text-danger">*</span></label>
                         <select id="tipo_itinerario" class="form-select">
                             <option value="">Selecione o tipo</option>
-                            <option value="1">Estadual</option>
-                            <option value="2">Nacional</option>
+                            <option value="1" data-grupo="diarias">Estadual</option>
+                            <option value="2" data-grupo="diarias,passagens">Nacional</option>
+                            <option value="3" data-grupo="passagens">Internacional</option>
                         </select>
                         <input type="hidden" name="tipo_itinerario" id="tipo_itinerario_hidden">
                     </div>
@@ -322,7 +323,7 @@ document.addEventListener('DOMContentLoaded', function() {
             infoEstadualContainer.style.display = 'block';
             origemNacionalContainer.style.display = 'none';
             paradasContainer.style.display = 'block';
-        } else if (tipo === '2') {
+        } else if (tipo === '2' || tipo === '3') {
             infoEstadualContainer.style.display = 'none';
             origemNacionalContainer.style.display = 'flex';
             paradasContainer.style.display = 'none';
@@ -331,6 +332,19 @@ document.addEventListener('DOMContentLoaded', function() {
             origemNacionalContainer.style.display = 'none';
             paradasContainer.style.display = 'none';
         }
+    }
+
+    // Filtra opções do tipo_itinerario conforme tipo_solicitacao
+    function filtrarOpcoesItinerario(grupo) {
+        var options = tipoSelect.querySelectorAll('option[data-grupo]');
+        options.forEach(function(opt) {
+            var grupos = (opt.getAttribute('data-grupo') || '').split(',');
+            opt.style.display = grupos.indexOf(grupo) !== -1 ? '' : 'none';
+            // Se a opção selecionada ficou oculta, resetar
+            if (opt.selected && opt.style.display === 'none') {
+                tipoSelect.value = '';
+            }
+        });
     }
 
     // ── Tipo da Solicitação: desbloqueia campos (CRÍTICO - deve rodar antes de tudo) ──
@@ -354,12 +368,16 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('[Diárias] Campos desbloqueados');
 
         if (val === TIPO_SOL_DIARIAS_PASSAGENS || val === TIPO_SOL_APENAS_PASSAGENS) {
-            tipoSelect.value = '2';
-            tipoSelect.disabled = true;
+            // Com passagens: permite Nacional ou Internacional
+            filtrarOpcoesItinerario('passagens');
+            tipoSelect.value = '2'; // Nacional como padrão
+            tipoSelect.disabled = false;
             atualizarCamposItinerario();
             justificativaMemorandoContainer.style.display = 'block';
             justificativaMemorandoInput.setAttribute('required', 'required');
         } else {
+            // Apenas diárias: permite Estadual ou Nacional
+            filtrarOpcoesItinerario('diarias');
             tipoSelect.value = '';
             tipoSelect.disabled = false;
             atualizarCamposItinerario();

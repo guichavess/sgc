@@ -319,7 +319,29 @@ def _calcular_kpis(ano, mes, fonte, natureza='', acao=''):
     dot_especiais_aberto = totais_conta.get(CONTA_ESPECIAIS_ABERTO, ZERO)
     dot_cancelado = totais_conta.get(CONTA_CANCELADO, ZERO)
     dot_bloqueado = totais_conta.get(CONTA_BLOQUEADO, ZERO)
-    dot_atualizada = dot_inicial + dot_suplementar + dot_especiais_aberto - abs(dot_cancelado) - abs(dot_bloqueado)
+    # Exec Gerencial total + Novas Contratações CGFR total (para abater da dotação)
+    exec_ger_total = ZERO
+    try:
+        eg_sql = text("SELECT COALESCE(SUM(valor), 0) FROM execucoes_orcamentarias WHERE acao IS NOT NULL")
+        exec_ger_total = _decimal(db.session.execute(eg_sql).scalar() or 0)
+    except Exception:
+        pass
+    novas_contrat_total = ZERO
+    try:
+        nc_sql = text("""
+            SELECT COALESCE(SUM(p.valor_solicitado), 0)
+            FROM cgfr_processos_enviados p
+            WHERE p.nivel_prioridade = 'Alto'
+              AND p.natureza_despesa_id IS NOT NULL
+              AND p.valor_solicitado IS NOT NULL
+        """)
+        novas_contrat_total = _decimal(db.session.execute(nc_sql).scalar() or 0)
+    except Exception:
+        pass
+
+    dot_atualizada = (dot_inicial + dot_suplementar + dot_especiais_aberto
+                      - abs(dot_cancelado) - abs(dot_bloqueado)
+                      - exec_ger_total - novas_contrat_total)
 
     return {
         'credito_disponivel': _decimal(credito_disp),
@@ -329,6 +351,7 @@ def _calcular_kpis(ano, mes, fonte, natureza='', acao=''):
         'pds_pagar': _decimal(pd_val),
         'pago': _decimal(pago),
         'dotacao_atualizada': dot_atualizada,
+        'novas_contratacoes': novas_contrat_total,
         'pct_disponivel': _pct(_decimal(credito_disp), dot_atualizada),
         'pct_reservado': _pct(_decimal(reservado), dot_atualizada),
         'pct_empenhado': _pct(_decimal(empenhado), dot_atualizada),
@@ -433,13 +456,29 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
     # Execução Gerencial (soma de execucoes_orcamentarias por ação)
     exec_gerencial_por_acao = _calcular_exec_gerencial(nivel='acao')
 
+    # Novas Contratações CGFR (prioritários) por natureza
+    novas_contrat_por_nat = _calcular_novas_contratacoes()
+
+    # Agregar novas contratações por ação (via LOA: ação → naturezas)
+    novas_contrat_por_acao = defaultdict(lambda: ZERO)
+    for acao_cod_key in acoes_dict.keys():
+        # Buscar naturezas que pertencem a esta ação via LOA
+        sql_nats = text("""
+            SELECT DISTINCT codNatureza FROM loa
+            WHERE ano = :ano AND codAcao = :acao AND codNatureza IS NOT NULL
+        """)
+        for r in db.session.execute(sql_nats, {'ano': ano, 'acao': acao_cod_key}).fetchall():
+            nat_cod = str(r[0])
+            if nat_cod in novas_contrat_por_nat:
+                novas_contrat_por_acao[acao_cod_key] += novas_contrat_por_nat[nat_cod]
+
     resultado = []
     totais = {
         'dot_inicial': ZERO, 'dot_suplementar': ZERO, 'dot_especial': ZERO,
         'dot_extraordinaria': ZERO, 'contingenciado': ZERO, 'dot_anulada': ZERO,
         'dot_atualizada': ZERO, 'credito_disponivel': ZERO, 'analise': ZERO,
         'reservado': ZERO, 'empenhado': ZERO, 'liquidado': ZERO, 'pd': ZERO, 'pago': ZERO,
-        'exec_gerencial': ZERO,
+        'exec_gerencial': ZERO, 'novas_contratacoes': ZERO,
     }
 
     for acao_cod in sorted(acoes_dict.keys()):
@@ -452,7 +491,15 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
         dot_bloqueado = contas.get(CONTA_BLOQUEADO, ZERO)
         credito_disp = contas.get(CONTA_CREDITO_DISPONIVEL, ZERO)
 
-        dot_atualizada = dot_inicial + dot_suplementar + dot_especiais_aberto - abs(dot_cancelado) - abs(dot_bloqueado)
+        # Novas Contratações CGFR para esta ação
+        novas_cont = novas_contrat_por_acao.get(acao_cod, ZERO)
+
+        # Execução Gerencial
+        exec_ger = _decimal(exec_gerencial_por_acao.get(str(acao_cod), 0))
+
+        dot_atualizada = (dot_inicial + dot_suplementar + dot_especiais_aberto
+                          - abs(dot_cancelado) - abs(dot_bloqueado)
+                          - exec_ger - novas_cont)
         analise = dot_atualizada - abs(credito_disp) if credito_disp else ZERO
         pct_exec = _pct(analise, dot_atualizada)
 
@@ -463,9 +510,6 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
         liquidado = _decimal(ex.get('liq', 0))
         pd_val = _decimal(ex.get('pd', 0))
         pago = _decimal(ex.get('ob', 0))
-
-        # Execução Gerencial
-        exec_ger = _decimal(exec_gerencial_por_acao.get(str(acao_cod), 0))
 
         item = {
             'codigo': acao_cod,
@@ -492,6 +536,7 @@ def _calcular_acoes(ano, mes, fonte, natureza='', acao=''):
             'pago': pago,
             'pct_pago': _pct(pago, dot_atualizada),
             'exec_gerencial': exec_ger,
+            'novas_contratacoes': novas_cont,
         }
         resultado.append(item)
 
@@ -680,6 +725,31 @@ def _calcular_exec_gerencial(nivel='acao'):
     return resultado
 
 
+def _calcular_novas_contratacoes():
+    """Soma valor_solicitado dos processos CGFR prioritários (Alto), agrupados por código de natureza.
+
+    Retorna dict {natureza_codigo_str: Decimal(total)}.
+    O match é feito via: cgfr_processos_enviados.natureza_despesa_id → natdespesas.codigo.
+    """
+    sql = text("""
+        SELECT n.codigo, COALESCE(SUM(p.valor_solicitado), 0) as total
+        FROM cgfr_processos_enviados p
+        JOIN natdespesas n ON n.id = p.natureza_despesa_id
+        WHERE p.nivel_prioridade = 'Alto'
+          AND p.natureza_despesa_id IS NOT NULL
+          AND p.valor_solicitado IS NOT NULL
+        GROUP BY n.codigo
+    """)
+    resultado = {}
+    try:
+        for r in db.session.execute(sql).fetchall():
+            if r[0]:
+                resultado[str(r[0])] = _decimal(r[1])
+    except Exception as e:
+        logger.warning('Erro ao calcular novas contratações CGFR: %s', e)
+    return resultado
+
+
 _cache_descricoes = {}
 
 def _carregar_descricoes():
@@ -779,6 +849,9 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
     # Execução Gerencial por ação+natureza
     exec_ger_por_nat = _calcular_exec_gerencial(nivel='natureza')
 
+    # Novas Contratações CGFR por código de natureza
+    novas_contrat_por_nat = _calcular_novas_contratacoes()
+
     # Agrupa: acao -> natureza -> conta -> total
     tree = {}
     for acao_v, nat, conta, total in rows:
@@ -803,10 +876,6 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
             dot_bloqueado = contas.get(CONTA_BLOQUEADO, 0)
             credito_disp = contas.get(CONTA_CREDITO_DISPONIVEL, 0)
 
-            dot_atualizada = dot_inicial + dot_suplementar + dot_especiais_aberto - abs(dot_cancelado) - abs(dot_bloqueado)
-            analise = dot_atualizada - abs(credito_disp) if credito_disp else 0
-            pct_exec = round((analise / dot_atualizada * 100), 2) if dot_atualizada else 0
-
             # Dados de execução financeira para esta ação+natureza
             ex = exec_por_nat.get((str(acao_v), str(nat)), {})
             res = float(ex.get('res', 0))
@@ -817,6 +886,15 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
 
             # Execução Gerencial
             exec_ger = exec_ger_por_nat.get((str(acao_v), str(nat)), 0)
+
+            # Novas Contratações CGFR para esta natureza
+            novas_cont = float(novas_contrat_por_nat.get(str(nat), 0))
+
+            dot_atualizada = (dot_inicial + dot_suplementar + dot_especiais_aberto
+                              - abs(dot_cancelado) - abs(dot_bloqueado)
+                              - exec_ger - novas_cont)
+            analise = dot_atualizada - abs(credito_disp) if credito_disp else 0
+            pct_exec = round((analise / dot_atualizada * 100), 2) if dot_atualizada else 0
 
             desc = nat_map.get(str(nat), '')
             lista.append({
@@ -843,6 +921,7 @@ def _calcular_todas_naturezas(ano, mes, fonte, natureza='', acao=''):
                 'pago': ob,
                 'pct_pago': round((ob / dot_atualizada * 100), 2) if dot_atualizada else 0,
                 'exec_gerencial': exec_ger,
+                'novas_contratacoes': novas_cont,
             })
         resultado[acao_v] = lista
 
@@ -1142,6 +1221,10 @@ def api_orcamentaria_naturezas(acao):
         if nat not in nat_dict:
             nat_dict[nat] = {}
 
+    # Novas Contratações CGFR + Exec Gerencial por natureza
+    novas_contrat_por_nat = _calcular_novas_contratacoes()
+    exec_ger_por_nat = _calcular_exec_gerencial(nivel='natureza')
+
     resultado = []
     for nat in sorted(nat_dict.keys()):
         contas = nat_dict[nat]
@@ -1152,7 +1235,12 @@ def api_orcamentaria_naturezas(acao):
         dot_bloqueado = contas.get(CONTA_BLOQUEADO, 0)
         credito_disp = contas.get(CONTA_CREDITO_DISPONIVEL, 0)
 
-        dot_atualizada = dot_inicial + dot_suplementar + dot_especiais_aberto - abs(dot_cancelado) - abs(dot_bloqueado)
+        exec_ger = float(exec_ger_por_nat.get((str(acao), str(nat)), 0))
+        novas_cont = float(novas_contrat_por_nat.get(str(nat), 0))
+
+        dot_atualizada = (dot_inicial + dot_suplementar + dot_especiais_aberto
+                          - abs(dot_cancelado) - abs(dot_bloqueado)
+                          - exec_ger - novas_cont)
         analise = dot_atualizada - abs(credito_disp) if credito_disp else 0
         pct_exec = round((analise / dot_atualizada * 100), 2) if dot_atualizada else 0
 
@@ -1168,6 +1256,8 @@ def api_orcamentaria_naturezas(acao):
             'credito_disponivel': credito_disp,
             'analise': analise,
             'pct_exec': pct_exec,
+            'exec_gerencial': exec_ger,
+            'novas_contratacoes': novas_cont,
         })
 
     return jsonify(resultado)

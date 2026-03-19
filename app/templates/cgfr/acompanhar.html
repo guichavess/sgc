@@ -29,10 +29,23 @@
         <div class="p-3 border-bottom" style="background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius: 12px 12px 0 0;">
             <div class="d-flex align-items-start justify-content-between">
                 <div>
-                    <h5 class="fw-bold text-dark mb-1">
+                    <h5 class="fw-bold text-dark mb-2">
                         <i class="bi bi-file-earmark-text me-2" style="color: #343990;"></i>
                         Processo: {% if processo.link_acesso %}<a href="{{ processo.link_acesso }}" target="_blank" class="text-decoration-none" style="color: #343990;">{{ processo.processo_formatado }} <i class="bi bi-box-arrow-up-right" style="font-size: 0.75rem;"></i></a>{% else %}{{ processo.processo_formatado }}{% endif %}
                     </h5>
+                    {% if tem_orcamento %}
+                    <div class="mb-2">
+                        <span class="badge" style="font-size: 0.95rem; padding: 8px 18px; background: #059669; color: #fff; border-radius: 6px;">
+                            <i class="bi bi-check-circle-fill me-2"></i>TEM ORÇAMENTO
+                        </span>
+                    </div>
+                    {% else %}
+                    <div class="mb-2">
+                        <span class="badge" style="font-size: 0.95rem; padding: 8px 18px; background: #dc2626; color: #fff; border-radius: 6px;">
+                            <i class="bi bi-x-circle-fill me-2"></i>NÃO TEM ORÇAMENTO
+                        </span>
+                    </div>
+                    {% endif %}
                     {% if processo.fornecedor %}
                     <h6 class="text-muted mb-1">{{ processo.fornecedor }}</h6>
                     {% endif %}
@@ -40,13 +53,7 @@
                     <p class="text-secondary mb-0 small">{{ processo.objeto_do_pedido }}</p>
                     {% endif %}
                 </div>
-                <div class="text-end">
-                    {% if processo.link_acesso %}
-                    <a href="{{ processo.link_acesso }}" target="_blank" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-box-arrow-up-right me-1"></i> Abrir no SEI
-                    </a>
-                    {% endif %}
-                </div>
+                <div class="text-end"></div>
             </div>
         </div>
 
@@ -178,23 +185,115 @@
 </div>
 {% endif %}
 
-{# Botão Abrir no SEI — final da página #}
+{# Botão Abrir no SEI — largura total #}
 {% if processo.link_acesso %}
-<div class="d-flex justify-content-center mb-4">
-    <a href="{{ processo.link_acesso }}" target="_blank" class="btn btn-primary">
+<div class="mb-4">
+    <a href="{{ processo.link_acesso }}" target="_blank" class="btn btn-primary w-100 py-2" style="font-size: 0.95rem;">
         <i class="bi bi-box-arrow-up-right me-2"></i> Abrir Processo no SEI
     </a>
 </div>
 {% endif %}
+
+{# Modal de Sincronização — idêntico ao módulo de Solicitação de Pagamentos #}
+<div class="modal fade" id="modalSyncCgfr" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>Sincronização de Documentos</h5>
+            </div>
+            <div class="modal-body">
+                <h6 id="syncPhaseTitle" class="fw-bold text-primary mb-2">Conectando à API SEI...</h6>
+
+                <div class="progress mb-3" style="height: 25px;">
+                    <div id="syncProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+                         role="progressbar" style="width: 0%;">0%</div>
+                </div>
+
+                <p id="syncStatusMsg" class="text-center text-muted small mb-2">Buscando documentos do processo...</p>
+
+                <div id="syncLogArea" class="border rounded p-2 bg-light"
+                     style="height: 150px; overflow-y: auto; font-size: 11px; font-family: monospace;">
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled id="btnSyncClose">
+                    Aguarde...
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block cgfr_js %}
 <script>
+function logarDetalhe(logDiv, msg) {
+    var line = document.createElement('div');
+    var now = new Date();
+    var ts = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
+    line.innerHTML = '<span class="text-muted">[' + ts + ']</span> ' + msg;
+    logDiv.appendChild(line);
+    logDiv.scrollTop = logDiv.scrollHeight;
+}
+
+function atualizarProgresso(barra, msg, pct, texto) {
+    var p = Math.min(Math.round(pct), 100);
+    barra.style.width = p + '%';
+    barra.innerText = p + '%';
+    msg.innerText = texto;
+}
+
 function sincronizarDocumentos() {
     var btn = document.getElementById('btnSyncDocs');
     var originalHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sincronizando...';
+
+    var modalEl = document.getElementById('modalSyncCgfr');
+    var barra = document.getElementById('syncProgressBar');
+    var titulo = document.getElementById('syncPhaseTitle');
+    var msg = document.getElementById('syncStatusMsg');
+    var logDiv = document.getElementById('syncLogArea');
+    var btnFechar = document.getElementById('btnSyncClose');
+
+    // Reset
+    titulo.innerText = 'Baixando Documentos SEI';
+    titulo.className = 'fw-bold text-primary mb-2';
+    barra.className = 'progress-bar progress-bar-striped progress-bar-animated bg-info';
+    barra.style.width = '0%'; barra.innerText = '0%';
+    msg.innerText = 'Conectando ao SEI...';
+    logDiv.innerHTML = '<div class="text-primary fw-bold">--- INÍCIO: DOWNLOAD DE DOCUMENTOS ---</div>';
+    btnFechar.setAttribute('disabled', 'true');
+    btnFechar.innerText = 'Processando...';
+    btnFechar.className = 'btn btn-secondary';
+    btnFechar.onclick = null;
+
+    var modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    // Progresso simulado
+    var progress = 0;
+    var etapas = [
+        {pct: 15, msg: 'Autenticando com a API SEI...'},
+        {pct: 35, msg: 'Buscando documentos do processo...'},
+        {pct: 55, msg: 'Processando documentos encontrados...'},
+        {pct: 70, msg: 'Salvando documentos no banco de dados...'},
+        {pct: 85, msg: 'Finalizando atualização de etapas...'},
+    ];
+    var etapaIdx = 0;
+
+    var progressInterval = setInterval(function() {
+        if (progress < 90) {
+            progress += Math.random() * 6 + 1;
+            if (etapaIdx < etapas.length && progress >= etapas[etapaIdx].pct) {
+                logarDetalhe(logDiv, etapas[etapaIdx].msg);
+                etapaIdx++;
+            }
+            if (progress > 90) progress = 90;
+            atualizarProgresso(barra, msg, progress, etapas[Math.min(etapaIdx, etapas.length - 1)].msg);
+        }
+    }, 800);
 
     fetch('{{ url_for("cgfr.sync_documentos", protocolo=processo.processo_formatado) }}', {
         method: 'POST',
@@ -202,34 +301,54 @@ function sincronizarDocumentos() {
     })
     .then(function(resp) { return resp.json(); })
     .then(function(data) {
+        clearInterval(progressInterval);
         btn.disabled = false;
         btn.innerHTML = originalHtml;
+
         if (data.success) {
-            Swal.fire({
-                icon: 'success',
-                title: 'Sincronização concluída',
-                text: data.message || 'Documentos sincronizados com sucesso!',
-                timer: 2000,
-                showConfirmButton: false,
-            }).then(function() {
-                window.location.reload();
-            });
+            barra.style.width = '100%'; barra.innerText = '100%';
+            barra.className = 'progress-bar progress-bar-striped progress-bar-animated bg-success';
+            titulo.innerText = 'Sincronização Concluída!';
+            titulo.className = 'fw-bold text-success mb-2';
+            msg.innerText = data.message || 'Documentos sincronizados e etapas atualizadas.';
+
+            logarDetalhe(logDiv, '<span class="text-success fw-bold">Sincronização concluída com sucesso!</span>');
+            logDiv.innerHTML += '<div class="text-success fw-bold mt-2">--- FIM ---</div>';
+
+            btnFechar.removeAttribute('disabled');
+            btnFechar.innerText = 'OK — Recarregar Página';
+            btnFechar.className = 'btn btn-success';
+            btnFechar.onclick = function() { window.location.reload(); };
         } else {
-            Swal.fire({
-                icon: 'error',
-                title: 'Erro na sincronização',
-                text: data.error || 'Erro desconhecido',
-            });
+            barra.style.width = '100%'; barra.innerText = 'Erro';
+            barra.className = 'progress-bar progress-bar-striped bg-danger';
+            titulo.innerText = 'Erro na Sincronização';
+            titulo.className = 'fw-bold text-danger mb-2';
+            msg.innerText = data.error || 'Erro desconhecido.';
+
+            logarDetalhe(logDiv, '<span class="text-danger fw-bold">ERRO: ' + (data.error || 'Falha desconhecida') + '</span>');
+
+            btnFechar.removeAttribute('disabled');
+            btnFechar.innerText = 'Fechar';
+            btnFechar.className = 'btn btn-danger';
         }
     })
     .catch(function(err) {
+        clearInterval(progressInterval);
         btn.disabled = false;
         btn.innerHTML = originalHtml;
-        Swal.fire({
-            icon: 'error',
-            title: 'Erro de conexão',
-            text: 'Não foi possível conectar ao servidor: ' + err.message,
-        });
+
+        barra.style.width = '100%'; barra.innerText = 'Erro';
+        barra.className = 'progress-bar progress-bar-striped bg-danger';
+        titulo.innerText = 'Erro de Conexão';
+        titulo.className = 'fw-bold text-danger mb-2';
+        msg.innerText = 'Não foi possível conectar ao servidor.';
+
+        logarDetalhe(logDiv, '<span class="text-danger fw-bold">ERRO: ' + err.message + '</span>');
+
+        btnFechar.removeAttribute('disabled');
+        btnFechar.innerText = 'Fechar';
+        btnFechar.className = 'btn btn-danger';
     });
 }
 </script>

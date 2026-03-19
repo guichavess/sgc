@@ -7,6 +7,16 @@ from flask_login import login_required, current_user
 from app.diarias.routes import diarias_bp
 from app.utils.permissions import requires_permission
 from app.services.diaria_service import DiariaService
+from app.models.diaria import Estado
+
+
+def _preload_estados_destino(itinerarios_items):
+    """Pré-carrega nomes dos estados de destino em batch (evita N+1 via property)."""
+    estado_ids = {it.estado_destino for it in itinerarios_items if it.estado_destino}
+    if not estado_ids:
+        return {}
+    estados = Estado.query.filter(Estado.cod_ibge.in_(estado_ids)).all()
+    return {e.cod_ibge: e.nome for e in estados}
 
 
 @diarias_bp.route('/')
@@ -30,10 +40,14 @@ def dashboard():
         page=page,
     )
 
+    # Pré-carrega estados de destino em batch (§2.1 — evita N+1 via property)
+    estados_destino = _preload_estados_destino(itinerarios.items)
+
     return render_template('diarias/dashboard.html',
         itinerarios=itinerarios,
         filtros=filtros,
         status_list=DiariaService.get_status_list(),
+        estados_destino=estados_destino,
     )
 
 
@@ -56,8 +70,12 @@ def todas():
         page=page,
     )
 
+    # Pré-carrega estados de destino em batch (§2.1 — evita N+1 via property)
+    estados_destino = _preload_estados_destino(itinerarios.items)
+
     return render_template('diarias/todas.html',
         itinerarios=itinerarios,
         filtros=filtros,
         status_list=DiariaService.get_status_list(),
+        estados_destino=estados_destino,
     )

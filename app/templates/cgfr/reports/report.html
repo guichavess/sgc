@@ -156,7 +156,7 @@
                         </div>
                         <div>
                             <div class="text-muted" style="font-size: 0.70rem; font-weight: 600; text-transform: uppercase;">Quantidade de Processos</div>
-                            <div class="fw-bold" style="font-size: 1.2rem;">{{ total_processos }}</div>
+                            <div class="fw-bold" style="font-size: 1.2rem;">{{ '{:,}'.format(total_processos).replace(',', '.') }}</div>
                         </div>
                     </div>
                 </div>

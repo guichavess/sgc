@@ -5,7 +5,7 @@ Quadro Orçamentário, upload de Autorização SCDP e criação de Nota de Empen
 """
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from flask import render_template, request, flash, redirect, url_for, abort, jsonify
+from flask import render_template, request, flash, redirect, url_for, abort, jsonify, current_app
 from flask_login import login_required, current_user
 
 from app.financeiro.routes import financeiro_bp
@@ -177,8 +177,8 @@ def inserir_nr(id):
 
     try:
         DiariasNotifier.notificar_etapa(itinerario, 'nota_reserva', current_user.id)
-    except Exception:
-        pass  # Notificacao nao deve bloquear o fluxo
+    except Exception as exc_notif:
+        current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
     return redirect(url_for('financeiro.diarias_lista'))
 
@@ -402,8 +402,8 @@ def inserir_nota_empenho(id):
             db.session.commit()
             try:
                 DiariasNotifier.notificar_etapa(itinerario, 'nota_empenho', current_user.id)
-            except Exception:
-                pass  # Notificacao nao deve bloquear o fluxo
+            except Exception as exc_notif:
+                current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
             flash(f'Nota de Empenho {codigo_ne} inserida e documento gerado no SEI!', 'success')
         else:
             flash('Erro ao gerar documento de Nota de Empenho no SEI.', 'danger')
@@ -540,8 +540,8 @@ def despacho_ccdp(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'despacho_ccdp', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
         return jsonify({
             'sucesso': True,
@@ -664,8 +664,8 @@ def despacho_apoio(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'despacho_apoio', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
         resultado = {
             'sucesso': True,
@@ -797,8 +797,8 @@ def despacho_diretor(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'despacho_diretor', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
         resultado = {
             'sucesso': True,
@@ -929,8 +929,8 @@ def despacho_geo(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'despacho_geo', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
         resultado = {
             'sucesso': True,
@@ -1002,8 +1002,8 @@ def inserir_nl(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'nl_inserida', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
         return jsonify({
             'sucesso': True,
@@ -1068,8 +1068,8 @@ def inserir_pd(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'pd_inserida', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
         return jsonify({
             'sucesso': True,
@@ -1134,8 +1134,8 @@ def inserir_ob(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'ob_inserida', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
         return jsonify({
             'sucesso': True,
@@ -1204,8 +1204,8 @@ def inserir_np(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'np_inserida', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
         return jsonify({
             'sucesso': True,
@@ -1268,8 +1268,8 @@ def upload_prestacao_scdp(id):
             db.session.commit()
             try:
                 DiariasNotifier.notificar_etapa(itinerario, 'prestacao_scdp', current_user.id)
-            except Exception:
-                pass  # Notificacao nao deve bloquear o fluxo
+            except Exception as exc_notif:
+                current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
             flash('Documento de Prestação SCDP enviado ao SEI com sucesso!', 'success')
         else:
             flash('Erro ao enviar documento ao SEI.', 'danger')
@@ -1370,8 +1370,8 @@ def despacho_final(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'processo_concluido', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
         resp = {
             'sucesso': True,
@@ -1484,8 +1484,8 @@ def assinar_despacho_ccdp(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'despacho_ccdp', current_user.id)
-        except Exception:
-            pass
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 
         return jsonify({
             'sucesso': True,

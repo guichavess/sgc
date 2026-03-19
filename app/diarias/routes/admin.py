@@ -578,8 +578,8 @@ def autorizar_solicitacao(id):
 
     try:
         DiariasNotifier.notificar_etapa(itinerario, 'nova_solicitacao', current_user.id)
-    except Exception:
-        pass  # Notificacao nao deve bloquear o fluxo
+    except Exception as exc_notif:
+        current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
 
     return jsonify(resultado)
 
@@ -700,8 +700,8 @@ def ciencia_sga(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'ciencia_sga', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
 
         resultado = {
             'sucesso': True,
@@ -859,8 +859,8 @@ def analise_nci(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'analise_nci', current_user.id)
-        except Exception:
-            pass  # Notificacao nao deve bloquear o fluxo
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
 
         resposta = {
             'sucesso': True,

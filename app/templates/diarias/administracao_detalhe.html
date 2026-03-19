@@ -190,7 +190,7 @@
                 <div class="col-md-3">
                     <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #0d6efd !important;">
                         <span class="info-card-label d-block mb-1">Tipo</span>
-                        <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else 'bg-warning text-dark' }}">
+                        <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else ('bg-danger' if itinerario.tipo_itinerario == 3 else 'bg-warning text-dark') }}">
                             {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
                         </span>
                     </div>

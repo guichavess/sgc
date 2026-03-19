@@ -80,6 +80,8 @@
                         <td>
                             {% if it.tipo_itinerario == 1 %}
                                 <span class="badge rounded-pill bg-info text-white">Estadual</span>
+                            {% elif it.tipo_itinerario == 3 %}
+                                <span class="badge rounded-pill bg-danger text-white">Internacional</span>
                             {% else %}
                                 <span class="badge rounded-pill bg-warning text-dark">Nacional</span>
                             {% endif %}
