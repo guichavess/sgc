@@ -54,6 +54,45 @@
     </h2>
 </div>
 
+{# ── Modal de Carregamento ── #}
+<div id="loading-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);">
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:#fff; border-radius:16px; padding:40px 50px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); min-width:340px;">
+        <div id="loading-spinner" style="margin:0 auto 20px;">
+            <div style="width:56px; height:56px; border:4px solid #e9ecef; border-top:4px solid #0d6efd; border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto;"></div>
+        </div>
+        <div id="loading-icon-success" style="display:none; margin:0 auto 20px;">
+            <div style="width:56px; height:56px; background:#198754; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+                <i class="bi bi-check-lg" style="font-size:32px; color:#fff;"></i>
+            </div>
+        </div>
+        <div id="loading-icon-error" style="display:none; margin:0 auto 20px;">
+            <div style="width:56px; height:56px; background:#dc3545; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+                <i class="bi bi-x-lg" style="font-size:32px; color:#fff;"></i>
+            </div>
+        </div>
+        <h5 id="loading-title" style="margin-bottom:8px; color:#212529;">Criando solicitacao...</h5>
+        <p id="loading-detail" style="color:#6c757d; margin-bottom:16px; font-size:14px;">Salvando dados da viagem</p>
+        <div id="loading-steps" style="text-align:left; font-size:13px; color:#6c757d;">
+            <div id="step-salvar" class="d-flex align-items-center gap-2 mb-2">
+                <i class="bi bi-arrow-right-circle-fill text-primary"></i>
+                <span>Salvando dados no sistema</span>
+            </div>
+            <div id="step-sei" class="d-flex align-items-center gap-2 mb-2" style="opacity:0.4;">
+                <i class="bi bi-circle"></i>
+                <span>Integracao com o SEI</span>
+            </div>
+            <div id="step-concluir" class="d-flex align-items-center gap-2" style="opacity:0.4;">
+                <i class="bi bi-circle"></i>
+                <span>Finalizando</span>
+            </div>
+        </div>
+        <button id="loading-close-btn" class="btn btn-outline-secondary btn-sm mt-3" style="display:none;" onclick="window.location.href='{{ url_for("diarias.dashboard") }}'">Fechar</button>
+    </div>
+</div>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
 <div class="card shadow-sm">
     <div class="card-header bg-primary text-white">
         <h5 class="mb-0"><i class="bi bi-airplane me-2"></i>Dados da Viagem</h5>
@@ -546,7 +585,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         + '<input type="text" class="form-control form-control-sm manual-setor" placeholder="Ex: SEAD/SUTIC">'
                         + '</div>'
                         + '<div class="col-md-4">'
-                        + '<label class="form-label small fw-semibold mb-1">Orgao</label>'
+                        + '<label class="form-label small fw-semibold mb-1">Órgão</label>'
                         + '<input type="text" class="form-control form-control-sm manual-orgao" placeholder="Ex: SEAD">'
                         + '</div>'
                         + '</div>'
@@ -680,9 +719,13 @@ document.addEventListener('DOMContentLoaded', function() {
             totalGeral += valorPessoa;
 
             if (valorDisplay) {
+                var tipoIt = tipoItinerarioHidden.value || tipoSelect.value || '';
                 if (cargoParaCalculo && valorUnit > 0) {
                     var labelExtra = cargoAssId ? ' <span class="text-primary">(assessorando)</span>' : '';
                     valorDisplay.innerHTML = '<i class="bi bi-cash me-1"></i>' + formatarMoeda(valorUnit) + '/dia &times; ' + qtdDiarias + ' = <b>' + formatarMoeda(valorPessoa) + '</b>' + labelExtra;
+                    valorDisplay.style.display = 'block';
+                } else if (cargoParaCalculo && !tipoIt) {
+                    valorDisplay.innerHTML = '<i class="bi bi-exclamation-triangle me-1 text-warning"></i><span class="text-muted">Selecione o tipo de itinerario para calcular o valor</span>';
                     valorDisplay.style.display = 'block';
                 } else {
                     valorDisplay.style.display = 'none';
@@ -1024,20 +1067,82 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
-    // ── Validação do formulário ──
+    // ── Funções do Loading Overlay ──
+    var overlay = document.getElementById('loading-overlay');
+    var loadingTitle = document.getElementById('loading-title');
+    var loadingDetail = document.getElementById('loading-detail');
+    var loadingSpinner = document.getElementById('loading-spinner');
+    var loadingSuccess = document.getElementById('loading-icon-success');
+    var loadingError = document.getElementById('loading-icon-error');
+    var loadingCloseBtn = document.getElementById('loading-close-btn');
+    var stepSalvar = document.getElementById('step-salvar');
+    var stepSei = document.getElementById('step-sei');
+    var stepConcluir = document.getElementById('step-concluir');
+
+    function showLoading() {
+        overlay.style.display = 'block';
+        loadingSpinner.style.display = 'block';
+        loadingSuccess.style.display = 'none';
+        loadingError.style.display = 'none';
+        loadingCloseBtn.style.display = 'none';
+        loadingTitle.textContent = 'Criando solicitacao...';
+        loadingDetail.textContent = 'Salvando dados da viagem';
+        stepSalvar.style.opacity = '1';
+        stepSalvar.innerHTML = '<i class="bi bi-arrow-right-circle-fill text-primary"></i><span>Salvando dados no sistema</span>';
+        stepSei.style.opacity = '0.4';
+        stepSei.innerHTML = '<i class="bi bi-circle"></i><span>Integracao com o SEI</span>';
+        stepConcluir.style.opacity = '0.4';
+        stepConcluir.innerHTML = '<i class="bi bi-circle"></i><span>Finalizando</span>';
+    }
+
+    function updateStep(step, status) {
+        var el = step === 'salvar' ? stepSalvar : step === 'sei' ? stepSei : stepConcluir;
+        el.style.opacity = '1';
+        if (status === 'done') {
+            el.querySelector('i').className = 'bi bi-check-circle-fill text-success';
+        } else if (status === 'active') {
+            el.querySelector('i').className = 'bi bi-arrow-right-circle-fill text-primary';
+        } else if (status === 'skip') {
+            el.querySelector('i').className = 'bi bi-dash-circle text-muted';
+            el.style.opacity = '0.5';
+        }
+    }
+
+    function showSuccess(message, redirectUrl) {
+        loadingSpinner.style.display = 'none';
+        loadingSuccess.style.display = 'block';
+        loadingTitle.textContent = 'Solicitação criada!';
+        loadingTitle.style.color = '#198754';
+        loadingDetail.textContent = message || 'Redirecionando...';
+        setTimeout(function() {
+            window.location.href = redirectUrl;
+        }, 1200);
+    }
+
+    function showError(message) {
+        loadingSpinner.style.display = 'none';
+        loadingError.style.display = 'block';
+        loadingTitle.textContent = 'Erro ao criar solicitacao';
+        loadingTitle.style.color = '#dc3545';
+        loadingDetail.textContent = message || 'Tente novamente.';
+        loadingCloseBtn.style.display = 'inline-block';
+        loadingCloseBtn.textContent = 'Voltar';
+        loadingCloseBtn.onclick = function() { overlay.style.display = 'none'; loadingTitle.style.color = '#212529'; };
+    }
+
+    // ── Validação e Submit AJAX ──
     document.getElementById('form-nova-diaria').onsubmit = function(e) {
+        e.preventDefault();
+
         var pessoas = document.querySelectorAll('input[name="pessoas_cpf[]"]');
         if (pessoas.length === 0) {
-            e.preventDefault();
             alert('Adicione pelo menos uma pessoa à viagem.');
             return false;
         }
 
-        // Valida cargo de cada pessoa
         var cargos = document.querySelectorAll('select[name="pessoas_cargo_id[]"]');
         for (var p = 0; p < cargos.length; p++) {
             if (!cargos[p].value) {
-                e.preventDefault();
                 alert('Selecione o cargo para diária de todas as pessoas.');
                 cargos[p].focus();
                 return false;
@@ -1052,20 +1157,68 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (paradas[i].value) temParada = true;
             }
             if (!temParada) {
-                e.preventDefault();
                 alert('Selecione pelo menos uma parada para viagem estadual.');
                 return false;
             }
         }
 
-        if (tipo === '2') {
+        if (tipo === '2' || tipo === '3') {
             var estadoDestino = document.getElementById('estado_destino').value;
             if (!estadoDestino) {
-                e.preventDefault();
-                alert('Selecione o estado de destino para viagem nacional.');
+                alert('Selecione o estado de destino para viagem ' + (tipo === '3' ? 'internacional.' : 'nacional.'));
                 return false;
             }
         }
+
+        // ── Submit via AJAX com feedback visual ──
+        showLoading();
+
+        var form = document.getElementById('form-nova-diaria');
+        var formData = new FormData(form);
+
+        // Step 1: Salvando
+        setTimeout(function() {
+            loadingDetail.textContent = 'Registrando itinerario e pessoas...';
+        }, 400);
+
+        fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(function(resp) {
+            return resp.json().then(function(data) {
+                data._status = resp.status;
+                return data;
+            });
+        })
+        .then(function(data) {
+            if (data.success) {
+                updateStep('salvar', 'done');
+
+                if (data.sei_background) {
+                    updateStep('sei', 'active');
+                    loadingDetail.textContent = 'Processo SEI sendo criado em segundo plano...';
+                    setTimeout(function() {
+                        updateStep('sei', 'done');
+                        updateStep('concluir', 'done');
+                        showSuccess('Processo SEI sera finalizado em segundo plano.', data.redirect);
+                    }, 800);
+                } else {
+                    updateStep('sei', 'skip');
+                    updateStep('concluir', 'done');
+                    showSuccess('', data.redirect);
+                }
+            } else {
+                showError(data.error || 'Erro desconhecido.');
+            }
+        })
+        .catch(function(err) {
+            console.error('[Diárias] Erro no submit:', err);
+            showError('Erro de conexão. Verifique sua internet e tente novamente.');
+        });
+
+        return false;
     };
 });
 </script>

@@ -73,6 +73,20 @@ class DiariasNotifier:
             return []
 
     @staticmethod
+    def _resolver_superintendente() -> list:
+        """Retorna IDs dos usuarios com cargo de Superintendente."""
+        try:
+            usuarios = Usuario.query.filter(
+                Usuario.ativo == True,
+                db.or_(
+                    Usuario.cargo.ilike('%superintendente%'),
+                )
+            ).all()
+            return [u.id for u in usuarios]
+        except Exception:
+            return []
+
+    @staticmethod
     def _url_detalhes_cliente(itinerario) -> str:
         """URL da pagina de detalhes do lado do cliente."""
         return f'/diarias/detalhes/{itinerario.id}'
@@ -124,6 +138,9 @@ class DiariasNotifier:
         if config.get('admins'):
             destinatarios.update(DiariasNotifier._resolver_admins())
 
+        if config.get('superintendente'):
+            destinatarios.update(DiariasNotifier._resolver_superintendente())
+
         # Remove o usuario que executou a acao (ele ja sabe)
         if usuario_responsavel_id and usuario_responsavel_id in destinatarios:
             destinatarios.discard(usuario_responsavel_id)
@@ -168,11 +185,21 @@ _url_cliente = DiariasNotifier._url_detalhes_cliente
 _url_financeiro = DiariasNotifier._url_detalhes_financeiro
 
 NOTIFICACAO_CONFIG = {
-    # Etapa 1 → 2: Solicitacao criada
+    # Etapa 1: Solicitacao criada — notifica financeiro, diárias e superintendente
     'nova_solicitacao': {
         'titulo': 'Nova Solicitacao de Diaria',
-        'mensagem': 'Uma nova solicitacao de diaria foi criada: {processo}. Pendente de analise financeira.',
+        'mensagem': 'Uma nova solicitacao de diaria foi criada: {processo}. Aguardando assinatura do Superintendente e autorizacao do Secretario.',
         'solicitante': False, 'financeiro': True, 'diarias': True, 'admins': False,
+        'superintendente': True,
+        'url_fn': _url_financeiro,
+    },
+
+    # Superintendente assinou requisições
+    'assinatura_superintendente': {
+        'titulo': 'Superintendente Assinou Requisicoes',
+        'mensagem': 'O Superintendente assinou as requisicoes do processo {processo}. Aguardando autorizacao do Secretario.',
+        'solicitante': False, 'financeiro': False, 'diarias': True, 'admins': True,
+        'superintendente': False,
         'url_fn': _url_financeiro,
     },
 

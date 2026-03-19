@@ -1,4 +1,4 @@
-{# Sub-navegacao da area de Administracao #}
+{# Sub-navegação da área de Administração #}
 <style>
     .subnav-admin {
         display: inline-flex;
@@ -69,16 +69,16 @@
     }
 </style>
 
-<nav class="subnav-admin" aria-label="Sub-navegacao Administracao">
+<nav class="subnav-admin" aria-label="Sub-navegação Administração">
     <a class="subnav-item {{ 'active' if request.endpoint in ('diarias.administracao', 'diarias.administracao_detalhe') }}"
        href="{{ url_for('diarias.administracao') }}">
         <i class="bi bi-list-check"></i>
-        <span>Solicitacoes</span>
+        <span>Solicitações</span>
     </a>
     <a class="subnav-item {{ 'active' if request.endpoint == 'diarias.agencias' }}"
        href="{{ url_for('diarias.agencias') }}">
         <i class="bi bi-building"></i>
-        <span>Agencias</span>
+        <span>Agências</span>
     </a>
     <a class="subnav-item {{ 'active' if request.endpoint == 'diarias.cargos' }}"
        href="{{ url_for('diarias.cargos') }}">

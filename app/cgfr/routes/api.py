@@ -148,10 +148,27 @@ def admin_sync():
     """Executa sincronização Trino → MySQL (admin only)."""
     try:
         resultado = SyncService.sync()
+        # Se o sync retornou com erro (ex: timeout), trata aqui
+        if 'error' in resultado:
+            error_msg = resultado['error']
+            if 'timeout' in error_msg.lower() or 'connect' in error_msg.lower():
+                return jsonify({
+                    'sucesso': False,
+                    'msg': 'Não foi possível conectar ao Data Lake (timeout). '
+                           'Verifique se o servidor Trino está acessível e tente novamente em alguns minutos.'
+                }), 503
+            return jsonify({'sucesso': False, 'msg': f'Erro na sincronização: {error_msg}'}), 500
         return jsonify({'sucesso': True, **resultado})
     except Exception as e:
         logger.exception('Erro na sincronização CGFR')
-        return jsonify({'sucesso': False, 'msg': f'Erro: {str(e)}'}), 500
+        error_msg = str(e)
+        if 'timeout' in error_msg.lower() or 'connect' in error_msg.lower():
+            return jsonify({
+                'sucesso': False,
+                'msg': 'Não foi possível conectar ao Data Lake (timeout). '
+                       'Verifique se o servidor Trino está acessível ou se você está conectado à VPN.'
+            }), 503
+        return jsonify({'sucesso': False, 'msg': f'Erro: {error_msg}'}), 500
 
 
 @cgfr_bp.route('/api/export-excel')

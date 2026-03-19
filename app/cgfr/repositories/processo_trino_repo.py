@@ -38,10 +38,7 @@ class ProcessoTrinoRepository:
             return None
 
         sql = """
-            SELECT protocolo_formatado, tipo_procedimento, tipo_processo,
-                   data_hora_processo, foi_enviado_cgfr, dt_enviado,
-                   foi_recebido_cgfr, dt_recebido, foi_devolvido_cgfr,
-                   dt_devolvido, valor_solicitado
+            SELECT *
             FROM sei.sei_processo.sei_consolidado_sead_sefaz_cgfr
             WHERE protocolo_formatado = '{}'
             LIMIT 1

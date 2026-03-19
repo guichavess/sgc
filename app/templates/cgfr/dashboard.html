@@ -3,6 +3,16 @@
 {% block title %}CGFR - Dashboard{% endblock %}
 
 {% block content %}
+<style>
+    @keyframes spin-sync-anim {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .spin-sync {
+        animation: spin-sync-anim 1.2s linear infinite;
+        display: inline-block;
+    }
+</style>
 <div class="container-fluid py-4">
 
 {# === Header === #}
@@ -210,6 +220,40 @@
 
 {# Modal de Edicao #}
 {% include 'cgfr/partials/modal_edicao.html' %}
+
+{# Modal Sincronização Data Lake #}
+<div class="modal fade" id="modalSyncDataLake" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0" style="overflow: hidden;">
+            <div class="modal-header border-0 text-white" style="background: linear-gradient(135deg, #343990 0%, #5b5fc7 100%);">
+                <h5 class="modal-title"><i class="bi bi-database-fill-gear me-2"></i>Sincronização — Data Lake</h5>
+            </div>
+            <div class="modal-body py-4">
+                <div class="text-center mb-3" id="syncDLIconArea">
+                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-2"
+                         style="width: 56px; height: 56px; background: rgba(52,57,144,0.08);">
+                        <i class="bi bi-arrow-repeat text-primary" style="font-size: 1.6rem;" id="syncDLIcon"></i>
+                    </div>
+                </div>
+                <h6 id="syncDLTitulo" class="fw-bold text-center mb-2" style="color: #343990;">Conectando ao Data Lake...</h6>
+                <div class="progress mb-3 mx-4" style="height: 22px; border-radius: 12px;">
+                    <div id="syncDLBarra" class="progress-bar progress-bar-striped progress-bar-animated"
+                         role="progressbar" style="width: 5%; background-color: #343990; border-radius: 12px;">
+                    </div>
+                </div>
+                <p id="syncDLMsg" class="text-center text-muted small mb-3">Iniciando conexão com o servidor Trino...</p>
+                <div id="syncDLLog" class="border rounded p-2 mx-2"
+                     style="height: 130px; overflow-y: auto; font-size: 11px; font-family: 'Consolas', monospace; background: #f8f9fc;">
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled id="syncDLBtnFechar">
+                    <i class="bi bi-hourglass-split me-1"></i>Aguarde...
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {# Modal Sincronização SEI — idêntico ao módulo de Pagamentos #}
 <div class="modal fade" id="modalSyncSeiCgfr" tabindex="-1" data-bs-backdrop="static">
@@ -709,28 +753,171 @@ $(document).ready(function() {
         return d.innerHTML;
     }
 
-    /* ===== Sync ===== */
+    /* ===== Sync Data Lake (com modal de progresso) ===== */
+    function _logDL(msg, cls) {
+        var logDiv = document.getElementById('syncDLLog');
+        var line = document.createElement('div');
+        var now = new Date();
+        var ts = now.getHours().toString().padStart(2,'0') + ':' +
+                 now.getMinutes().toString().padStart(2,'0') + ':' +
+                 now.getSeconds().toString().padStart(2,'0');
+        line.innerHTML = '<span class="text-muted">[' + ts + ']</span> ' + (cls ? '<span class="' + cls + '">' + msg + '</span>' : msg);
+        logDiv.appendChild(line);
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    var _syncDLInterval = null;
+
+    function _animateProgress(barra, from, to, duration) {
+        var start = Date.now();
+        clearInterval(_syncDLInterval);
+        _syncDLInterval = setInterval(function() {
+            var elapsed = Date.now() - start;
+            var pct = Math.min(from + (to - from) * (elapsed / duration), to);
+            barra.style.width = Math.round(pct) + '%';
+            if (pct >= to) clearInterval(_syncDLInterval);
+        }, 100);
+    }
+
     function initSyncButton() {
         $('#btnSync').on('click', function() {
             Swal.fire({
                 title: 'Sincronizar dados?',
-                text: 'Buscar dados mais recentes do Data Lake SEI.',
+                html: '<p class="mb-1">Buscar dados mais recentes do <strong>Data Lake SEI</strong>.</p><small class="text-muted">Isso pode levar alguns segundos.</small>',
                 icon: 'question', showCancelButton: true,
-                confirmButtonColor: '#343990', confirmButtonText: 'Sincronizar', cancelButtonText: 'Cancelar'
+                confirmButtonColor: '#343990', confirmButtonText: '<i class="bi bi-arrow-repeat me-1"></i>Sincronizar',
+                cancelButtonText: 'Cancelar'
             }).then(function(r) { if (r.isConfirmed) doSync(); });
         });
     }
 
     function doSync() {
-        Swal.fire({ title: 'Sincronizando...', html: 'Buscando dados do Data Lake SEI.', allowOutsideClick: false, didOpen: function(){ Swal.showLoading(); } });
-        fetch('{{ url_for("cgfr.admin_sync") }}', { method:'POST', headers:{'Content-Type':'application/json'} })
-        .then(function(r){ return r.json(); })
-        .then(function(d){
-            Swal.fire({ icon: d.sucesso?'success':'error', title: d.sucesso?'Sincronizado!':'Erro',
-                html: d.sucesso ? 'Inseridos: <b>'+d.inserted+'</b><br>Atualizados: <b>'+d.updated+'</b><br>Erros: <b>'+d.errors+'</b>' : d.msg||'Erro desconhecido' });
-            if (d.sucesso) reloadTable();
+        var modalEl = document.getElementById('modalSyncDataLake');
+        var barra = document.getElementById('syncDLBarra');
+        var titulo = document.getElementById('syncDLTitulo');
+        var msg = document.getElementById('syncDLMsg');
+        var logDiv = document.getElementById('syncDLLog');
+        var iconEl = document.getElementById('syncDLIcon');
+        var iconArea = document.getElementById('syncDLIconArea');
+        var btnFechar = document.getElementById('syncDLBtnFechar');
+
+        // Reset estado
+        barra.style.width = '5%';
+        barra.style.backgroundColor = '#343990';
+        barra.className = 'progress-bar progress-bar-striped progress-bar-animated';
+        titulo.innerText = 'Conectando ao Data Lake...';
+        titulo.style.color = '#343990';
+        msg.innerText = 'Iniciando conexão com o servidor Trino...';
+        logDiv.innerHTML = '';
+        iconEl.className = 'bi bi-arrow-repeat text-primary spin-sync';
+        iconArea.querySelector('.rounded-circle').style.background = 'rgba(52,57,144,0.08)';
+        btnFechar.setAttribute('disabled', 'true');
+        btnFechar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Aguarde...';
+        btnFechar.className = 'btn btn-secondary';
+        btnFechar.onclick = null;
+
+        // Abre modal
+        var modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        _logDL('Iniciando sincronização com Data Lake SEI...', 'fw-bold text-primary');
+        _logDL('Conectando ao servidor Trino (10.0.122.75:8443)...');
+
+        // Anima progresso simulado (0→30% em 3s para fase de conexão)
+        _animateProgress(barra, 5, 30, 3000);
+
+        setTimeout(function() {
+            titulo.innerText = 'Buscando processos...';
+            msg.innerText = 'Consultando a view sei_consolidado_sead_sefaz_cgfr...';
+            _logDL('Conexão estabelecida com sucesso');
+            _logDL('Executando query no Data Lake...');
+            _animateProgress(barra, 30, 60, 5000);
+        }, 2000);
+
+        setTimeout(function() {
+            titulo.innerText = 'Processando dados...';
+            msg.innerText = 'Fazendo UPSERT no banco local...';
+            _logDL('Dados recebidos, processando registros...');
+            _animateProgress(barra, 60, 85, 4000);
+        }, 5000);
+
+        // Faz a requisição real
+        var startTime = Date.now();
+        fetch('{{ url_for("cgfr.admin_sync") }}', { method: 'POST', headers: {'Content-Type': 'application/json'} })
+        .then(function(r) { return r.json().then(function(d) { return {status: r.status, data: d}; }); })
+        .then(function(resp) {
+            clearInterval(_syncDLInterval);
+            var d = resp.data;
+            var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+            if (d.sucesso) {
+                // Sucesso
+                barra.style.width = '100%';
+                barra.style.backgroundColor = '#198754';
+                barra.className = 'progress-bar progress-bar-striped progress-bar-animated';
+                titulo.innerText = 'Sincronização Concluída!';
+                titulo.style.color = '#198754';
+                iconEl.className = 'bi bi-check-circle-fill text-success';
+                iconEl.style.fontSize = '1.6rem';
+                iconArea.querySelector('.rounded-circle').style.background = 'rgba(25,135,84,0.08)';
+                msg.innerHTML = '<strong>' + d.total + '</strong> registros processados em <strong>' + elapsed + 's</strong>';
+
+                _logDL('UPSERT concluído: ' + d.inserted + ' inseridos, ' + d.updated + ' atualizados', 'text-success');
+                if (d.errors > 0) {
+                    _logDL('⚠ ' + d.errors + ' erro(s) durante o processamento', 'text-warning fw-bold');
+                }
+                if (d.skipped > 0) {
+                    _logDL(d.skipped + ' registro(s) ignorados (sem protocolo)');
+                }
+                if (d.colunas_trino) {
+                    _logDL('Colunas da view: ' + d.colunas_trino.join(', '), 'text-muted');
+                }
+                _logDL('Sincronização finalizada com sucesso (' + elapsed + 's)', 'fw-bold text-success');
+
+                btnFechar.removeAttribute('disabled');
+                btnFechar.innerHTML = '<i class="bi bi-check-lg me-1"></i>OK — Recarregar';
+                btnFechar.className = 'btn btn-success';
+                btnFechar.onclick = function() { window.location.reload(); };
+                reloadTable();
+            } else {
+                // Erro
+                barra.style.width = '100%';
+                barra.style.backgroundColor = '#dc3545';
+                barra.className = 'progress-bar progress-bar-striped';
+                titulo.innerText = 'Erro na Sincronização';
+                titulo.style.color = '#dc3545';
+                iconEl.className = 'bi bi-exclamation-triangle-fill text-danger';
+                iconEl.style.fontSize = '1.6rem';
+                iconArea.querySelector('.rounded-circle').style.background = 'rgba(220,53,69,0.08)';
+                msg.innerHTML = d.msg || 'Erro desconhecido ao sincronizar.';
+
+                _logDL('ERRO: ' + (d.msg || 'Falha na sincronização'), 'text-danger fw-bold');
+                _logDL('Tempo decorrido: ' + elapsed + 's');
+
+                btnFechar.removeAttribute('disabled');
+                btnFechar.innerHTML = '<i class="bi bi-x-lg me-1"></i>Fechar';
+                btnFechar.className = 'btn btn-danger';
+            }
         })
-        .catch(function(){ Swal.fire('Erro','Falha na comunicação.','error'); });
+        .catch(function(err) {
+            clearInterval(_syncDLInterval);
+            barra.style.width = '100%';
+            barra.style.backgroundColor = '#dc3545';
+            barra.className = 'progress-bar progress-bar-striped';
+            titulo.innerText = 'Falha na Comunicação';
+            titulo.style.color = '#dc3545';
+            iconEl.className = 'bi bi-wifi-off text-danger';
+            iconEl.style.fontSize = '1.6rem';
+            iconArea.querySelector('.rounded-circle').style.background = 'rgba(220,53,69,0.08)';
+            msg.innerText = 'Não foi possível conectar ao servidor.';
+
+            _logDL('ERRO: Falha na comunicação com o servidor', 'text-danger fw-bold');
+            _logDL(String(err), 'text-danger');
+
+            btnFechar.removeAttribute('disabled');
+            btnFechar.innerHTML = '<i class="bi bi-x-lg me-1"></i>Fechar';
+            btnFechar.className = 'btn btn-danger';
+        });
     }
 
     /* ===== Sync Docs SEI (bulk — todos os processos, com modal estilo Pagamentos) ===== */

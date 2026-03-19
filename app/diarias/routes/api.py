@@ -318,7 +318,7 @@ def api_excluir_cotacao_voo(cotacao_id):
     ok = DiariaService.excluir_cotacao_voo(cotacao_id)
     if ok:
         return jsonify({'sucesso': True})
-    return jsonify({'error': 'Cotacao nao encontrada.'}), 404
+    return jsonify({'error': 'Cotação não encontrada.'}), 404
 
 
 @diarias_bp.route('/api/verificar-autorizacao/<int:itinerario_id>')

@@ -40,6 +40,11 @@ class SyncService:
         try:
             registros = ProcessoTrinoRepository.fetch_all()
             resultado['total'] = len(registros)
+            # Log das colunas disponíveis na view (útil para debug)
+            if registros:
+                colunas_trino = list(registros[0].keys())
+                logger.info(f'Colunas disponíveis na view Trino: {colunas_trino}')
+                resultado['colunas_trino'] = colunas_trino
         except Exception as e:
             logger.exception('Erro ao buscar dados do Trino')
             return {'error': str(e), **resultado}
@@ -148,35 +153,64 @@ class SyncService:
             return None
 
     @staticmethod
+    def _get_field(reg, *keys):
+        """Busca um valor tentando múltiplas chaves alternativas.
+
+        Útil quando a view do Trino renomeia colunas entre versões.
+        Retorna o primeiro valor encontrado (não-None) ou None.
+        """
+        for key in keys:
+            val = reg.get(key)
+            if val is not None:
+                return val
+        return None
+
+    @staticmethod
     def _extrair_dados_sync(reg):
         """Extrai e mapeia dados do registro Trino para colunas MySQL sync.
 
-        Mapeamento baseado no sistema original:
-        - tipo_procedimento → especificacao
-        - tipo_processo → tipo_processo (fallback)
-        - data_hora_processo → data_hora_processo
-        - foi_enviado_cgfr + dt_enviado → tramitado_sead_cgfr
-        - foi_recebido_cgfr + dt_recebido → recebido_cgfr + data_recebido_cgfr
-        - foi_devolvido_cgfr + dt_devolvido → devolvido_cgfr_sead + data_devolvido_cgfr_sead
-        - valor_solicitado → valor_solicitado (somente se MySQL estiver NULL)
+        Mapeamento resiliente — tenta nomes alternativos para cada campo,
+        pois a view no Data Lake pode mudar os nomes das colunas.
+
+        Mapeamento:
+        - tipo_procedimento|especificacao|tipo_proc → especificacao
+        - tipo_processo → tipo_processo
+        - data_hora_processo|data_processo|data_autuacao → data_hora_processo
+        - foi_enviado_cgfr|enviado_cgfr + dt_enviado|data_enviado → tramitado_sead_cgfr
+        - foi_recebido_cgfr|recebido + dt_recebido|data_recebido → recebido_cgfr + data_recebido_cgfr
+        - foi_devolvido_cgfr|devolvido + dt_devolvido|data_devolvido → devolvido_cgfr_sead + data_devolvido_cgfr_sead
+        - valor_solicitado|valor → valor_solicitado (somente se MySQL estiver NULL)
         """
+        _get = SyncService._get_field
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+        # Campos com nomes alternativos (ordem de prioridade)
+        especificacao = _get(reg, 'tipo_procedimento', 'especificacao', 'tipo_proc', 'descricao_tipo') or ''
+        tipo_processo = _get(reg, 'tipo_processo') or ''
+        data_hora = _get(reg, 'data_hora_processo', 'data_processo', 'data_autuacao')
+        foi_enviado = _get(reg, 'foi_enviado_cgfr', 'enviado_cgfr', 'enviado')
+        dt_enviado = _get(reg, 'dt_enviado', 'data_enviado', 'data_envio')
+        foi_recebido = _get(reg, 'foi_recebido_cgfr', 'recebido_cgfr', 'recebido')
+        dt_recebido = _get(reg, 'dt_recebido', 'data_recebido', 'data_recebimento')
+        foi_devolvido = _get(reg, 'foi_devolvido_cgfr', 'devolvido_cgfr', 'devolvido')
+        dt_devolvido = _get(reg, 'dt_devolvido', 'data_devolvido', 'data_devolucao')
+        valor = _get(reg, 'valor_solicitado', 'valor')
+
         dados = {
-            'processo_formatado': reg.get('protocolo_formatado'),
-            'especificacao': reg.get('tipo_procedimento') or '',
-            'tipo_processo': reg.get('tipo_processo') or '',
-            'data_hora_processo': str(reg['data_hora_processo']) if reg.get('data_hora_processo') else None,
-            'tramitado_sead_cgfr': SyncService._fmt_datetime(reg.get('dt_enviado')) if reg.get('foi_enviado_cgfr') else None,
-            'recebido_cgfr': 1 if reg.get('foi_recebido_cgfr') else 0,
-            'data_recebido_cgfr': SyncService._fmt_datetime(reg.get('dt_recebido')) if reg.get('foi_recebido_cgfr') else None,
-            'devolvido_cgfr_sead': 1 if reg.get('foi_devolvido_cgfr') else 0,
-            'data_devolvido_cgfr_sead': SyncService._fmt_datetime(reg.get('dt_devolvido')) if reg.get('foi_devolvido_cgfr') else None,
+            'processo_formatado': _get(reg, 'protocolo_formatado', 'processo_formatado', 'protocolo'),
+            'especificacao': especificacao,
+            'tipo_processo': tipo_processo,
+            'data_hora_processo': str(data_hora) if data_hora else None,
+            'tramitado_sead_cgfr': SyncService._fmt_datetime(dt_enviado) if foi_enviado else None,
+            'recebido_cgfr': 1 if foi_recebido else 0,
+            'data_recebido_cgfr': SyncService._fmt_datetime(dt_recebido) if foi_recebido else None,
+            'devolvido_cgfr_sead': 1 if foi_devolvido else 0,
+            'data_devolvido_cgfr_sead': SyncService._fmt_datetime(dt_devolvido) if foi_devolvido else None,
             'data_inclusao': now,
         }
 
         # valor_solicitado do Trino (só insere se presente, UPDATE condicional via COALESCE)
-        val_solic = SyncService._to_decimal(reg.get('valor_solicitado'))
+        val_solic = SyncService._to_decimal(valor)
         if val_solic is not None:
             dados['valor_solicitado'] = val_solic
 

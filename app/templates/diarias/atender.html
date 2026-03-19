@@ -1,5 +1,5 @@
 {% extends 'diarias/base_diarias.html' %}
-{% block title %}SGC - Analisar Solicitacao{% endblock %}
+{% block title %}SGC - Analisar Solicitação{% endblock %}
 
 {% block diarias_css %}
 <style>
@@ -90,11 +90,11 @@
             </h4>
             <h5 class="text-muted mb-2">
                 {{ itinerario.tipo.nome if itinerario.tipo else '-' }} |
-                {{ itinerario.qtd_diarias_solicitadas }} diaria(s)
+                {{ itinerario.qtd_diarias_solicitadas }} diária(s)
             </h5>
             <p class="text-secondary mb-0 small">
                 <strong>Solicitante:</strong> {{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() }} |
-                Periodo: {{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}
+                Período: {{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}
                 a {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }} |
                 Destino: {{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}
             </p>
@@ -160,11 +160,11 @@
                                         <th class="ps-3">Nome</th>
                                         <th>CPF / Mat.</th>
                                         <th>Cargo (Folha)</th>
-                                        <th>Setor / Orgao</th>
+                                        <th>Setor / Órgão</th>
                                         <th>Vinculo</th>
-                                        <th>Cargo Diaria</th>
+                                        <th>Cargo Diária</th>
                                         <th>Assessorando</th>
-                                        <th class="text-end pe-3">Valor Diaria</th>
+                                        <th class="text-end pe-3">Valor Diária</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -215,8 +215,8 @@
                             <table class="table table-custom table-hover align-middle mb-0" style="font-size: 0.85rem;">
                                 <thead>
                                     <tr>
-                                        <th class="ps-3">Municipio</th>
-                                        <th>Codigo IBGE</th>
+                                        <th class="ps-3">Município</th>
+                                        <th>Código IBGE</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -244,13 +244,13 @@
             </section>
             {% endif %}
 
-            {# ===== SECAO DE COTACOES DE VOOS (Nacional / Passagens) ===== #}
-            {% if itinerario.tipo_itinerario in [2, 3] %}
+            {# ===== SECAO DE COTACOES DE VOOS (Nacional / Passagens — só na etapa Aquisição de Passagens) ===== #}
+            {% if itinerario.tipo_itinerario in [2, 3] and itinerario.etapa_atual_id == 3 %}
             <section class="mb-4">
                 <div class="card border-0 shadow-sm overflow-hidden">
                     <div class="card-header bg-white border-bottom py-2">
                         <div class="d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0 section-title"><i class="bi bi-airplane me-1"></i>Cotacoes de Voos</h6>
+                            <h6 class="mb-0 section-title"><i class="bi bi-airplane me-1"></i>Cotações de Voos</h6>
                         </div>
                     </div>
                     <div class="card-body">
@@ -259,7 +259,7 @@
                         <div class="border rounded p-3 mb-4 bg-light" id="form-cotacao-voo">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h6 class="fw-bold mb-0" style="font-size: 0.85rem;">
-                                    <i class="bi bi-plus-circle me-1"></i>Cadastrar Opcao de Voo
+                                    <i class="bi bi-plus-circle me-1"></i>Cadastrar Opção de Voo
                                 </h6>
                                 {# Tabs ida/volta #}
                                 <div class="btn-group btn-group-sm" role="group">
@@ -276,10 +276,10 @@
 
                             <input type="hidden" id="cotacao_itinerario_id" value="{{ itinerario.id }}">
 
-                            {# Agencia #}
+                            {# Agência #}
                             <div class="row g-2 mb-2">
                                 <div class="col-md-6">
-                                    <label class="form-label">Agencia</label>
+                                    <label class="form-label">Agência</label>
                                     <select id="cotacao_contrato" class="form-select form-select-sm">
                                         <option value="">Selecione (opcional)</option>
                                         {% for ag in agencias %}
@@ -313,7 +313,7 @@
                                     <input type="text" id="cotacao_voo" class="form-control form-control-sm" placeholder="LA 3853">
                                 </div>
                                 <div class="col-md-2">
-                                    <label class="form-label">Saida <span class="text-danger">*</span></label>
+                                    <label class="form-label">Saída <span class="text-danger">*</span></label>
                                     <input type="datetime-local" id="cotacao_saida" class="form-control form-control-sm">
                                 </div>
                                 <div class="col-md-2">
@@ -332,13 +332,13 @@
 
                             {# Checkbox conexao #}
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="chk-conexao" onchange="toggleConexao()">
+                                <input class="form-check-input" type="checkbox" id="chk-conexao" onchange="toggleConexão()">
                                 <label class="form-check-label small" for="chk-conexao">Tem conexao (2o trecho)</label>
                             </div>
 
                             {# Trecho 2 (conexao) #}
                             <div class="conexao-fields" id="conexao-fields">
-                                <small class="text-muted fw-bold d-block mb-2">Trecho 2 (Conexao)</small>
+                                <small class="text-muted fw-bold d-block mb-2">Trecho 2 (Conexão)</small>
                                 <div class="row g-2 mb-2">
                                     <div class="col-md-2">
                                         <label class="form-label">CIA</label>
@@ -349,7 +349,7 @@
                                         <input type="text" id="cotacao_voo_cx" class="form-control form-control-sm" placeholder="LA 4737">
                                     </div>
                                     <div class="col-md-2">
-                                        <label class="form-label">Saida</label>
+                                        <label class="form-label">Saída</label>
                                         <input type="datetime-local" id="cotacao_saida_cx" class="form-control form-control-sm">
                                     </div>
                                     <div class="col-md-2">
@@ -388,10 +388,10 @@
                                 <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.8rem;">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>Agencia</th>
+                                            <th>Agência</th>
                                             <th>CIA</th>
                                             <th>Voo</th>
-                                            <th>Saida</th>
+                                            <th>Saída</th>
                                             <th>Chegada</th>
                                             <th>Rota</th>
                                             <th>Bagagem</th>
@@ -435,10 +435,10 @@
                                 <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.8rem;">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>Agencia</th>
+                                            <th>Agência</th>
                                             <th>CIA</th>
                                             <th>Voo</th>
-                                            <th>Saida</th>
+                                            <th>Saída</th>
                                             <th>Chegada</th>
                                             <th>Rota</th>
                                             <th>Bagagem</th>
@@ -482,7 +482,7 @@
 
             {# ===== FORMULARIO DE APROVACAO ===== #}
             <section class="card shadow-sm p-3">
-                <h6 class="section-title mb-3"><i class="bi bi-check2-square me-1"></i>Aprovacao</h6>
+                <h6 class="section-title mb-3"><i class="bi bi-check2-square me-1"></i>Aprovação</h6>
                 <form action="{{ url_for('diarias.update_atendimento', id=itinerario.id) }}" method="post" id="form-aprovacao">
 
                     {# Selecionar cotacoes por pessoa (Nacional) #}
@@ -495,8 +495,8 @@
                                         <tr>
                                             <th class="ps-3">Pessoa (CPF)</th>
                                             <th>Cargo</th>
-                                            <th>Cotacao Ida</th>
-                                            <th>Cotacao Volta</th>
+                                            <th>Cotação Ida</th>
+                                            <th>Cotação Volta</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -532,11 +532,11 @@
                     {% endif %}
 
                     <div class="mb-3">
-                        <label for="conclusao" class="form-label fw-semibold small">Conclusao <span class="text-danger">*</span></label>
+                        <label for="conclusao" class="form-label fw-semibold small">Conclusão <span class="text-danger">*</span></label>
                         <select name="conclusao" id="conclusao" class="form-select form-select-sm" required>
                             <option value="" disabled selected>Selecione</option>
-                            <option value="2">Aceitar Itinerario</option>
-                            <option value="3">Rejeitar Itinerario</option>
+                            <option value="2">Aceitar Itinerário</option>
+                            <option value="3">Rejeitar Itinerário</option>
                             <option value="4">Cancelar Processo</option>
                         </select>
                     </div>
@@ -555,7 +555,7 @@
 
 {% block diarias_js %}
 <script>
-function toggleConexao() {
+function toggleConexão() {
     var chk = document.getElementById('chk-conexao');
     var fields = document.getElementById('conexao-fields');
     if (chk.checked) {
@@ -583,7 +583,7 @@ async function adicionarCotacaoVoo() {
 
     // Validacao
     if (!cia || !voo || !saida || !chegada || !origem || !destino || !valor) {
-        alert('Preencha todos os campos obrigatorios (CIA, Voo, Saida, Chegada, Origem, Destino, Valor).');
+        alert('Preencha todos os campos obrigatórios (CIA, Voo, Saída, Chegada, Origem, Destino, Valor).');
         return;
     }
 
@@ -601,7 +601,7 @@ async function adicionarCotacaoVoo() {
         bagagem: bagagem || null,
     };
 
-    // Conexao
+    // Conexão
     if (document.getElementById('chk-conexao').checked) {
         payload.cia_conexao = document.getElementById('cotacao_cia_cx').value.trim();
         payload.voo_conexao = document.getElementById('cotacao_voo_cx').value.trim();
@@ -627,10 +627,10 @@ async function adicionarCotacaoVoo() {
             // Recarrega para atualizar tabelas e selects de aprovacao
             location.reload();
         } else {
-            alert(data.error || 'Erro ao criar cotacao.');
+            alert(data.error || 'Erro ao criar cotação.');
         }
     } catch (err) {
-        alert('Erro de conexao.');
+        alert('Erro de conexão.');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i> Adicionar';
@@ -638,7 +638,7 @@ async function adicionarCotacaoVoo() {
 }
 
 async function excluirCotacaoVoo(id, btnEl) {
-    if (!confirm('Excluir esta cotacao?')) return;
+    if (!confirm('Excluir esta cotação?')) return;
 
     btnEl.disabled = true;
     try {
@@ -659,7 +659,7 @@ async function excluirCotacaoVoo(id, btnEl) {
             btnEl.disabled = false;
         }
     } catch (err) {
-        alert('Erro de conexao.');
+        alert('Erro de conexão.');
         btnEl.disabled = false;
     }
 }
@@ -680,7 +680,7 @@ document.getElementById('form-aprovacao').addEventListener('submit', function(e)
         });
         if (!ok) {
             e.preventDefault();
-            alert('Selecione cotacoes de ida e volta para cada pessoa.');
+            alert('Selecione cotações de ida e volta para cada pessoa.');
         }
     }
 });

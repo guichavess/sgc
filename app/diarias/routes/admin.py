@@ -391,6 +391,148 @@ def escolha_passagens(id):
     return redirect(url_for('diarias.administracao_detalhe', id=id))
 
 
+# ── Assinatura do Superintendente nas Requisições ────────────────────────
+
+@diarias_bp.route('/administracao/<int:id>/assinar-superintendente', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def assinar_superintendente(id):
+    """
+    Superintendente assina os documentos de Requisição de Diárias
+    (e Requisição de Passagens, se aplicável) no SEI.
+    Deve ocorrer ANTES da autorização do Secretário.
+    """
+    from app.services.sei_auth import autenticar_usuario_sei
+    from app.services.diarias_sei_integration import UNIDADE_SEAD
+    from app.services.sei_integration import assinar_documento
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    # Guard: somente o superintendente pode assinar
+    if not current_user.is_superintendente:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Apenas o Superintendente pode assinar as requisições.'
+        }), 403
+
+    # Guard: só permite na etapa 1 (Solicitação Iniciada)
+    if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_INICIADA:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Esta solicitação não está na etapa de autorização (etapa 1).'
+        }), 400
+
+    # Guard: precisa de processo SEI e requisição gerada
+    if not itinerario.sei_id_procedimento or not itinerario.sei_id_requisicao:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Esta solicitação não possui processo SEI ou requisição de diárias vinculada.'
+        }), 400
+
+    # Guard: já assinou
+    if itinerario.superintendente_assinou:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'O Superintendente já assinou as requisições desta solicitação.'
+        }), 400
+
+    # Parse JSON
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados não informados.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip()
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Usuário e senha do SEI são obrigatórios.'}), 400
+
+    if not cargo:
+        cargo = 'Superintendente de Gestão Administrativa'
+
+    # 1. Autentica superintendente no SEI
+    auth_result = autenticar_usuario_sei(sei_usuario, sei_senha)
+    if not auth_result:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Falha na autenticação no SEI. Verifique usuário e senha.'
+        }), 401
+
+    token_super = auth_result['token']
+    id_usuario = auth_result['id_usuario']
+    id_login = auth_result['id_login']
+
+    documentos_assinados = []
+
+    # 2. Assinar Requisição de Diárias
+    dados_assinatura = {
+        'protocolo_doc': itinerario.sei_id_requisicao,
+        'orgao': 'SEAD-PI',
+        'cargo': cargo,
+        'id_login': id_login,
+        'id_usuario': id_usuario,
+        'senha': sei_senha,
+    }
+
+    ret = assinar_documento(
+        token=token_super,
+        unidade_id=UNIDADE_SEAD,
+        dados_assinatura=dados_assinatura,
+    )
+
+    if not ret or not ret.get('sucesso'):
+        erro = ret.get('erro', 'Erro desconhecido') if ret else 'Sem resposta'
+        return jsonify({
+            'sucesso': False,
+            'erro': f'Falha ao assinar Requisição de Diárias: {erro}'
+        }), 500
+
+    documentos_assinados.append(itinerario.sei_requisicao_formatado or 'Req. Diárias')
+
+    # 3. Assinar Requisição de Passagens (se existir)
+    if itinerario.sei_id_requisicao_passagens:
+        dados_assinatura_pass = {
+            'protocolo_doc': itinerario.sei_id_requisicao_passagens,
+            'orgao': 'SEAD-PI',
+            'cargo': cargo,
+            'id_login': id_login,
+            'id_usuario': id_usuario,
+            'senha': sei_senha,
+        }
+
+        ret_pass = assinar_documento(
+            token=token_super,
+            unidade_id=UNIDADE_SEAD,
+            dados_assinatura=dados_assinatura_pass,
+        )
+
+        if ret_pass and ret_pass.get('sucesso'):
+            documentos_assinados.append(itinerario.sei_requisicao_passagens_formatado or 'Req. Passagens')
+        else:
+            current_app.logger.warning(
+                f"SEI Diárias: Superintendente assinou Req. Diárias mas falhou na Req. Passagens: "
+                f"{ret_pass.get('erro') if ret_pass else 'Sem resposta'}"
+            )
+
+    # 4. Salvar no banco
+    itinerario.superintendente_assinou = True
+    itinerario.superintendente_assinou_data = datetime.now()
+    db.session.commit()
+
+    # 5. Notificar que Superintendente assinou
+    try:
+        DiariasNotifier.notificar_etapa(itinerario, 'assinatura_superintendente', current_user.id)
+    except Exception as exc_notif:
+        current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
+
+    return jsonify({
+        'sucesso': True,
+        'documentos_assinados': documentos_assinados,
+        'mensagem': f'Requisições assinadas com sucesso: {", ".join(documentos_assinados)}',
+    })
+
+
 # ── Autorização do Secretário ─────────────────────────────────────────────
 
 @diarias_bp.route('/administracao/<int:id>/autorizar', methods=['POST'])
@@ -440,6 +582,13 @@ def autorizar_solicitacao(id):
             'erro': 'Esta solicitação não possui processo SEI vinculado.'
         }), 400
 
+    # Guard: Superintendente precisa ter assinado antes
+    if not itinerario.superintendente_assinou:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'O Superintendente precisa assinar as requisições antes da autorização do Secretário.'
+        }), 400
+
     # Parse JSON
     dados = request.get_json()
     if not dados:
@@ -466,6 +615,41 @@ def autorizar_solicitacao(id):
     token_secretario = auth_result['token']
     id_usuario = auth_result['id_usuario']
     id_login = auth_result['id_login']
+
+    # 1.5 Secretário assina as Requisições (Diárias + Passagens)
+    if itinerario.sei_id_requisicao:
+        ret_req = assinar_documento(
+            token=token_secretario,
+            unidade_id=UNIDADE_SEAD,
+            dados_assinatura={
+                'protocolo_doc': itinerario.sei_id_requisicao,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': id_login,
+                'id_usuario': id_usuario,
+                'senha': sei_senha,
+            },
+        )
+        if not ret_req or not ret_req.get('sucesso'):
+            erro = ret_req.get('erro', 'Erro desconhecido') if ret_req else 'Sem resposta'
+            current_app.logger.warning(f"SEI: Secretário falhou ao assinar Req. Diárias: {erro}")
+
+    if itinerario.sei_id_requisicao_passagens:
+        ret_req_pass = assinar_documento(
+            token=token_secretario,
+            unidade_id=UNIDADE_SEAD,
+            dados_assinatura={
+                'protocolo_doc': itinerario.sei_id_requisicao_passagens,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': id_login,
+                'id_usuario': id_usuario,
+                'senha': sei_senha,
+            },
+        )
+        if not ret_req_pass or not ret_req_pass.get('sucesso'):
+            erro = ret_req_pass.get('erro', 'Erro desconhecido') if ret_req_pass else 'Sem resposta'
+            current_app.logger.warning(f"SEI: Secretário falhou ao assinar Req. Passagens: {erro}")
 
     # 2. Obtem token admin para criar documento
     token_admin = gerar_token_sei_admin()

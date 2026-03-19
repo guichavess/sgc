@@ -42,6 +42,14 @@ class Usuario(db.Model, UserMixin):
         cargo_lower = self.cargo.lower()
         return 'secretário' in cargo_lower or 'secretario' in cargo_lower
 
+    @property
+    def is_superintendente(self):
+        """Verifica se o usuário é o Superintendente de Gestão Administrativa."""
+        if not self.cargo:
+            return False
+        cargo_lower = self.cargo.lower()
+        return 'superintendente' in cargo_lower
+
     def tem_permissao(self, modulo, acao=None):
         """Verifica se o usuário tem permissão para módulo/ação.
 

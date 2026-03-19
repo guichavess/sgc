@@ -2,6 +2,7 @@
 Rotas CRUD do módulo de Diárias (criar, visualizar, atender).
 """
 import json
+import threading
 from flask import render_template, request, redirect, url_for, flash, current_app, jsonify
 from flask_login import login_required, current_user
 
@@ -41,14 +42,38 @@ def nova():
     )
 
 
+def _executar_sei_background(app, itinerario_id, pessoas, dados, tipo_solicitacao_id,
+                             justificativa_memorando, objetivo, arquivo_externo, usuario_id):
+    """Executa integração SEI + notificação em thread separada para não bloquear o request."""
+    with app.app_context():
+        try:
+            itinerario = DiariasItinerario.query.get(itinerario_id)
+            if not itinerario:
+                return
+
+            _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
+                                  justificativa_memorando, objetivo, arquivo_externo)
+        except Exception as e:
+            current_app.logger.error(f'[DIARIAS] Erro SEI background: {e}')
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'nova_solicitacao', usuario_id)
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
+
+
 @diarias_bp.route('/store', methods=['POST'])
 @login_required
 @requires_permission('diarias.criar')
 def store():
     """Salva nova solicitação de diária."""
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     try:
         tipo = int(request.form.get('tipo_itinerario', 0))
         if tipo not in (1, 2, 3):
+            if is_ajax:
+                return jsonify({'success': False, 'error': 'Tipo de itinerário inválido.'}), 400
             flash('Tipo de itinerário inválido.', 'danger')
             return redirect(url_for('diarias.nova'))
 
@@ -66,6 +91,8 @@ def store():
         pessoas_orgao = request.form.getlist('pessoas_orgao[]')
 
         if not pessoas_cpf:
+            if is_ajax:
+                return jsonify({'success': False, 'error': 'Adicione pelo menos uma pessoa à viagem.'}), 400
             flash('Adicione pelo menos uma pessoa à viagem.', 'danger')
             return redirect(url_for('diarias.nova'))
 
@@ -128,19 +155,39 @@ def store():
             'Solicitacao criada pelo usuario',
         )
 
-        # ── Integração SEI: Nacional/Internacional + Passagens (Diárias+Passagens ou Apenas Passagens) ──
-        if tipo in (2, 3) and tipo_solicitacao_id in (TIPO_SOL_DIARIAS_PASSAGENS, TIPO_SOL_APENAS_PASSAGENS):
-            _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
-                                  justificativa_memorando, objetivo, arquivo_externo)
+        # ── Integração SEI em background (não bloqueia o response) ──
+        precisa_sei = tipo in (2, 3) and tipo_solicitacao_id in (TIPO_SOL_DIARIAS_PASSAGENS, TIPO_SOL_APENAS_PASSAGENS)
+        if precisa_sei:
+            app = current_app._get_current_object()
+            usuario_id = current_user.id
+            t = threading.Thread(
+                target=_executar_sei_background,
+                args=(app, itinerario.id, pessoas, dados, tipo_solicitacao_id,
+                      justificativa_memorando, objetivo, arquivo_externo, usuario_id),
+                daemon=True,
+            )
+            t.start()
+        else:
+            # Sem SEI: notifica de forma síncrona (rápido)
+            try:
+                DiariasNotifier.notificar_etapa(itinerario, 'nova_solicitacao', current_user.id)
+            except Exception as exc_notif:
+                current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
+
+        if is_ajax:
+            return jsonify({
+                'success': True,
+                'redirect': url_for('diarias.dashboard'),
+                'message': 'Solicitacao criada com sucesso!',
+                'sei_background': precisa_sei,
+            })
 
         flash('Solicitação de diária criada com sucesso!', 'success')
-        try:
-            DiariasNotifier.notificar_etapa(itinerario, 'nova_solicitacao', current_user.id)
-        except Exception as exc_notif:
-            current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
         return redirect(url_for('diarias.dashboard'))
 
     except Exception as e:
+        if is_ajax:
+            return jsonify({'success': False, 'error': str(e)}), 500
         flash(f'Erro ao criar solicitação: {str(e)}', 'danger')
         return redirect(url_for('diarias.nova'))
 

@@ -1,7 +1,7 @@
 {% extends "base_layout.html" %}
 
-{% block title %}SGC - Diarias{% endblock %}
-{% block module_name %}Diarias{% endblock %}
+{% block title %}SGC - Diárias{% endblock %}
+{% block module_name %}Diárias{% endblock %}
 
 {% block extra_css %}
 {# Tom Select para dropdowns com pesquisa #}
@@ -10,19 +10,19 @@
 {% endblock %}
 
 {% block sidebar_links %}
-<div class="sidebar-section-label">Diarias</div>
+<div class="sidebar-section-label">Diárias</div>
 <ul class="sidebar-menu">
     <li>
         <a class="sidebar-link {{ 'active' if request.endpoint == 'diarias.dashboard' }}"
            href="{{ url_for('diarias.dashboard') }}">
-            <i class="bi bi-list-ul"></i> Minhas Solicitacoes
+            <i class="bi bi-list-ul"></i> Minhas Solicitações
         </a>
     </li>
     {% if current_user.is_admin or current_user.tem_permissao('diarias', 'aprovar') %}
     <li>
         <a class="sidebar-link {{ 'active' if request.endpoint in ('diarias.administracao', 'diarias.administracao_detalhe', 'diarias.agencias', 'diarias.cargos') }}"
            href="{{ url_for('diarias.administracao') }}">
-            <i class="bi bi-kanban"></i> Administracao
+            <i class="bi bi-kanban"></i> Administração
         </a>
     </li>
     {% endif %}

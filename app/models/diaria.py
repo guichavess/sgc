@@ -205,6 +205,10 @@ class DiariasItinerario(db.Model):
     sei_id_doc_externo = db.Column(db.String(50), nullable=True)     # ID do documento externo (anexo)
     sei_doc_externo_formatado = db.Column(db.String(50), nullable=True)  # Número formatado do doc externo
 
+    # Assinatura do Superintendente nas Requisições (antes do Secretário)
+    superintendente_assinou = db.Column(db.Boolean, default=False, nullable=False)
+    superintendente_assinou_data = db.Column(db.DateTime, nullable=True)
+
     # Autorização do Secretário (gerada pelo sistema ou detectada via SEI)
     sei_id_autorizacao = db.Column(db.String(50), nullable=True)
     sei_autorizacao_formatado = db.Column(db.String(50), nullable=True)

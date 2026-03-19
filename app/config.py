@@ -84,6 +84,7 @@ class Config:
     TRINO_PASSWORD = os.getenv('TRINO_PASSWORD', '')
     TRINO_CATALOG = os.getenv('TRINO_CATALOG', 'iceberg')
     TRINO_SCHEMA = os.getenv('TRINO_SCHEMA', 'sei')
+    TRINO_TIMEOUT = int(os.getenv('TRINO_TIMEOUT', '120'))  # timeout em segundos
 
     # ==========================================================================
     # LOGGING

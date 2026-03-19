@@ -988,21 +988,70 @@ def consultar_documentos_procedimento(protocolo_procedimento):
         return resultado
 
 
+def _verificar_dupla_assinatura(doc):
+    """
+    Verifica se um documento SEI possui as duas assinaturas necessarias:
+    Superintendente + Secretario de Estado.
+
+    A API do SEI retorna Assinaturas como lista de dicts com campos como
+    Nome, CargoFuncao, etc. Identificamos pelo cargo/nome.
+
+    Returns:
+        dict com {
+            completa: bool (True se ambas as assinaturas estao presentes),
+            tem_superintendente: bool,
+            tem_secretario: bool,
+            assinaturas: list (assinaturas originais do documento),
+            nomes: list[str] (nomes dos assinantes),
+        }
+    """
+    assinaturas = doc.get('Assinaturas', [])
+    tem_superintendente = False
+    tem_secretario = False
+    nomes = []
+
+    for a in assinaturas:
+        nome = a.get('Nome', '')
+        cargo = a.get('CargoFuncao', '') or a.get('Cargo', '') or ''
+        nomes.append(nome)
+
+        texto = (cargo + ' ' + nome).lower()
+        if 'superintendente' in texto:
+            tem_superintendente = True
+        if 'secret' in texto and 'estado' in texto:
+            tem_secretario = True
+
+    # Fallback: se CargoFuncao nao esta disponivel, tenta identificar pelo
+    # numero de assinaturas (minimo 2) — compatibilidade com APIs que nao
+    # retornam cargo nas assinaturas
+    if not tem_superintendente and not tem_secretario and len(assinaturas) >= 2:
+        # Assume que 2+ assinaturas = Superintendente + Secretario (ordem historica)
+        tem_superintendente = True
+        tem_secretario = True
+
+    return {
+        'completa': tem_superintendente and tem_secretario,
+        'tem_superintendente': tem_superintendente,
+        'tem_secretario': tem_secretario,
+        'assinaturas': assinaturas,
+        'nomes': nomes,
+    }
+
+
 def verificar_autorizacao_diaria(itinerario):
     """
     Verifica autorizacao no processo SEI da solicitacao de diaria.
 
-    A logica varia conforme o tipo da solicitacao:
+    Para TODOS os tipos de solicitacao, o documento de autorizacao
+    (Requisicao de Diarias ou Autorizacao do Secretario) deve possuir
+    DUAS assinaturas: Superintendente + Secretario de Estado.
 
-    - **Apenas Diarias (tipo 1):** procura o documento SEAD_REQUISICAO_DE_DIARIAS
-      (IdSerie 532) e verifica se ele possui assinaturas. Se assinado, considera
-      autorizado.
+    Fluxo de assinatura:
+    1. Superintendente assina primeiro
+    2. Secretario assina depois
 
-    - **Diarias + Passagens (tipo 2) e Apenas Passagens (tipo 3):** procura o
-      documento SEAD_AUTORIZACAO_DO_SECRETARIO (IdSerie 574). Se existir, considera
-      autorizado (logica original).
-
-    Se autorizado, avanca automaticamente para etapa 2 (Solicitacao Autorizada).
+    Somente apos ambas as assinaturas a solicitacao e considerada autorizada
+    e avanca para a etapa Financeiro.
 
     Args:
         itinerario: objeto DiariasItinerario (deve ter sei_protocolo)
@@ -1042,59 +1091,76 @@ def verificar_autorizacao_diaria(itinerario):
     apenas_diarias = (tipo_sol == 1)
 
     doc_encontrado = None
+    info_assinaturas = None
 
     if apenas_diarias:
         # Tipo 1 (Apenas Diarias):
-        # 1º Busca Requisicao de Diarias assinada (fluxo original via SEI)
-        # 2º Busca Autorizacao do Secretario (fluxo via sistema ou SEI direto)
+        # 1) Busca Requisicao de Diarias com dupla assinatura
+        # 2) Fallback: Autorizacao do Secretario com dupla assinatura
         for doc in resp_docs['documentos']:
             serie = doc.get('Serie', {})
             if str(serie.get('IdSerie', '')) == ID_SERIE_REQUISICAO_DIARIAS:
-                assinaturas = doc.get('Assinaturas', [])
-                if assinaturas:
+                info_assinaturas = _verificar_dupla_assinatura(doc)
+                if info_assinaturas['completa']:
                     doc_encontrado = doc
-                break  # so existe uma requisicao, nao precisa continuar
+                break
 
-        # Se nao encontrou requisicao assinada, verifica autorizacao do secretario
+        # Fallback: Autorizacao do Secretario
         if not doc_encontrado:
             for doc in resp_docs['documentos']:
                 serie = doc.get('Serie', {})
                 if str(serie.get('IdSerie', '')) == ID_SERIE_AUTORIZACAO_SECRETARIO:
-                    doc_encontrado = doc
+                    info_ass = _verificar_dupla_assinatura(doc)
+                    if info_ass['completa']:
+                        doc_encontrado = doc
+                        info_assinaturas = info_ass
+                    else:
+                        info_assinaturas = info_ass
                     break
     else:
-        # Tipos 2 e 3: busca Autorizacao do Secretario (logica original)
-        for doc in resp_docs['documentos']:
-            serie = doc.get('Serie', {})
-            if str(serie.get('IdSerie', '')) == ID_SERIE_AUTORIZACAO_SECRETARIO:
-                doc_encontrado = doc
+        # Tipos 2 e 3: busca Requisicao de Diarias ou Autorizacao do Secretario
+        # Verifica todos os documentos-chave por dupla assinatura
+        for id_serie in [ID_SERIE_REQUISICAO_DIARIAS, ID_SERIE_REQUISICAO_PASSAGENS,
+                         ID_SERIE_AUTORIZACAO_SECRETARIO]:
+            for doc in resp_docs['documentos']:
+                serie = doc.get('Serie', {})
+                if str(serie.get('IdSerie', '')) == id_serie:
+                    info_ass = _verificar_dupla_assinatura(doc)
+                    if info_ass['completa']:
+                        doc_encontrado = doc
+                        info_assinaturas = info_ass
+                        break
+            if doc_encontrado:
                 break
 
-    if doc_encontrado:
+        # Se nenhum doc-chave tem dupla assinatura, guarda info parcial do primeiro encontrado
+        if not doc_encontrado and not info_assinaturas:
+            for doc in resp_docs['documentos']:
+                serie = doc.get('Serie', {})
+                if str(serie.get('IdSerie', '')) in (ID_SERIE_REQUISICAO_DIARIAS,
+                                                      ID_SERIE_AUTORIZACAO_SECRETARIO):
+                    info_assinaturas = _verificar_dupla_assinatura(doc)
+                    break
+
+    if doc_encontrado and info_assinaturas and info_assinaturas['completa']:
         resultado['autorizada'] = True
         resultado['documento_autorizacao'] = {
             'id_documento': doc_encontrado.get('IdDocumento', ''),
             'documento_formatado': doc_encontrado.get('DocumentoFormatado', ''),
             'serie_nome': doc_encontrado.get('Serie', {}).get('Nome', ''),
             'data': doc_encontrado.get('Data', ''),
-            'assinaturas': doc_encontrado.get('Assinaturas', []),
+            'assinaturas': info_assinaturas['assinaturas'],
         }
 
         # Avanca para etapa 2 se ainda estiver na etapa 1
         if itinerario.etapa_atual_id == DiariasEtapaID.SOLICITACAO_INICIADA:
             doc_fmt = doc_encontrado.get('DocumentoFormatado', '?')
-            assinaturas = doc_encontrado.get('Assinaturas', [])
-            nomes = [a.get('Nome', '?') for a in assinaturas]
+            nomes = info_assinaturas['nomes']
 
-            if apenas_diarias:
-                # Comentario para Apenas Diarias
-                comentario = f"Requisicao de Diarias ({doc_fmt}) assinada por: {', '.join(nomes)}"
-            else:
-                # Comentario para tipos com passagens
-                if nomes:
-                    comentario = f"Autorizacao do Secretario ({doc_fmt}) assinada por: {', '.join(nomes)}"
-                else:
-                    comentario = f"Documento de Autorizacao do Secretario encontrado ({doc_fmt})"
+            comentario = (
+                f"Documento {doc_fmt} assinado pelo Superintendente e Secretario: "
+                f"{', '.join(nomes)}"
+            )
 
             DiariaService.registrar_movimentacao(
                 itinerario.id,
@@ -1172,19 +1238,36 @@ def verificar_autorizacao_diaria(itinerario):
                 current_app.logger.warning(
                     "SEI Diarias: Nao foi possivel obter token para encaminhar procedimento."
                 )
-    elif apenas_diarias:
-        # Tipo 1: documento existe mas nao tem assinaturas — informa ao usuario
+    elif info_assinaturas:
+        # Documento encontrado mas sem as duas assinaturas necessarias
+        # Monta mensagem informativa sobre o que falta
+        faltam = []
+        if not info_assinaturas['tem_superintendente']:
+            faltam.append('Superintendente')
+        if not info_assinaturas['tem_secretario']:
+            faltam.append('Secretario')
+
+        if not info_assinaturas['assinaturas']:
+            resultado['erro'] = 'Documento encontrado, mas ainda nao possui nenhuma assinatura.'
+        else:
+            nomes_parcial = info_assinaturas['nomes']
+            resultado['erro'] = (
+                f"Documento assinado por {', '.join(nomes_parcial)}, "
+                f"mas falta assinatura de: {', '.join(faltam)}."
+            )
+
+        # Retorna dados parciais do documento para referencia
         for doc in resp_docs['documentos']:
             serie = doc.get('Serie', {})
-            if str(serie.get('IdSerie', '')) == ID_SERIE_REQUISICAO_DIARIAS:
+            if str(serie.get('IdSerie', '')) in (ID_SERIE_REQUISICAO_DIARIAS,
+                                                  ID_SERIE_AUTORIZACAO_SECRETARIO):
                 resultado['documento_autorizacao'] = {
                     'id_documento': doc.get('IdDocumento', ''),
                     'documento_formatado': doc.get('DocumentoFormatado', ''),
                     'serie_nome': doc.get('Serie', {}).get('Nome', ''),
                     'data': doc.get('Data', ''),
-                    'assinaturas': [],
+                    'assinaturas': info_assinaturas['assinaturas'],
                 }
-                resultado['erro'] = 'Requisicao de Diarias encontrada, mas ainda nao possui assinaturas.'
                 break
 
     return resultado
