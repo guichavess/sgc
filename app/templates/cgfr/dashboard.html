@@ -833,6 +833,11 @@ $(document).ready(function() {
             var p = $(this).data('protocolo');
             if (p) abrirModalEdicao(String(p));
         });
+
+        // Registra o handler de salvar do modal (precisa de jQuery + SweetAlert, por isso está aqui)
+        if (typeof initSalvarClassificacao === 'function') {
+            initSalvarClassificacao();
+        }
     }
 });
 </script>

@@ -115,9 +115,9 @@
                 </div>
             </div>
             <div class="modal-footer py-2">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-danger btn-sm" id="btnSalvarClassificacao">
-                    <i class="bi bi-check-lg me-1"></i> Salvar
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnSalvarClassificacao">
+                    <i class="bi bi-check-lg me-1"></i> Salvar Alterações
                 </button>
             </div>
         </div>
@@ -125,6 +125,15 @@
 </div>
 
 <script>
+/*
+ * IMPORTANTE: Este script roda ANTES do jQuery/SweetAlert/Select2 carregarem
+ * (o partial esta dentro do bloco content, as libs carregam no bloco extra_js).
+ *
+ * Por isso, SOMENTE definimos funcoes aqui (hoisted via function declaration).
+ * O bind do click handler e feito por initSalvarClassificacao(), que DEVE ser
+ * chamada pelo dashboard JS (bloco cgfr_js) depois que jQuery ja esta disponivel.
+ */
+
 function formatarMonetarioBR(valor) {
     if (valor === null || valor === undefined || valor === '') return '';
     var v = parseFloat(valor);
@@ -137,46 +146,54 @@ function converterDataParaISO(dataStr) {
     // DD/MM/YYYY → YYYY-MM-DD
     var parts = dataStr.split('/');
     if (parts.length === 3) return parts[2] + '-' + parts[1] + '-' + parts[0];
-    // Já está em formato ISO ou outro
     return dataStr;
 }
 
 function abrirModalEdicao(protocolo) {
     // Buscar dados do registro via DataTable cache
-    const table = window.cgfrTable;
-    const data = table.rows().data().toArray().find(r => r.processo_formatado === protocolo);
+    var table = window.cgfrTable;
+    if (!table) { alert('Tabela não inicializada.'); return; }
 
-    if (!data) {
-        Swal.fire('Erro', 'Processo não encontrado na tabela.', 'error');
+    var rows = table.rows().data().toArray();
+    var record = null;
+    for (var i = 0; i < rows.length; i++) {
+        if (rows[i].processo_formatado === protocolo) { record = rows[i]; break; }
+    }
+
+    if (!record) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire('Erro', 'Processo não encontrado na tabela.', 'error');
+        } else {
+            alert('Processo não encontrado na tabela.');
+        }
         return;
     }
 
-    // Preencher campos
-    $('#modal-processo-formatado').val(data.processo_formatado);
-    $('#modal-processo-display').text(data.processo_formatado);
-    $('#modal-fornecedor').val(data.fornecedor);
-    $('#modal-objeto').val(data.objeto_do_pedido || '');
-    $('#modal-necessidade').val(data.necessidade || '');
-    $('#modal-deliberacao').val(data.deliberacao || '');
-    $('#modal-tipo-despesa').val(data.tipo_despesa);
-    // Valores monetários: formatar como BR (1.234,56) para exibição no input
-    $('#modal-valor-solicitado').val(formatarMonetarioBR(data.valor_solicitado));
-    $('#modal-valor-aprovado').val(formatarMonetarioBR(data.valor_aprovado));
-    // Data da reunião: converter de DD/MM/YYYY para YYYY-MM-DD (formato HTML date input)
-    $('#modal-data-reuniao').val(converterDataParaISO(data.data_da_reuniao));
-    $('#modal-prioridade').val(data.nivel_prioridade);
-    $('#modal-reserva').val(data.possui_reserva || 0);
-    $('#modal-valor-reserva').val(data.valor_reserva);
-    $('#modal-observacao').val(data.observacao || '');
+    // Preencher campos via vanilla JS (jQuery pode não estar disponível no momento da definição)
+    document.getElementById('modal-processo-formatado').value = record.processo_formatado;
+    document.getElementById('modal-processo-display').textContent = record.processo_formatado;
+    document.getElementById('modal-fornecedor').value = record.fornecedor || '';
+    document.getElementById('modal-objeto').value = record.objeto_do_pedido || '';
+    document.getElementById('modal-necessidade').value = record.necessidade || '';
+    document.getElementById('modal-deliberacao').value = record.deliberacao || '';
+    document.getElementById('modal-tipo-despesa').value = record.tipo_despesa || '';
+    document.getElementById('modal-valor-solicitado').value = formatarMonetarioBR(record.valor_solicitado);
+    document.getElementById('modal-valor-aprovado').value = formatarMonetarioBR(record.valor_aprovado);
+    document.getElementById('modal-data-reuniao').value = converterDataParaISO(record.data_da_reuniao);
+    document.getElementById('modal-prioridade').value = record.nivel_prioridade || '';
+    document.getElementById('modal-reserva').value = record.possui_reserva || 0;
+    document.getElementById('modal-valor-reserva').value = record.valor_reserva || '';
+    document.getElementById('modal-observacao').value = record.observacao || '';
 
-    // Inicializar Select2 (se nao inicializado)
-    initSelect2Fields(data);
+    // Select2 — chamada segura (jQuery já estará disponível quando esta função é chamada pelo dashboard)
+    initSelect2Fields(record);
 
     new bootstrap.Modal(document.getElementById('modalEdicao')).show();
 }
 
-function initSelect2Fields(data) {
-    const opts = window.cgfrFilterOptions;
+function initSelect2Fields(record) {
+    var opts = window.cgfrFilterOptions;
+    if (!opts || typeof $ === 'undefined') return;
 
     // Natureza
     $('#modal-natureza').empty().select2({
@@ -186,7 +203,7 @@ function initSelect2Fields(data) {
         allowClear: true,
         language: 'pt-BR',
         data: [{id: '', text: ''}].concat(opts.naturezas)
-    }).val(data.natureza_despesa_id || '').trigger('change');
+    }).val(record.natureza_despesa_id || '').trigger('change');
 
     // Fonte
     $('#modal-fonte').empty().select2({
@@ -196,7 +213,7 @@ function initSelect2Fields(data) {
         allowClear: true,
         language: 'pt-BR',
         data: [{id: '', text: ''}].concat(opts.fontes)
-    }).val(data.fonte_id || '').trigger('change');
+    }).val(record.fonte_id || '').trigger('change');
 
     // Acao
     $('#modal-acao').empty().select2({
@@ -206,52 +223,98 @@ function initSelect2Fields(data) {
         allowClear: true,
         language: 'pt-BR',
         data: [{id: '', text: ''}].concat(opts.acoes)
-    }).val(data.acao_id || '').trigger('change');
+    }).val(record.acao_id || '').trigger('change');
 }
 
-// Salvar
-$(document).on('click', '#btnSalvarClassificacao', function() {
-    const payload = {
-        processo_formatado: $('#modal-processo-formatado').val(),
-        natureza_despesa_id: $('#modal-natureza').val() || null,
-        fonte_id: $('#modal-fonte').val() || null,
-        acao_id: $('#modal-acao').val() || null,
-        fornecedor: $('#modal-fornecedor').val(),
-        objeto_do_pedido: $('#modal-objeto').val(),
-        necessidade: $('#modal-necessidade').val(),
-        deliberacao: $('#modal-deliberacao').val(),
-        tipo_despesa: $('#modal-tipo-despesa').val(),
-        valor_solicitado: $('#modal-valor-solicitado').val(),
-        valor_aprovado: $('#modal-valor-aprovado').val(),
-        data_da_reuniao: $('#modal-data-reuniao').val() || null,
-        nivel_prioridade: $('#modal-prioridade').val(),
-        possui_reserva: $('#modal-reserva').val(),
-        valor_reserva: $('#modal-valor-reserva').val(),
-        observacao: $('#modal-observacao').val(),
-    };
+/**
+ * Registra o handler de salvar. DEVE ser chamada após jQuery + SweetAlert estarem carregados.
+ * Chamada por initEditModal() no dashboard.html (bloco cgfr_js).
+ */
+function initSalvarClassificacao() {
+    $(document).on('click', '#btnSalvarClassificacao', function() {
+        var btnSalvar = $(this);
+        var protocolo = $('#modal-processo-formatado').val();
 
-    fetch('{{ url_for("cgfr.api_salvar") }}', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.sucesso) {
-            bootstrap.Modal.getInstance(document.getElementById('modalEdicao')).hide();
-            Swal.fire({
-                icon: 'success',
-                title: 'Salvo!',
-                text: data.msg,
-                timer: 1500,
-                showConfirmButton: false
-            });
-            window.cgfrTable.ajax.reload(null, false);
-            window.cgfrAtualizarKPIs();
-        } else {
-            Swal.fire('Erro', data.msg || 'Erro ao salvar.', 'error');
+        if (!protocolo) {
+            Swal.fire({ icon: 'warning', title: 'Atenção', text: 'Processo não identificado. Feche o modal e tente novamente.' });
+            return;
         }
-    })
-    .catch(() => Swal.fire('Erro', 'Falha na comunicação.', 'error'));
-});
+
+        var payload = {
+            processo_formatado: protocolo,
+            natureza_despesa_id: $('#modal-natureza').val() || null,
+            fonte_id: $('#modal-fonte').val() || null,
+            acao_id: $('#modal-acao').val() || null,
+            fornecedor: $('#modal-fornecedor').val(),
+            objeto_do_pedido: $('#modal-objeto').val(),
+            necessidade: $('#modal-necessidade').val(),
+            deliberacao: $('#modal-deliberacao').val(),
+            tipo_despesa: $('#modal-tipo-despesa').val(),
+            valor_solicitado: $('#modal-valor-solicitado').val(),
+            valor_aprovado: $('#modal-valor-aprovado').val(),
+            data_da_reuniao: $('#modal-data-reuniao').val() || null,
+            nivel_prioridade: $('#modal-prioridade').val(),
+            possui_reserva: $('#modal-reserva').val(),
+            valor_reserva: $('#modal-valor-reserva').val(),
+            observacao: $('#modal-observacao').val(),
+        };
+
+        // Loading state no botão
+        var originalHtml = btnSalvar.html();
+        btnSalvar.html('<span class="spinner-border spinner-border-sm me-1"></span> Salvando...').prop('disabled', true);
+
+        fetch('{{ url_for("cgfr.api_salvar") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(resp) {
+            btnSalvar.html(originalHtml).prop('disabled', false);
+
+            if (resp.sucesso) {
+                // Fecha o modal
+                var modalInstance = bootstrap.Modal.getInstance(document.getElementById('modalEdicao'));
+                if (modalInstance) modalInstance.hide();
+
+                // Toast de sucesso — discreto, posicionado no topo direito
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Alterações salvas',
+                    text: 'O processo ' + protocolo + ' foi atualizado com sucesso.',
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3000,
+                    timerProgressBar: true,
+                    didOpen: function(toast) {
+                        toast.addEventListener('mouseenter', Swal.stopTimer);
+                        toast.addEventListener('mouseleave', Swal.resumeTimer);
+                    }
+                });
+
+                // Recarrega tabela e KPIs
+                if (window.cgfrTable) window.cgfrTable.ajax.reload(null, false);
+                if (window.cgfrAtualizarKPIs) window.cgfrAtualizarKPIs();
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro ao salvar',
+                    text: resp.msg || 'Não foi possível salvar as alterações. Tente novamente.',
+                    confirmButtonColor: '#dc3545'
+                });
+            }
+        })
+        .catch(function(err) {
+            btnSalvar.html(originalHtml).prop('disabled', false);
+            console.error('Erro ao salvar classificação CGFR:', err);
+            Swal.fire({
+                icon: 'error',
+                title: 'Falha na comunicação',
+                text: 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.',
+                confirmButtonColor: '#dc3545'
+            });
+        });
+    });
+}
 </script>
