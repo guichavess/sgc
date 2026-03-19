@@ -382,6 +382,7 @@ def _format_record(p, acao_map=None):
 
     # Natureza/Fonte/Acao como texto para exibicao na tabela
     d['natureza_despesa'] = p.natureza_rel.titulo if p.natureza_rel else None
+    d['natureza_codigo'] = p.natureza_rel.codigo if p.natureza_rel else None
     d['acao'] = acao_map[p.acao_id].titulo if p.acao_id and p.acao_id in acao_map else None
     d['fonte'] = p.fonte_rel.descricao if p.fonte_rel else None
 

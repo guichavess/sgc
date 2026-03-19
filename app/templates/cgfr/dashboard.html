@@ -188,15 +188,12 @@
                     <tr>
                         <th>Processo</th>
                         <th>Fornecedor / Objeto</th>
-                        <th>Data de Envio</th>
-                        <th>Data de Recebimento</th>
-                        <th>Data da Reunião</th>
+                        <th>Datas</th>
                         <th class="text-end">Valor Solicitado</th>
                         <th class="text-end">Valor Aprovado</th>
                         <th>Natureza</th>
-                        <th>Deliberação</th>
+                        <th>Deliberação / Prioridade</th>
                         <th>Tipo de Processo</th>
-                        <th>Prioridade</th>
                         <th class="text-center">Operações</th>
                     </tr>
                 </thead>
@@ -292,46 +289,66 @@ $(document).ready(function() {
                             h += '<div class="cell-contrato-titulo text-muted">Fornecedor não informado</div>';
                         }
                         if (sub) {
-                            var subTrunc = sub.length > 90 ? sub.substring(0, 90) + '...' : sub;
-                            h += '<div class="cell-contrato-sub"' + (sub.length > 90 ? ' data-bs-toggle="tooltip" data-bs-placement="top" title="' + sub.replace(/"/g, '&quot;') + '"' : '') + '>' + esc(subTrunc) + '</div>';
+                            var subTrunc = sub.length > 140 ? sub.substring(0, 140) + '...' : sub;
+                            h += '<div class="cell-contrato-sub"' + (sub.length > 140 ? ' data-bs-toggle="tooltip" data-bs-placement="top" title="' + sub.replace(/"/g, '&quot;') + '"' : '') + '>' + esc(subTrunc) + '</div>';
                         }
                         h += '</div>';
                         return h;
                     },
                     defaultContent: '-',
                 },
-                { data: 'dt_enviado_fmt', defaultContent: '-' },
-                { data: 'data_recebido_cgfr', defaultContent: '-' },
-                { data: 'data_da_reuniao', defaultContent: '-' },
+                {
+                    data: 'dt_enviado_fmt',
+                    render: function(data, type, row) {
+                        var envio = data || '-';
+                        var reuniao = row.data_da_reuniao || '-';
+                        return '<div style="line-height:1.5;font-size:0.72rem;">' +
+                            '<span class="text-muted">Envio:</span> <strong>' + envio + '</strong><br>' +
+                            '<span class="text-muted">Reunião:</span> <strong>' + reuniao + '</strong>' +
+                            '</div>';
+                    },
+                    defaultContent: '-',
+                },
                 { data: 'valor_solicitado_fmt', className: 'text-end', defaultContent: '-',
                     render: function(data) { return data && data !== '-' ? '<span style="color:#059669;font-weight:600;">' + data + '</span>' : '-'; }
                 },
                 { data: 'valor_acordado_fmt', className: 'text-end', defaultContent: '-',
                     render: function(data) { return data && data !== '-' ? '<span style="color:#059669;font-weight:600;">' + data + '</span>' : '-'; }
                 },
-                { data: 'natureza_despesa', defaultContent: '<span class="text-muted">-</span>' },
+                {
+                    data: 'natureza_codigo',
+                    render: function(data, type, row) {
+                        if (!data) return '<span class="text-muted">-</span>';
+                        var titulo = row.natureza_despesa || '';
+                        var tip = titulo ? (data + ' - ' + titulo) : String(data);
+                        return '<span title="' + $('<span>').text(tip).html() + '" style="cursor:help;font-weight:600;">' + data + '</span>';
+                    },
+                    defaultContent: '<span class="text-muted">-</span>',
+                },
                 {
                     data: 'deliberacao',
-                    render: function(data) {
-                        if (!data) return '<span class="badge badge-status bg-secondary">Pendente</span>';
-                        if (data === 'Deferido' || data === 'Aprovado') {
-                            return '<span class="badge badge-status bg-success">' + data + '</span>';
+                    render: function(data, type, row) {
+                        var h = '';
+                        // Deliberação
+                        if (!data) {
+                            h += '<span class="badge badge-status bg-secondary">Pendente</span>';
+                        } else if (data === 'Deferido' || data === 'Aprovado') {
+                            h += '<span class="badge badge-status bg-success">' + data + '</span>';
+                        } else {
+                            h += '<span class="badge badge-status bg-warning text-dark">' + data + '</span>';
                         }
-                        return '<span class="badge badge-status bg-warning text-dark">' + data + '</span>';
+                        // Prioridade
+                        var prio = row.nivel_prioridade;
+                        if (prio) {
+                            var colors = { 'Alto': 'bg-danger', 'Medio': 'bg-warning text-dark', 'Baixo': 'bg-info text-dark' };
+                            var icons = { 'Alto': 'bi-arrow-up-circle-fill', 'Medio': 'bi-dash-circle-fill', 'Baixo': 'bi-arrow-down-circle-fill' };
+                            h += '<br><span class="badge ' + (colors[prio] || 'bg-secondary') + '" style="font-size:0.85em;margin-top:5px;padding:5px 10px;">' +
+                                '<i class="bi ' + (icons[prio] || '') + ' me-1"></i>' + prio + '</span>';
+                        }
+                        return h;
                     },
                 },
                 { data: 'tipo_processo', defaultContent: '<span class="text-muted">-</span>' },
-                {
-                    data: 'nivel_prioridade',
-                    render: function(data) {
-                        if (!data) return '<span class="text-muted">-</span>';
-                        var colors = { 'Alto': 'bg-danger', 'Medio': 'bg-warning text-dark', 'Baixo': 'bg-success' };
-                        var icons = { 'Alto': 'bi-arrow-up-circle-fill', 'Medio': 'bi-dash-circle-fill', 'Baixo': 'bi-arrow-down-circle-fill' };
-                        return '<span class="badge ' + (colors[data] || 'bg-secondary') + '" style="font-size:0.70em;">' +
-                            '<i class="bi ' + (icons[data] || '') + ' me-1"></i>' + data + '</span>';
-                    },
-                    defaultContent: '-',
-                },
                 {
                     data: 'protocolo_formatado',
                     className: 'text-center',
