@@ -24,7 +24,9 @@ from app.utils.permissions import requires_admin
 logger = logging.getLogger(__name__)
 
 # Constantes
-_SEI_BASE_URL = "https://api.sei.pi.gov.br/v1/unidades/110006213/procedimentos/documentos"
+_SEI_UNIDADE = "110006213"
+_SEI_BASE_URL = f"https://api.sei.pi.gov.br/v1/unidades/{_SEI_UNIDADE}/procedimentos/documentos"
+_SEI_PROC_URL = f"https://api.sei.pi.gov.br/v1/unidades/{_SEI_UNIDADE}/procedimentos/consulta"
 _SEI_TIMEOUT = 60   # 60s — API SEI é lenta
 _MAX_RETRIES = 3    # 3 tentativas com backoff progressivo
 _MAX_WORKERS = 8    # threads paralelas para bulk sync
@@ -46,6 +48,74 @@ def acompanhar(protocolo):
         mov_nr=dados['mov_nr'],
         tem_orcamento=dados['tem_orcamento'],
     )
+
+
+def _update_processo_from_sei(protocolo, token_sei, app_obj):
+    """Consulta API SEI procedimento e atualiza campos sync do CgfrProcessoEnviado.
+    Preenche link_acesso e outros campos que o sync Trino pode trazer vazios.
+    """
+    protocolo_limpo = "".join(filter(str.isdigit, protocolo))
+    headers = {'token': token_sei, 'Accept': 'application/json'}
+    params = {'protocolo_procedimento': protocolo_limpo, 'sinal_completo': 'S'}
+
+    try:
+        resp = http_requests.get(
+            _SEI_PROC_URL, headers=headers, params=params,
+            timeout=_SEI_TIMEOUT, verify=False,
+        )
+        if resp.status_code != 200:
+            logger.warning(f"[{protocolo}] Consulta procedimento retornou {resp.status_code}")
+            return
+        data = resp.json()
+    except Exception as e:
+        logger.warning(f"[{protocolo}] Erro ao consultar procedimento: {e}")
+        return
+
+    with app_obj.app_context():
+        try:
+            processo = CgfrProcessoEnviado.query.get(protocolo)
+            if not processo:
+                return
+
+            # Atualiza campos sync somente se vieram da API
+            if data.get('LinkAcesso'):
+                processo.link_acesso = data['LinkAcesso']
+            if data.get('Especificacao'):
+                processo.especificacao = data['Especificacao']
+            if data.get('TipoProcedimento', {}).get('Nome'):
+                processo.tipo_processo = data['TipoProcedimento']['Nome']
+
+            geracao = data.get('AndamentoGeracao', {})
+            if geracao:
+                unidade_g = geracao.get('Unidade', {})
+                usuario_g = geracao.get('Usuario', {})
+                if unidade_g.get('IdUnidade'):
+                    processo.id_unidade_geradora = str(unidade_g['IdUnidade'])
+                if unidade_g.get('Sigla'):
+                    processo.geracao_sigla = unidade_g['Sigla']
+                if geracao.get('Descricao'):
+                    processo.geracao_descricao = geracao['Descricao']
+                if usuario_g.get('Nome'):
+                    processo.usuario_gerador = usuario_g['Nome']
+
+            ultimo = data.get('UltimoAndamento', {})
+            if ultimo:
+                unidade_u = ultimo.get('Unidade', {})
+                usuario_u = ultimo.get('Usuario', {})
+                if unidade_u.get('Sigla'):
+                    processo.ultimo_andamento_sigla = unidade_u['Sigla']
+                if ultimo.get('Descricao'):
+                    processo.ultimo_andamento_descricao = ultimo['Descricao']
+                if usuario_u.get('Nome'):
+                    processo.ultimo_andamento_usuario = usuario_u['Nome']
+
+            db.session.commit()
+            logger.info(f"[{protocolo}] Campos sync do processo atualizados via API SEI")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"[{protocolo}] Erro ao atualizar processo: {e}")
+        finally:
+            db.session.remove()
 
 
 def _fetch_and_save_docs(protocolo, token_sei, app_obj):
@@ -159,6 +229,11 @@ def sync_documentos(protocolo):
         return jsonify({'success': False, 'error': f'Erro autenticação SEI: {str(e)}'}), 500
 
     app_obj = current_app._get_current_object()
+
+    # Atualiza campos sync do processo (link_acesso, especificacao, etc.)
+    _update_processo_from_sei(protocolo, token_sei, app_obj)
+
+    # Sincroniza documentos
     success, msg = _fetch_and_save_docs(protocolo, token_sei, app_obj)
 
     return jsonify({'success': success, 'message': msg})
@@ -194,9 +269,14 @@ def sync_documentos_bulk():
 
         yield f"data: {json.dumps({'msg': f'Iniciando sync de {total} processos...', 'progresso': 0})}\n\n"
 
+        def _sync_full(proto, token, app):
+            """Atualiza processo + documentos em uma única tarefa."""
+            _update_processo_from_sei(proto, token, app)
+            return _fetch_and_save_docs(proto, token, app)
+
         with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
             futures = {
-                executor.submit(_fetch_and_save_docs, proto, token_sei, app_obj): proto
+                executor.submit(_sync_full, proto, token_sei, app_obj): proto
                 for proto in protocolos
             }
 

@@ -1021,6 +1021,9 @@ $(document).ready(function() {
             if (p) abrirModalEdicao(String(p));
         });
 
+        // Máscara monetária BR para campos do modal
+        $('.cgfr-money').mask('#.##0,00', {reverse: true});
+
         // Registra o handler de salvar do modal (precisa de jQuery + SweetAlert, por isso está aqui)
         if (typeof initSalvarClassificacao === 'function') {
             initSalvarClassificacao();

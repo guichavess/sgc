@@ -119,37 +119,64 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
             'nivel_prioridade',
         ]
 
+        from decimal import Decimal, InvalidOperation
+        from datetime import date as dt_date
+
+        def _parse_decimal(val):
+            """Converte string monetária BR/US para Decimal ou None."""
+            s = str(val).strip() if val else ''
+            if not s:
+                return None
+            if ',' in s:
+                # Formato BR: "1.234,56" → "1234.56"
+                s = s.replace('.', '').replace(',', '.')
+            try:
+                return Decimal(s)
+            except (InvalidOperation, ValueError):
+                return None
+
+        def _parse_int(val):
+            """Converte para int, retorna None se vazio/inválido."""
+            if val is None or val == '':
+                return None
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return None
+
+        def _parse_date(val):
+            """Converte ISO 'YYYY-MM-DD' para date, retorna None se inválido."""
+            if not val or val == '-':
+                return None
+            try:
+                return dt_date.fromisoformat(str(val))
+            except (ValueError, TypeError):
+                return None
+
         for campo in campos_editaveis:
             if campo in dados:
                 valor = dados[campo]
-                # Converter strings vazias em None para campos FK
-                if campo in ('natureza_despesa_id', 'fonte_id', 'acao_id') and valor == '':
-                    valor = None
-                elif campo in ('natureza_despesa_id', 'fonte_id', 'acao_id') and valor is not None:
-                    valor = int(valor)
-                elif campo in ('valor_solicitado', 'valor_aprovado') and valor:
-                    from decimal import Decimal, InvalidOperation
-                    s = str(valor).strip()
-                    if ',' in s:
-                        # Formato BR: "1.234,56" → remove pontos de milhar, troca vírgula
-                        s = s.replace('.', '').replace(',', '.')
-                    # Formato numérico direto: "1234.56"
-                    try:
-                        valor = Decimal(s) if s else None
-                    except (InvalidOperation, ValueError):
-                        valor = None
+
+                if campo in ('natureza_despesa_id', 'fonte_id', 'acao_id'):
+                    valor = _parse_int(valor)
+                elif campo in ('valor_solicitado', 'valor_aprovado'):
+                    valor = _parse_decimal(valor)
                 elif campo == 'data_da_reuniao':
-                    from datetime import date as dt_date
-                    if valor and valor != '-':
-                        try:
-                            # ISO: "YYYY-MM-DD"
-                            valor = dt_date.fromisoformat(str(valor))
-                        except (ValueError, TypeError):
-                            valor = None
-                    else:
-                        valor = None
-                elif campo == 'possui_reserva' and valor is not None:
-                    valor = int(valor) if valor != '' else 0
+                    valor = _parse_date(valor)
+                elif campo == 'possui_reserva':
+                    valor = _parse_int(valor) or 0
+                elif campo == 'valor_reserva':
+                    # VARCHAR(30): limpar e armazenar como texto
+                    valor = str(valor).strip()[:30] if valor else ''
+                elif campo == 'nivel_prioridade':
+                    # VARCHAR(10): truncar para evitar erro de overflow
+                    valor = str(valor).strip()[:10] if valor else ''
+                elif campo == 'tipo_despesa':
+                    valor = str(valor).strip()[:50] if valor else ''
+                else:
+                    # Campos texto livres: converter None para ''
+                    valor = str(valor).strip() if valor else ''
+
                 setattr(processo, campo, valor)
 
         db.session.commit()
