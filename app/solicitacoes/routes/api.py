@@ -373,26 +373,47 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
                         serie = doc.get('Serie', {})
                         unidade = doc.get('UnidadeElaboradora', {})
 
-                        novo_mov = SeiMovimentacao(
-                            id_documento=str(doc.get('IdDocumento', '')),
-                            protocolo_procedimento=protocolo,
-                            id_procedimento=str(doc.get('IdProcedimento', '')),
-                            procedimento_formatado=str(doc.get('ProcedimentoFormatado', '')),
-                            documento_formatado=str(doc.get('DocumentoFormatado', '')),
-                            link_acesso=doc.get('LinkAcesso'),
-                            descricao=doc.get('Descricao'),
-                            data=doc.get('Data') or doc.get('DataGeracao'),
-                            numero=doc.get('Numero'),
-                            id_serie=int(serie.get('IdSerie')) if serie.get('IdSerie') and str(serie.get('IdSerie')).isdigit() else None,
-                            serie_nome=serie.get('Nome'),
-                            serie_aplicabilidade=serie.get('Aplicabilidade'),
-                            unidade_id=str(unidade.get('IdUnidade', '')),
-                            unidade_sigla=unidade.get('Sigla'),
-                            unidade_descricao=unidade.get('Descricao'),
-                            tempo_execucao=tempo_total,
-                            obs=""
-                        )
-                        db.session.add(novo_mov)
+                        id_doc = str(doc.get('IdDocumento', ''))
+
+                        # UPSERT: se o documento já existe, atualiza os dados
+                        existente = SeiMovimentacao.query.get(id_doc)
+                        if existente:
+                            existente.protocolo_procedimento = protocolo
+                            existente.id_procedimento = str(doc.get('IdProcedimento', ''))
+                            existente.procedimento_formatado = str(doc.get('ProcedimentoFormatado', ''))
+                            existente.documento_formatado = str(doc.get('DocumentoFormatado', ''))
+                            existente.link_acesso = doc.get('LinkAcesso')
+                            existente.descricao = doc.get('Descricao')
+                            existente.data = doc.get('Data') or doc.get('DataGeracao')
+                            existente.numero = doc.get('Numero')
+                            existente.id_serie = int(serie.get('IdSerie')) if serie.get('IdSerie') and str(serie.get('IdSerie')).isdigit() else None
+                            existente.serie_nome = serie.get('Nome')
+                            existente.serie_aplicabilidade = serie.get('Aplicabilidade')
+                            existente.unidade_id = str(unidade.get('IdUnidade', ''))
+                            existente.unidade_sigla = unidade.get('Sigla')
+                            existente.unidade_descricao = unidade.get('Descricao')
+                            existente.tempo_execucao = tempo_total
+                        else:
+                            novo_mov = SeiMovimentacao(
+                                id_documento=id_doc,
+                                protocolo_procedimento=protocolo,
+                                id_procedimento=str(doc.get('IdProcedimento', '')),
+                                procedimento_formatado=str(doc.get('ProcedimentoFormatado', '')),
+                                documento_formatado=str(doc.get('DocumentoFormatado', '')),
+                                link_acesso=doc.get('LinkAcesso'),
+                                descricao=doc.get('Descricao'),
+                                data=doc.get('Data') or doc.get('DataGeracao'),
+                                numero=doc.get('Numero'),
+                                id_serie=int(serie.get('IdSerie')) if serie.get('IdSerie') and str(serie.get('IdSerie')).isdigit() else None,
+                                serie_nome=serie.get('Nome'),
+                                serie_aplicabilidade=serie.get('Aplicabilidade'),
+                                unidade_id=str(unidade.get('IdUnidade', '')),
+                                unidade_sigla=unidade.get('Sigla'),
+                                unidade_descricao=unidade.get('Descricao'),
+                                tempo_execucao=tempo_total,
+                                obs=""
+                            )
+                            db.session.add(novo_mov)
 
                     db.session.commit()
                     return (True, f"OK: {protocolo}")
