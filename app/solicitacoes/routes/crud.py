@@ -228,7 +228,8 @@ def vincular_solicitacao():
 
             # 3. Lista e baixa documentos do SEI para tabela seimovimentacao
             protocolo_formatado = resultado_sei['protocolo_formatado']
-            documentos_sei = listar_documentos_procedimento_sei(token_sei, protocolo_formatado)
+            resultado_docs = listar_documentos_procedimento_sei(token_sei, protocolo_formatado)
+            documentos_sei = resultado_docs.get('documentos', [])
             if documentos_sei:
                 _baixar_documentos_sei(
                     token_sei, protocolo_formatado, documentos_sei

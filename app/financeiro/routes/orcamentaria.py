@@ -330,7 +330,7 @@ def _calcular_kpis(ano, mes, fonte, natureza='', acao=''):
     try:
         nc_sql = text("""
             SELECT COALESCE(SUM(p.valor_solicitado), 0)
-            FROM cgfr_processos_enviados p
+            FROM cgfr_processo_enviado p
             WHERE p.nivel_prioridade = 'Alto'
               AND p.natureza_despesa_id IS NOT NULL
               AND p.valor_solicitado IS NOT NULL
@@ -729,11 +729,11 @@ def _calcular_novas_contratacoes():
     """Soma valor_solicitado dos processos CGFR prioritários (Alto), agrupados por código de natureza.
 
     Retorna dict {natureza_codigo_str: Decimal(total)}.
-    O match é feito via: cgfr_processos_enviados.natureza_despesa_id → natdespesas.codigo.
+    O match é feito via: cgfr_processo_enviado.natureza_despesa_id → natdespesas.codigo.
     """
     sql = text("""
         SELECT n.codigo, COALESCE(SUM(p.valor_solicitado), 0) as total
-        FROM cgfr_processos_enviados p
+        FROM cgfr_processo_enviado p
         JOIN natdespesas n ON n.id = p.natureza_despesa_id
         WHERE p.nivel_prioridade = 'Alto'
           AND p.natureza_despesa_id IS NOT NULL

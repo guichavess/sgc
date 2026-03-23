@@ -33,25 +33,23 @@
                         <i class="bi bi-file-earmark-text me-2" style="color: #343990;"></i>
                         Processo: {% if processo.link_acesso %}<a href="{{ processo.link_acesso }}" target="_blank" class="text-decoration-none" style="color: #343990;">{{ processo.processo_formatado }} <i class="bi bi-box-arrow-up-right" style="font-size: 0.75rem;"></i></a>{% else %}{{ processo.processo_formatado }}{% endif %}
                     </h5>
-                    {% if tem_orcamento %}
-                    <div class="mb-2">
-                        <span class="badge" style="font-size: 0.95rem; padding: 8px 18px; background: #059669; color: #fff; border-radius: 6px;">
-                            <i class="bi bi-check-circle-fill me-2"></i>TEM ORÇAMENTO
-                        </span>
-                    </div>
-                    {% else %}
-                    <div class="mb-2">
-                        <span class="badge" style="font-size: 0.95rem; padding: 8px 18px; background: #dc2626; color: #fff; border-radius: 6px;">
-                            <i class="bi bi-x-circle-fill me-2"></i>NÃO TEM ORÇAMENTO
-                        </span>
-                    </div>
-                    {% endif %}
                     {% if processo.fornecedor %}
                     <h6 class="text-muted mb-1">{{ processo.fornecedor }}</h6>
                     {% endif %}
                     {% if processo.objeto_do_pedido %}
-                    <p class="text-secondary mb-0 small">{{ processo.objeto_do_pedido }}</p>
+                    <p class="text-secondary mb-1 small">{{ processo.objeto_do_pedido }}</p>
                     {% endif %}
+                    <div>
+                        {% if tem_orcamento %}
+                        <span class="badge" style="font-size: 0.82rem; padding: 5px 14px; background: #059669; color: #fff; border-radius: 6px;">
+                            <i class="bi bi-check-circle-fill me-1"></i>TEM ORÇAMENTO
+                        </span>
+                        {% else %}
+                        <span class="badge" style="font-size: 0.82rem; padding: 5px 14px; background: #dc2626; color: #fff; border-radius: 6px;">
+                            <i class="bi bi-x-circle-fill me-1"></i>NÃO TEM ORÇAMENTO
+                        </span>
+                        {% endif %}
+                    </div>
                 </div>
                 <div class="text-end"></div>
             </div>

@@ -1,5 +1,8 @@
+import logging
 import requests
-import json
+
+logger = logging.getLogger(__name__)
+
 
 def realizar_login_sei(usuario, senha, orgao):
     url = "https://api.sei.pi.gov.br/v1/orgaos/usuarios/login"
@@ -18,5 +21,5 @@ def realizar_login_sei(usuario, senha, orgao):
         response.raise_for_status() # Levanta erro para status 4xx ou 5xx
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"Erro na conexão com SEI: {e}")
+        logger.error(f"Erro na conexão com SEI: {e}")
         return None

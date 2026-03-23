@@ -37,9 +37,18 @@
                 </div>
                 {% endif %}
 
-                {# Tag orçamento movida para cabeçalho da página #}
+                {# Detalhamento do doc CGFR Despacho na etapa CGFR (2a etapa) #}
+                {% if loop.index == 2 and mov_cgfr %}
+                <div class="mt-2">
+                    <a href="{{ mov_cgfr.link_acesso }}" target="_blank"
+                       class="text-decoration-none d-inline-block"
+                       style="font-size: 0.72rem; color: #0d6efd;">
+                        <i class="bi bi-file-earmark-text me-1"></i>{{ mov_cgfr.nome }}
+                    </a>
+                </div>
+                {% endif %}
 
-                {# Link NR na etapa SEFAZ - UGGP (3ª etapa) #}
+                {# Link NR na etapa SEFAZ - UGGP (3a etapa) #}
                 {% if loop.index == 3 and mov_nr %}
                 <div class="mt-2">
                     <a href="{{ mov_nr.link_acesso }}" target="_blank"

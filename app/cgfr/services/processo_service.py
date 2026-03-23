@@ -520,7 +520,8 @@ def obter_timeline_acompanhamento(protocolo):
 
     # Datas
     data_envio = _parse_date(processo.tramitado_sead_cgfr)
-    data_cgfr = _parse_date(doc_cgfr.data) if doc_cgfr else None
+    # Etapa CGFR usa "Data Receb. CGFR" do processo, NAO a data do documento 3639
+    data_cgfr = _parse_date(processo.data_recebido_cgfr) if processo.data_recebido_cgfr else None
     data_sefaz = _parse_date(doc_sefaz.data) if doc_sefaz else None
     data_nr = _parse_date(doc_nr.data) if doc_nr else None
     data_contrato = _parse_date(doc_contrato.data) if doc_contrato else None
@@ -529,6 +530,15 @@ def obter_timeline_acompanhamento(protocolo):
     tem_orcamento = False
     if data_nr and data_envio:
         tem_orcamento = data_nr < data_envio
+
+    # Montar CGFR Despacho info (doc 3639) para detalhamento na timeline
+    mov_cgfr = None
+    if doc_cgfr:
+        mov_cgfr = {
+            'nome': doc_cgfr.serie_nome or 'SEFAZ: CGFR - Despacho',
+            'link_acesso': doc_cgfr.link_acesso or '',
+            'numero': doc_cgfr.numero or doc_cgfr.documento_formatado or '',
+        }
 
     # Montar NR info
     mov_nr = None
@@ -593,6 +603,7 @@ def obter_timeline_acompanhamento(protocolo):
     return {
         'processo': processo_dict,
         'timeline_data': timeline_data,
+        'mov_cgfr': mov_cgfr,
         'mov_nr': mov_nr,
         'tem_orcamento': tem_orcamento,
     }

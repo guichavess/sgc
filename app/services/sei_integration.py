@@ -273,23 +273,29 @@ def consultar_procedimento_sei(token, protocolo):
         return resultado
 
 
-def listar_documentos_procedimento_sei(token, protocolo):
+def listar_documentos_procedimento_sei(token, protocolo, max_retries=3, timeout=60):
     """
     Lista os documentos de um processo existente no SEI.
 
     Usa GET /v1/unidades/{id_unidade}/procedimentos/documentos
-    Separada da consulta para permitir buscar documentos após validar o processo.
+    Compartilhada entre modulos Pagamentos e CGFR.
 
     Args:
-        token: Token de autenticação SEI
-        protocolo: Número do processo (formatado ou só dígitos)
+        token: Token de autenticacao SEI
+        protocolo: Numero do processo (formatado ou so digitos)
+        max_retries: Numero de tentativas (default 3, com backoff progressivo)
+        timeout: Timeout em segundos por tentativa (default 60)
 
     Returns:
-        list de documentos ou lista vazia se falhar
+        dict com {sucesso: bool, documentos: list, erro: str|None}
     """
+    import logging
+    import time
+    logger = logging.getLogger(__name__)
+
     protocolo_limpo = "".join(filter(str.isdigit, protocolo))
     if not token or not protocolo_limpo:
-        return []
+        return {'sucesso': False, 'documentos': [], 'erro': 'Token ou protocolo invalido'}
 
     url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/procedimentos/documentos"
     params = {
@@ -303,25 +309,48 @@ def listar_documentos_procedimento_sei(token, protocolo):
         'Accept': 'application/json'
     }
 
+    # Retry com backoff progressivo (5s, 10s, 15s)
+    resp = None
+    last_error = None
+    for tentativa in range(1, max_retries + 1):
+        try:
+            resp = requests.get(url, params=params, headers=headers,
+                                timeout=timeout, verify=False)
+            if resp.status_code == 200:
+                break
+            last_error = f'HTTP {resp.status_code}'
+            logger.warning(f"[{protocolo}] API retornou {resp.status_code} "
+                           f"(tentativa {tentativa}/{max_retries})")
+        except requests.exceptions.ReadTimeout:
+            last_error = 'Timeout'
+            logger.warning(f"[{protocolo}] Timeout (tentativa {tentativa}/{max_retries})")
+        except (requests.exceptions.SSLError,
+                requests.exceptions.ConnectionError) as e:
+            last_error = str(e)
+            logger.warning(f"[{protocolo}] Conexao: {e} (tentativa {tentativa}/{max_retries})")
+
+        if tentativa < max_retries:
+            time.sleep(tentativa * 5)
+
+    if not resp or resp.status_code != 200:
+        return {
+            'sucesso': False,
+            'documentos': [],
+            'erro': f'API SEI nao respondeu apos {max_retries} tentativas ({last_error})',
+        }
+
     try:
-        response = requests.get(url, params=params, headers=headers, timeout=60, verify=False)
+        data = resp.json()
+    except Exception:
+        return {'sucesso': False, 'documentos': [], 'erro': 'JSON invalido na resposta da API SEI'}
 
-        if response.status_code != 200:
-            return []
+    # Parsing: resposta pode ser dict com 'Documentos', 'resultados', ou lista direta
+    documentos = []
+    if isinstance(data, dict):
+        documentos = data.get('Documentos', [])
+        if not documentos and 'resultados' in data:
+            documentos = data['resultados']
+    elif isinstance(data, list):
+        documentos = data
 
-        data = response.json()
-
-        # Parsing: resposta pode ser dict com 'Documentos', 'resultados', ou lista direta
-        documentos = []
-        if isinstance(data, dict):
-            documentos = data.get('Documentos', [])
-            if not documentos and 'resultados' in data:
-                documentos = data['resultados']
-        elif isinstance(data, list):
-            documentos = data
-
-        return documentos
-
-    except Exception as e:
-        print(f"Erro ao listar documentos SEI: {e}")
-        return []
+    return {'sucesso': True, 'documentos': documentos, 'erro': None}
