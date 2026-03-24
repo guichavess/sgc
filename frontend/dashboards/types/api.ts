@@ -65,6 +65,54 @@ export interface ContratosKpis {
   valor_total: number;
 }
 
+// Consolidado Orçamentário
+
+export interface FiltroOption {
+  codigo?: number | string;
+  valor?: number;
+  label?: string;
+  descricao?: string;
+}
+
+export interface FiltrosOrcamentario {
+  meses: FiltroOption[];
+  acoes: FiltroOption[];
+  naturezas: FiltroOption[];
+  fontes: FiltroOption[];
+}
+
+export interface OrcamentarioKpis {
+  reservado: number;
+  empenhado: number;
+  liquidado: number;
+  pd: number;
+  pago: number;
+  dotacao: number;
+}
+
+export interface PdAbertoDetalhe {
+  codigo: string;
+  competencia: string;
+  valor: number;
+}
+
+export interface TabelaContratoRow {
+  contrato: string;
+  credor: string;
+  objeto: string;
+  reserva: number;
+  empenho: number;
+  liquidacao: number;
+  pd: number;
+  pd_aberto: number;
+  pd_aberto_pds?: PdAbertoDetalhe[];
+  ob: number;
+}
+
+export interface TabelaContratosResponse {
+  rows: TabelaContratoRow[];
+}
+
 // Formato Recharts (após adaptação)
 
 export interface RechartsDataPoint {

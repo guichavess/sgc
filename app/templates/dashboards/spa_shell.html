@@ -1,34 +1,87 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SGC - Dashboards</title>
-    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/x-icon">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    {% for css_url in vite_css('dashboards/main') %}
-        <link rel="stylesheet" href="{{ css_url }}">
-    {% endfor %}
-</head>
-<body>
-    <div id="dashboards-root"
-         data-usuario-nome="{{ usuario_nome }}"
-         data-hub-url="{{ hub_url }}"
-         data-logout-url="{{ logout_url }}"
-         data-logo-url="{{ logo_url }}"
-    ></div>
+{% extends "base_layout.html" %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{% block title %}SGC - Dashboards{% endblock %}
+{% block module_name %}Dashboards{% endblock %}
 
-    {% if vite_dev_mode %}
-        <script type="module" src="http://localhost:5173/static/dist/@vite/client"></script>
-        <script type="module" src="{{ vite_asset('dashboards/main') }}"></script>
-    {% else %}
-        <script type="module" src="{{ vite_asset('dashboards/main') }}"></script>
-    {% endif %}
-</body>
-</html>
+{% block sidebar_links %}
+<div class="sidebar-section-label">Dashboards</div>
+<ul class="sidebar-menu" id="dashboards-sidebar-menu">
+    <li>
+        <a class="sidebar-link" href="/dashboards/" data-dash-path="/">
+            <i class="bi bi-speedometer2"></i> Execução Financeira
+        </a>
+    </li>
+    <li>
+        <a class="sidebar-link" href="/dashboards/programacao-desembolso" data-dash-path="/programacao-desembolso">
+            <i class="bi bi-cash-stack"></i> Programação de Desembolso (PD)
+        </a>
+    </li>
+</ul>
+{% endblock %}
+
+{% block extra_css %}
+{% for css_url in vite_css('dashboards/main') %}
+    <link rel="stylesheet" href="{{ css_url }}">
+{% endfor %}
+{% endblock %}
+
+{% block content %}
+<div id="dashboards-root"
+     data-usuario-nome="{{ usuario_nome }}"
+     data-hub-url="{{ hub_url }}"
+     data-logout-url="{{ logout_url }}"
+     data-logo-url="{{ logo_url }}"
+></div>
+{% endblock %}
+
+{% block extra_js %}
+{% if vite_dev_mode %}
+    <script type="module" src="http://localhost:5173/static/dist/@vite/client"></script>
+    <script type="module" src="{{ vite_asset('dashboards/main') }}"></script>
+{% else %}
+    <script type="module" src="{{ vite_asset('dashboards/main') }}"></script>
+{% endif %}
+
+<script>
+// Sincroniza sidebar links com navegação SPA (React Router)
+(function() {
+    function updateSidebarActive() {
+        var path = window.location.pathname.replace(/^\/dashboards/, '') || '/';
+        var links = document.querySelectorAll('#dashboards-sidebar-menu .sidebar-link');
+        links.forEach(function(link) {
+            var dashPath = link.getAttribute('data-dash-path');
+            if (dashPath === '/') {
+                link.classList.toggle('active', path === '/' || path === '');
+            } else {
+                link.classList.toggle('active', path.startsWith(dashPath));
+            }
+        });
+    }
+
+    // Atualiza no carregamento
+    updateSidebarActive();
+
+    // Intercepta cliques no sidebar para usar React Router (pushState)
+    document.querySelectorAll('#dashboards-sidebar-menu .sidebar-link').forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            var href = link.getAttribute('href');
+            history.pushState(null, '', href);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            updateSidebarActive();
+        });
+    });
+
+    // Atualiza quando React Router muda a URL
+    var origPushState = history.pushState;
+    history.pushState = function() {
+        origPushState.apply(this, arguments);
+        setTimeout(updateSidebarActive, 0);
+    };
+
+    window.addEventListener('popstate', function() {
+        setTimeout(updateSidebarActive, 0);
+    });
+})();
+</script>
+{% endblock %}

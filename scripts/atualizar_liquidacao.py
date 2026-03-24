@@ -297,7 +297,8 @@ def main():
                 method="multi",
             )
 
-        print(f"SUCESSO TOTAL! Tempo: {time.time() - t0:.2f}s")
+        elapsed_total = time.time() - t0
+        print(f"SUCESSO TOTAL! Tempo: {elapsed_total:.2f}s")
 
     except Exception as e:
         print(f"ERRO FATAL: {e}")

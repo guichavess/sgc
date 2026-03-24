@@ -216,7 +216,9 @@
                                 {% for modulo_key, modulo_label in modulos %}
                                 <tr>
                                     <td class="ps-3 perm-module-name">
-                                        {% if modulo_key == 'solicitacoes' %}
+                                        {% if modulo_key == 'dashboards' %}
+                                            <i class="bi bi-speedometer2 me-1"></i>
+                                        {% elif modulo_key == 'solicitacoes' %}
                                             <i class="bi bi-cash-stack me-1"></i>
                                         {% elif modulo_key == 'financeiro' %}
                                             <i class="bi bi-bank me-1"></i>

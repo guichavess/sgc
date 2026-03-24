@@ -493,7 +493,9 @@ def main():
     else:
         print("Nenhuma alteração detectada nos contratos existentes.")
 
-    print(f"Tempo total: {time.time() - t0:.2f}s")
+    elapsed_total = time.time() - t0
+    print(f"Tempo total: {elapsed_total:.2f}s")
+
 
 if __name__ == "__main__":
     main()

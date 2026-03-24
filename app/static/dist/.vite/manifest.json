@@ -3,25 +3,25 @@
     "file": "js/chunks/Modal-BdqnsjNv.js",
     "name": "Modal"
   },
-  "_react-vendor-C-8u0GKz.js": {
-    "file": "js/chunks/react-vendor-C-8u0GKz.js",
+  "_react-vendor-DSmCEkYt.js": {
+    "file": "js/chunks/react-vendor-DSmCEkYt.js",
     "name": "react-vendor"
   },
-  "_recharts-vendor-O7NjGzxt.js": {
-    "file": "js/chunks/recharts-vendor-O7NjGzxt.js",
+  "_recharts-vendor-Cre-6g89.js": {
+    "file": "js/chunks/recharts-vendor-Cre-6g89.js",
     "name": "recharts-vendor",
     "imports": [
-      "_react-vendor-C-8u0GKz.js"
+      "_react-vendor-DSmCEkYt.js"
     ]
   },
   "dashboards/main.tsx": {
-    "file": "js/dashboards-app-CkA2Ot3c.js",
+    "file": "js/dashboards-app-DcZiHK5a.js",
     "name": "dashboards-app",
     "src": "dashboards/main.tsx",
     "isEntry": true,
     "imports": [
-      "_react-vendor-C-8u0GKz.js",
-      "_recharts-vendor-O7NjGzxt.js"
+      "_react-vendor-DSmCEkYt.js",
+      "_recharts-vendor-Cre-6g89.js"
     ]
   },
   "js/components/MoneyInput.js": {

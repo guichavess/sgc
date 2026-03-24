@@ -4,6 +4,7 @@ import EmptyState from './EmptyState';
 
 interface ChartCardProps {
   title: string;
+  subtitle?: string;
   icon?: string;
   loading: boolean;
   empty?: boolean;
@@ -13,6 +14,7 @@ interface ChartCardProps {
 
 export default function ChartCard({
   title,
+  subtitle,
   icon,
   loading,
   empty,
@@ -21,9 +23,18 @@ export default function ChartCard({
 }: ChartCardProps) {
   return (
     <div className={`card chart-card ${className || ''}`}>
-      <div className="chart-title">
-        {icon && <i className={`${icon} me-2`}></i>}
-        {title}
+      <div className="chart-card-header">
+        <div className="d-flex align-items-center gap-2">
+          {icon && (
+            <div className="chart-card-icon">
+              <i className={icon}></i>
+            </div>
+          )}
+          <div>
+            <div className="chart-card-title">{title}</div>
+            {subtitle && <div className="chart-card-subtitle">{subtitle}</div>}
+          </div>
+        </div>
       </div>
       {loading ? (
         <LoadingSpinner />

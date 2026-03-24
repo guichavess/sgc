@@ -10,9 +10,7 @@ interface NavbarProps {
 
 const NAV_ITEMS = [
   { path: '/', label: 'Consolidado', icon: 'bi-speedometer2' },
-  { path: '/pagamentos', label: 'Pagamentos', icon: 'bi-cash-stack' },
-  { path: '/financeiro', label: 'Financeiro', icon: 'bi-bank' },
-  { path: '/contratos', label: 'Contratos', icon: 'bi-clipboard-check' },
+  { path: '/programacao-desembolso', label: 'Programação de Desembolso (PD)', icon: 'bi-cash-stack' },
 ];
 
 function getShortName(fullName: string): string {

@@ -69,6 +69,45 @@
     margin-bottom: 1rem;
 }
 
+/* Chart Card Header - estilo moderno */
+.chart-card-header {
+    padding: 1.25rem 1.5rem 0.75rem;
+}
+
+.chart-card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background-color: #e8edf8;
+    color: #343990;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.chart-card-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #212529;
+    line-height: 1.3;
+}
+
+.chart-card-subtitle {
+    font-size: 0.78rem;
+    color: #6c757d;
+    margin-top: 1px;
+}
+
+/* Compat: chart-title legado */
+.chart-title {
+    padding: 1.25rem 1.5rem 0.75rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #212529;
+}
+
 /* Chart placeholder para estados vazios */
 .chart-empty {
     display: flex;

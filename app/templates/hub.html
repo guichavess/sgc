@@ -251,8 +251,8 @@
         </div>
         {% endif %}
 
-        {# Modulo Dashboards (visivel apenas para administradores) #}
-        {% if current_user.is_admin %}
+        {# Modulo Dashboards (visivel para quem tem permissão ou admins) #}
+        {% if current_user.tem_permissao('dashboards') %}
         <div class="col-md-4">
             <a href="{{ url_for('dashboards.spa_shell') }}" class="module-card module-card-dashboards">
                 <div class="module-icon module-icon-dashboards">

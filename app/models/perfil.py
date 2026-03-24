@@ -70,6 +70,7 @@ class PerfilPermissao(db.Model):
 # Nota: O módulo 'usuarios' NÃO está aqui porque é restrito a admins (is_admin).
 # Estes são os módulos que admins podem liberar para outros usuários via perfis.
 MODULOS = [
+    ('dashboards', 'Dashboards'),
     ('solicitacoes', 'Pagamentos'),
     ('financeiro', 'Financeiro'),
     ('prestacoes_contratos', 'Execuções de Contratos'),

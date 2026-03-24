@@ -6,19 +6,12 @@ import Pagamentos from './pages/Pagamentos';
 import Financeiro from './pages/Financeiro';
 import Contratos from './pages/Contratos';
 
-export interface AppConfig {
-  usuarioNome: string;
-  hubUrl: string;
-  logoutUrl: string;
-  logoUrl: string;
-}
-
-export default function App({ config }: { config: AppConfig }) {
+export default function App() {
   return (
     <Routes>
-      <Route element={<DashboardLayout config={config} />}>
+      <Route element={<DashboardLayout />}>
         <Route index element={<Consolidado />} />
-        <Route path="pagamentos" element={<Pagamentos />} />
+        <Route path="programacao-desembolso" element={<Pagamentos />} />
         <Route path="financeiro" element={<Financeiro />} />
         <Route path="contratos" element={<Contratos />} />
         <Route path="*" element={<Navigate to="/" replace />} />
