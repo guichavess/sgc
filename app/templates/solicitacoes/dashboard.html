@@ -919,14 +919,23 @@
     }
 
     function erroGenerico(source, msgEl, barra, btn, logDiv, faseNome) {
+        var tentouReconectar = false;
         return function(event) {
+            // EventSource dispara onerror em qualquer queda de conexão.
+            // Antes de declarar erro crítico, tenta ignorar 1x (reconexão automática do browser)
+            if (!tentouReconectar && source.readyState !== 2) {
+                tentouReconectar = true;
+                console.warn(`Conexão ${faseNome} instável, aguardando reconexão automática...`);
+                logDiv.innerHTML += `<div class="text-warning small">⚠ Conexão instável na ${faseNome}, tentando reconectar...</div>`;
+                return; // Deixa o EventSource tentar reconectar sozinho
+            }
             if(source) source.close();
             console.error(`Erro ${faseNome}:`, event);
-            msgEl.innerText = `Erro na ${faseNome}. Verifique o console.`;
+            msgEl.innerText = `Conexão perdida na ${faseNome}. Tente novamente.`;
             barra.className = "progress-bar bg-danger";
-            logDiv.innerHTML += `<div class="text-danger fw-bold mt-2">❌ ERRO CRÍTICO NA ${faseNome.toUpperCase()}</div>`;
+            logDiv.innerHTML += `<div class="text-danger fw-bold mt-2">❌ Conexão perdida na ${faseNome.toUpperCase()}. Recarregue a página e tente novamente.</div>`;
             btn.removeAttribute('disabled');
-            btn.innerText = 'Fechar (Erro)';
+            btn.innerText = 'Fechar';
         };
     }
 

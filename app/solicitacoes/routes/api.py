@@ -326,8 +326,8 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
             "sinal_completo": "N"
         }
 
-        max_tentativas = 3
-        timeouts = [90, 150, 210]  # escala progressiva: 90s → 150s → 210s
+        max_tentativas = 2
+        timeouts = [30, 60]  # escala progressiva: 30s → 60s (produção: não travar em protocolos lentos)
         resp = None
         thread_session = http_requests.Session()
         thread_session.verify = False
@@ -813,6 +813,9 @@ def api_sincronizar_documentos():
             yield f"data: {json.dumps({'msg': 'Iniciando download dos documentos...', 'progresso': 15})}\n\n"
 
             protocolos_422 = []  # Protocolos que não existem mais no SEI
+            TIMEOUT_GLOBAL = 600  # 10 minutos máximo para Fase 1
+            inicio_fase1 = time.time()
+            last_heartbeat = time.time()
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                 future_to_prot = {}
@@ -831,14 +834,27 @@ def api_sincronizar_documentos():
 
                 completed = 0
                 sucessos = 0
+                timeout_atingido = False
 
-                for future in concurrent.futures.as_completed(future_to_prot):
+                for future in concurrent.futures.as_completed(future_to_prot, timeout=TIMEOUT_GLOBAL):
+                    # Heartbeat: envia comentário SSE a cada 20s para manter conexão viva
+                    agora = time.time()
+                    if agora - last_heartbeat > 20:
+                        yield ": heartbeat\n\n"
+                        last_heartbeat = agora
+
+                    # Timeout global: encerra graciosamente
+                    if agora - inicio_fase1 > TIMEOUT_GLOBAL:
+                        timeout_atingido = True
+                        app_real.logger.warning(f'Fase 1: timeout global de {TIMEOUT_GLOBAL}s atingido com {completed}/{total} processados')
+                        break
+
                     protocolo = future_to_prot[future]
                     completed += 1
                     percentual = 15 + int((completed / total) * 85)
 
                     try:
-                        sucesso, mensagem = future.result()
+                        sucesso, mensagem = future.result(timeout=5)
 
                         if sucesso:
                             sucessos += 1
@@ -858,8 +874,11 @@ def api_sincronizar_documentos():
                         yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Erro thread {protocolo}: {str(exc)}'})}\n\n"
 
             # Evento final com lista de 422s
+            msg_final = f'Download concluído! {sucessos}/{total} protocolos atualizados.'
+            if timeout_atingido:
+                msg_final = f'Download parcial (timeout {TIMEOUT_GLOBAL//60}min): {sucessos}/{total} protocolos atualizados.'
             evento_final = {
-                'msg': f'Download concluído! {sucessos}/{total} protocolos atualizados.',
+                'msg': msg_final,
                 'progresso': 100,
                 'concluido': True,
                 'protocolos_422': protocolos_422
