@@ -91,7 +91,7 @@ TOKEN = get_token()
 # =========================
 
 # Anos a processar
-YEARS = [2023,2024, 2025, 2026]
+YEARS = [2024, 2025, 2026]
 
 # UG
 UG_MODE = "single"      # "single" ou "all"
@@ -117,7 +117,7 @@ COLUMNS_PD = [
     "codigoGestao", "codFonte", "codNatureza", "codigoCredor", "nomeCredor",
     "dataEmissao", "valor", "itens", "observacao", "codClassificacao",
     "statusExecucao", "codUgPagadora", "codigoOB", "codigoNE", "codigoNL",
-    "valorTotalPD",
+    "valorTotalPD", "competencia",
 ]
 
 INT_COLUMNS = [
@@ -400,6 +400,9 @@ def main():
         for col in DATE_COLUMNS:
             if col in final_main.columns:
                 final_main[col] = pd.to_datetime(final_main[col], errors="coerce")
+
+        if "competencia" in final_main.columns:
+            final_main["competencia"] = final_main["competencia"].astype("string")
 
         # Conversoes tabela itens
         if final_items is not None and not final_items.empty:
