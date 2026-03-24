@@ -326,8 +326,8 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
             "sinal_completo": "N"
         }
 
-        max_tentativas = 2
-        timeouts = [30, 60]  # escala progressiva: 30s → 60s (produção: não travar em protocolos lentos)
+        max_tentativas = 3
+        timeouts = [60, 120, 180]  # escala progressiva: 60s → 120s → 180s (API SEI pode demorar em produção)
         resp = None
         thread_session = http_requests.Session()
         thread_session.verify = False
@@ -339,6 +339,13 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
             except (http_requests.exceptions.SSLError,
                     http_requests.exceptions.ConnectionError,
                     http_requests.exceptions.ReadTimeout) as e_retry:
+                # Fecha a sessão e cria uma nova para evitar reutilizar conexão morta (ConnectionReset)
+                try:
+                    thread_session.close()
+                except Exception:
+                    pass
+                thread_session = http_requests.Session()
+                thread_session.verify = False
                 if tentativa < max_tentativas:
                     wait_secs = tentativa * 5
                     app_obj.logger.warning(
@@ -370,51 +377,35 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
                     items_found = data_json
 
                 if items_found:
+                    # Remove movimentos antigos APENAS deste protocolo (download bem-sucedido)
+                    # Protocolos que falharam por timeout mantêm os dados anteriores intactos
+                    SeiMovimentacao.query.filter_by(protocolo_procedimento=protocolo).delete()
+                    db.session.flush()
+
                     for doc in items_found:
                         serie = doc.get('Serie', {})
                         unidade = doc.get('UnidadeElaboradora', {})
-
                         id_doc = str(doc.get('IdDocumento', ''))
-
-                        # UPSERT: se o documento já existe, atualiza os dados
-                        existente = SeiMovimentacao.query.get(id_doc)
-                        if existente:
-                            existente.protocolo_procedimento = protocolo
-                            existente.id_procedimento = str(doc.get('IdProcedimento', ''))
-                            existente.procedimento_formatado = str(doc.get('ProcedimentoFormatado', ''))
-                            existente.documento_formatado = str(doc.get('DocumentoFormatado', ''))
-                            existente.link_acesso = doc.get('LinkAcesso')
-                            existente.descricao = doc.get('Descricao')
-                            existente.data = doc.get('Data') or doc.get('DataGeracao')
-                            existente.numero = doc.get('Numero')
-                            existente.id_serie = int(serie.get('IdSerie')) if serie.get('IdSerie') and str(serie.get('IdSerie')).isdigit() else None
-                            existente.serie_nome = serie.get('Nome')
-                            existente.serie_aplicabilidade = serie.get('Aplicabilidade')
-                            existente.unidade_id = str(unidade.get('IdUnidade', ''))
-                            existente.unidade_sigla = unidade.get('Sigla')
-                            existente.unidade_descricao = unidade.get('Descricao')
-                            existente.tempo_execucao = tempo_total
-                        else:
-                            novo_mov = SeiMovimentacao(
-                                id_documento=id_doc,
-                                protocolo_procedimento=protocolo,
-                                id_procedimento=str(doc.get('IdProcedimento', '')),
-                                procedimento_formatado=str(doc.get('ProcedimentoFormatado', '')),
-                                documento_formatado=str(doc.get('DocumentoFormatado', '')),
-                                link_acesso=doc.get('LinkAcesso'),
-                                descricao=doc.get('Descricao'),
-                                data=doc.get('Data') or doc.get('DataGeracao'),
-                                numero=doc.get('Numero'),
-                                id_serie=int(serie.get('IdSerie')) if serie.get('IdSerie') and str(serie.get('IdSerie')).isdigit() else None,
-                                serie_nome=serie.get('Nome'),
-                                serie_aplicabilidade=serie.get('Aplicabilidade'),
-                                unidade_id=str(unidade.get('IdUnidade', '')),
-                                unidade_sigla=unidade.get('Sigla'),
-                                unidade_descricao=unidade.get('Descricao'),
-                                tempo_execucao=tempo_total,
-                                obs=""
-                            )
-                            db.session.add(novo_mov)
+                        novo_mov = SeiMovimentacao(
+                            id_documento=id_doc,
+                            protocolo_procedimento=protocolo,
+                            id_procedimento=str(doc.get('IdProcedimento', '')),
+                            procedimento_formatado=str(doc.get('ProcedimentoFormatado', '')),
+                            documento_formatado=str(doc.get('DocumentoFormatado', '')),
+                            link_acesso=doc.get('LinkAcesso'),
+                            descricao=doc.get('Descricao'),
+                            data=doc.get('Data') or doc.get('DataGeracao'),
+                            numero=doc.get('Numero'),
+                            id_serie=int(serie.get('IdSerie')) if serie.get('IdSerie') and str(serie.get('IdSerie')).isdigit() else None,
+                            serie_nome=serie.get('Nome'),
+                            serie_aplicabilidade=serie.get('Aplicabilidade'),
+                            unidade_id=str(unidade.get('IdUnidade', '')),
+                            unidade_sigla=unidade.get('Sigla'),
+                            unidade_descricao=unidade.get('Descricao'),
+                            tempo_execucao=tempo_total,
+                            obs=""
+                        )
+                        db.session.add(novo_mov)
 
                     db.session.commit()
                     return (True, f"OK: {protocolo}")
@@ -789,21 +780,6 @@ def api_sincronizar_documentos():
                 yield f"data: {json.dumps({'msg': 'Todos os processos já estão concluídos. Nada a sincronizar.', 'progresso': 100, 'concluido': True})}\n\n"
                 return
 
-            # Extrai protocolos para limpeza seletiva
-            lista_protocolos = [s.protocolo_gerado_sei for s in solicitacoes_pendentes]
-
-            # Limpeza seletiva: deleta movimentações dos processos que serão atualizados
-            yield f"data: {json.dumps({'msg': f'Limpando dados de {total} processos em andamento...', 'progresso': 10})}\n\n"
-            try:
-                db.session.query(SeiMovimentacao).filter(
-                    SeiMovimentacao.protocolo_procedimento.in_(lista_protocolos)
-                ).delete(synchronize_session=False)
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                yield f"data: {json.dumps({'msg': f'Erro ao limpar banco: {str(e)}', 'progresso': 0})}\n\n"
-                return
-
             base_url = "https://api.sei.pi.gov.br/v1/unidades/110006213/procedimentos/documentos"
 
             # Mapa protocolo → link SEI (para enviar no evento de 422)
@@ -813,11 +789,11 @@ def api_sincronizar_documentos():
             yield f"data: {json.dumps({'msg': 'Iniciando download dos documentos...', 'progresso': 15})}\n\n"
 
             protocolos_422 = []  # Protocolos que não existem mais no SEI
-            TIMEOUT_GLOBAL = 600  # 10 minutos máximo para Fase 1
+            TIMEOUT_GLOBAL = 1800  # 30 minutos máximo para Fase 1 (API SEI pode ser lenta)
             inicio_fase1 = time.time()
             last_heartbeat = time.time()
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
                 future_to_prot = {}
                 for idx, s in enumerate(solicitacoes_pendentes):
                     future = executor.submit(
