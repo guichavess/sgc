@@ -63,7 +63,8 @@ def login():
     if request.method == 'POST':
         user = request.form.get('usuario')
         pwd = request.form.get('senha')
-        orgao = "SEAD-PI" 
+        orgao_escolha = request.form.get('orgao', 'SEAD')
+        orgao = f"{orgao_escolha}-PI"
 
         dados_api = realizar_login_sei(user, pwd, orgao)
 
