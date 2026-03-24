@@ -10,9 +10,8 @@ import time
 import requests as http_requests
 import concurrent.futures
 
-# Session reutilizável para conexões SEI (keep-alive, connection pooling)
-_sei_session = http_requests.Session()
-_sei_session.verify = False
+# Nota: sessões HTTP são criadas por thread para evitar race conditions
+# (requests.Session NÃO é thread-safe quando compartilhada)
 
 from app.solicitacoes.routes import solicitacoes_bp
 from app.models import (
@@ -328,12 +327,14 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
         }
 
         max_tentativas = 3
-        timeouts = [60, 120, 180]  # escala progressiva: 60s → 120s → 180s
+        timeouts = [90, 150, 210]  # escala progressiva: 90s → 150s → 210s
         resp = None
+        thread_session = http_requests.Session()
+        thread_session.verify = False
         for tentativa in range(1, max_tentativas + 1):
             try:
                 timeout_atual = timeouts[tentativa - 1]
-                resp = _sei_session.get(base_url, headers=headers, params=params, timeout=timeout_atual)
+                resp = thread_session.get(base_url, headers=headers, params=params, timeout=timeout_atual)
                 break  # sucesso, sai do loop
             except (http_requests.exceptions.SSLError,
                     http_requests.exceptions.ConnectionError,
@@ -813,17 +814,20 @@ def api_sincronizar_documentos():
 
             protocolos_422 = []  # Protocolos que não existem mais no SEI
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                future_to_prot = {
-                    executor.submit(
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                future_to_prot = {}
+                for idx, s in enumerate(solicitacoes_pendentes):
+                    future = executor.submit(
                         baixar_documentos_thread,
                         app_real,
                         s.protocolo_gerado_sei,
                         token_sei,
                         base_url
-                    ): s.protocolo_gerado_sei
-                    for s in solicitacoes_pendentes
-                }
+                    )
+                    future_to_prot[future] = s.protocolo_gerado_sei
+                    # Rate limiting: pausa 1s a cada 3 submissões para não sobrecarregar a API SEI
+                    if idx % 3 == 2:
+                        time.sleep(1)
 
                 completed = 0
                 sucessos = 0
@@ -914,7 +918,7 @@ def api_atualizar_etapas():
             token_sei = session.get('sei_token')
 
             # Threads paralelas para processar etapas
-            with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
                 future_to_id = {
                     executor.submit(
                         processar_item_sei,
