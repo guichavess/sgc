@@ -80,7 +80,7 @@ def create_app(config_class=None):
             env = {**os.environ, 'PYTHONIOENCODING': 'utf-8'}
             result = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=600,
-                cwd=scripts_dir, env=env
+                cwd=scripts_dir, env=env, encoding='utf-8'
             )
             ok = result.returncode == 0
             _siafe_status['scripts'][idx]['status'] = 'ok' if ok else 'erro'

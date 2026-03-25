@@ -100,6 +100,17 @@ def importar_tabela(conn, tabela, create_sql, inserts, dry_run=False):
 
     print(f"  ✓ Dados inseridos com sucesso.")
 
+    # Pós-import: remover duplicados conhecidos da tabela estados
+    if tabela == 'estados' and not dry_run:
+        # cod_ibge 1 (Piauí falso) e 2 (São Paulo falso) vêm do dump legado
+        result = conn.execute(db.text(
+            "SELECT cod_ibge FROM estados WHERE cod_ibge IN (1, 2)"
+        ))
+        falsos = [r[0] for r in result.fetchall()]
+        if falsos:
+            conn.execute(db.text("DELETE FROM estados WHERE cod_ibge IN (1, 2)"))
+            print(f"  ⚠ Removidos {len(falsos)} estados duplicados (cod_ibge fictício do dump legado).")
+
 
 def main():
     parser = argparse.ArgumentParser(

@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import json
 import sys
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -81,7 +82,7 @@ TOKEN = get_token()
 # =========================
 
 # Anos a processar
-YEARS = [2026]
+YEARS = [datetime.now().year]
 
 # UG
 UG_MODE = "single"      # "single" ou "all"

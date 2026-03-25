@@ -673,9 +673,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var valoresCargo = {{ valores_cargo_json | safe }};
     var cargosOptions = '';
     {% for c in cargos %}
-    {% if c.nome != 'Assessor Técnico' %}
     cargosOptions += '<option value="{{ c.id }}">{{ c.nome }}</option>';
-    {% endif %}
     {% endfor %}
 
     // Opções de cargo do assessorado (apenas Superintendente e Secretário)
@@ -747,12 +745,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ── Auto-match de cargo: relaciona cargo da API com diarias_cargos ──
-    // Mapa de cargos: { id: nome } para matching (exclui Assessor Técnico)
+    // Mapa de cargos: { id: nome } para matching
     var cargosMap = {};
     {% for c in cargos %}
-    {% if c.nome != 'Assessor Técnico' %}
     cargosMap['{{ c.id }}'] = '{{ c.nome }}';
-    {% endif %}
     {% endfor %}
 
     function normalizarTexto(str) {

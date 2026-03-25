@@ -174,10 +174,9 @@ def seed_data():
             DiariasCargo(id=5, nome='Motorista'),
             DiariasCargo(id=6, nome='Coordenador'),
             DiariasCargo(id=7, nome='Gerente'),
-            DiariasCargo(id=8, nome='Assessor Técnico'),
         ])
         db.session.commit()
-        print("   ✓ Cargos (8 registros)")
+        print("   ✓ Cargos (7 registros)")
     else:
         print("   • Cargos (já populado)")
 
@@ -217,7 +216,7 @@ def seed_data():
             DiariasValorCargo(id=1,  cargo_id=1, valor=240.00, tipo_itinerario_id=1),
             DiariasValorCargo(id=2,  cargo_id=2, valor=240.00, tipo_itinerario_id=1),
             DiariasValorCargo(id=3,  cargo_id=3, valor=160.00, tipo_itinerario_id=1),
-            DiariasValorCargo(id=4,  cargo_id=4, valor=240.00, tipo_itinerario_id=1),
+            DiariasValorCargo(id=4,  cargo_id=4, valor=160.00, tipo_itinerario_id=1),
             DiariasValorCargo(id=5,  cargo_id=5, valor=160.00, tipo_itinerario_id=1),
             DiariasValorCargo(id=6,  cargo_id=6, valor=160.00, tipo_itinerario_id=1),
             DiariasValorCargo(id=7,  cargo_id=7, valor=160.00, tipo_itinerario_id=1),
@@ -225,16 +224,13 @@ def seed_data():
             DiariasValorCargo(id=8,  cargo_id=1, valor=480.00, tipo_itinerario_id=2),
             DiariasValorCargo(id=9,  cargo_id=2, valor=480.00, tipo_itinerario_id=2),
             DiariasValorCargo(id=10, cargo_id=3, valor=320.00, tipo_itinerario_id=2),
-            DiariasValorCargo(id=11, cargo_id=4, valor=480.00, tipo_itinerario_id=2),
+            DiariasValorCargo(id=11, cargo_id=4, valor=320.00, tipo_itinerario_id=2),
             DiariasValorCargo(id=12, cargo_id=5, valor=320.00, tipo_itinerario_id=2),
             DiariasValorCargo(id=13, cargo_id=6, valor=320.00, tipo_itinerario_id=2),
             DiariasValorCargo(id=14, cargo_id=7, valor=320.00, tipo_itinerario_id=2),
-            # Assessor Técnico
-            DiariasValorCargo(id=15, cargo_id=8, valor=160.00, tipo_itinerario_id=1),
-            DiariasValorCargo(id=16, cargo_id=8, valor=320.00, tipo_itinerario_id=2),
         ])
         db.session.commit()
-        print("   ✓ Valores de cargo (16 registros)")
+        print("   ✓ Valores de cargo (14 registros)")
     else:
         print("   • Valores de cargo (já populado)")
 

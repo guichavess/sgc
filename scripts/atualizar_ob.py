@@ -10,6 +10,7 @@ import os
 import json
 import sys
 
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -46,7 +47,7 @@ ENGINE = create_engine(DATABASE_URI, echo=False)
 # 2. CONFIGURAÇÕES ESPECÍFICAS
 # =============================================================================
 
-YEAR = 2026
+YEAR = datetime.now().year
 tabela_destino = "ob"
 
 DELETE_YEAR = YEAR
