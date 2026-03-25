@@ -4,12 +4,31 @@ Configura e inicializa todas as extensões e blueprints.
 """
 import os
 import sys
+import json
 import logging
 import subprocess
 import threading
 from logging.handlers import RotatingFileHandler
 from flask import Flask, redirect, url_for, render_template, jsonify
 from flask_login import current_user, login_required
+
+# Status da atualização SIAFE persistido em arquivo para sobreviver a múltiplos workers
+_SIAFE_STATUS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'siafe_status.json')
+_siafe_lock = threading.Lock()
+
+
+def _read_siafe_status() -> dict:
+    try:
+        with open(_SIAFE_STATUS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {'running': False, 'scripts': []}
+    except Exception:
+        return {'running': False, 'scripts': []}
+
+
+def _write_siafe_status(status):
+    with open(_SIAFE_STATUS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(status, f, ensure_ascii=False)
 
 from app.config import get_config
 from app.extensions import db, login_manager, session, migrate, init_extensions
@@ -69,11 +88,14 @@ def create_app(config_class=None):
         {'id': 'sei',         'arquivo': 'atualizar_etapas_sei.py',  'nome': 'Etapas SEI',    'grupo': 'sei',   'args': []},
     ]
     SIAFE_SCRIPTS_MAP = {s['id']: s for s in SIAFE_SCRIPTS}
-    _siafe_status = {'running': False, 'scripts': []}
 
     def _executar_script(scripts_dir, script_info, idx):
-        """Executa um único script e atualiza o status."""
-        _siafe_status['scripts'][idx]['status'] = 'running'
+        """Executa um único script e atualiza o status no arquivo."""
+        with _siafe_lock:
+            status = _read_siafe_status()
+            status['scripts'][idx]['status'] = 'running'
+            _write_siafe_status(status)
+
         script_path = os.path.join(scripts_dir, script_info['arquivo'])
         cmd = [sys.executable, script_path] + script_info.get('args', [])
         try:
@@ -83,39 +105,48 @@ def create_app(config_class=None):
                 cwd=scripts_dir, env=env, encoding='utf-8'
             )
             ok = result.returncode == 0
-            _siafe_status['scripts'][idx]['status'] = 'ok' if ok else 'erro'
-            if not ok and result.stderr:
-                _siafe_status['scripts'][idx]['erro'] = result.stderr[-300:]
+            with _siafe_lock:
+                status = _read_siafe_status()
+                status['scripts'][idx]['status'] = 'ok' if ok else 'erro'
+                if not ok and result.stderr:
+                    status['scripts'][idx]['erro'] = result.stderr[-300:]
+                _write_siafe_status(status)
         except subprocess.TimeoutExpired:
-            _siafe_status['scripts'][idx]['status'] = 'erro'
-            _siafe_status['scripts'][idx]['erro'] = 'Timeout (10min)'
+            with _siafe_lock:
+                status = _read_siafe_status()
+                status['scripts'][idx]['status'] = 'erro'
+                status['scripts'][idx]['erro'] = 'Timeout (10min)'
+                _write_siafe_status(status)
         except Exception as e:
-            _siafe_status['scripts'][idx]['status'] = 'erro'
-            _siafe_status['scripts'][idx]['erro'] = str(e)
+            with _siafe_lock:
+                status = _read_siafe_status()
+                status['scripts'][idx]['status'] = 'erro'
+                status['scripts'][idx]['erro'] = str(e)
+                _write_siafe_status(status)
 
     def _executar_scripts_siafe(selected_scripts):
         """Executa scripts em paralelo por grupo independente."""
         from concurrent.futures import ThreadPoolExecutor, as_completed
         scripts_dir = os.path.join(app.root_path, '..', 'scripts')
 
-        # Agrupa scripts por grupo mantendo a ordem e o índice original
         grupos = {}
         for i, s in enumerate(selected_scripts):
             g = s.get('grupo', 'siafe')
             grupos.setdefault(g, []).append((i, s))
 
         def run_group(items):
-            """Executa scripts de um grupo sequencialmente."""
             for idx, script_info in items:
                 _executar_script(scripts_dir, script_info, idx)
 
-        # Executa grupos em paralelo (siafe e loa rodam ao mesmo tempo)
         with ThreadPoolExecutor(max_workers=len(grupos)) as pool:
             futures = [pool.submit(run_group, items) for items in grupos.values()]
             for f in as_completed(futures):
-                f.result()  # propaga exceções
+                f.result()
 
-        _siafe_status['running'] = False
+        with _siafe_lock:
+            status = _read_siafe_status()
+            status['running'] = False
+            _write_siafe_status(status)
 
     @app.route('/api/atualizar-siafe', methods=['POST'])
     @login_required
@@ -123,8 +154,11 @@ def create_app(config_class=None):
         from flask import request as req
         if not current_user.nome or 'PEDRO ALEXANDRE' not in current_user.nome.upper():
             return jsonify({'erro': 'Acesso negado'}), 403
-        if _siafe_status['running']:
-            return jsonify({'erro': 'Atualização já em andamento'}), 409
+
+        with _siafe_lock:
+            current_status = _read_siafe_status()
+            if current_status.get('running'):
+                return jsonify({'erro': 'Atualização já em andamento'}), 409
 
         data = req.get_json(silent=True) or {}
         selected_ids = data.get('scripts')
@@ -136,11 +170,12 @@ def create_app(config_class=None):
         if not selected_scripts:
             return jsonify({'erro': 'Nenhum script selecionado'}), 400
 
-        _siafe_status['running'] = True
-        _siafe_status['scripts'] = [
-            {'nome': s['nome'], 'status': 'pendente', 'erro': None}
-            for s in selected_scripts
-        ]
+        with _siafe_lock:
+            _write_siafe_status({
+                'running': True,
+                'scripts': [{'nome': s['nome'], 'status': 'pendente', 'erro': None} for s in selected_scripts]
+            })
+
         thread = threading.Thread(
             target=_executar_scripts_siafe, args=(selected_scripts,), daemon=True
         )
@@ -152,9 +187,10 @@ def create_app(config_class=None):
     def atualizar_siafe_status():
         if not current_user.nome or 'PEDRO ALEXANDRE' not in current_user.nome.upper():
             return jsonify({'erro': 'Acesso negado'}), 403
+        status = _read_siafe_status()
         return jsonify({
-            'running': _siafe_status['running'],
-            'scripts': _siafe_status['scripts']
+            'running': status.get('running', False),
+            'scripts': status.get('scripts', [])
         })
 
     # Migração inline: adicionar cod_natureza e cod_subitem ao planejamento_orcamentario
