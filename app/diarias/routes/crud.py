@@ -70,7 +70,7 @@ def store():
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
     try:
-        tipo = int(request.form.get('tipo_itinerario', 0))
+        tipo = int(request.form.get('tipo_itinerario') or 0)
         if tipo not in (1, 2, 3):
             if is_ajax:
                 return jsonify({'success': False, 'error': 'Tipo de itinerário inválido.'}), 400
@@ -118,7 +118,7 @@ def store():
         justificativa = request.form.get('justificativa', '').strip() or None
         justificativa_memorando = request.form.get('justificativa_memorando', '').strip() or None
 
-        tipo_solicitacao_id = int(request.form.get('tipo_solicitacao', 0))
+        tipo_solicitacao_id = int(request.form.get('tipo_solicitacao') or 0)
 
         objetivo = request.form.get('objetivo', '').strip() or None
 
@@ -186,6 +186,8 @@ def store():
         return redirect(url_for('diarias.dashboard'))
 
     except Exception as e:
+        import traceback
+        current_app.logger.error(f'[DIARIAS] Erro ao criar solicitacao: {e}\n{traceback.format_exc()}')
         if is_ajax:
             return jsonify({'success': False, 'error': str(e)}), 500
         flash(f'Erro ao criar solicitação: {str(e)}', 'danger')

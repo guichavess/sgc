@@ -378,7 +378,7 @@
             </section>
 
             {# --- UPLOAD COTACAO AO SEI --- #}
-            {% if itinerario.sei_protocolo %}
+            {% if itinerario.sei_protocolo and itinerario.etapa_atual_id == 3 %}
             <section class="mb-4">
                 <h6 class="section-title mb-2"><i class="bi bi-cloud-upload me-1"></i>Enviar Cotação ao SEI</h6>
                 <div class="card border-primary">
@@ -865,6 +865,7 @@
             {% endif %}
 
             {# --- NOTA DE RESERVA (FINANCEIRO) --- #}
+            {% if itinerario.etapa_atual_id >= 2 %}
             <section class="mb-4">
                 <h6 class="section-title mb-2"><i class="bi bi-journal-bookmark me-1"></i>Nota de Reserva (Financeiro)</h6>
                 {% if itinerario.nota_reserva %}
@@ -896,6 +897,7 @@
                 </div>
                 {% endif %}
             </section>
+            {% endif %}
 
             {# --- PARADAS (ESTADUAL) --- #}
             {% if paradas %}
@@ -940,11 +942,11 @@
 <div class="modal fade" id="modalAssinarSuperintendente" tabindex="-1" aria-labelledby="modalAssinarSuperLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header bg-primary bg-opacity-10">
-                <h5 class="modal-title" id="modalAssinarSuperLabel">
+            <div class="modal-header bg-primary">
+                <h5 class="modal-title text-white" id="modalAssinarSuperLabel">
                     <i class="bi bi-pen me-1"></i> Assinar Requisições
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
             </div>
             <div class="modal-body">
                 <div id="super-erro" class="alert alert-danger d-none" role="alert"></div>
@@ -967,11 +969,6 @@
                            placeholder="Sua senha no SEI" autocomplete="off">
                 </div>
 
-                <div class="mb-3">
-                    <label for="super_cargo" class="form-label fw-semibold">Cargo</label>
-                    <input type="text" class="form-control" id="super_cargo"
-                           value="Superintendente de Gestão Administrativa">
-                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -1017,11 +1014,6 @@
                            placeholder="Sua senha no SEI" autocomplete="off">
                 </div>
 
-                <div class="mb-3">
-                    <label for="autorizar_cargo" class="form-label fw-semibold">Cargo</label>
-                    <input type="text" class="form-control" id="autorizar_cargo"
-                           value="Secretário de Administração do Estado do Piauí">
-                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -1204,7 +1196,6 @@ async function assinarSuperintendente() {
 
     var usuario = document.getElementById('super_usuario').value.trim();
     var senha = document.getElementById('super_senha').value.trim();
-    var cargo = document.getElementById('super_cargo').value.trim();
 
     if (!usuario || !senha) {
         erroDiv.textContent = 'Informe usuario e senha do SEI.';
@@ -1221,8 +1212,7 @@ async function assinarSuperintendente() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 sei_usuario: usuario,
-                sei_senha: senha,
-                cargo: cargo
+                sei_senha: senha
             })
         });
 
@@ -1266,7 +1256,6 @@ async function autorizarSolicitacao() {
 
     var usuario = document.getElementById('autorizar_usuario').value.trim();
     var senha = document.getElementById('autorizar_senha').value.trim();
-    var cargo = document.getElementById('autorizar_cargo').value.trim();
 
     if (!usuario || !senha) {
         erroDiv.textContent = 'Informe usuario e senha do SEI.';
@@ -1283,8 +1272,7 @@ async function autorizarSolicitacao() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 sei_usuario: usuario,
-                sei_senha: senha,
-                cargo: cargo
+                sei_senha: senha
             })
         });
 

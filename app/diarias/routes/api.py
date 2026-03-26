@@ -14,7 +14,7 @@ from app.models.diaria import Municipio, Setor, Orgao, DiariasServidor
 
 @diarias_bp.route('/api/buscar-pessoa')
 @login_required
-@requires_permission('diarias.visualizar')
+@requires_permission('diarias.criar')
 def api_buscar_pessoa_cpf():
     """
     Busca servidor por CPF.

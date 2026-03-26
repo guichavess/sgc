@@ -193,6 +193,10 @@ def assinar_documento(token, unidade_id, dados_assinatura):
             return {"sucesso": True}
         else:
             erro_msg = response.text
+            # Documento já assinado fora da aplicação — trata como sucesso
+            if "já foi assinado" in erro_msg:
+                print(f"⚠️ Documento {dados_assinatura['protocolo_doc']} já estava assinado (ignorado).")
+                return {"sucesso": True, "aviso": "Documento já estava assinado"}
             print(f"❌ Erro assinatura SEI: {erro_msg}")
             return {"sucesso": False, "erro": f"SEI recusou: {erro_msg}"}
 

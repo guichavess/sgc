@@ -95,7 +95,13 @@ def autenticar_usuario_sei(usuario, senha):
         if response.status_code == 200:
             dados = response.json()
 
-            token = dados.get('IdSession') or dados.get('token') or dados.get('Token')
+            # Estrutura SEI: {"Token": "...", "Login": {"IdUsuario": ..., "IdLogin": ...}, ...}
+            # Token fica na RAIZ do JSON (igual ao que o modulo pagamentos usa em auth/routes.py)
+            login_data = dados.get('Login', dados)
+
+            token = dados.get('Token') or dados.get('token') or dados.get('IdSession')
+            if not token:
+                token = login_data.get('IdSession') or login_data.get('token') or login_data.get('Token')
             if not token:
                 token = response.headers.get('token') or response.headers.get('Token')
 
@@ -107,9 +113,11 @@ def autenticar_usuario_sei(usuario, senha):
 
             return {
                 'token': token,
-                'id_usuario': str(dados.get('IdUsuario', '')),
-                'id_login': str(dados.get('IdLogin', '') or token),
-                'nome': dados.get('Nome', ''),
+                'id_usuario': str(login_data.get('IdUsuario', '')),
+                'id_login': str(login_data.get('IdLogin', '') or token),
+                'nome': login_data.get('Nome', ''),
+                'cargo': login_data.get('UltimoCargoAssinatura', ''),
+                'unidades': dados.get('Unidades', []),
                 'dados_completos': dados,
             }
         else:

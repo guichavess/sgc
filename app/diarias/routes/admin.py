@@ -403,7 +403,6 @@ def assinar_superintendente(id):
     Deve ocorrer ANTES da autorização do Secretário.
     """
     from app.services.sei_auth import autenticar_usuario_sei
-    from app.services.diarias_sei_integration import UNIDADE_SEAD
     from app.services.sei_integration import assinar_documento
 
     itinerario = DiariasItinerario.query.get_or_404(id)
@@ -448,9 +447,6 @@ def assinar_superintendente(id):
     if not sei_usuario or not sei_senha:
         return jsonify({'sucesso': False, 'erro': 'Usuário e senha do SEI são obrigatórios.'}), 400
 
-    if not cargo:
-        cargo = 'Superintendente de Gestão Administrativa'
-
     # 1. Autentica superintendente no SEI
     auth_result = autenticar_usuario_sei(sei_usuario, sei_senha)
     if not auth_result:
@@ -462,12 +458,46 @@ def assinar_superintendente(id):
     token_super = auth_result['token']
     id_usuario = auth_result['id_usuario']
     id_login = auth_result['id_login']
+    # Sempre usa o cargo real do SEI (UltimoCargoAssinatura); formulário é apenas último recurso
+    cargo = auth_result.get('cargo') or cargo or 'Superintendente de Gestão Administrativa'
+
+    # Usa a unidade onde o documento foi criado (APOIOSGA) para assinatura.
+    unidade_assinatura = UNIDADE_APOIOSGA
+
+    current_app.logger.info(
+        f"[DIARIAS] Assinatura superintendente - usuario={sei_usuario} "
+        f"id_usuario={id_usuario!r} id_login={id_login!r} "
+        f"unidade_assinatura={unidade_assinatura!r} "
+        f"protocolo_doc={itinerario.sei_requisicao_formatado!r}"
+    )
 
     documentos_assinados = []
 
-    # 2. Assinar Requisição de Diárias
+    # 2. Assinar Memorando SGA (se existir)
+    if itinerario.sei_id_memorando:
+        ret_memo = assinar_documento(
+            token=token_super,
+            unidade_id=unidade_assinatura,
+            dados_assinatura={
+                'protocolo_doc': itinerario.sei_memorando_formatado,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': id_login,
+                'id_usuario': id_usuario,
+                'senha': sei_senha,
+            },
+        )
+        if ret_memo and ret_memo.get('sucesso'):
+            documentos_assinados.append(itinerario.sei_memorando_formatado or 'Memorando SGA')
+        else:
+            current_app.logger.warning(
+                f"SEI Diárias: Falha ao assinar Memorando SGA: "
+                f"{ret_memo.get('erro') if ret_memo else 'Sem resposta'}"
+            )
+
+    # 3. Assinar Requisição de Diárias
     dados_assinatura = {
-        'protocolo_doc': itinerario.sei_id_requisicao,
+        'protocolo_doc': itinerario.sei_requisicao_formatado,
         'orgao': 'SEAD-PI',
         'cargo': cargo,
         'id_login': id_login,
@@ -477,7 +507,7 @@ def assinar_superintendente(id):
 
     ret = assinar_documento(
         token=token_super,
-        unidade_id=UNIDADE_SEAD,
+        unidade_id=unidade_assinatura,
         dados_assinatura=dados_assinatura,
     )
 
@@ -490,10 +520,10 @@ def assinar_superintendente(id):
 
     documentos_assinados.append(itinerario.sei_requisicao_formatado or 'Req. Diárias')
 
-    # 3. Assinar Requisição de Passagens (se existir)
+    # 4. Assinar Requisição de Passagens (se existir)
     if itinerario.sei_id_requisicao_passagens:
         dados_assinatura_pass = {
-            'protocolo_doc': itinerario.sei_id_requisicao_passagens,
+            'protocolo_doc': itinerario.sei_requisicao_passagens_formatado,
             'orgao': 'SEAD-PI',
             'cargo': cargo,
             'id_login': id_login,
@@ -503,7 +533,7 @@ def assinar_superintendente(id):
 
         ret_pass = assinar_documento(
             token=token_super,
-            unidade_id=UNIDADE_SEAD,
+            unidade_id=unidade_assinatura,
             dados_assinatura=dados_assinatura_pass,
         )
 
@@ -555,7 +585,7 @@ def autorizar_solicitacao(id):
     from app.services.diarias_sei_integration import (
         gerar_token_sei_admin, gerar_autorizacao_secretario,
         enviar_procedimento, gerar_despacho_dfin,
-        UNIDADE_SEAD, UNIDADE_DFIN_APOIO,
+        UNIDADE_DFIN_APOIO,
     )
     from app.services.sei_integration import assinar_documento
 
@@ -601,9 +631,6 @@ def autorizar_solicitacao(id):
     if not sei_usuario or not sei_senha:
         return jsonify({'sucesso': False, 'erro': 'Usuário e senha do SEI são obrigatórios.'}), 400
 
-    if not cargo:
-        cargo = 'Secretário de Administração do Estado do Piauí'
-
     # 1. Autentica secretário no SEI
     auth_result = autenticar_usuario_sei(sei_usuario, sei_senha)
     if not auth_result:
@@ -615,14 +642,24 @@ def autorizar_solicitacao(id):
     token_secretario = auth_result['token']
     id_usuario = auth_result['id_usuario']
     id_login = auth_result['id_login']
+    # Sempre usa o cargo real do SEI (UltimoCargoAssinatura); formulário é apenas último recurso
+    cargo = auth_result.get('cargo') or cargo or 'Secretário de Administração do Estado do Piauí'
+
+    # Usa a unidade onde o documento foi criado (APOIOSGA) para assinatura.
+    unidade_assinatura_sec = UNIDADE_APOIOSGA
+
+    current_app.logger.info(
+        f"[DIARIAS] Assinatura secretario - usuario={sei_usuario} "
+        f"unidade_assinatura={unidade_assinatura_sec!r}"
+    )
 
     # 1.5 Secretário assina as Requisições (Diárias + Passagens)
     if itinerario.sei_id_requisicao:
         ret_req = assinar_documento(
             token=token_secretario,
-            unidade_id=UNIDADE_SEAD,
+            unidade_id=unidade_assinatura_sec,
             dados_assinatura={
-                'protocolo_doc': itinerario.sei_id_requisicao,
+                'protocolo_doc': itinerario.sei_requisicao_formatado,
                 'orgao': 'SEAD-PI',
                 'cargo': cargo,
                 'id_login': id_login,
@@ -637,9 +674,9 @@ def autorizar_solicitacao(id):
     if itinerario.sei_id_requisicao_passagens:
         ret_req_pass = assinar_documento(
             token=token_secretario,
-            unidade_id=UNIDADE_SEAD,
+            unidade_id=unidade_assinatura_sec,
             dados_assinatura={
-                'protocolo_doc': itinerario.sei_id_requisicao_passagens,
+                'protocolo_doc': itinerario.sei_requisicao_passagens_formatado,
                 'orgao': 'SEAD-PI',
                 'cargo': cargo,
                 'id_login': id_login,
@@ -690,7 +727,7 @@ def autorizar_solicitacao(id):
 
     ret_assinatura = assinar_documento(
         token=token_secretario,
-        unidade_id=UNIDADE_SEAD,
+        unidade_id=unidade_assinatura_sec,
         dados_assinatura=dados_assinatura,
     )
 

@@ -1146,6 +1146,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         var tipo = tipoItinerarioHidden.value;
+        if (!tipo) {
+            alert('Selecione o tipo de itinerário (Estadual, Nacional ou Internacional).');
+            tipoSelect.focus();
+            return false;
+        }
         if (tipo === '1') {
             var paradas = document.querySelectorAll('select[name="paradas[]"]');
             var temParada = false;
