@@ -26,6 +26,15 @@ TIPOS = [
     # 'diarias.nova_solicitacao' - lembrete
     # 'diarias.aprovada' - lembrete
 
+    # ── Etapa 1: Assinatura do Superintendente ──
+    {
+        'codigo': 'diarias.assinatura_superintendente',
+        'modulo': 'diarias',
+        'nome': 'Superintendente Assinou Requisicoes',
+        'descricao': 'Notifica que o Superintendente assinou as requisicoes. Aguardando autorizacao do Secretario.',
+        'nivel': 'lembrete',
+    },
+
     # ── Fluxo Financeiro (etapas 2-9) ──
     {
         'codigo': 'diarias.nota_reserva',
