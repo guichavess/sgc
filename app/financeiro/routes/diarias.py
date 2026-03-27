@@ -40,7 +40,7 @@ def diarias_lista():
     page = request.args.get('page', 1, type=int)
 
     query = DiariasItinerario.query.filter(
-        DiariasItinerario.etapa_atual_id >= DiariasEtapaID.FINANCEIRO
+        DiariasItinerario.etapa_atual_id >= int(DiariasEtapaID.FINANCEIRO)
     )
 
     # Filtro de busca por processo SEI ou usuário gerador
@@ -57,7 +57,7 @@ def diarias_lista():
     if filtro_status == 'pendente':
         query = query.filter(
             DiariasItinerario.nota_reserva.is_(None),
-            DiariasItinerario.etapa_atual_id == DiariasEtapaID.FINANCEIRO,
+            DiariasItinerario.etapa_atual_id == int(DiariasEtapaID.FINANCEIRO),
         )
     elif filtro_status == 'inserida':
         query = query.filter(
