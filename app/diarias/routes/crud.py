@@ -150,7 +150,7 @@ def store():
         # ── Registra etapa 1 na timeline ──
         DiariaService.registrar_movimentacao(
             itinerario.id,
-            DiariasEtapaID.SOLICITACAO_INICIADA,
+            DiariasEtapaID.SOLICITACAO_INICIAL,
             current_user.id,
             'Solicitacao criada pelo usuario',
         )
@@ -308,22 +308,29 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
 
             itinerario.sei_protocolo = resultado.get('protocolo', '')
             itinerario.sei_id_procedimento = str(proc.get('IdProcedimento', '')) if proc else None
-            itinerario.sei_id_memorando = str(memo.get('IdDocumento', '')) if memo else None
-            itinerario.sei_memorando_formatado = str(memo.get('DocumentoFormatado', '')) if memo else None
+
+            # Documentos SEI vão na tabela normalizada
+            if memo:
+                itinerario.set_doc('memorando',
+                                   sei_id=str(memo.get('IdDocumento', '')),
+                                   sei_formatado=str(memo.get('DocumentoFormatado', '')))
 
             if req:
-                itinerario.sei_id_requisicao = str(req.get('IdDocumento', '')) if req else None
-                itinerario.sei_requisicao_formatado = str(req.get('DocumentoFormatado', '')) if req else None
+                itinerario.set_doc('requisicao',
+                                   sei_id=str(req.get('IdDocumento', '')),
+                                   sei_formatado=str(req.get('DocumentoFormatado', '')))
 
             req_pass = resultado.get('requisicao_passagens')
             if req_pass:
-                itinerario.sei_id_requisicao_passagens = str(req_pass.get('IdDocumento', ''))
-                itinerario.sei_requisicao_passagens_formatado = str(req_pass.get('DocumentoFormatado', ''))
+                itinerario.set_doc('requisicao_passagens',
+                                   sei_id=str(req_pass.get('IdDocumento', '')),
+                                   sei_formatado=str(req_pass.get('DocumentoFormatado', '')))
 
             doc_ext = resultado.get('doc_externo')
             if doc_ext:
-                itinerario.sei_id_doc_externo = str(doc_ext.get('IdDocumento', '')) if doc_ext else None
-                itinerario.sei_doc_externo_formatado = str(doc_ext.get('DocumentoFormatado', '')) if doc_ext else None
+                itinerario.set_doc('doc_externo',
+                                   sei_id=str(doc_ext.get('IdDocumento', '')),
+                                   sei_formatado=str(doc_ext.get('DocumentoFormatado', '')))
 
             # Atualiza n_processo com o protocolo SEI se não tinha processo informado
             if not itinerario.n_processo and resultado.get('protocolo'):
@@ -434,11 +441,11 @@ def gerar_relatorio(id):
     itinerario = DiariasItinerario.query.get_or_404(id)
 
     # Valida: OB deve existir
-    if not itinerario.sei_id_ob:
+    if not itinerario.has_doc('ob'):
         return jsonify({'success': False, 'error': 'A Ordem Bancária (OB) ainda não foi inserida no processo.'}), 400
 
     # Valida: relatório ainda não gerado
-    if itinerario.sei_id_relatorio_viagem:
+    if itinerario.has_doc('relatorio_viagem'):
         return jsonify({'success': False, 'error': 'O Relatório de Viagem já foi gerado para esta solicitação.'}), 400
 
     # Obtém dados do formulário
@@ -551,8 +558,7 @@ def gerar_relatorio(id):
             aviso = f'Documento gerado mas assinatura falhou: {resultado_assinatura.get("erro", "")}'
 
         # 5. Salva no banco
-        itinerario.sei_id_relatorio_viagem = id_documento
-        itinerario.sei_relatorio_viagem_formatado = doc_formatado
+        itinerario.set_doc('relatorio_viagem', sei_id=id_documento, sei_formatado=doc_formatado)
         db.session.commit()
 
         try:
@@ -593,12 +599,12 @@ def upload_comprovante(id):
     itinerario = DiariasItinerario.query.get_or_404(id)
 
     # Valida: relatório já gerado
-    if not itinerario.sei_id_relatorio_viagem:
+    if not itinerario.has_doc('relatorio_viagem'):
         flash('O Relatório de Viagem deve ser gerado antes de enviar o comprovante.', 'danger')
         return redirect(url_for('diarias.detalhes', id=id))
 
     # Valida: comprovante não já enviado
-    if itinerario.sei_id_comprovante_viagem:
+    if itinerario.has_doc('comprovante_viagem'):
         flash('O comprovante de viagem já foi enviado.', 'warning')
         return redirect(url_for('diarias.detalhes', id=id))
 
@@ -634,13 +640,14 @@ def upload_comprovante(id):
         )
 
         if retorno:
-            itinerario.sei_id_comprovante_viagem = str(retorno.get('IdDocumento', ''))
-            itinerario.sei_comprovante_viagem_formatado = retorno.get('DocumentoFormatado', '')
+            itinerario.set_doc('comprovante_viagem',
+                               sei_id=str(retorno.get('IdDocumento', '')),
+                               sei_formatado=retorno.get('DocumentoFormatado', ''))
 
-            # Avança etapa para Comprovante de Viagem (§1.1 — commit único)
+            # Avança etapa para Prestação de Contas (§1.1 — commit único)
             DiariaService.registrar_movimentacao(
                 itinerario.id,
-                DiariasEtapaID.COMPROVANTE_VIAGEM,
+                DiariasEtapaID.PRESTACAO_CONTAS,
                 current_user.id,
                 'Comprovante de viagem enviado pelo solicitante',
                 auto_commit=False,

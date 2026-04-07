@@ -257,6 +257,7 @@ def api_criar_cotacao_voo():
             chegada_conexao=chegada_conexao,
             origem_conexao=data.get('origem_conexao', '').strip() or None,
             destino_conexao=data.get('destino_conexao', '').strip() or None,
+            fonte='manual',
         )
         return jsonify({
             'id': cotacao.id,
@@ -267,6 +268,7 @@ def api_criar_cotacao_voo():
             'valor': float(cotacao.valor),
             'valor_formatado': cotacao.valor_formatado,
             'nome_agencia': cotacao.nome_agencia,
+            'fonte': cotacao.fonte,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

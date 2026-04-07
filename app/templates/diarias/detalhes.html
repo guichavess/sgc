@@ -255,7 +255,7 @@
         {% endif %}
 
         {# ── Relatório de Viagem (após OB inserida) ── #}
-        {% if itinerario.sei_id_ob %}
+        {% if itinerario.has_doc('ob') %}
         <section class="mb-4 mt-4">
             <div class="card border-0 shadow-sm overflow-hidden">
                 <div class="card-header py-3" style="background: linear-gradient(135deg, #6f42c1 0%, #8b5cf6 100%);">
@@ -264,8 +264,9 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    {% if itinerario.sei_id_relatorio_viagem %}
+                    {% if itinerario.has_doc('relatorio_viagem') %}
                         {# Relatório já gerado #}
+                        {% set doc = itinerario.get_doc('relatorio_viagem') %}
                         <div class="alert alert-success d-flex align-items-center mb-0">
                             <i class="bi bi-check-circle-fill fs-4 me-3"></i>
                             <div>
@@ -273,7 +274,7 @@
                                 <span class="text-muted">
                                     Documento SEI:
                                     <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank" class="fw-bold">
-                                        {{ itinerario.sei_relatorio_viagem_formatado }}
+                                        {{ doc.sei_formatado }}
                                         <i class="bi bi-box-arrow-up-right small"></i>
                                     </a>
                                 </span>
@@ -339,7 +340,7 @@
         {% endif %}
 
         {# ── Comprovante de Viagem (após relatório gerado) ── #}
-        {% if itinerario.sei_id_relatorio_viagem %}
+        {% if itinerario.has_doc('relatorio_viagem') %}
         <section class="mb-4">
             <div class="card border-0 shadow-sm overflow-hidden">
                 <div class="card-header py-3" style="background: linear-gradient(135deg, #198754 0%, #20c997 100%);">
@@ -348,7 +349,8 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    {% if itinerario.sei_id_comprovante_viagem %}
+                    {% if itinerario.has_doc('comprovante_viagem') %}
+                        {% set doc = itinerario.get_doc('comprovante_viagem') %}
                         <div class="alert alert-success d-flex align-items-center mb-0">
                             <i class="bi bi-check-circle-fill fs-4 me-3"></i>
                             <div>
@@ -356,7 +358,7 @@
                                 <span class="text-muted">
                                     Documento SEI:
                                     <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank" class="fw-bold">
-                                        {{ itinerario.sei_comprovante_viagem_formatado }}
+                                        {{ doc.sei_formatado }}
                                         <i class="bi bi-box-arrow-up-right small"></i>
                                     </a>
                                 </span>
@@ -394,7 +396,7 @@
     </div>
 </div>
 
-{% if itinerario.sei_id_ob and not itinerario.sei_id_relatorio_viagem %}
+{% if itinerario.has_doc('ob') and not itinerario.has_doc('relatorio_viagem') %}
 <script>
 function gerarRelatorioViagem() {
     const relato = document.getElementById('relatoViagem').value.trim();
@@ -453,7 +455,7 @@ function gerarRelatorioViagem() {
 </script>
 {% endif %}
 
-{% if itinerario.sei_id_relatorio_viagem and not itinerario.sei_id_comprovante_viagem %}
+{% if itinerario.has_doc('relatorio_viagem') and not itinerario.has_doc('comprovante_viagem') %}
 <script>
 document.getElementById('formComprovante')?.addEventListener('submit', function() {
     const btn = document.getElementById('btnEnviarComprovante');

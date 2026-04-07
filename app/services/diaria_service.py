@@ -13,7 +13,7 @@ from app.models.diaria import (
     DiariasValorCargo,
     DiariasStatusViagem, DiariasTipoSolicitacao, DiariasCargo,
     DiariasNatureza, Municipio, Estado, Setor, Orgao,
-    DiariasEtapa, DiariasHistoricoMovimentacao,
+    DiariasEtapa, DiariasHistoricoMovimentacao, DiariasMovimentacao,
 )
 from app.models.contrato import Contrato
 
@@ -360,7 +360,7 @@ class DiariaService:
                           saida, chegada, origem, destino, valor, bagagem=None,
                           cia_conexao=None, voo_conexao=None, saida_conexao=None,
                           chegada_conexao=None, origem_conexao=None, destino_conexao=None,
-                          auto_commit=True):
+                          fonte='manual', auto_commit=True):
         """Cria uma cotacao de voo detalhada (com suporte a conexao)."""
         cotacao = DiariasCotacaoVoo(
             itinerario_id=itinerario_id,
@@ -374,6 +374,7 @@ class DiariaService:
             destino=destino,
             bagagem=bagagem,
             valor=Decimal(str(valor)),
+            fonte=fonte,
             cia_conexao=cia_conexao or None,
             voo_conexao=voo_conexao or None,
             saida_conexao=saida_conexao,
@@ -447,86 +448,193 @@ class DiariaService:
         """
         Monta os dados da timeline para exibição na página de detalhes.
 
-        A etapa "Aquisição de Passagens" (ID 4) só aparece para solicitações
+        Usa a tabela diarias_movimentacao (espelho SEI) para determinar:
+        - Quais sub-itens (documentos) existem em cada etapa
+        - Data de cada documento (coluna Data)
+        - Link de acesso ao documento no SEI (coluna LinkAcesso)
+        - Data da etapa = data do primeiro documento correspondente
+        - Range de datas = primeiro doc da etapa ... último doc da etapa
+
+        A etapa "Escolha do Voo" (ID 2) só aparece para solicitações
         do tipo "Diárias + Passagens" (id=2) e "Apenas Passagens" (id=3).
 
-        Args:
-            itinerario: objeto DiariasItinerario
-
         Returns:
-            Lista de dicts com dados de cada etapa:
-            [
-                {
-                    'etapa': DiariasEtapa,
-                    'concluida': bool,
-                    'data': datetime ou None,
-                    'atual': bool,
-                    'comentario': str ou None,
-                    'tempo_decorrido': str ou None ('3d', '5h', '10min'),
-                }
-            ]
+            Lista de dicts com chaves:
+            etapa, concluida, data, data_fim, atual, comentario, tempo_decorrido,
+            subitens[{id, nome, concluido, doc_formatado, link_acesso, data}]
         """
-        from app.constants import DiariasEtapaID
+        from app.constants import DiariasEtapaID, DIARIAS_SUBITENS, TIPOS_COM_PASSAGENS
+        from app.services.diarias_sei_integration import SERIE_TIPO_DOCUMENTO_MAP
 
         # 1. Busca todas as etapas ordenadas
         todas_etapas = DiariasEtapa.query.order_by(DiariasEtapa.ordem).all()
 
-        # 2. Filtra etapas conforme o tipo de solicitação:
-        #    "Aquisição de Passagens" (ID 3) só para tipo 2 e 3 (com passagens)
-        TIPOS_COM_PASSAGENS = {2, 3}  # Diárias+Passagens, Apenas Passagens
+        # 2. Filtra etapa "Escolha do Voo" se não tem passagens
         tipo_sol = getattr(itinerario, 'tipo_solicitacao_id', None)
+        tem_passagens = tipo_sol in TIPOS_COM_PASSAGENS
 
-        if tipo_sol not in TIPOS_COM_PASSAGENS:
-            todas_etapas = [e for e in todas_etapas if e.id != DiariasEtapaID.AQUISICAO_PASSAGENS]
+        if not tem_passagens:
+            todas_etapas = [e for e in todas_etapas if e.id != DiariasEtapaID.ESCOLHA_VOO]
 
-        # 3. Busca histórico de movimentações deste itinerário
-        historico = DiariasHistoricoMovimentacao.query.filter_by(
-            id_itinerario=itinerario.id
-        ).order_by(DiariasHistoricoMovimentacao.data_movimentacao.asc()).all()
+        # 3. Determina ordem da etapa atual para cálculo de concluída
+        etapa_atual_obj = next((e for e in todas_etapas if e.id == itinerario.etapa_atual_id), None)
+        etapa_atual_ordem = etapa_atual_obj.ordem if etapa_atual_obj else 0
 
-        # 4. Mapeia histórico por etapa (pega a primeira ocorrência de cada etapa)
-        hist_por_etapa = {}
-        for h in historico:
-            if h.id_etapa_nova not in hist_por_etapa:
-                hist_por_etapa[h.id_etapa_nova] = h
+        # 4. Busca documentos da diarias_movimentacao para este processo
+        #    e mapeia IdSerie → doc_tipo usando SERIE_TIPO_DOCUMENTO_MAP
+        protocolo = itinerario.n_processo or itinerario.sei_protocolo
+        docs_por_tipo = {}  # doc_tipo → lista de {data, link_acesso, doc_formatado, serie_nome}
 
-        # 5. Monta timeline
+        if protocolo:
+            movs = DiariasMovimentacao.query.filter_by(
+                protocolo_procedimento=protocolo
+            ).all()
+
+            for mov in movs:
+                id_serie_str = str(mov.id_serie) if mov.id_serie else ''
+                tipo_doc = SERIE_TIPO_DOCUMENTO_MAP.get(id_serie_str)
+
+                # Refinamento: IdSerie 264 (Documento Externo) pode ser prestação SCDP
+                if id_serie_str == '264':
+                    texto_ref = ((mov.descricao or '') + ' ' + (mov.numero or '')).lower()
+                    if any(kw in texto_ref for kw in ('scdp', 'prestação', 'prestacao')):
+                        tipo_doc = 'prestacao_scdp'
+
+                if not tipo_doc:
+                    continue
+
+                # Parse da data (formato dd/mm/yyyy ou yyyy-mm-dd)
+                data_parsed = None
+                if mov.data:
+                    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d/%m/%Y %H:%M:%S'):
+                        try:
+                            data_parsed = datetime.strptime(mov.data.strip(), fmt)
+                            break
+                        except (ValueError, AttributeError):
+                            continue
+
+                if tipo_doc not in docs_por_tipo:
+                    docs_por_tipo[tipo_doc] = []
+
+                docs_por_tipo[tipo_doc].append({
+                    'data': data_parsed,
+                    'data_str': mov.data or '',
+                    'link_acesso': mov.link_acesso or '',
+                    'doc_formatado': mov.documento_formatado or '',
+                    'serie_nome': mov.serie_nome or '',
+                })
+
+            # Ordena cada lista por data (mais antigo primeiro)
+            for tipo_doc in docs_por_tipo:
+                docs_por_tipo[tipo_doc].sort(
+                    key=lambda d: d['data'] or datetime.min
+                )
+
+        # 5. Monta índice invertido: doc_tipo → etapa_id (para calcular datas por etapa)
+        doc_tipo_para_etapa = {}
+        for etapa_id, subs in DIARIAS_SUBITENS.items():
+            for sub_cfg in subs:
+                doc_tipo_para_etapa[sub_cfg['doc_tipo']] = etapa_id
+
+        # 6. Calcula data_inicio e data_fim por etapa (a partir dos docs encontrados)
+        etapa_datas = {}  # etapa_id → {'inicio': datetime, 'fim': datetime}
+        for tipo_doc, docs_lista in docs_por_tipo.items():
+            etapa_id = doc_tipo_para_etapa.get(tipo_doc)
+            if etapa_id is None:
+                continue
+
+            for doc_info in docs_lista:
+                if not doc_info['data']:
+                    continue
+                if etapa_id not in etapa_datas:
+                    etapa_datas[etapa_id] = {'inicio': doc_info['data'], 'fim': doc_info['data']}
+                else:
+                    if doc_info['data'] < etapa_datas[etapa_id]['inicio']:
+                        etapa_datas[etapa_id]['inicio'] = doc_info['data']
+                    if doc_info['data'] > etapa_datas[etapa_id]['fim']:
+                        etapa_datas[etapa_id]['fim'] = doc_info['data']
+
+        # 7. Monta timeline com sub-itens
         timeline = []
         data_anterior = None
 
         for etapa in todas_etapas:
-            hist = hist_por_etapa.get(etapa.id)
-            data_atual = hist.data_movimentacao if hist else None
+            datas_etapa = etapa_datas.get(etapa.id)
+            data_inicio = datas_etapa['inicio'] if datas_etapa else None
+            data_fim = datas_etapa['fim'] if datas_etapa else None
 
-            # Calcula tempo decorrido entre etapas consecutivas
+            concluida = etapa.ordem < etapa_atual_ordem
+
+            # Última etapa (Prestação de Contas): concluída se todos os subitens têm docs
+            if not concluida and etapa.id == itinerario.etapa_atual_id:
+                subitens_cfg = DIARIAS_SUBITENS.get(etapa.id, [])
+                if subitens_cfg:
+                    todos_concluidos = all(
+                        docs_por_tipo.get(s['doc_tipo'])
+                        for s in subitens_cfg
+                        if not s.get('condicional') or (
+                            s.get('condicional') == 'passagens'
+                            and itinerario.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
+                        )
+                    )
+                    if todos_concluidos:
+                        concluida = True
+
+            # Tempo decorrido entre etapas
             tempo_decorrido = None
-            if data_anterior and data_atual:
-                diff = data_atual - data_anterior
+            if concluida and data_anterior and data_inicio:
+                diff = data_inicio - data_anterior
                 dias = diff.days
                 if dias > 0:
                     tempo_decorrido = f"{dias}d"
                 else:
-                    horas = diff.seconds // 3600
+                    horas = max(diff.seconds // 3600, 0)
                     if horas > 0:
                         tempo_decorrido = f"{horas}h"
                     else:
-                        minutos = diff.seconds // 60
+                        minutos = max(diff.seconds // 60, 0)
                         tempo_decorrido = f"{minutos}min"
 
-            concluida = hist is not None
             atual = etapa.id == itinerario.etapa_atual_id
+
+            # Sub-itens: só para etapas concluídas ou a atual
+            subitens = []
+            if concluida or atual:
+                config_subitens = DIARIAS_SUBITENS.get(etapa.id, [])
+                for sub_cfg in config_subitens:
+                    if sub_cfg.get('condicional') == 'passagens' and not tem_passagens:
+                        continue
+
+                    docs_lista = docs_por_tipo.get(sub_cfg['doc_tipo'], [])
+                    # Pega o primeiro documento encontrado para este tipo
+                    doc_info = docs_lista[0] if docs_lista else None
+                    sub_concluido = doc_info is not None
+
+                    subitens.append({
+                        'id': sub_cfg['id'],
+                        'nome': sub_cfg['nome'],
+                        'concluido': sub_concluido,
+                        'doc_formatado': doc_info['doc_formatado'] if doc_info else None,
+                        'link_acesso': doc_info['link_acesso'] if doc_info else None,
+                        'data': doc_info['data'] if doc_info else None,
+                        'data_str': doc_info['data_str'] if doc_info else None,
+                    })
 
             timeline.append({
                 'etapa': etapa,
                 'concluida': concluida,
-                'data': data_atual,
+                'data': data_inicio,
+                'data_fim': data_fim,
                 'atual': atual,
-                'comentario': hist.comentario if hist else None,
+                'comentario': None,
                 'tempo_decorrido': tempo_decorrido,
+                'subitens': subitens,
             })
 
-            if data_atual:
-                data_anterior = data_atual
+            if data_fim:
+                data_anterior = data_fim
+            elif data_inicio:
+                data_anterior = data_inicio
 
         return timeline
 

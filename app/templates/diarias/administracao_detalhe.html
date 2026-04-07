@@ -95,10 +95,15 @@
 {% endblock %}
 
 {% block content %}
-<div class="mb-3">
+<div class="mb-3 d-flex justify-content-between align-items-center">
     <a href="{{ url_for('diarias.administracao') }}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
+    {% if current_user.is_admin and itinerario.sei_protocolo %}
+    <button id="btn-atualizar-individual" class="btn btn-primary btn-sm" onclick="atualizarIndividual()">
+        <i class="bi bi-arrow-repeat me-1"></i> Atualizar Etapas
+    </button>
+    {% endif %}
 </div>
 
 {# ===== CARD PRINCIPAL ===== #}
@@ -123,7 +128,7 @@
                 {{ itinerario.tipo.nome if itinerario.tipo else '-' }} |
                 {{ itinerario.qtd_diarias_solicitadas }} diária(s)
             </h5>
-            <p class="text-secondary mb-0 small">
+            <p class="text-secondary mb-1" style="font-size: 0.95rem;">
                 <strong>Solicitante:</strong> {{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() }} |
                 Período: {{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}
                 a {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}
@@ -133,13 +138,121 @@
                 </span>
                 {% endif %}
             </p>
+            <p class="text-secondary mb-0" style="font-size: 0.95rem;">
+                <strong>Data da Solicitação:</strong> {{ itinerario.data_solicitacao.strftime('%d/%m/%Y') if itinerario.data_solicitacao else '-' }}
+            </p>
         </div>
 
         <div class="p-3">
-            {# Timeline #}
+            {# --- TIMELINE (sempre visível, acima das abas) --- #}
             {% include 'diarias/partials/timeline_diarias.html' %}
 
+            {# --- CARDS RESUMO (abaixo da timeline) --- #}
+            <div class="row g-2 mb-3">
+                <div class="col-md-3">
+                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #0d6efd !important;">
+                        <span class="info-card-label d-block mb-1">Tipo</span>
+                        <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else ('bg-danger' if itinerario.tipo_itinerario == 3 else 'bg-warning text-dark') }}">
+                            {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
+                        </span>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #198754 !important;">
+                        <span class="info-card-label d-block mb-1">Diarias</span>
+                        <span class="info-card-value">{{ itinerario.qtd_diarias_solicitadas }}</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #fd7e14 !important;">
+                        <span class="info-card-label d-block mb-1">Período</span>
+                        <span class="info-card-value" style="font-size: 0.85rem;">
+                            {{ itinerario.data_viagem.strftime('%d/%m') if itinerario.data_viagem else '-' }}
+                            a {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}
+                        </span>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #6f42c1 !important;">
+                        <span class="info-card-label d-block mb-1">Valor Total</span>
+                        <span class="info-card-value text-success">
+                            {% if itinerario.valor_total %}
+                            {{ "R$ {:,.2f}".format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                            {% else %}Pendente{% endif %}
+                        </span>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #343990 !important;">
+                        <span class="info-card-label d-block mb-1">Origem / Destino</span>
+                        <span class="info-card-value" style="font-size: 0.85rem;">
+                            {{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}
+                            <i class="bi bi-arrow-right" style="font-size: 0.7rem; color: #6c757d;"></i>
+                            {{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {# --- OBJETIVO (abaixo dos cards) --- #}
+            {% if itinerario.objetivo %}
+            <div class="mb-3">
+                <h6 class="section-title mb-2"><i class="bi bi-bullseye me-1"></i>Objetivo da Viagem</h6>
+                <div class="p-2 border rounded bg-light">
+                    <p class="mb-0 small">{{ itinerario.objetivo }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            {# ===== ABAS (nav-tabs server-side) ===== #}
+            <ul class="nav nav-tabs mb-0" id="tabsDiaria" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {{ 'active' if aba == 'resumo' }}"
+                       href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='resumo') }}">
+                        <i class="bi bi-info-circle me-1"></i> Resumo
+                    </a>
+                </li>
+                {% if itinerario.tipo_itinerario in [2, 3] %}
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {{ 'active' if aba == 'passagens' }}"
+                       href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='passagens') }}">
+                        <i class="bi bi-airplane me-1"></i> Passagens
+                        {% if itinerario.escolha_voo_ida_id %}
+                        <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                        {% elif cotacoes_voos|length > 0 %}
+                        <i class="bi bi-exclamation-circle text-warning ms-1"></i>
+                        {% endif %}
+                        <span class="badge bg-secondary ms-1">{{ cotacoes_voos|length }}</span>
+                    </a>
+                </li>
+                {% endif %}
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {{ 'active' if aba == 'financeiro' }}"
+                       href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='financeiro') }}">
+                        <i class="bi bi-cash-stack me-1"></i> Financeiro
+                        {% set has_nr = itinerario.get_doc('nota_reserva') %}
+                        {% if has_nr and has_nr.codigo %}
+                        <i class="bi bi-check-circle-fill text-success ms-1"></i>
+                        {% endif %}
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {{ 'active' if aba == 'pessoas' }}"
+                       href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='pessoas') }}">
+                        <i class="bi bi-people me-1"></i> Pessoas
+                        <span class="badge bg-secondary ms-1">{{ itens|length }}</span>
+                    </a>
+                </li>
+            </ul>
+
+            {# ===== CONTEÚDO DAS ABAS ===== #}
+            <div class="border border-top-0 rounded-bottom p-3">
+
+            {# ===================== ABA RESUMO ===================== #}
+            {% if aba == 'resumo' %}
+
             {# --- ASSINATURA DUPLA: SUPERINTENDENTE + SECRETÁRIO --- #}
+            {% set doc_autorizacao = itinerario.get_doc('autorizacao') %}
             {% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento %}
             <div class="card border-0 shadow-sm mb-4 overflow-hidden">
                 <div class="card-header py-2" style="background: linear-gradient(135deg, #343990 0%, #5b5fc7 100%);">
@@ -179,7 +292,7 @@
                                 </small>
                                 {% elif current_user.is_superintendente %}
                                 <p class="text-muted mb-2" style="font-size: 0.78rem;">
-                                    Assine as requisições de Diárias{% if itinerario.sei_id_requisição_passagens %} e Passagens{% endif %}
+                                    Assine as requisições de Diárias{% if itinerario.has_doc('requisicao_passagens') %} e Passagens{% endif %}
                                 </p>
                                 <button type="button" class="btn btn-sm px-4 text-white fw-semibold"
                                         style="background: linear-gradient(135deg, #343990, #5b5fc7);"
@@ -220,7 +333,7 @@
                     </div>
                 </div>
             </div>
-            {% elif itinerario.sei_autorização_formatado %}
+            {% elif doc_autorizacao and doc_autorizacao.sei_formatado %}
             <div class="card border-success mb-4 shadow-sm">
                 <div class="card-header bg-success bg-opacity-10 py-2">
                     <h6 class="mb-0 section-title" style="color: #0f5132;">
@@ -232,86 +345,1202 @@
                         <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
                         <div>
                             <span class="fw-bold text-success">Autorizada</span>
-                            <br><small class="text-muted">Documento SEI: {{ itinerario.sei_autorização_formatado }}</small>
+                            <br><small class="text-muted">Documento SEI: {{ doc_autorizacao.sei_formatado }}</small>
                         </div>
                     </div>
                 </div>
             </div>
             {% endif %}
 
-            {# --- CARDS RESUMO --- #}
-            <div class="row g-2 mb-4">
-                <div class="col-md-3">
-                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #0d6efd !important;">
-                        <span class="info-card-label d-block mb-1">Tipo</span>
-                        <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else ('bg-danger' if itinerario.tipo_itinerario == 3 else 'bg-warning text-dark') }}">
-                            {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
-                        </span>
-                    </div>
+            {# --- PRESTAÇÃO DE CONTAS (etapa 5) --- #}
+            {% set doc_relatorio = itinerario.get_doc('relatorio_viagem') %}
+            {% set doc_np = itinerario.get_doc('np') %}
+            {% set doc_prestacao_scdp = itinerario.get_doc('prestacao_scdp') %}
+            {% if itinerario.etapa_atual_id >= 5 or doc_relatorio or doc_np or doc_prestacao_scdp %}
+            <div class="card border-0 shadow-sm mb-4 overflow-hidden">
+                <div class="card-header py-2" style="background: linear-gradient(135deg, #7B1FA2 0%, #BA68C8 100%);">
+                    <h6 class="mb-0 text-white fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">
+                        <i class="bi bi-clipboard-check me-1"></i>Prestação de Contas
+                    </h6>
                 </div>
-                <div class="col-md-2">
-                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #198754 !important;">
-                        <span class="info-card-label d-block mb-1">Diarias</span>
-                        <span class="info-card-value">{{ itinerario.qtd_diarias_solicitadas }}</span>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #fd7e14 !important;">
-                        <span class="info-card-label d-block mb-1">Período</span>
-                        <span class="info-card-value" style="font-size: 0.85rem;">
-                            {{ itinerario.data_viagem.strftime('%d/%m') if itinerario.data_viagem else '-' }}
-                            a {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}
-                        </span>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #6f42c1 !important;">
-                        <span class="info-card-label d-block mb-1">Valor Total</span>
-                        <span class="info-card-value text-success">
-                            {% if itinerario.valor_total %}
-                            {{ "R$ {:,.2f}".format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
-                            {% else %}Pendente{% endif %}
-                        </span>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #343990 !important;">
-                        <span class="info-card-label d-block mb-1">Origem</span>
-                        <span class="info-card-value" style="font-size: 0.85rem;">
-                            {{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}
-                        </span>
-                    </div>
-                </div>
-            </div>
+                <div class="card-body py-3 px-3">
+                    <div class="row g-3">
+                        {# Relatório de Viagem #}
+                        <div class="col-md-4">
+                            <div class="rounded-3 p-3 h-100 text-center"
+                                 style="{{ 'background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;' if doc_relatorio else 'background: #f8f9fa; border: 1.5px dashed #dee2e6;' }}">
+                                <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; color: {{ '#0f5132' if doc_relatorio else '#6c757d' }};">
+                                    Relatório de Viagem
+                                </div>
+                                {% if doc_relatorio %}
+                                <i class="bi bi-check-circle-fill text-success d-block" style="font-size: 1.4rem;"></i>
+                                <small class="text-muted" style="font-size: 0.72rem;">
+                                    {% if doc_relatorio.sei_formatado %}SEI: {{ doc_relatorio.sei_formatado }}{% else %}Registrado{% endif %}
+                                </small>
+                                {% else %}
+                                <i class="bi bi-hourglass-split d-block" style="font-size: 1.4rem; color: #adb5bd;"></i>
+                                <small class="text-muted" style="font-size: 0.75rem;">Aguardando</small>
+                                {% endif %}
+                            </div>
+                        </div>
 
-            {# --- INFO GERAIS --- #}
-            <div class="mb-4">
-                <h6 class="section-title mb-2"><i class="bi bi-info-circle me-1"></i>Informacoes Gerais</h6>
-                <table class="table table-bordered table-sm mb-0">
-                    <tr>
-                        <th class="bg-light" style="width:20%">Solicitante</th>
-                        <td>{{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() }}</td>
-                        <th class="bg-light" style="width:20%">Data Solicitacao</th>
-                        <td>{{ itinerario.data_solicitacao.strftime('%d/%m/%Y') if itinerario.data_solicitacao else '-' }}</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Origem</th>
-                        <td>{{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}</td>
-                        <th class="bg-light">Destino (Estado)</th>
-                        <td>{{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}</td>
-                    </tr>
-                </table>
-            </div>
+                        {# Nota Patrimonial (NP) #}
+                        <div class="col-md-4">
+                            <div class="rounded-3 p-3 h-100 text-center"
+                                 style="{{ 'background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;' if doc_np else 'background: #f8f9fa; border: 1.5px dashed #dee2e6;' }}">
+                                <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; color: {{ '#0f5132' if doc_np else '#6c757d' }};">
+                                    Nota Patrimonial (NP)
+                                </div>
+                                {% if doc_np %}
+                                <i class="bi bi-check-circle-fill text-success d-block" style="font-size: 1.4rem;"></i>
+                                <small class="text-muted" style="font-size: 0.72rem;">
+                                    {% if doc_np.sei_formatado %}SEI: {{ doc_np.sei_formatado }}{% else %}Registrada{% endif %}
+                                </small>
+                                {% else %}
+                                <i class="bi bi-hourglass-split d-block" style="font-size: 1.4rem; color: #adb5bd;"></i>
+                                <small class="text-muted" style="font-size: 0.75rem;">Aguardando</small>
+                                {% endif %}
+                            </div>
+                        </div>
 
-            {# --- OBJETIVO --- #}
-            {% if itinerario.objetivo %}
-            <div class="mb-4">
-                <h6 class="section-title mb-2"><i class="bi bi-bullseye me-1"></i>Objetivo da Viagem</h6>
-                <div class="p-2 border rounded bg-light">
-                    <p class="mb-0 small">{{ itinerario.objetivo }}</p>
+                        {# Prestação SCDP #}
+                        <div class="col-md-4">
+                            <div class="rounded-3 p-3 h-100 text-center"
+                                 style="{{ 'background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;' if doc_prestacao_scdp else 'background: #f8f9fa; border: 1.5px dashed #dee2e6;' }}">
+                                <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; color: {{ '#0f5132' if doc_prestacao_scdp else '#6c757d' }};">
+                                    Prestação SCDP
+                                </div>
+                                {% if doc_prestacao_scdp %}
+                                <i class="bi bi-check-circle-fill text-success d-block" style="font-size: 1.4rem;"></i>
+                                <small class="text-muted" style="font-size: 0.72rem;">
+                                    {% if doc_prestacao_scdp.sei_formatado %}SEI: {{ doc_prestacao_scdp.sei_formatado }}{% else %}Registrada{% endif %}
+                                </small>
+                                {% else %}
+                                <i class="bi bi-hourglass-split d-block" style="font-size: 1.4rem; color: #adb5bd;"></i>
+                                <small class="text-muted" style="font-size: 0.75rem;">Aguardando</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             {% endif %}
+
+            {% endif %}{# /aba resumo #}
+
+            {# ===================== ABA PASSAGENS ===================== #}
+            {% if aba == 'passagens' and itinerario.tipo_itinerario in [2, 3] %}
+
+            {# --- Variaveis de controle --- #}
+            {% set count_manual = cotacoes_voos|selectattr('fonte', 'equalto', 'manual')|list|length %}
+            {% set count_ocr = cotacoes_voos|selectattr('fonte', 'equalto', 'ocr_sei')|list|length %}
+            {% set count_sem_fonte = cotacoes_voos|rejectattr('fonte')|list|length %}
+            {% set escolha_feita = itinerario.escolha_voo_ida_id or itinerario.escolha_sei_opcoes %}
+            {% set voos_ida = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'ida')|list %}
+            {% set voos_volta = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'volta')|list %}
+            {% set voos_ida_sorted = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'ida')|sort(attribute='valor')|list %}
+            {% set voos_volta_sorted = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'volta')|sort(attribute='valor')|list %}
+
+            {# ══ NAVEGAÇÃO DE FASES (stepper) ══ #}
+            <style>
+                .fase-stepper .fase-btn {
+                    background: #e9ecef; color: #6c757d;
+                    cursor: pointer; transition: all 0.15s;
+                }
+                .fase-stepper .fase-btn:hover:not([disabled]) { background: #dee2e6; }
+                .fase-stepper .fase-btn.active { background: #343990; color: #fff; }
+                .fase-stepper .fase-btn.done:not(.active) { background: #d1e7dd; color: #0f5132; }
+                .fase-stepper .fase-conector { width: 40px; height: 2px; background: #dee2e6; transition: background 0.15s; }
+                .fase-stepper .fase-conector.done { background: #198754; }
+            </style>
+            {% set fase1_done = cotacoes_voos|length > 0 %}
+            <div class="d-flex align-items-center mb-4 fase-stepper" role="tablist" style="gap: 0;">
+                {# Fase 1 #}
+                <button class="btn btn-sm d-flex align-items-center px-3 py-2 rounded-pill fw-semibold border-0 fase-btn {{ 'done' if fase1_done and escolha_feita else '' }} {{ '' if escolha_feita else 'active' }}"
+                        id="fase1-tab" data-bs-toggle="pill" data-bs-target="#fase1" type="button" role="tab"
+                        aria-controls="fase1" aria-selected="{{ 'false' if escolha_feita else 'true' }}">
+                    {% if fase1_done and escolha_feita %}
+                    <i class="bi bi-check-circle-fill me-1" style="font-size: 0.85rem;"></i>
+                    {% else %}
+                    <span class="d-inline-flex align-items-center justify-content-center rounded-circle me-1"
+                          style="width: 20px; height: 20px; font-size: 0.65rem; font-weight: 700; background: rgba(0,0,0,0.15); color: inherit;">1</span>
+                    {% endif %}
+                    Cotações
+                    {% if fase1_done %}
+                    <span class="badge bg-secondary bg-opacity-50 ms-1" style="font-size: 0.55rem;">{{ cotacoes_voos|length }}</span>
+                    {% endif %}
+                </button>
+
+                {# Conector #}
+                <div class="flex-grow-0 mx-2 fase-conector {{ 'done' if escolha_feita else '' }}"></div>
+
+                {# Fase 2 #}
+                <button class="btn btn-sm d-flex align-items-center px-3 py-2 rounded-pill fw-semibold border-0 fase-btn {{ 'active' if escolha_feita else '' }}"
+                        id="fase2-tab" data-bs-toggle="pill" data-bs-target="#fase2" type="button" role="tab"
+                        aria-controls="fase2" aria-selected="{{ 'true' if escolha_feita else 'false' }}"
+                        {{ 'disabled' if not cotacoes_voos|length and not escolha_feita else '' }}>
+                    {% if escolha_feita %}
+                    <i class="bi bi-check-circle-fill me-1" style="font-size: 0.85rem;"></i>
+                    {% else %}
+                    <span class="d-inline-flex align-items-center justify-content-center rounded-circle me-1"
+                          style="width: 20px; height: 20px; font-size: 0.65rem; font-weight: 700; background: rgba(0,0,0,0.15); color: inherit;">2</span>
+                    {% endif %}
+                    Escolha do Voo
+                </button>
+
+                {# Ajuda #}
+                <a class="ms-auto text-muted text-decoration-none" data-bs-toggle="collapse" href="#infoOrigemCotacoes"
+                   role="button" style="font-size: 0.72rem;">
+                    <i class="bi bi-question-circle"></i>
+                </a>
+            </div>
+
+            <div class="collapse mb-3" id="infoOrigemCotacoes">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body py-3">
+                        <h6 class="fw-bold mb-2" style="font-size: 0.82rem; color: #37474F;">
+                            <i class="bi bi-signpost-split me-2"></i>Origem das Cotações
+                        </h6>
+                        <p class="text-muted mb-3" style="font-size: 0.76rem;">
+                            As cotações podem ser obtidas de <strong>duas formas</strong>. O cadastro manual é preferencial.
+                            Caso não haja cotações cadastradas, o sistema verifica automaticamente o SEI e extrai via OCR.
+                        </p>
+                        <div class="row g-3">
+                            <div class="col-md-5">
+                                <div class="rounded-3 p-2 h-100" style="background: #f0fdf4; border: 1.5px solid #198754;">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-pencil-square me-2" style="color: #198754;"></i>
+                                        <div>
+                                            <span class="fw-bold" style="font-size: 0.78rem; color: #0f5132;">Cadastro Manual</span>
+                                            <span class="badge bg-success ms-1" style="font-size: 0.55rem;">PREFERENCIAL</span>
+                                            <br><small class="text-muted" style="font-size: 0.68rem;">Registre as cotações no formulário abaixo.</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-2 d-flex align-items-center justify-content-center">
+                                <span class="fw-bold text-secondary" style="font-size: 0.75rem;">OU</span>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="rounded-3 p-2 h-100" style="background: #f5faff; border: 1.5px solid #1565C0;">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-file-earmark-pdf me-2" style="color: #1565C0;"></i>
+                                        <div>
+                                            <span class="fw-bold" style="font-size: 0.78rem; color: #0d47a1;">Extração OCR do SEI</span>
+                                            <span class="badge ms-1" style="font-size: 0.55rem; background: #1565C0;">AUTOMÁTICO</span>
+                                            <br><small class="text-muted" style="font-size: 0.68rem;">IdSerie 272 — PDF baixado e processado via OCR.</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ══ CONTEUDO DAS FASES ══ #}
+            <div class="tab-content" id="fases-passagens-content">
+
+            {# ══ FASE 1: COTACOES ══ #}
+            <div class="tab-pane fade {{ '' if escolha_feita else 'show active' }}" id="fase1" role="tabpanel" aria-labelledby="fase1-tab">
+
+            {# ── UPLOAD + FORMULARIO + TABELAS DE COTACOES ── #}
+
+            {# --- UPLOAD COTACAO AO SEI (só na etapa 2) --- #}
+            {% if itinerario.sei_protocolo and itinerario.etapa_atual_id == 2 %}
+            <section class="mb-4">
+                <h6 class="section-title mb-2"><i class="bi bi-cloud-upload me-1"></i>Enviar Cotação ao SEI</h6>
+                <div class="card border-primary">
+                    <div class="card-body py-2">
+                        <form action="{{ url_for('diarias.upload_cotacao', id=itinerario.id) }}" method="post" enctype="multipart/form-data">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-semibold mb-1">Descrição</label>
+                                    <input type="text" name="descricao_cotacao" class="form-control form-control-sm"
+                                           placeholder="Ex: cotação agência X">
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-semibold mb-1">Arquivo (PDF) <span class="text-danger">*</span></label>
+                                    <input type="file" name="arquivo_cotacao" class="form-control form-control-sm"
+                                           accept=".pdf,.jpg,.jpeg,.png" required>
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                                        <i class="bi bi-cloud-upload me-1"></i>Enviar
+                                    </button>
+                                </div>
+                            </div>
+                            <small class="text-muted d-block mt-1">
+                                <i class="bi bi-info-circle me-1"></i>Documento enviado ao SEI como "Cotação" (série 272). O OCR será aplicado automaticamente na sincronização.
+                            </small>
+                        </form>
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+
+            {# --- COTACOES DE VOOS --- #}
+            {% if voos_ida|length > 0 or voos_volta|length > 0 %}
+            <section class="mb-4">
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-header bg-white border-bottom py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0 section-title"><i class="bi bi-airplane me-1"></i>Cotações de Voos</h6>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-secondary">{{ cotacoes_voos|length }} opção(ões)</span>
+                                {% if count_manual > 0 %}
+                                <span class="badge bg-success" style="font-size: 0.65rem;" title="Cadastradas manualmente no SGC">
+                                    <i class="bi bi-pencil-square me-1"></i>{{ count_manual }} manual
+                                </span>
+                                {% endif %}
+                                {% if count_ocr + count_sem_fonte > 0 %}
+                                <span class="badge" style="font-size: 0.65rem; background: #1565C0;" title="Extraídas via OCR do SEI">
+                                    <i class="bi bi-file-earmark-pdf me-1"></i>{{ count_ocr + count_sem_fonte }} OCR
+                                </span>
+                                {% endif %}
+                                {% if cotacoes_voos|length > 0 %}
+                                <button type="button" class="btn btn-outline-warning btn-sm" style="font-size: 0.7rem; padding: 2px 8px;"
+                                        onclick="reimportarCotacoes({{ itinerario.id }})" id="btn-reimportar-cotacoes"
+                                        title="Remove cotações existentes e reimporta do PDF no SEI">
+                                    <i class="bi bi-arrow-repeat me-1"></i>Reimportar OCR
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+
+                        {# --- FORMULARIO CADASTRAR COTACAO (só na etapa 2) --- #}
+                        {% if itinerario.etapa_atual_id == 2 %}
+                        <div class="border rounded p-3 mb-4 bg-light" id="form-cotacao-voo">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold mb-0" style="font-size: 0.85rem;">
+                                    <i class="bi bi-plus-circle me-1"></i>Cadastrar Opção de Voo
+                                    <span class="badge bg-success ms-1" style="font-size: 0.6rem;">Manual</span>
+                                </h6>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <input type="radio" class="btn-check" name="tipo_trecho_tab" id="tab-ida" value="ida" checked>
+                                    <label class="btn btn-outline-primary" for="tab-ida">
+                                        <i class="bi bi-arrow-right me-1"></i>Ida
+                                    </label>
+                                    <input type="radio" class="btn-check" name="tipo_trecho_tab" id="tab-volta" value="volta">
+                                    <label class="btn btn-outline-info" for="tab-volta">
+                                        <i class="bi bi-arrow-left me-1"></i>Volta
+                                    </label>
+                                </div>
+                            </div>
+
+                            <input type="hidden" id="cotacao_itinerario_id" value="{{ itinerario.id }}">
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label">Agência</label>
+                                    <select id="cotacao_contrato" class="form-select form-select-sm">
+                                        <option value="">Selecione (opcional)</option>
+                                        {% for ag in agencias %}
+                                        <option value="{{ ag.codigo }}">{{ ag.nomeContratadoResumido or ag.nomeContratado }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Bagagem</label>
+                                    <select id="cotacao_bagagem" class="form-select form-select-sm">
+                                        <option value="">Selecione</option>
+                                        <option value="1 mala despachada">1 mala despachada</option>
+                                        <option value="Apenas mão">Apenas mão</option>
+                                        <option value="2 malas despachadas">2 malas despachadas</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Valor Total (R$) <span class="text-danger">*</span></label>
+                                    <input type="number" id="cotacao_valor" class="form-control form-control-sm" step="0.01" min="0" placeholder="0,00" required>
+                                </div>
+                            </div>
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-2">
+                                    <label class="form-label">CIA <span class="text-danger">*</span></label>
+                                    <input type="text" id="cotacao_cia" class="form-control form-control-sm" placeholder="LATAM">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Voo <span class="text-danger">*</span></label>
+                                    <input type="text" id="cotacao_voo" class="form-control form-control-sm" placeholder="LA 3853">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Saída <span class="text-danger">*</span></label>
+                                    <input type="datetime-local" id="cotacao_saida" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Chegada <span class="text-danger">*</span></label>
+                                    <input type="datetime-local" id="cotacao_chegada" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Origem <span class="text-danger">*</span></label>
+                                    <input type="text" id="cotacao_origem" class="form-control form-control-sm" placeholder="Teresina">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Destino <span class="text-danger">*</span></label>
+                                    <input type="text" id="cotacao_destino" class="form-control form-control-sm" placeholder="Brasilia">
+                                </div>
+                            </div>
+
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="chk-conexao" onchange="toggleConexão()">
+                                <label class="form-check-label small" for="chk-conexao">Tem conexão (2º trecho)</label>
+                            </div>
+
+                            <div class="conexao-fields" id="conexao-fields">
+                                <small class="text-muted fw-bold d-block mb-2">Trecho 2 (Conexão)</small>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-2">
+                                        <label class="form-label">CIA</label>
+                                        <input type="text" id="cotacao_cia_cx" class="form-control form-control-sm" placeholder="LATAM">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">Voo</label>
+                                        <input type="text" id="cotacao_voo_cx" class="form-control form-control-sm" placeholder="LA 4737">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">Saída</label>
+                                        <input type="datetime-local" id="cotacao_saida_cx" class="form-control form-control-sm">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">Chegada</label>
+                                        <input type="datetime-local" id="cotacao_chegada_cx" class="form-control form-control-sm">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">Origem</label>
+                                        <input type="text" id="cotacao_origem_cx" class="form-control form-control-sm" placeholder="Brasilia">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label">Destino</label>
+                                        <input type="text" id="cotacao_destino_cx" class="form-control form-control-sm" placeholder="Congonhas">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-end mt-2">
+                                <button type="button" class="btn btn-primary btn-sm" id="btn-adicionar-cotacao" onclick="adicionarCotacaoVoo()">
+                                    <i class="bi bi-plus-circle me-1"></i> Adicionar
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}{# /etapa == 2 form #}
+
+                        {# --- TABELAS DE COTACOES REGISTRADAS --- #}
+                        <div id="cotacoes-voos-container">
+                            {# IDA #}
+                            <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;">
+                                <i class="bi bi-arrow-right-circle me-1"></i>OPÇÕES DE VOOS — IDA
+                                <span class="badge bg-primary ms-1" id="count-ida">{{ voos_ida|length }}</span>
+                            </h6>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.8rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Fonte</th>
+                                            <th>Agência</th>
+                                            <th>CIA</th>
+                                            <th>Voo</th>
+                                            <th>Saída</th>
+                                            <th>Chegada</th>
+                                            <th>Rota</th>
+                                            <th>Bagagem</th>
+                                            <th class="text-end">Total</th>
+                                            {% if itinerario.etapa_atual_id == 2 %}<th style="width:50px"></th>{% endif %}
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-ida">
+                                        {% for c in voos_ida %}
+                                        <tr data-id="{{ c.id }}">
+                                            <td class="text-center">
+                                                {% if c.fonte == 'manual' %}
+                                                <span class="badge bg-success" style="font-size: 0.6rem;" title="Cadastrado manualmente no SGC"><i class="bi bi-pencil-square"></i></span>
+                                                {% elif c.fonte == 'ocr_sei' %}
+                                                <span class="badge" style="font-size: 0.6rem; background: #1565C0;" title="Extraído via OCR do SEI"><i class="bi bi-file-earmark-pdf"></i></span>
+                                                {% else %}
+                                                <span class="badge bg-secondary" style="font-size: 0.6rem;" title="Fonte não identificada"><i class="bi bi-question-circle"></i></span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ c.nome_agencia or '-' }}</td>
+                                            <td class="fw-semibold">{{ c.cia }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.cia_conexao }}</small>{% endif %}</td>
+                                            <td><strong>{{ c.voo }}</strong>{% if c.tem_conexao %}<br><small class="text-muted">{{ c.voo_conexao }}</small>{% endif %}</td>
+                                            <td>{{ c.saida.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.saida_conexao.strftime('%d/%m/%Y - %H:%M') if c.saida_conexao else '' }}</small>{% endif %}</td>
+                                            <td>{{ c.chegada.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.chegada_conexao.strftime('%d/%m/%Y - %H:%M') if c.chegada_conexao else '' }}</small>{% endif %}</td>
+                                            <td class="voo-rota">
+                                                {{ c.origem }} <i class="bi bi-arrow-right"></i> {{ c.destino }}
+                                                {% if c.tem_conexao %}
+                                                <br>{{ c.origem_conexao }} <i class="bi bi-arrow-right"></i> {{ c.destino_conexao }}
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ c.bagagem or '-' }}</td>
+                                            <td class="text-end fw-bold text-success">{{ c.valor_formatado }}</td>
+                                            {% if itinerario.etapa_atual_id == 2 %}
+                                            <td class="text-center">
+                                                <button class="btn btn-outline-danger btn-excluir-cotacao" onclick="excluirCotacaoVoo({{ c.id }}, this)">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </td>
+                                            {% endif %}
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {# VOLTA #}
+                            <h6 class="fw-bold text-info mb-2" style="font-size: 0.8rem;">
+                                <i class="bi bi-arrow-left-circle me-1"></i>OPÇÕES DE VOOS — VOLTA
+                                <span class="badge bg-info ms-1" id="count-volta">{{ voos_volta|length }}</span>
+                            </h6>
+                            <div class="table-responsive mb-3">
+                                <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.8rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Fonte</th>
+                                            <th>Agência</th>
+                                            <th>CIA</th>
+                                            <th>Voo</th>
+                                            <th>Saída</th>
+                                            <th>Chegada</th>
+                                            <th>Rota</th>
+                                            <th>Bagagem</th>
+                                            <th class="text-end">Total</th>
+                                            {% if itinerario.etapa_atual_id == 2 %}<th style="width:50px"></th>{% endif %}
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-volta">
+                                        {% for c in voos_volta %}
+                                        <tr data-id="{{ c.id }}">
+                                            <td class="text-center">
+                                                {% if c.fonte == 'manual' %}
+                                                <span class="badge bg-success" style="font-size: 0.6rem;" title="Cadastrado manualmente no SGC"><i class="bi bi-pencil-square"></i></span>
+                                                {% elif c.fonte == 'ocr_sei' %}
+                                                <span class="badge" style="font-size: 0.6rem; background: #1565C0;" title="Extraído via OCR do SEI"><i class="bi bi-file-earmark-pdf"></i></span>
+                                                {% else %}
+                                                <span class="badge bg-secondary" style="font-size: 0.6rem;" title="Fonte não identificada"><i class="bi bi-question-circle"></i></span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ c.nome_agencia or '-' }}</td>
+                                            <td class="fw-semibold">{{ c.cia }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.cia_conexao }}</small>{% endif %}</td>
+                                            <td><strong>{{ c.voo }}</strong>{% if c.tem_conexao %}<br><small class="text-muted">{{ c.voo_conexao }}</small>{% endif %}</td>
+                                            <td>{{ c.saida.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.saida_conexao.strftime('%d/%m/%Y - %H:%M') if c.saida_conexao else '' }}</small>{% endif %}</td>
+                                            <td>{{ c.chegada.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.chegada_conexao.strftime('%d/%m/%Y - %H:%M') if c.chegada_conexao else '' }}</small>{% endif %}</td>
+                                            <td class="voo-rota">
+                                                {{ c.origem }} <i class="bi bi-arrow-right"></i> {{ c.destino }}
+                                                {% if c.tem_conexao %}
+                                                <br>{{ c.origem_conexao }} <i class="bi bi-arrow-right"></i> {{ c.destino_conexao }}
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ c.bagagem or '-' }}</td>
+                                            <td class="text-end fw-bold text-success">{{ c.valor_formatado }}</td>
+                                            {% if itinerario.etapa_atual_id == 2 %}
+                                            <td class="text-center">
+                                                <button class="btn btn-outline-danger btn-excluir-cotacao" onclick="excluirCotacaoVoo({{ c.id }}, this)">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </td>
+                                            {% endif %}
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+
+            </div>{# /tab-pane fase1 #}
+
+            {# ══ FASE 2: ESCOLHA DE PASSAGENS ══ #}
+            <div class="tab-pane fade {{ 'show active' if escolha_feita else '' }}" id="fase2" role="tabpanel" aria-labelledby="fase2-tab">
+
+            {# --- Escolha de Passagens extraida do SEI (dados reais do PDF) --- #}
+            {% if itinerario.escolha_via_sei and itinerario.escolha_sei_opcoes %}
+            <section class="mb-4">
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-header py-2" style="background: linear-gradient(135deg, #343990 0%, #5b5fc7 100%);">
+                        <h6 class="mb-0 text-white fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">
+                            <i class="bi bi-check2-square me-1"></i>Escolha de Passagens
+                            {% set doc_escolha_ext = itinerario.get_doc('escolha_passagens') %}
+                            {% if doc_escolha_ext and doc_escolha_ext.sei_formatado %}
+                            <span class="badge bg-light text-dark ms-2" style="font-size: 0.6rem;">
+                                SEI: {{ doc_escolha_ext.sei_formatado }}
+                                {% if doc_escolha_ext.sei_id and itinerario.sei_id_procedimento %}
+                                <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}&id_documento={{ doc_escolha_ext.sei_id }}"
+                                   target="_blank" class="text-primary ms-1"><i class="bi bi-box-arrow-up-right"></i></a>
+                                {% endif %}
+                            </span>
+                            {% endif %}
+                        </h6>
+                    </div>
+                    <div class="card-body py-3">
+                        {# Opcoes escolhidas #}
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <div class="rounded-3 p-2 text-center" style="background: #f0f6ff; border: 1.5px solid #343990;">
+                                    <small class="fw-bold text-uppercase d-block mb-1" style="font-size: 0.65rem; color: #343990;">Opções Escolhidas</small>
+                                    <span class="fw-bold" style="font-size: 1.1rem; color: #343990;">
+                                        {% for op in itinerario.escolha_sei_opcoes.split(',') %}
+                                        Opção {{ op }}{{ ', ' if not loop.last else '' }}
+                                        {% endfor %}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="rounded-3 p-2 text-center" style="background: {{ '#d1e7dd' if itinerario.escolha_menor_valor else '#fff3cd' }}; border: 1.5px solid {{ '#198754' if itinerario.escolha_menor_valor else '#ffc107' }};">
+                                    <small class="fw-bold text-uppercase d-block mb-1" style="font-size: 0.65rem; color: {{ '#0f5132' if itinerario.escolha_menor_valor else '#664d03' }};">Menor Valor?</small>
+                                    {% if itinerario.escolha_menor_valor %}
+                                    <span class="badge bg-success" style="font-size: 0.85rem;"><i class="bi bi-check-circle me-1"></i>SIM</span>
+                                    {% elif itinerario.escolha_menor_valor == false %}
+                                    <span class="badge bg-warning text-dark" style="font-size: 0.85rem;"><i class="bi bi-exclamation-triangle me-1"></i>NÃO</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary" style="font-size: 0.85rem;">Não informado</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="rounded-3 p-2 text-center" style="background: {{ '#d1e7dd' if itinerario.escolha_declaracao_responsabilidade else '#f8f9fa' }}; border: 1.5px solid {{ '#198754' if itinerario.escolha_declaracao_responsabilidade else '#dee2e6' }};">
+                                    <small class="fw-bold text-uppercase d-block mb-1" style="font-size: 0.65rem; color: {{ '#0f5132' if itinerario.escolha_declaracao_responsabilidade else '#6c757d' }};">Declaração</small>
+                                    {% if itinerario.escolha_declaracao_responsabilidade %}
+                                    <span class="badge bg-success" style="font-size: 0.85rem;"><i class="bi bi-check-circle me-1"></i>Assinada</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary" style="font-size: 0.85rem;">Pendente</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        {# Voos vinculados (se cruzamento funcionou) #}
+                        {% if itinerario.escolha_voo_ida or itinerario.escolha_voo_volta %}
+                        <div class="row g-3 mb-3">
+                            {% if itinerario.escolha_voo_ida %}
+                            {% set vi = itinerario.escolha_voo_ida %}
+                            <div class="col-md-6">
+                                <h6 class="fw-bold text-primary mb-2" style="font-size: 0.78rem;">
+                                    <i class="bi bi-arrow-right-circle me-1"></i>VOO IDA SELECIONADO
+                                </h6>
+                                <div class="border rounded p-2 bg-light">
+                                    <strong>{{ vi.cia }} - {{ vi.voo }}</strong><br>
+                                    <small class="text-muted">{{ vi.origem }} <i class="bi bi-arrow-right"></i> {{ vi.destino }}</small><br>
+                                    <small class="text-muted">{{ vi.saida.strftime('%d/%m/%Y %H:%M') }} <i class="bi bi-arrow-right"></i> {{ vi.chegada.strftime('%d/%m/%Y %H:%M') }}</small><br>
+                                    <span class="fw-bold text-success">{{ vi.valor_formatado }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if itinerario.escolha_voo_volta %}
+                            {% set vv = itinerario.escolha_voo_volta %}
+                            <div class="col-md-6">
+                                <h6 class="fw-bold text-info mb-2" style="font-size: 0.78rem;">
+                                    <i class="bi bi-arrow-left-circle me-1"></i>VOO VOLTA SELECIONADO
+                                </h6>
+                                <div class="border rounded p-2 bg-light">
+                                    <strong>{{ vv.cia }} - {{ vv.voo }}</strong><br>
+                                    <small class="text-muted">{{ vv.origem }} <i class="bi bi-arrow-right"></i> {{ vv.destino }}</small><br>
+                                    <small class="text-muted">{{ vv.saida.strftime('%d/%m/%Y %H:%M') }} <i class="bi bi-arrow-right"></i> {{ vv.chegada.strftime('%d/%m/%Y %H:%M') }}</small><br>
+                                    <span class="fw-bold text-success">{{ vv.valor_formatado }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        {# Justificativas (se nao menor valor) #}
+                        {% if not itinerario.escolha_menor_valor and itinerario.escolha_justificativa_codigos %}
+                        <div class="p-2 border rounded bg-warning bg-opacity-10 mb-2">
+                            <small class="fw-bold text-warning d-block mb-1">
+                                <i class="bi bi-exclamation-triangle me-1"></i>Justificativa por não optar pelo menor valor
+                            </small>
+                            <small class="text-muted">Códigos: {{ itinerario.escolha_justificativa_codigos }}</small>
+                            {% if itinerario.escolha_justificativa_outros %}
+                            <br><small class="text-muted">Outros: {{ itinerario.escolha_justificativa_outros[:200] }}{{ '...' if itinerario.escolha_justificativa_outros|length > 200 else '' }}</small>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+
+            {# --- Escolha de Passagens via SGC (formulario / visualizacao) --- #}
+            {# So exibe se NÃO veio do SEI (evita duplicar com a secao acima) #}
+            {% if voos_ida_sorted|length > 0 and voos_volta_sorted|length > 0 and not itinerario.escolha_via_sei %}
+            <section class="mb-4">
+                <div class="card border-0 shadow-sm overflow-hidden">
+                    <div class="card-header py-2" style="background-color: #343990; color: #fff;">
+                        <h6 class="mb-0"><i class="bi bi-check2-square me-1"></i>Escolha de Passagens</h6>
+                    </div>
+                    <div class="card-body">
+
+                        {% if itinerario.escolha_voo_ida_id %}
+                        {# === MODO VISUALIZACAO (ja registrada) === #}
+                        <div class="alert alert-success d-flex align-items-center mb-3" role="alert">
+                            <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                            <div>
+                                <strong>Escolha de passagens registrada no SGC!</strong>
+                                {% set doc_escolha = itinerario.get_doc('escolha_passagens') %}
+                                {% if doc_escolha and doc_escolha.sei_formatado %}
+                                <br><small>Documento SEI: {{ doc_escolha.sei_formatado }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;">
+                                    <i class="bi bi-arrow-right-circle me-1"></i>VOO IDA SELECIONADO
+                                </h6>
+                                {% if itinerario.escolha_voo_ida %}
+                                {% set vi = itinerario.escolha_voo_ida %}
+                                <div class="border rounded p-2 bg-light">
+                                    <strong>{{ vi.cia }} - {{ vi.voo }}</strong><br>
+                                    <small class="text-muted">{{ vi.origem }} <i class="bi bi-arrow-right"></i> {{ vi.destino }}</small><br>
+                                    <small class="text-muted">{{ vi.saida.strftime('%d/%m/%Y %H:%M') }} <i class="bi bi-arrow-right"></i> {{ vi.chegada.strftime('%d/%m/%Y %H:%M') }}</small><br>
+                                    {% if vi.nome_agencia %}<small class="text-muted">Agência: {{ vi.nome_agencia }}</small><br>{% endif %}
+                                    <span class="fw-bold text-success">{{ vi.valor_formatado }}</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="fw-bold text-info mb-2" style="font-size: 0.8rem;">
+                                    <i class="bi bi-arrow-left-circle me-1"></i>VOO VOLTA SELECIONADO
+                                </h6>
+                                {% if itinerario.escolha_voo_volta %}
+                                {% set vv = itinerario.escolha_voo_volta %}
+                                <div class="border rounded p-2 bg-light">
+                                    <strong>{{ vv.cia }} - {{ vv.voo }}</strong><br>
+                                    <small class="text-muted">{{ vv.origem }} <i class="bi bi-arrow-right"></i> {{ vv.destino }}</small><br>
+                                    <small class="text-muted">{{ vv.saida.strftime('%d/%m/%Y %H:%M') }} <i class="bi bi-arrow-right"></i> {{ vv.chegada.strftime('%d/%m/%Y %H:%M') }}</small><br>
+                                    {% if vv.nome_agencia %}<small class="text-muted">Agência: {{ vv.nome_agencia }}</small><br>{% endif %}
+                                    <span class="fw-bold text-success">{{ vv.valor_formatado }}</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if not itinerario.escolha_menor_valor %}
+                        <div class="mt-3 p-2 border rounded bg-warning bg-opacity-10">
+                            <small class="fw-bold text-warning">
+                                <i class="bi bi-exclamation-triangle me-1"></i>Não foi escolhido o menor valor
+                            </small>
+                            {% if itinerario.escolha_justificativa_codigos %}
+                            <br><small class="text-muted">Justificativa(s): {{ itinerario.escolha_justificativa_codigos }}</small>
+                            {% endif %}
+                            {% if itinerario.escolha_justificativa_outros %}
+                            <br><small class="text-muted">Outros: {{ itinerario.escolha_justificativa_outros }}</small>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        {% elif itinerario.etapa_atual_id == 2 and not itinerario.escolha_via_sei %}
+                        {# === MODO FORMULARIO (só na etapa 2 e se nao tem escolha via SEI) === #}
+                        <form action="{{ url_for('diarias.escolha_passagens', id=itinerario.id) }}"
+                              method="post" id="form-escolha-passagens">
+
+                            {# --- IDA --- #}
+                            <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;">
+                                <i class="bi bi-arrow-right-circle me-1"></i>SELECIONE O VOO DE IDA
+                            </h6>
+                            <div class="mb-3">
+                                {% for c in voos_ida_sorted %}
+                                <div class="form-check border rounded p-2 ps-4 mb-2 escolha-option {{ 'bg-success bg-opacity-10 border-success' if loop.first else '' }}">
+                                    <input class="form-check-input mt-2" type="radio"
+                                           name="escolha_voo_ida" id="ida_{{ c.id }}"
+                                           value="{{ c.id }}" data-valor="{{ c.valor }}"
+                                           onchange="checkCheapestSelection()" required>
+                                    <label class="form-check-label w-100" for="ida_{{ c.id }}">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong>OPÇÃO {{ loop.index }}</strong>
+                                                {% if loop.first %}<span class="badge bg-success ms-1">MENOR VALOR</span>{% endif %}
+                                                <span class="ms-2 text-muted" style="font-size: 0.8rem;">
+                                                    {{ c.cia }} {{ c.voo }} |
+                                                    {{ c.origem }} <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino }}
+                                                    {% if c.tem_conexao %}
+                                                    <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino_conexao }}
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            <span class="fw-bold text-success fs-6">{{ c.valor_formatado }}</span>
+                                        </div>
+                                        <small class="text-muted">
+                                            Saída: {{ c.saida.strftime('%d/%m/%Y %H:%M') }} |
+                                            Chegada: {{ c.chegada.strftime('%d/%m/%Y %H:%M') }}
+                                            {% if c.nome_agencia %}| Agência: {{ c.nome_agencia }}{% endif %}
+                                            {% if c.bagagem %}| {{ c.bagagem }}{% endif %}
+                                        </small>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            {# --- VOLTA --- #}
+                            <h6 class="fw-bold text-info mb-2" style="font-size: 0.8rem;">
+                                <i class="bi bi-arrow-left-circle me-1"></i>SELECIONE O VOO DE VOLTA
+                            </h6>
+                            <div class="mb-3">
+                                {% for c in voos_volta_sorted %}
+                                <div class="form-check border rounded p-2 ps-4 mb-2 escolha-option {{ 'bg-info bg-opacity-10 border-info' if loop.first else '' }}">
+                                    <input class="form-check-input mt-2" type="radio"
+                                           name="escolha_voo_volta" id="volta_{{ c.id }}"
+                                           value="{{ c.id }}" data-valor="{{ c.valor }}"
+                                           onchange="checkCheapestSelection()" required>
+                                    <label class="form-check-label w-100" for="volta_{{ c.id }}">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong>OPÇÃO {{ loop.index }}</strong>
+                                                {% if loop.first %}<span class="badge bg-info">MENOR VALOR</span>{% endif %}
+                                                <span class="ms-2 text-muted" style="font-size: 0.8rem;">
+                                                    {{ c.cia }} {{ c.voo }} |
+                                                    {{ c.origem }} <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino }}
+                                                    {% if c.tem_conexao %}
+                                                    <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino_conexao }}
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            <span class="fw-bold text-success fs-6">{{ c.valor_formatado }}</span>
+                                        </div>
+                                        <small class="text-muted">
+                                            Saída: {{ c.saida.strftime('%d/%m/%Y %H:%M') }} |
+                                            Chegada: {{ c.chegada.strftime('%d/%m/%Y %H:%M') }}
+                                            {% if c.nome_agencia %}| Agência: {{ c.nome_agencia }}{% endif %}
+                                            {% if c.bagagem %}| {{ c.bagagem }}{% endif %}
+                                        </small>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            {# --- JUSTIFICATIVA (oculta por padrao) --- #}
+                            <div id="justificativa-section" style="display: none;">
+                                <div class="alert alert-warning mb-3">
+                                    <h6 class="alert-heading fw-bold" style="font-size: 0.85rem;">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>
+                                        Justificativa (passagem selecionada não é a de menor valor)
+                                    </h6>
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" name="justificativa_J1" id="just_J1">
+                                        <label class="form-check-label small" for="just_J1">
+                                            O valor de diárias ultrapassa o benefício econômico do menor valor
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" name="justificativa_J2" id="just_J2">
+                                        <label class="form-check-label small" for="just_J2">
+                                            Recomendação médica com CID
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" name="justificativa_J3" id="just_J3">
+                                        <label class="form-check-label small" for="just_J3">
+                                            Disposições do art. 6º do Decreto nº 14.891/2012
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" name="justificativa_J4" id="just_J4">
+                                        <label class="form-check-label small" for="just_J4">
+                                            Autorização do Governador ou dirigente máximo
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="justificativa_J5" id="just_J5"
+                                               onchange="toggleOutrosInput()">
+                                        <label class="form-check-label small" for="just_J5">
+                                            Outros
+                                        </label>
+                                    </div>
+                                    <div id="outros-input-container" style="display: none;" class="ms-4">
+                                        <input type="text" class="form-control form-control-sm"
+                                               name="justificativa_outros_texto"
+                                               id="justificativa_outros_texto"
+                                               placeholder="Descreva a justificativa...">
+                                    </div>
+                                </div>
+                            </div>
+
+                            {# --- DECLARACAO --- #}
+                            <div class="form-check mb-3 border rounded p-3 bg-light">
+                                <input class="form-check-input" type="checkbox"
+                                       name="declaracao_responsabilidade"
+                                       id="declaracao_responsabilidade" required>
+                                <label class="form-check-label small" for="declaracao_responsabilidade">
+                                    <strong>Declaro</strong> que as informações acima são verdadeiras e assumo
+                                    a responsabilidade pela escolha da passagem aérea, estando ciente das
+                                    normas vigentes (Conforme art. 6º, § único, do Decreto nº 14.891/2012).
+                                </label>
+                            </div>
+
+                            <div class="d-flex justify-content-end">
+                                <button type="submit" class="btn btn-primary" id="btn-registrar-escolha">
+                                    <i class="bi bi-check2-square me-1"></i>Registrar Escolha de Passagens
+                                </button>
+                            </div>
+                        </form>
+                        {% endif %}
+
+                    </div>
+                </div>
+            </section>
+            {% endif %}{# /voos_ida_sorted > 0 #}
+
+            </div>{# /tab-pane fase2 #}
+            </div>{# /tab-content #}
+
+            {% endif %}{# /aba passagens #}
+
+            {# ===================== ABA FINANCEIRO ===================== #}
+            {% if aba == 'financeiro' %}
+
+            {# --- NOTA DE RESERVA + VERIFICAÇÕES PÓS-DESPACHO (accordion) --- #}
+            {% set doc_nr = itinerario.get_doc('nota_reserva') %}
+            <div class="accordion" id="accordionFinanceiro">
+
+                {# ══ ACCORDION ITEM 1: Nota de Reserva ══ #}
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingNR">
+                        <button class="accordion-button {{ '' if not (doc_nr and doc_nr.codigo) else 'collapsed' }}" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#collapseNR" aria-expanded="{{ 'true' if not (doc_nr and doc_nr.codigo) else 'false' }}">
+                            <i class="bi bi-journal-bookmark me-2"></i>Nota de Reserva (Financeiro)
+                            {% if doc_nr and doc_nr.codigo %}
+                            <i class="bi bi-check-circle-fill text-success ms-2"></i>
+                            {% else %}
+                            <i class="bi bi-clock text-warning ms-2"></i>
+                            {% endif %}
+                        </button>
+                    </h2>
+                    <div id="collapseNR" class="accordion-collapse collapse {{ 'show' if not (doc_nr and doc_nr.codigo) }}" data-bs-parent="#accordionFinanceiro">
+                        <div class="accordion-body">
+                            {% if doc_nr and doc_nr.codigo %}
+                            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
+                                    <div>
+                                        <span class="fw-bold fs-6">{{ doc_nr.codigo }}</span>
+                                        {% if doc_nr.sei_formatado %}
+                                        <br><small class="text-muted">Documento SEI: {{ doc_nr.sei_formatado }}</small>
+                                        {% endif %}
+                                        <br><small class="text-success">Inserida pelo financeiro</small>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-3 rounded-3" style="background: #fff8e1; border: 1.5px dashed #ffc107;">
+                                <i class="bi bi-clock-history text-warning fs-3 d-block mb-1"></i>
+                                <p class="text-muted mb-0 fw-semibold small">Aguardando inserção da Nota de Reserva pelo Financeiro</p>
+                                {% if itinerario.etapa_atual_id < 3 %}
+                                <small class="text-muted">A etapa de Análise da Solicitação ainda não iniciou</small>
+                                {% elif itinerario.etapa_atual_id == 3 %}
+                                <small class="text-muted">Pendente de ação do Financeiro</small>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {# ══ ACCORDION ITEM 2: Ciência SGA ══ #}
+                {% if itinerario.has_doc('despacho_ccdp') %}
+                {% set sga_concluido = itinerario.has_doc('despacho_sga') %}
+                {% set sga_pode_agir = not sga_concluido and session.get('unidades') and '110006213' in (session.get('unidades') | map(attribute='id') | list | map('string') | list) %}
+                {% set nci_visivel = itinerario.etapa_atual_id == 3 or (itinerario.etapa_atual_id > 3 and itinerario.has_doc('analise_pagamento')) %}
+                {% set nci_concluido = itinerario.has_doc('analise_pagamento') %}
+                {% set nci_pode_agir = not nci_concluido and session.get('unidades') and '110006211' in (session.get('unidades') | map(attribute='id') | list | map('string') | list) %}
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingSGA">
+                        <button class="accordion-button {{ 'collapsed' if sga_concluido else '' }}" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#collapseSGA" aria-expanded="{{ 'false' if sga_concluido else 'true' }}">
+                            <i class="bi bi-1-circle-fill me-2" style="color: #1565C0;"></i>Ciência do Superintendente — Despacho SGA
+                            {% if sga_concluido %}
+                            <i class="bi bi-check-circle-fill text-success ms-2"></i>
+                            {% elif sga_pode_agir %}
+                            <i class="bi bi-exclamation-circle text-warning ms-2"></i>
+                            {% endif %}
+                        </button>
+                    </h2>
+                    <div id="collapseSGA" class="accordion-collapse collapse {{ '' if not sga_concluido else '' }} {{ 'show' if (sga_pode_agir or (not sga_concluido and not sga_pode_agir)) }}" data-bs-parent="#accordionFinanceiro">
+                        <div class="accordion-body">
+
+                        {# ── Tópico 1: Ciência do Superintendente — Despacho SGA ── #}
+                        <div class="fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 0.5px; color: #1565C0;">
+                            <i class="bi bi-1-circle-fill me-1"></i>Ciência do Superintendente — Despacho SGA
+                        </div>
+
+                        {% if sga_concluido %}
+                            {% set doc_desp_sga = itinerario.get_doc('despacho_sga') %}
+                            <div class="rounded-3 p-3 mb-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-check-circle-fill fs-4 text-success me-3"></i>
+                                    <div>
+                                        <strong>Ciência Registrada e Despacho SGA Gerado</strong>
+                                        <div class="mt-1">
+                                            {% if doc_desp_sga and doc_desp_sga.sei_formatado %}
+                                                <small class="text-muted">Documento SEI: {{ doc_desp_sga.sei_formatado }}</small>
+                                            {% endif %}
+                                            {% if itinerario.ciencia_superintendente_data %}
+                                                <br><small class="text-muted">
+                                                    {{ itinerario.ciencia_superintendente_data.strftime('%d/%m/%Y às %H:%M') }}
+                                                </small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        {% elif sga_pode_agir %}
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <div class="rounded-3 p-3 h-100" style="background: #f8f9fa; border: 1.5px solid #dee2e6;">
+                                        <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; color: #1565C0;">
+                                            Leitura do Despacho
+                                        </div>
+                                        <div class="border rounded p-2 bg-white" style="font-size: 0.78rem;">
+                                            <p class="mb-1">Processo nº <b>{{ itinerario.sei_protocolo or itinerario.n_processo or '' }}</b></p>
+                                            <p class="mb-1" style="text-align: center;"><b>DESPACHO</b></p>
+                                            <p class="mb-0" style="text-indent: 1em; text-align: justify; font-size: 0.75rem;">
+                                                Após a realização de análise técnica e emissão da nota de empenho, retorno os
+                                                autos à <b>Superintendência de Gestão Administrativa</b>, para conhecimento e
+                                                providências referente à concessão de diárias.
+                                            </p>
+                                            {% set doc_desp_ccdp = itinerario.get_doc('despacho_ccdp') %}
+                                            {% if doc_desp_ccdp and doc_desp_ccdp.sei_formatado %}
+                                                <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">Documento SEI: {{ doc_desp_ccdp.sei_formatado }}</small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="rounded-3 p-3 h-100" style="background: linear-gradient(135deg, #e3f2fd 0%, #f5faff 100%); border: 1.5px solid #1565C0;">
+                                        <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; color: #0d47a1;">
+                                            Ciência e Assinatura
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="checkCienciaSGA" onchange="toggleBtnCienciaSGA()">
+                                            <label class="form-check-label" for="checkCienciaSGA" style="font-size: 0.78rem;">
+                                                Declaro ciência e autorizo o encaminhamento ao NCI
+                                            </label>
+                                        </div>
+                                        <div class="mb-2">
+                                            <input type="text" class="form-control form-control-sm" id="sga_sei_usuario" placeholder="Usuário SEI">
+                                        </div>
+                                        <div class="mb-2">
+                                            <input type="password" class="form-control form-control-sm" id="sga_sei_senha" placeholder="Senha SEI">
+                                        </div>
+                                        <input type="hidden" id="sga_cargo" value="{{ session.get('usuario_cargo', 'Superintendente') }}">
+                                        <button type="button" class="btn btn-sm px-3 text-white fw-semibold w-100" id="btnCienciaSGA" disabled
+                                                style="background: linear-gradient(135deg, #1565C0, #42A5F5);"
+                                                onclick="enviarCienciaSGA()">
+                                            <i class="bi bi-vector-pen me-1"></i> Gerar Despacho SGA e Assinar
+                                        </button>
+                                        <div id="sgaResultado" class="mt-2" style="display:none;"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        {% else %}
+                            <div class="rounded-3 p-3 mb-3 text-center" style="background: #f8f9fa; border: 1.5px dashed #dee2e6; opacity: 0.8;">
+                                <i class="bi bi-hourglass-split me-1" style="color: #adb5bd;"></i>
+                                <span style="font-size: 0.78rem; color: #6c757d;">Aguardando ciência do Superintendente</span>
+                            </div>
+                        {% endif %}
+
+                        </div>{# /accordion-body SGA #}
+                    </div>{# /collapse SGA #}
+                </div>{# /accordion-item SGA #}
+
+                {# ══ ACCORDION ITEM 3: Análise NCI ══ #}
+                {% if nci_visivel %}
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingNCI">
+                        <button class="accordion-button {{ 'collapsed' if nci_concluido else '' }}" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#collapseNCI" aria-expanded="{{ 'false' if nci_concluido else 'true' }}">
+                            <i class="bi bi-2-circle-fill me-2" style="color: #2E7D32;"></i>Análise de Pagamento — NCI
+                            {% if nci_concluido %}
+                            <i class="bi bi-check-circle-fill text-success ms-2"></i>
+                            {% elif nci_pode_agir %}
+                            <i class="bi bi-exclamation-circle text-warning ms-2"></i>
+                            {% endif %}
+                        </button>
+                    </h2>
+                    <div id="collapseNCI" class="accordion-collapse collapse {{ 'show' if not nci_concluido }}" data-bs-parent="#accordionFinanceiro">
+                        <div class="accordion-body">
+
+                        {% if nci_concluido %}
+                            {% set doc_analise = itinerario.get_doc('analise_pagamento') %}
+                            {% set doc_desp_nci = itinerario.get_doc('despacho_nci') %}
+                            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-check-circle-fill fs-4 text-success me-3"></i>
+                                    <div>
+                                        <strong>Análise e Despacho NCI Gerados</strong>
+                                        <div class="mt-1">
+                                            {% if doc_analise and doc_analise.sei_formatado %}
+                                                <small class="text-muted">Análise SEI: {{ doc_analise.sei_formatado }}</small>
+                                            {% endif %}
+                                            {% if doc_desp_nci and doc_desp_nci.sei_formatado %}
+                                                <br><small class="text-muted">Despacho NCI: {{ doc_desp_nci.sei_formatado }}</small>
+                                            {% endif %}
+                                            {% if itinerario.ciencia_nci_data %}
+                                                <br><small class="text-muted">
+                                                    {{ itinerario.ciencia_nci_data.strftime('%d/%m/%Y às %H:%M') }}
+                                                </small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        {% elif nci_pode_agir %}
+                            {# NCI pode preencher — barra de progresso + formulário empilhado #}
+                            <div class="d-flex align-items-center mb-3" style="gap: 0;">
+                                <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
+                                     style="width: 28px; height: 28px; background: #2E7D32; color: #fff; font-size: 0.75rem; font-weight: 700;">
+                                    1
+                                </div>
+                                <div class="flex-grow-1 mx-2" style="height: 3px; background: #dee2e6;"></div>
+                                <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
+                                     style="width: 28px; height: 28px; background: #dee2e6; color: #adb5bd; font-size: 0.75rem; font-weight: 700;">
+                                    2
+                                </div>
+                            </div>
+
+                            {# Passo 1: Análise de Pagamento (21 perguntas) — full width #}
+                            <div class="rounded-3 p-3 mb-3" style="background: linear-gradient(135deg, #e8f5e9 0%, #f5fff5 100%); border: 1.5px solid #2E7D32;">
+                                <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; color: #1b5e20;">
+                                    Passo 1 — Análise de Pagamento
+                                </div>
+                                <p class="text-muted mb-2" style="font-size: 0.72rem;">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Preencha S = Sim, N = Não, NA = Não se aplica.
+                                </p>
+
+                                <div id="formAnaliseNCI">
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered table-sm mb-0" style="font-size: 0.8rem;">
+                                            <thead style="background: linear-gradient(135deg, #2E7D32, #66BB6A);">
+                                                <tr>
+                                                    <th class="text-white" style="width:70%">Pergunta</th>
+                                                    <th class="text-center text-white" style="width:10%">S</th>
+                                                    <th class="text-center text-white" style="width:10%">N</th>
+                                                    <th class="text-center text-white" style="width:10%">NA</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% set perguntas = [
+                                                    {"id": "q1", "num": "1", "texto": "A(s) diária(s) foi(ram) solicitada(s) para militares, servidores públicos, empregados públicos, ou agentes políticos?", "extras": ["vinculo", "nome_agente"]},
+                                                    {"id": "q2", "num": "2", "texto": "O servidor é o gestor máximo do órgão ou entidade?"},
+                                                    {"id": "q3", "num": "3", "texto": "Foi avaliado a oportunidade e a necessidade da viagem?", "extras": ["quem_analisou"]},
+                                                    {"id": "q4", "num": "4", "texto": "O valor da diária corresponde ao valor do cargo de autoridade superior?", "extras": ["classe_correspondente"]},
+                                                    {"id": "q5", "num": "5", "texto": "O agente é autoridade superior no órgão ou entidade?", "extras": ["cargo_agente"]},
+                                                    {"id": "q6", "num": "6", "texto": "No caso de servidor não ser autoridade superior, a diária é equivalente ao cargo do servidor?"},
+                                                    {"id": "q7", "num": "7", "texto": "O servidor indicado para acompanhar a autoridade possui cargo igual ou inferior?"},
+                                                    {"id": "q8", "num": "8", "texto": "A diária foi majorada em até 30% quando a hospedagem for coberta pelo servidor?"},
+                                                    {"id": "q9", "num": "9", "texto": "O deslocamento da sede para o aeroporto ou rodoviária, a diária é de 50%?"},
+                                                    {"id": "q10", "num": "10", "texto": "O valor das diárias está com base nos anexos I e II do decreto 20.890/2022?", "extras": ["valor_diaria", "destino_viagem"]},
+                                                    {"id": "q11", "num": "11", "texto": "As diárias a serem concedidas estão dentro do período da viagem?"},
+                                                    {"id": "q12", "num": "12", "texto": "Em caso de prorrogação, a viagem foi comunicada ao concedente?"},
+                                                    {"id": "q13", "num": "13", "texto": "Foi demonstrada a disponibilidade orçamentário-financeira?", "extras": ["projeto_natureza", "fonte_recursos"]},
+                                                    {"id": "q14", "num": "14", "texto": "O servidor realizou viagem anterior a serviço do Estado?"},
+                                                    {"id": "q15", "num": "15", "texto": "O servidor prestou contas das diárias recebidas anteriormente?"},
+                                                    {"id": "q16", "num": "16", "texto": "Foi aprovada a prestação de contas da viagem anterior?", "extras": ["responsavel_analise"]},
+                                                    {"id": "q17", "num": "17", "texto": "A viagem foi autorizada pelo ordenador de despesa?", "extras": ["quem_autorizou"]},
+                                                    {"id": "q18", "num": "18", "texto": "A publicação da portaria de diárias foi realizada no DOE antes da viagem?"},
+                                                    {"id": "q19", "num": "19", "texto": "Trata-se de despesas de exercícios anteriores?"},
+                                                    {"id": "q20", "num": "20", "texto": "Em caso de DEA, foi apresentada justificativa para o não pagamento no exercício?"},
+                                                    {"id": "q21", "num": "21", "texto": "Em caso de DEA, a despesa foi reconhecida pela autoridade competente?"}
+                                                ] %}
+                                                {% for p in perguntas %}
+                                                <tr>
+                                                    <td>
+                                                        <strong>{{ p.num }}.</strong> {{ p.texto }}
+                                                        {% if p.extras is defined %}
+                                                            {% for campo in p.extras %}
+                                                            <div class="mt-1">
+                                                                <input type="text" class="form-control form-control-sm"
+                                                                       id="nci_{{ p.id }}_{{ campo }}"
+                                                                       placeholder="{{ campo | replace('_', ' ') | title }}">
+                                                            </div>
+                                                            {% endfor %}
+                                                        {% endif %}
+                                                        <div class="mt-1">
+                                                            <input type="text" class="form-control form-control-sm"
+                                                                   id="nci_{{ p.id }}_obs" placeholder="Observação (opcional)">
+                                                        </div>
+                                                    </td>
+                                                    <td class="text-center align-middle">
+                                                        <input class="form-check-input" type="radio" name="nci_{{ p.id }}" value="S">
+                                                    </td>
+                                                    <td class="text-center align-middle">
+                                                        <input class="form-check-input" type="radio" name="nci_{{ p.id }}" value="N">
+                                                    </td>
+                                                    <td class="text-center align-middle">
+                                                        <input class="form-check-input" type="radio" name="nci_{{ p.id }}" value="NA">
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div class="mt-3">
+                                        <label for="nci_observacoes_gerais" class="form-label fw-bold" style="font-size: 0.8rem;">Observações Gerais</label>
+                                        <textarea class="form-control form-control-sm" id="nci_observacoes_gerais" rows="2"
+                                                  placeholder="Observações adicionais sobre a análise..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {# Passo 2: Credenciais + Enviar — full width, row inline #}
+                            <div class="rounded-3 p-3" style="background: #f8f9fa; border: 1.5px solid #dee2e6;">
+                                <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; color: #2E7D32;">
+                                    Passo 2 — Assinar e Enviar
+                                </div>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-3">
+                                        <label class="form-label mb-1" style="font-size: 0.72rem; font-weight: 600;">Usuário SEI <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control form-control-sm" id="nci_sei_usuario" placeholder="usuario@sead.pi.gov.br">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label mb-1" style="font-size: 0.72rem; font-weight: 600;">Senha SEI <span class="text-danger">*</span></label>
+                                        <input type="password" class="form-control form-control-sm" id="nci_sei_senha" placeholder="Sua senha do SEI">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label mb-1" style="font-size: 0.72rem; font-weight: 600;">Cargo</label>
+                                        <input type="text" class="form-control form-control-sm" id="nci_cargo" value="{{ session.get('usuario_cargo', 'Assessora Técnica') }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button type="button" class="btn btn-sm px-3 text-white fw-semibold w-100" id="btnAnaliseNCI"
+                                                style="background: linear-gradient(135deg, #2E7D32, #66BB6A);"
+                                                onclick="enviarAnaliseNCI()">
+                                            <i class="bi bi-file-earmark-check me-1"></i> Gerar Análise e Despacho NCI
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="nciResultado" class="mt-2" style="display:none;"></div>
+                            </div>
+
+                        {% else %}
+                            <div class="rounded-3 p-3 text-center" style="background: #f8f9fa; border: 1.5px dashed #dee2e6; opacity: 0.8;">
+                                <i class="bi bi-hourglass-split me-1" style="color: #adb5bd;"></i>
+                                <span style="font-size: 0.78rem; color: #6c757d;">Aguardando análise do Núcleo de Controle Interno</span>
+                            </div>
+                        {% endif %}{# /nci if/elif/else #}
+
+                        </div>{# /accordion-body NCI #}
+                    </div>{# /collapse NCI #}
+                </div>{# /accordion-item NCI #}
+                {% endif %}{# /nci_visivel #}
+
+                {% endif %}{# /has_doc('despacho_ccdp') #}
+
+            </div>{# /accordion #}
+
+            {% endif %}{# /aba financeiro #}
+
+            {# ===================== ABA PESSOAS ===================== #}
+            {% if aba == 'pessoas' %}
 
             {# --- PESSOAS --- #}
             <section class="mb-4">
@@ -377,528 +1606,6 @@
                 </div>
             </section>
 
-            {# --- UPLOAD COTACAO AO SEI --- #}
-            {% if itinerario.sei_protocolo and itinerario.etapa_atual_id == 3 %}
-            <section class="mb-4">
-                <h6 class="section-title mb-2"><i class="bi bi-cloud-upload me-1"></i>Enviar Cotação ao SEI</h6>
-                <div class="card border-primary">
-                    <div class="card-body py-2">
-                        <form action="{{ url_for('diarias.upload_cotacao', id=itinerario.id) }}" method="post" enctype="multipart/form-data">
-                            <div class="row g-2 align-items-end">
-                                <div class="col-md-5">
-                                    <label class="form-label small fw-semibold mb-1">Descricao</label>
-                                    <input type="text" name="descricao_cotacao" class="form-control form-control-sm"
-                                           placeholder="Ex: cotação agência X">
-                                </div>
-                                <div class="col-md-5">
-                                    <label class="form-label small fw-semibold mb-1">Arquivo (PDF) <span class="text-danger">*</span></label>
-                                    <input type="file" name="arquivo_cotacao" class="form-control form-control-sm"
-                                           accept=".pdf,.jpg,.jpeg,.png" required>
-                                </div>
-                                <div class="col-md-2">
-                                    <button type="submit" class="btn btn-primary btn-sm w-100">
-                                        <i class="bi bi-cloud-upload me-1"></i>Enviar
-                                    </button>
-                                </div>
-                            </div>
-                            <small class="text-muted d-block mt-1">
-                                <i class="bi bi-info-circle me-1"></i>Documento enviado ao SEI como "Cotacao" (serie 272).
-                            </small>
-                        </form>
-                    </div>
-                </div>
-            </section>
-            {% endif %}
-
-            {# --- COTACOES DE VOOS (DETALHADAS + CADASTRO — só na etapa Aquisição de Passagens) --- #}
-            {% if itinerario.tipo_itinerario in [2, 3] and itinerario.etapa_atual_id == 3 %}
-            {% set voos_ida = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'ida')|list %}
-            {% set voos_volta = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'volta')|list %}
-
-            <section class="mb-4">
-                <div class="card border-0 shadow-sm overflow-hidden">
-                    <div class="card-header bg-white border-bottom py-2">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0 section-title"><i class="bi bi-airplane me-1"></i>Cotações de Voos</h6>
-                            <span class="badge bg-secondary">{{ cotacoes_voos|length }} opção(ões)</span>
-                        </div>
-                    </div>
-                    <div class="card-body">
-
-                        {# --- FORMULARIO CADASTRAR COTACAO --- #}
-                        <div class="border rounded p-3 mb-4 bg-light" id="form-cotacao-voo">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h6 class="fw-bold mb-0" style="font-size: 0.85rem;">
-                                    <i class="bi bi-plus-circle me-1"></i>Cadastrar Opção de Voo
-                                </h6>
-                                <div class="btn-group btn-group-sm" role="group">
-                                    <input type="radio" class="btn-check" name="tipo_trecho_tab" id="tab-ida" value="ida" checked>
-                                    <label class="btn btn-outline-primary" for="tab-ida">
-                                        <i class="bi bi-arrow-right me-1"></i>Ida
-                                    </label>
-                                    <input type="radio" class="btn-check" name="tipo_trecho_tab" id="tab-volta" value="volta">
-                                    <label class="btn btn-outline-info" for="tab-volta">
-                                        <i class="bi bi-arrow-left me-1"></i>Volta
-                                    </label>
-                                </div>
-                            </div>
-
-                            <input type="hidden" id="cotacao_itinerario_id" value="{{ itinerario.id }}">
-
-                            <div class="row g-2 mb-2">
-                                <div class="col-md-6">
-                                    <label class="form-label">Agência</label>
-                                    <select id="cotacao_contrato" class="form-select form-select-sm">
-                                        <option value="">Selecione (opcional)</option>
-                                        {% for ag in agencias %}
-                                        <option value="{{ ag.codigo }}">{{ ag.nomeContratadoResumido or ag.nomeContratado }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Bagagem</label>
-                                    <select id="cotacao_bagagem" class="form-select form-select-sm">
-                                        <option value="">Selecione</option>
-                                        <option value="1 mala despachada">1 mala despachada</option>
-                                        <option value="Apenas mao">Apenas mao</option>
-                                        <option value="2 malas despachadas">2 malas despachadas</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Valor Total (R$) <span class="text-danger">*</span></label>
-                                    <input type="number" id="cotacao_valor" class="form-control form-control-sm" step="0.01" min="0" placeholder="0,00" required>
-                                </div>
-                            </div>
-
-                            <div class="row g-2 mb-2">
-                                <div class="col-md-2">
-                                    <label class="form-label">CIA <span class="text-danger">*</span></label>
-                                    <input type="text" id="cotacao_cia" class="form-control form-control-sm" placeholder="LATAM">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label">Voo <span class="text-danger">*</span></label>
-                                    <input type="text" id="cotacao_voo" class="form-control form-control-sm" placeholder="LA 3853">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label">Saída <span class="text-danger">*</span></label>
-                                    <input type="datetime-local" id="cotacao_saida" class="form-control form-control-sm">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label">Chegada <span class="text-danger">*</span></label>
-                                    <input type="datetime-local" id="cotacao_chegada" class="form-control form-control-sm">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label">Origem <span class="text-danger">*</span></label>
-                                    <input type="text" id="cotacao_origem" class="form-control form-control-sm" placeholder="Teresina">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label">Destino <span class="text-danger">*</span></label>
-                                    <input type="text" id="cotacao_destino" class="form-control form-control-sm" placeholder="Brasilia">
-                                </div>
-                            </div>
-
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="chk-conexao" onchange="toggleConexão()">
-                                <label class="form-check-label small" for="chk-conexao">Tem conexao (2o trecho)</label>
-                            </div>
-
-                            <div class="conexao-fields" id="conexao-fields">
-                                <small class="text-muted fw-bold d-block mb-2">Trecho 2 (Conexão)</small>
-                                <div class="row g-2 mb-2">
-                                    <div class="col-md-2">
-                                        <label class="form-label">CIA</label>
-                                        <input type="text" id="cotacao_cia_cx" class="form-control form-control-sm" placeholder="LATAM">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label">Voo</label>
-                                        <input type="text" id="cotacao_voo_cx" class="form-control form-control-sm" placeholder="LA 4737">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label">Saída</label>
-                                        <input type="datetime-local" id="cotacao_saida_cx" class="form-control form-control-sm">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label">Chegada</label>
-                                        <input type="datetime-local" id="cotacao_chegada_cx" class="form-control form-control-sm">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label">Origem</label>
-                                        <input type="text" id="cotacao_origem_cx" class="form-control form-control-sm" placeholder="Brasilia">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label">Destino</label>
-                                        <input type="text" id="cotacao_destino_cx" class="form-control form-control-sm" placeholder="Congonhas">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="d-flex justify-content-end mt-2">
-                                <button type="button" class="btn btn-primary btn-sm" id="btn-adicionar-cotacao" onclick="adicionarCotacaoVoo()">
-                                    <i class="bi bi-plus-circle me-1"></i> Adicionar
-                                </button>
-                            </div>
-                        </div>
-
-                        {# --- TABELAS DE COTACOES REGISTRADAS --- #}
-                        <div id="cotacoes-voos-container">
-                            {# IDA #}
-                            <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;">
-                                <i class="bi bi-arrow-right-circle me-1"></i>OPCOES DE VOOS IDA
-                                <span class="badge bg-primary ms-1" id="count-ida">{{ voos_ida|length }}</span>
-                            </h6>
-                            <div class="table-responsive mb-3">
-                                <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.8rem;">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Agência</th>
-                                            <th>CIA</th>
-                                            <th>Voo</th>
-                                            <th>Saída</th>
-                                            <th>Chegada</th>
-                                            <th>Rota</th>
-                                            <th>Bagagem</th>
-                                            <th class="text-end">Total</th>
-                                            <th style="width:50px"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tbody-ida">
-                                        {% for c in voos_ida %}
-                                        <tr data-id="{{ c.id }}">
-                                            <td>{{ c.nome_agencia or '-' }}</td>
-                                            <td class="fw-semibold">{{ c.cia }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.cia_conexao }}</small>{% endif %}</td>
-                                            <td><strong>{{ c.voo }}</strong>{% if c.tem_conexao %}<br><small class="text-muted">{{ c.voo_conexao }}</small>{% endif %}</td>
-                                            <td>{{ c.saida.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.saida_conexao.strftime('%d/%m/%Y - %H:%M') if c.saida_conexao else '' }}</small>{% endif %}</td>
-                                            <td>{{ c.chegada.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.chegada_conexao.strftime('%d/%m/%Y - %H:%M') if c.chegada_conexao else '' }}</small>{% endif %}</td>
-                                            <td class="voo-rota">
-                                                {{ c.origem }} <i class="bi bi-arrow-right"></i> {{ c.destino }}
-                                                {% if c.tem_conexao %}
-                                                <br>{{ c.origem_conexao }} <i class="bi bi-arrow-right"></i> {{ c.destino_conexao }}
-                                                {% endif %}
-                                            </td>
-                                            <td>{{ c.bagagem or '-' }}</td>
-                                            <td class="text-end fw-bold text-success">{{ c.valor_formatado }}</td>
-                                            <td class="text-center">
-                                                <button class="btn btn-outline-danger btn-excluir-cotacao" onclick="excluirCotacaoVoo({{ c.id }}, this)">
-                                                    <i class="bi bi-x"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {# VOLTA #}
-                            <h6 class="fw-bold text-info mb-2" style="font-size: 0.8rem;">
-                                <i class="bi bi-arrow-left-circle me-1"></i>OPCOES DE VOOS VOLTA
-                                <span class="badge bg-info ms-1" id="count-volta">{{ voos_volta|length }}</span>
-                            </h6>
-                            <div class="table-responsive mb-3">
-                                <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.8rem;">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Agência</th>
-                                            <th>CIA</th>
-                                            <th>Voo</th>
-                                            <th>Saída</th>
-                                            <th>Chegada</th>
-                                            <th>Rota</th>
-                                            <th>Bagagem</th>
-                                            <th class="text-end">Total</th>
-                                            <th style="width:50px"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tbody-volta">
-                                        {% for c in voos_volta %}
-                                        <tr data-id="{{ c.id }}">
-                                            <td>{{ c.nome_agencia or '-' }}</td>
-                                            <td class="fw-semibold">{{ c.cia }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.cia_conexao }}</small>{% endif %}</td>
-                                            <td><strong>{{ c.voo }}</strong>{% if c.tem_conexao %}<br><small class="text-muted">{{ c.voo_conexao }}</small>{% endif %}</td>
-                                            <td>{{ c.saida.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.saida_conexao.strftime('%d/%m/%Y - %H:%M') if c.saida_conexao else '' }}</small>{% endif %}</td>
-                                            <td>{{ c.chegada.strftime('%d/%m/%Y - %H:%M') }}{% if c.tem_conexao %}<br><small class="text-muted">{{ c.chegada_conexao.strftime('%d/%m/%Y - %H:%M') if c.chegada_conexao else '' }}</small>{% endif %}</td>
-                                            <td class="voo-rota">
-                                                {{ c.origem }} <i class="bi bi-arrow-right"></i> {{ c.destino }}
-                                                {% if c.tem_conexao %}
-                                                <br>{{ c.origem_conexao }} <i class="bi bi-arrow-right"></i> {{ c.destino_conexao }}
-                                                {% endif %}
-                                            </td>
-                                            <td>{{ c.bagagem or '-' }}</td>
-                                            <td class="text-end fw-bold text-success">{{ c.valor_formatado }}</td>
-                                            <td class="text-center">
-                                                <button class="btn btn-outline-danger btn-excluir-cotacao" onclick="excluirCotacaoVoo({{ c.id }}, this)">
-                                                    <i class="bi bi-x"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-            {% endif %}
-
-            {# --- ESCOLHA DE PASSAGENS (a partir da etapa 3 - Aquisição de Passagens) --- #}
-            {% if itinerario.tipo_itinerario in [2, 3] and itinerario.etapa_atual_id >= 3 %}
-            {% set voos_ida_sorted = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'ida')|sort(attribute='valor')|list %}
-            {% set voos_volta_sorted = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'volta')|sort(attribute='valor')|list %}
-
-            {% if voos_ida_sorted|length > 0 and voos_volta_sorted|length > 0 %}
-            <section class="mb-4">
-                <div class="card border-0 shadow-sm overflow-hidden">
-                    <div class="card-header py-2" style="background-color: #343990; color: #fff;">
-                        <h6 class="mb-0"><i class="bi bi-check2-square me-1"></i>Escolha de Passagens</h6>
-                    </div>
-                    <div class="card-body">
-
-                        {% if itinerario.escolha_voo_ida_id %}
-                        {# === MODO VISUALIZACAO (ja registrada) === #}
-                        <div class="alert alert-success d-flex align-items-center mb-3" role="alert">
-                            <i class="bi bi-check-circle-fill fs-4 me-3"></i>
-                            <div>
-                                <strong>Escolha de passagens ja registrada!</strong>
-                                {% if itinerario.sei_escolha_passagens_formatado %}
-                                <br><small>Documento SEI: {{ itinerario.sei_escolha_passagens_formatado }}</small>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;">
-                                    <i class="bi bi-arrow-right-circle me-1"></i>VOO IDA SELECIONADO
-                                </h6>
-                                {% if itinerario.escolha_voo_ida %}
-                                {% set vi = itinerario.escolha_voo_ida %}
-                                <div class="border rounded p-2 bg-light">
-                                    <strong>{{ vi.cia }} - {{ vi.voo }}</strong><br>
-                                    <small class="text-muted">{{ vi.origem }} <i class="bi bi-arrow-right"></i> {{ vi.destino }}</small><br>
-                                    <small class="text-muted">{{ vi.saida.strftime('%d/%m/%Y %H:%M') }} <i class="bi bi-arrow-right"></i> {{ vi.chegada.strftime('%d/%m/%Y %H:%M') }}</small><br>
-                                    {% if vi.nome_agencia %}<small class="text-muted">Agência: {{ vi.nome_agencia }}</small><br>{% endif %}
-                                    <span class="fw-bold text-success">{{ vi.valor_formatado }}</span>
-                                </div>
-                                {% endif %}
-                            </div>
-                            <div class="col-md-6">
-                                <h6 class="fw-bold text-info mb-2" style="font-size: 0.8rem;">
-                                    <i class="bi bi-arrow-left-circle me-1"></i>VOO VOLTA SELECIONADO
-                                </h6>
-                                {% if itinerario.escolha_voo_volta %}
-                                {% set vv = itinerario.escolha_voo_volta %}
-                                <div class="border rounded p-2 bg-light">
-                                    <strong>{{ vv.cia }} - {{ vv.voo }}</strong><br>
-                                    <small class="text-muted">{{ vv.origem }} <i class="bi bi-arrow-right"></i> {{ vv.destino }}</small><br>
-                                    <small class="text-muted">{{ vv.saida.strftime('%d/%m/%Y %H:%M') }} <i class="bi bi-arrow-right"></i> {{ vv.chegada.strftime('%d/%m/%Y %H:%M') }}</small><br>
-                                    {% if vv.nome_agencia %}<small class="text-muted">Agência: {{ vv.nome_agencia }}</small><br>{% endif %}
-                                    <span class="fw-bold text-success">{{ vv.valor_formatado }}</span>
-                                </div>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        {% if not itinerario.escolha_menor_valor %}
-                        <div class="mt-3 p-2 border rounded bg-warning bg-opacity-10">
-                            <small class="fw-bold text-warning">
-                                <i class="bi bi-exclamation-triangle me-1"></i>Nao foi escolhido o menor valor
-                            </small>
-                            {% if itinerario.escolha_justificativa_codigos %}
-                            <br><small class="text-muted">Justificativa(s): {{ itinerario.escolha_justificativa_codigos }}</small>
-                            {% endif %}
-                            {% if itinerario.escolha_justificativa_outros %}
-                            <br><small class="text-muted">Outros: {{ itinerario.escolha_justificativa_outros }}</small>
-                            {% endif %}
-                        </div>
-                        {% endif %}
-
-                        {% else %}
-                        {# === MODO FORMULARIO === #}
-                        <form action="{{ url_for('diarias.escolha_passagens', id=itinerario.id) }}"
-                              method="post" id="form-escolha-passagens">
-
-                            {# --- IDA --- #}
-                            <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;">
-                                <i class="bi bi-arrow-right-circle me-1"></i>SELECIONE O VOO DE IDA
-                            </h6>
-                            <div class="mb-3">
-                                {% for c in voos_ida_sorted %}
-                                <div class="form-check border rounded p-2 ps-4 mb-2 escolha-option {{ 'bg-success bg-opacity-10 border-success' if loop.first else '' }}">
-                                    <input class="form-check-input mt-2" type="radio"
-                                           name="escolha_voo_ida" id="ida_{{ c.id }}"
-                                           value="{{ c.id }}" data-valor="{{ c.valor }}"
-                                           onchange="checkCheapestSelection()" required>
-                                    <label class="form-check-label w-100" for="ida_{{ c.id }}">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <strong>OPCAO {{ loop.index }}</strong>
-                                                {% if loop.first %}<span class="badge bg-success ms-1">MENOR VALOR</span>{% endif %}
-                                                <span class="ms-2 text-muted" style="font-size: 0.8rem;">
-                                                    {{ c.cia }} {{ c.voo }} |
-                                                    {{ c.origem }} <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino }}
-                                                    {% if c.tem_conexao %}
-                                                    <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino_conexao }}
-                                                    {% endif %}
-                                                </span>
-                                            </div>
-                                            <span class="fw-bold text-success fs-6">{{ c.valor_formatado }}</span>
-                                        </div>
-                                        <small class="text-muted">
-                                            Saída: {{ c.saida.strftime('%d/%m/%Y %H:%M') }} |
-                                            Chegada: {{ c.chegada.strftime('%d/%m/%Y %H:%M') }}
-                                            {% if c.nome_agencia %}| Agência: {{ c.nome_agencia }}{% endif %}
-                                            {% if c.bagagem %}| {{ c.bagagem }}{% endif %}
-                                        </small>
-                                    </label>
-                                </div>
-                                {% endfor %}
-                            </div>
-
-                            {# --- VOLTA --- #}
-                            <h6 class="fw-bold text-info mb-2" style="font-size: 0.8rem;">
-                                <i class="bi bi-arrow-left-circle me-1"></i>SELECIONE O VOO DE VOLTA
-                            </h6>
-                            <div class="mb-3">
-                                {% for c in voos_volta_sorted %}
-                                <div class="form-check border rounded p-2 ps-4 mb-2 escolha-option {{ 'bg-info bg-opacity-10 border-info' if loop.first else '' }}">
-                                    <input class="form-check-input mt-2" type="radio"
-                                           name="escolha_voo_volta" id="volta_{{ c.id }}"
-                                           value="{{ c.id }}" data-valor="{{ c.valor }}"
-                                           onchange="checkCheapestSelection()" required>
-                                    <label class="form-check-label w-100" for="volta_{{ c.id }}">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <strong>OPCAO {{ loop.index }}</strong>
-                                                {% if loop.first %}<span class="badge bg-info">MENOR VALOR</span>{% endif %}
-                                                <span class="ms-2 text-muted" style="font-size: 0.8rem;">
-                                                    {{ c.cia }} {{ c.voo }} |
-                                                    {{ c.origem }} <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino }}
-                                                    {% if c.tem_conexao %}
-                                                    <i class="bi bi-arrow-right" style="font-size:0.6rem;"></i> {{ c.destino_conexao }}
-                                                    {% endif %}
-                                                </span>
-                                            </div>
-                                            <span class="fw-bold text-success fs-6">{{ c.valor_formatado }}</span>
-                                        </div>
-                                        <small class="text-muted">
-                                            Saída: {{ c.saida.strftime('%d/%m/%Y %H:%M') }} |
-                                            Chegada: {{ c.chegada.strftime('%d/%m/%Y %H:%M') }}
-                                            {% if c.nome_agencia %}| Agência: {{ c.nome_agencia }}{% endif %}
-                                            {% if c.bagagem %}| {{ c.bagagem }}{% endif %}
-                                        </small>
-                                    </label>
-                                </div>
-                                {% endfor %}
-                            </div>
-
-                            {# --- JUSTIFICATIVA (oculta por padrao) --- #}
-                            <div id="justificativa-section" style="display: none;">
-                                <div class="alert alert-warning mb-3">
-                                    <h6 class="alert-heading fw-bold" style="font-size: 0.85rem;">
-                                        <i class="bi bi-exclamation-triangle me-1"></i>
-                                        Justificativa (passagem selecionada NAO e a de menor valor)
-                                    </h6>
-                                    <div class="form-check mb-1">
-                                        <input class="form-check-input" type="checkbox" name="justificativa_J1" id="just_J1">
-                                        <label class="form-check-label small" for="just_J1">
-                                            O valor de diarias ultrapassa o beneficio economico do menor valor
-                                        </label>
-                                    </div>
-                                    <div class="form-check mb-1">
-                                        <input class="form-check-input" type="checkbox" name="justificativa_J2" id="just_J2">
-                                        <label class="form-check-label small" for="just_J2">
-                                            Recomendacao medica com CID
-                                        </label>
-                                    </div>
-                                    <div class="form-check mb-1">
-                                        <input class="form-check-input" type="checkbox" name="justificativa_J3" id="just_J3">
-                                        <label class="form-check-label small" for="just_J3">
-                                            Disposicoes do art. 6 do Decreto n 14.891/2012
-                                        </label>
-                                    </div>
-                                    <div class="form-check mb-1">
-                                        <input class="form-check-input" type="checkbox" name="justificativa_J4" id="just_J4">
-                                        <label class="form-check-label small" for="just_J4">
-                                            Autorizacao do Governador ou dirigente maximo
-                                        </label>
-                                    </div>
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" name="justificativa_J5" id="just_J5"
-                                               onchange="toggleOutrosInput()">
-                                        <label class="form-check-label small" for="just_J5">
-                                            Outros
-                                        </label>
-                                    </div>
-                                    <div id="outros-input-container" style="display: none;" class="ms-4">
-                                        <input type="text" class="form-control form-control-sm"
-                                               name="justificativa_outros_texto"
-                                               id="justificativa_outros_texto"
-                                               placeholder="Descreva a justificativa...">
-                                    </div>
-                                </div>
-                            </div>
-
-                            {# --- DECLARACAO --- #}
-                            <div class="form-check mb-3 border rounded p-3 bg-light">
-                                <input class="form-check-input" type="checkbox"
-                                       name="declaracao_responsabilidade"
-                                       id="declaracao_responsabilidade" required>
-                                <label class="form-check-label small" for="declaracao_responsabilidade">
-                                    <strong>Declaro</strong> que as informacoes acima sao verdadeiras e assumo
-                                    a responsabilidade pela escolha da passagem aerea, estando ciente das
-                                    normas vigentes.
-                                </label>
-                            </div>
-
-                            <div class="d-flex justify-content-end">
-                                <button type="submit" class="btn btn-primary" id="btn-registrar-escolha">
-                                    <i class="bi bi-check2-square me-1"></i>Registrar Escolha de Passagens
-                                </button>
-                            </div>
-                        </form>
-                        {% endif %}
-
-                    </div>
-                </div>
-            </section>
-            {% endif %}
-            {% endif %}
-
-            {# --- NOTA DE RESERVA (FINANCEIRO) --- #}
-            {% if itinerario.etapa_atual_id >= 2 %}
-            <section class="mb-4">
-                <h6 class="section-title mb-2"><i class="bi bi-journal-bookmark me-1"></i>Nota de Reserva (Financeiro)</h6>
-                {% if itinerario.nota_reserva %}
-                <div class="card border-success">
-                    <div class="card-body py-2">
-                        <div class="d-flex align-items-center">
-                            <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
-                            <div>
-                                <span class="fw-bold fs-6">{{ itinerario.nota_reserva }}</span>
-                                {% if itinerario.sei_nota_reserva_formatado %}
-                                <br><small class="text-muted">Documento SEI: {{ itinerario.sei_nota_reserva_formatado }}</small>
-                                {% endif %}
-                                <br><small class="text-success">Inserida pelo financeiro</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% else %}
-                <div class="card border-warning">
-                    <div class="card-body text-center py-3">
-                        <i class="bi bi-clock-history text-warning fs-3 d-block mb-1"></i>
-                        <p class="text-muted mb-0 fw-semibold small">Aguardando insercao da Nota de Reserva pelo Financeiro</p>
-                        {% if itinerario.etapa_atual_id < 2 %}
-                        <small class="text-muted">A solicitacao precisa ser autorizada primeiro</small>
-                        {% elif itinerario.etapa_atual_id == 2 %}
-                        <small class="text-muted">A solicitacao ja foi autorizada. Pendente de acao do Financeiro.</small>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-            </section>
-            {% endif %}
-
             {# --- PARADAS (ESTADUAL) --- #}
             {% if paradas %}
             <section class="mb-4">
@@ -933,6 +1640,10 @@
             </section>
             {% endif %}
 
+            {% endif %}{# /aba pessoas #}
+
+            </div>{# /border border-top-0 (conteúdo das abas) #}
+
         </div>
     </div>
 </div>
@@ -954,7 +1665,7 @@
 
                 <p class="text-muted small mb-3">
                     Informe suas credenciais do SEI para assinar os documentos de requisição
-                    (Requisicao de Diarias{% if itinerario.sei_id_requisição_passagens %} e Requisicao de Passagens{% endif %}).
+                    (Requisicao de Diarias{% if itinerario.has_doc('requisicao_passagens') %} e Requisicao de Passagens{% endif %}).
                 </p>
 
                 <div class="mb-3">
@@ -1180,6 +1891,44 @@ async function excluirCotacaoVoo(id, btnEl) {
         btnEl.disabled = false;
     }
 }
+
+async function reimportarCotacoes(itinerarioId) {
+    if (!confirm('Reimportar cotações?\n\nAs cotações atuais serão removidas e os dados serão extraídos novamente do PDF no SEI.')) {
+        return;
+    }
+    var btn = document.getElementById('btn-reimportar-cotacoes');
+    var textoOriginal = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Reimportando...';
+
+    try {
+        var resp = await fetch('/diarias/api/atualizar-individual/' + itinerarioId, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({force_cotacoes: true})
+        });
+        var data = await resp.json();
+        if (data.sucesso) {
+            var cotImportadas = data.cotacoes_importadas || 0;
+            if (cotImportadas > 0) {
+                alert('Reimportação concluída! ' + cotImportadas + ' opção(ões) de voo extraída(s).\n\nA página será recarregada.');
+                location.reload();
+            } else {
+                alert('Reimportação concluída, mas nenhuma opção de voo foi extraída do PDF.\n\nDetalhes: ' + (data.msg || ''));
+                btn.disabled = false;
+                btn.innerHTML = textoOriginal;
+            }
+        } else {
+            alert('Erro: ' + (data.msg || 'Erro desconhecido'));
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+        }
+    } catch (err) {
+        alert('Erro de conexão: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = textoOriginal;
+    }
+}
 </script>
 {% endif %}
 
@@ -1216,7 +1965,12 @@ async function assinarSuperintendente() {
             })
         });
 
-        var data = await resp.json();
+        var data;
+        try {
+            data = await resp.json();
+        } catch (parseErr) {
+            throw new Error('Servidor retornou resposta inválida (status ' + resp.status + ')');
+        }
 
         if (resp.ok && data.sucesso) {
             sucessoDiv.innerHTML = '<i class="bi bi-check-circle me-1"></i> ' + (data.mensagem || 'Requisicoes assinadas com sucesso!') + ' Recarregando...';
@@ -1234,7 +1988,8 @@ async function assinarSuperintendente() {
             btn.innerHTML = '<i class="bi bi-pen me-1"></i> Assinar Requisições';
         }
     } catch (err) {
-        erroDiv.textContent = 'Erro de conexão, tente novamente.';
+        console.error('Erro na assinatura:', err);
+        erroDiv.textContent = 'Erro de conexão: ' + (err.message || 'tente novamente.');
         erroDiv.classList.remove('d-none');
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-pen me-1"></i> Assinar Requisições';
@@ -1276,7 +2031,12 @@ async function autorizarSolicitacao() {
             })
         });
 
-        var data = await resp.json();
+        var data;
+        try {
+            data = await resp.json();
+        } catch (parseErr) {
+            throw new Error('Servidor retornou resposta inválida (status ' + resp.status + ')');
+        }
 
         if (resp.ok && data.sucesso) {
             sucessoDiv.innerHTML = '<i class="bi bi-check-circle me-1"></i> Autorização realizada com sucesso! Documento: <b>' +
@@ -1295,7 +2055,8 @@ async function autorizarSolicitacao() {
             btn.innerHTML = '<i class="bi bi-pen me-1"></i> Autorizar e Assinar';
         }
     } catch (err) {
-        erroDiv.textContent = 'Erro de conexão, tente novamente.';
+        console.error('Erro na autorização:', err);
+        erroDiv.textContent = 'Erro de conexão: ' + (err.message || 'tente novamente.');
         erroDiv.classList.remove('d-none');
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-pen me-1"></i> Autorizar e Assinar';
@@ -1304,257 +2065,8 @@ async function autorizarSolicitacao() {
 </script>
 {% endif %}
 
-{# ================================================================ #}
-{# Seção Ciência Superintendente + Despacho SGA (Passo 2 pós-NE)    #}
-{# Visível apenas se o Despacho CCDP já foi gerado                  #}
-{# ================================================================ #}
-{% if itinerario.sei_id_despacho_ccdp %}
-<div class="card shadow-sm mb-4">
-    <div class="card-header py-3" style="background-color: #1565C0;">
-        <h5 class="text-white mb-0">
-            <i class="bi bi-clipboard-check me-2"></i>Ciência do Superintendente — Despacho SGA
-        </h5>
-    </div>
-    <div class="card-body">
-
-        {% if itinerario.sei_id_despacho_sga %}
-            {# Já concluído #}
-            <div class="alert alert-success d-flex align-items-center" role="alert">
-                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
-                <div>
-                    <strong>Ciência registrada e Despacho SGA gerado!</strong>
-                    {% if itinerario.sei_despacho_sga_formatado %}
-                        <br><small class="text-muted">Documento SEI: {{ itinerario.sei_despacho_sga_formatado }}</small>
-                    {% endif %}
-                    {% if itinerario.ciencia_superintendente_data %}
-                        <br><small class="text-muted">Data: {{ itinerario.ciencia_superintendente_data.strftime('%d/%m/%Y %H:%M') }}</small>
-                    {% endif %}
-                </div>
-            </div>
-
-        {% elif session.get('unidades') and '110006213' in (session.get('unidades') | map(attribute='id') | list | map('string') | list) %}
-            {# Superintendente vê o despacho e pode dar ciência #}
-            <div class="mb-3">
-                <h6 class="fw-bold"><i class="bi bi-file-text me-1"></i>Despacho CCDP (Leitura obrigatória)</h6>
-                <div class="border rounded p-3 bg-light" style="font-family: Arial, sans-serif; font-size: 12pt;">
-                    <p>Processo nº <b>{{ itinerario.sei_protocolo or itinerario.n_processo or '' }}</b></p>
-                    <p>Interessados: @interessados_virgula_espaco@</p>
-                    <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
-                    <br>
-                    <p style="text-align: center;"><b>DESPACHO</b></p>
-                    <br>
-                    <p style="text-indent: 2em; text-align: justify;">
-                        Após a realização de análise técnica e emissão da nota de empenho, retorno os
-                        autos à <b>Superintendência de Gestão Administrativa</b>, para conhecimento e
-                        providências referente à concessão de diárias.
-                    </p>
-                    {% if itinerario.sei_despacho_ccdp_formatado %}
-                        <br><small class="text-muted">Documento SEI: {{ itinerario.sei_despacho_ccdp_formatado }}</small>
-                    {% endif %}
-                </div>
-            </div>
-
-            <hr>
-
-            <div class="form-check mb-3">
-                <input class="form-check-input" type="checkbox" id="checkCienciaSGA" onchange="toggleBtnCienciaSGA()">
-                <label class="form-check-label fw-bold" for="checkCienciaSGA">
-                    Declaro ciência do despacho acima e autorizo o encaminhamento ao NCI
-                </label>
-            </div>
-
-            <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
-            <div class="row g-3 mb-3">
-                <div class="col-md-4">
-                    <label for="sga_sei_usuario" class="form-label fw-bold">Usuário SEI <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="sga_sei_usuario" placeholder="usuario@sead.pi.gov.br">
-                </div>
-                <div class="col-md-4">
-                    <label for="sga_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
-                    <input type="password" class="form-control" id="sga_sei_senha" placeholder="Sua senha do SEI">
-                </div>
-                <div class="col-md-4">
-                    <label for="sga_cargo" class="form-label fw-bold">Cargo</label>
-                    <input type="text" class="form-control" id="sga_cargo" value="{{ session.get('usuario_cargo', 'Superintendente') }}">
-                </div>
-            </div>
-
-            <button type="button" class="btn btn-primary fw-bold px-4" id="btnCienciaSGA" disabled
-                    onclick="enviarCienciaSGA()">
-                <i class="bi bi-send me-1"></i> Gerar Despacho SGA e Assinar
-            </button>
-            <div id="sgaResultado" class="mt-3" style="display:none;"></div>
-
-        {% else %}
-            <div class="alert alert-info d-flex align-items-center" role="alert">
-                <i class="bi bi-hourglass-split fs-4 me-3"></i>
-                <div>
-                    <strong>Aguardando ciência do Superintendente.</strong>
-                    <p class="mb-0 mt-1 small text-muted">
-                        O Superintendente de Gestão Administrativa dará ciência do despacho CCDP.
-                    </p>
-                </div>
-            </div>
-        {% endif %}
-
-    </div>
-</div>
-{% endif %}
-
-{# ================================================================ #}
-{# Seção Análise NCI (Passo 3 pós-NE)                               #}
-{# Visível após o Despacho SGA ter sido gerado                      #}
-{# ================================================================ #}
-{% if itinerario.sei_id_despacho_sga %}
-<div class="card shadow-sm mb-4">
-    <div class="card-header py-3" style="background-color: #2E7D32;">
-        <h5 class="text-white mb-0">
-            <i class="bi bi-clipboard2-data me-2"></i>Análise de Pagamento — Núcleo de Controle Interno
-        </h5>
-    </div>
-    <div class="card-body">
-
-        {% if itinerario.sei_id_analise_pagamento %}
-            {# Já concluído #}
-            <div class="alert alert-success d-flex align-items-center" role="alert">
-                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
-                <div>
-                    <strong>Análise de Pagamento e Despacho NCI gerados!</strong>
-                    {% if itinerario.sei_analise_pagamento_formatado %}
-                        <br><small class="text-muted">Análise SEI: {{ itinerario.sei_analise_pagamento_formatado }}</small>
-                    {% endif %}
-                    {% if itinerario.sei_despacho_nci_formatado %}
-                        <br><small class="text-muted">Despacho NCI SEI: {{ itinerario.sei_despacho_nci_formatado }}</small>
-                    {% endif %}
-                    {% if itinerario.ciencia_nci_data %}
-                        <br><small class="text-muted">Data: {{ itinerario.ciencia_nci_data.strftime('%d/%m/%Y %H:%M') }}</small>
-                    {% endif %}
-                </div>
-            </div>
-
-        {% elif session.get('unidades') and '110006211' in (session.get('unidades') | map(attribute='id') | list | map('string') | list) %}
-            {# Usuário NCI preenche a análise #}
-            <p class="text-muted small mb-3">
-                <i class="bi bi-info-circle me-1"></i>
-                Preencha as respostas da Análise de Pagamento (S = Sim, N = Não, NA = Não se aplica).
-                O documento será gerado no SEI junto com o Despacho NCI.
-            </p>
-
-            <div id="formAnaliseNCI">
-                {# Perguntas #}
-                <div class="table-responsive mb-4">
-                    <table class="table table-bordered table-sm">
-                        <thead class="table-dark">
-                            <tr>
-                                <th style="width:70%">Pergunta</th>
-                                <th class="text-center" style="width:10%">S</th>
-                                <th class="text-center" style="width:10%">N</th>
-                                <th class="text-center" style="width:10%">NA</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% set perguntas = [
-                                {"id": "q1", "num": "1", "texto": "A(s) diária(s) foi(ram) solicitada(s) para militares, servidores públicos, empregados públicos, ou agentes políticos?", "extras": ["vinculo", "nome_agente"]},
-                                {"id": "q2", "num": "2", "texto": "O servidor é o gestor máximo do órgão ou entidade?"},
-                                {"id": "q3", "num": "3", "texto": "Foi avaliado a oportunidade e a necessidade da viagem?", "extras": ["quem_analisou"]},
-                                {"id": "q4", "num": "4", "texto": "O valor da diária corresponde ao valor do cargo de autoridade superior?", "extras": ["classe_correspondente"]},
-                                {"id": "q5", "num": "5", "texto": "O agente é autoridade superior no órgão ou entidade?", "extras": ["cargo_agente"]},
-                                {"id": "q6", "num": "6", "texto": "No caso de servidor não ser autoridade superior, a diária é equivalente ao cargo do servidor?"},
-                                {"id": "q7", "num": "7", "texto": "O servidor indicado para acompanhar a autoridade possui cargo igual ou inferior?"},
-                                {"id": "q8", "num": "8", "texto": "A diária foi majorada em até 30% quando a hospedagem for coberta pelo servidor?"},
-                                {"id": "q9", "num": "9", "texto": "O deslocamento da sede para o aeroporto ou rodoviária, a diária é de 50%?"},
-                                {"id": "q10", "num": "10", "texto": "O valor das diárias está com base nos anexos I e II do decreto 20.890/2022?", "extras": ["valor_diaria", "destino_viagem"]},
-                                {"id": "q11", "num": "11", "texto": "As diárias a serem concedidas estão dentro do período da viagem?"},
-                                {"id": "q12", "num": "12", "texto": "Em caso de prorrogação, a viagem foi comunicada ao concedente?"},
-                                {"id": "q13", "num": "13", "texto": "Foi demonstrada a disponibilidade orçamentário-financeira?", "extras": ["projeto_natureza", "fonte_recursos"]},
-                                {"id": "q14", "num": "14", "texto": "O servidor realizou viagem anterior a serviço do Estado?"},
-                                {"id": "q15", "num": "15", "texto": "O servidor prestou contas das diárias recebidas anteriormente?"},
-                                {"id": "q16", "num": "16", "texto": "Foi aprovada a prestação de contas da viagem anterior?", "extras": ["responsavel_analise"]},
-                                {"id": "q17", "num": "17", "texto": "A viagem foi autorizada pelo ordenador de despesa?", "extras": ["quem_autorizou"]},
-                                {"id": "q18", "num": "18", "texto": "A publicação da portaria de diárias foi realizada no DOE antes da viagem?"},
-                                {"id": "q19", "num": "19", "texto": "Trata-se de despesas de exercícios anteriores?"},
-                                {"id": "q20", "num": "20", "texto": "Em caso de DEA, foi apresentada justificativa para o não pagamento no exercício?"},
-                                {"id": "q21", "num": "21", "texto": "Em caso de DEA, a despesa foi reconhecida pela autoridade competente?"}
-                            ] %}
-                            {% for p in perguntas %}
-                            <tr>
-                                <td>
-                                    <strong>{{ p.num }}.</strong> {{ p.texto }}
-                                    {% if p.extras is defined %}
-                                        {% for campo in p.extras %}
-                                        <div class="mt-1">
-                                            <input type="text" class="form-control form-control-sm"
-                                                   id="nci_{{ p.id }}_{{ campo }}"
-                                                   placeholder="{{ campo | replace('_', ' ') | title }}">
-                                        </div>
-                                        {% endfor %}
-                                    {% endif %}
-                                    <div class="mt-1">
-                                        <input type="text" class="form-control form-control-sm"
-                                               id="nci_{{ p.id }}_obs" placeholder="Observação (opcional)">
-                                    </div>
-                                </td>
-                                <td class="text-center align-middle">
-                                    <input class="form-check-input" type="radio" name="nci_{{ p.id }}" value="S">
-                                </td>
-                                <td class="text-center align-middle">
-                                    <input class="form-check-input" type="radio" name="nci_{{ p.id }}" value="N">
-                                </td>
-                                <td class="text-center align-middle">
-                                    <input class="form-check-input" type="radio" name="nci_{{ p.id }}" value="NA">
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="mb-3">
-                    <label for="nci_observacoes_gerais" class="form-label fw-bold">Observações Gerais</label>
-                    <textarea class="form-control" id="nci_observacoes_gerais" rows="3"
-                              placeholder="Observações adicionais sobre a análise..."></textarea>
-                </div>
-
-                <hr>
-                <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
-                <div class="row g-3 mb-3">
-                    <div class="col-md-4">
-                        <label for="nci_sei_usuario" class="form-label fw-bold">Usuário SEI <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="nci_sei_usuario" placeholder="usuario@sead.pi.gov.br">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="nci_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
-                        <input type="password" class="form-control" id="nci_sei_senha" placeholder="Sua senha do SEI">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="nci_cargo" class="form-label fw-bold">Cargo</label>
-                        <input type="text" class="form-control" id="nci_cargo" value="{{ session.get('usuario_cargo', 'Assessora Técnica') }}">
-                    </div>
-                </div>
-
-                <button type="button" class="btn btn-success fw-bold px-4" id="btnAnaliseNCI"
-                        onclick="enviarAnaliseNCI()">
-                    <i class="bi bi-file-earmark-check me-1"></i> Gerar Análise e Despacho NCI
-                </button>
-                <div id="nciResultado" class="mt-3" style="display:none;"></div>
-            </div>
-
-        {% else %}
-            <div class="alert alert-info d-flex align-items-center" role="alert">
-                <i class="bi bi-hourglass-split fs-4 me-3"></i>
-                <div>
-                    <strong>Aguardando Análise do Núcleo de Controle Interno.</strong>
-                    <p class="mb-0 mt-1 small text-muted">
-                        O NCI realizará a análise de pagamento e emitirá o parecer.
-                    </p>
-                </div>
-            </div>
-        {% endif %}
-
-    </div>
-</div>
-{% endif %}
-
+{# Verificações Pós-Despacho — HTML movido para dentro do card de Nota de Reserva (content block) #}
+{# Apenas o JavaScript permanece aqui no bloco diarias_js #}
 {# JavaScript para Passos 2 e 3 #}
 <script>
     // Toggle botão Ciência SGA
@@ -1702,6 +2214,123 @@ async function autorizarSolicitacao() {
             btn.innerHTML = '<i class="bi bi-file-earmark-check me-1"></i> Gerar Análise e Despacho NCI';
         }
     }
+
+    // Atualizar Etapas Individual (sincronizar com SEI)
+    function atualizarIndividual() {
+        const modal = new bootstrap.Modal(document.getElementById('modalAtualizarEtapas'));
+        const log = document.getElementById('sync-log');
+        const spinner = document.getElementById('sync-spinner');
+        const btnFechar = document.getElementById('btn-sync-fechar');
+        const btnReload = document.getElementById('btn-sync-reload');
+
+        // Reset modal state
+        log.innerHTML = '';
+        spinner.style.display = 'flex';
+        btnFechar.style.display = 'none';
+        btnReload.style.display = 'none';
+        modal.show();
+
+        function addLog(html, cls) {
+            const div = document.createElement('div');
+            div.className = 'mb-1 ' + (cls || '');
+            div.innerHTML = html;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        addLog('<i class="bi bi-search me-1"></i> Consultando documentos no SEI...', 'text-muted');
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+        fetch("{{ url_for('diarias.api_atualizar_individual', id_itinerario=itinerario.id) }}", {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            signal: controller.signal
+        })
+        .then(r => { clearTimeout(timeoutId); return r.json(); })
+        .then(data => {
+            spinner.style.display = 'none';
+
+            if (data.sucesso) {
+                // Documentos encontrados
+                const docs = data.docs_encontrados || [];
+                if (docs.length > 0) {
+                    addLog(`<strong><i class="bi bi-file-earmark-text me-1"></i> ${docs.length} documento(s) mapeado(s):</strong>`);
+                    docs.forEach(d => {
+                        const badge = d.novo
+                            ? '<span class="badge bg-success ms-1">novo</span>'
+                            : '<span class="badge bg-secondary ms-1">existente</span>';
+                        addLog(`&nbsp;&nbsp;• <strong>${d.serie_nome}</strong> (${d.sei_formatado}) → <code>${d.tipo}</code> ${badge}`, 'small');
+                    });
+                } else {
+                    addLog('<i class="bi bi-info-circle me-1"></i> Nenhum documento mapeável encontrado.', 'text-warning');
+                }
+
+                // Docs atualizados
+                if (data.docs_atualizados > 0) {
+                    addLog(`<i class="bi bi-database-check me-1"></i> ${data.docs_atualizados} documento(s) atualizado(s) no banco.`, 'text-success mt-2');
+                }
+
+                // Cotações importadas
+                if (data.cotacoes_importadas > 0) {
+                    addLog(`<i class="bi bi-airplane me-1"></i> ${data.cotacoes_importadas} opção(ões) de voo importada(s) via OCR.`, 'text-info mt-1');
+                }
+
+                // Mensagens detalhadas de cotação
+                const msgsCotacao = (data.msgs || []).filter(m => m.toLowerCase().includes('cotaç') || m.toLowerCase().includes('cotac'));
+                msgsCotacao.forEach(m => {
+                    addLog(`&nbsp;&nbsp;<small>${m}</small>`, 'text-muted');
+                });
+
+                // Etapa
+                addLog('<hr class="my-2">');
+                if (data.etapa_anterior !== data.etapa_nova) {
+                    addLog(`<i class="bi bi-arrow-right-circle me-1"></i> Etapa alterada: <strong>${data.etapa_anterior} → ${data.etapa_nova} (${data.etapa_nova_nome})</strong>`, 'text-primary fw-bold');
+                } else {
+                    addLog(`<i class="bi bi-check-circle me-1"></i> Etapa mantida: <strong>${data.etapa_nova_nome}</strong>`, 'text-success');
+                }
+
+                btnReload.style.display = 'inline-block';
+            } else {
+                addLog(`<i class="bi bi-exclamation-triangle me-1"></i> ${data.msg}`, 'text-danger fw-bold');
+                btnFechar.style.display = 'inline-block';
+            }
+        })
+        .catch(err => {
+            spinner.style.display = 'none';
+            addLog(`<i class="bi bi-x-circle me-1"></i> Erro de conexão: ${err.message}`, 'text-danger fw-bold');
+            btnFechar.style.display = 'inline-block';
+        });
+    }
 </script>
+
+{# ===== MODAL: Atualizar Etapas ===== #}
+<div class="modal fade" id="modalAtualizarEtapas" tabindex="-1" aria-labelledby="modalAtualizarEtapasLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modalAtualizarEtapasLabel">
+                    <i class="bi bi-arrow-repeat me-1"></i> Sincronização com SEI
+                </h6>
+            </div>
+            <div class="modal-body">
+                <div id="sync-spinner" class="d-flex align-items-center gap-2 mb-2">
+                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                    <span class="text-muted small">Processando...</span>
+                </div>
+                <div id="sync-log" style="max-height: 350px; overflow-y: auto; font-size: 0.85rem;"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button id="btn-sync-fechar" type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" style="display:none;">
+                    Fechar
+                </button>
+                <button id="btn-sync-reload" type="button" class="btn btn-primary btn-sm" onclick="location.reload()" style="display:none;">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Recarregar Página
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}

@@ -86,21 +86,52 @@ ETAPA_ALIASES = {
 
 
 # =============================================================================
-# ETAPAS DO PROCESSO DE DIÁRIAS
+# ETAPAS DO PROCESSO DE DIÁRIAS (5 etapas conforme Lista de Verificação)
 # =============================================================================
 class DiariasEtapaID(IntEnum):
-    """IDs das etapas no fluxo de diárias."""
-    SOLICITACAO_INICIADA = 1
-    FINANCEIRO = 2              # Nota de Reserva + Quadro Orçamentário
-    AQUISICAO_PASSAGENS = 3     # Cotações + Escolha (somente tipos 2,3)
-    DESPACHO_CCDP = 4           # Despacho CCDP → SGA (pós NE)
-    CIENCIA_SGA = 5             # Ciência do Superintendente + Despacho SGA → NCI
-    ANALISE_NCI = 6             # Análise de Pagamento + Despacho NCI
-    DESPACHO_APOIO = 7          # Despacho APOIO/DFIN (Superintendente → DFIN)
-    DESPACHO_DIRETOR = 8        # Despacho Diretor DFIN → GEO
-    DESPACHO_GEO = 9            # Despacho GEO → CCDP + NL/PD/OB
-    COMPROVANTE_VIAGEM = 10     # Upload comprovante viagem (cliente, pós-relatório)
-    PRESTACAO_CONTAS_CCDP = 11  # NP + Prestação SCDP + Despacho Final (CCDP)
+    """IDs das 5 etapas principais no fluxo de diárias e passagens."""
+    SOLICITACAO_INICIAL = 1      # Memorando, Requisições, Folder, Autorização Secretário
+    ESCOLHA_VOO = 2              # Cotações aéreas + Justificativa (somente tipos 2,3)
+    ANALISE_SOLICITACAO = 3      # Nota de Reserva, Habilitação, SCDP, Análise NCI
+    CONCESSAO_DIARIAS = 4        # NL, PD, OB
+    PRESTACAO_CONTAS = 5         # Relatório de viagem, NP, Prestação SCDP
+
+
+# Configuração dos sub-itens de cada etapa (checklist da Lista de Verificação).
+# Cada sub-item mapeia para um tipo de documento em DiariasDocumentoSei.
+# 'condicional': 'passagens' → só aparece para tipo_solicitacao_id in {2, 3}
+DIARIAS_SUBITENS = {
+    DiariasEtapaID.SOLICITACAO_INICIAL: [
+        {'id': 'memorando',              'nome': 'Memorando de solicitação',     'doc_tipo': 'memorando'},
+        {'id': 'requisicao',             'nome': 'Requisição de Diárias',        'doc_tipo': 'requisicao'},
+        {'id': 'requisicao_passagens',   'nome': 'Requisição de Passagens',      'doc_tipo': 'requisicao_passagens', 'condicional': 'passagens'},
+        {'id': 'doc_evento',             'nome': 'Folder ou doc. do evento',     'doc_tipo': 'doc_externo'},
+        {'id': 'autorizacao',            'nome': 'Autorização do Secretário',    'doc_tipo': 'autorizacao'},
+    ],
+    DiariasEtapaID.ESCOLHA_VOO: [
+        {'id': 'cotacoes',               'nome': 'Cotações aéreas',              'doc_tipo': 'memorando_cotacoes'},
+        {'id': 'escolha_passagens',      'nome': 'Justificativa de escolha da passagem', 'doc_tipo': 'escolha_passagens'},
+    ],
+    DiariasEtapaID.ANALISE_SOLICITACAO: [
+        {'id': 'nota_reserva',           'nome': 'Nota de reserva',              'doc_tipo': 'nota_reserva'},
+        {'id': 'habilitacao',            'nome': 'Análise de habilitação para receber diárias', 'doc_tipo': 'analise_habilitacao'},
+        {'id': 'scdp',                   'nome': 'Comprovante de lançamento do SCDP', 'doc_tipo': 'autorizacao_scdp'},
+        {'id': 'nci',                    'nome': 'Análise do NCI',               'doc_tipo': 'analise_pagamento'},
+    ],
+    DiariasEtapaID.CONCESSAO_DIARIAS: [
+        {'id': 'nl',                     'nome': 'Nota de liquidação',           'doc_tipo': 'nl'},
+        {'id': 'pd',                     'nome': 'Programação de Desembolso',    'doc_tipo': 'pd'},
+        {'id': 'ob',                     'nome': 'Ordem bancária',               'doc_tipo': 'ob'},
+    ],
+    DiariasEtapaID.PRESTACAO_CONTAS: [
+        {'id': 'relatorio',              'nome': 'Relatório de viagem',          'doc_tipo': 'relatorio_viagem'},
+        {'id': 'np',                     'nome': 'Nota patrimonial',             'doc_tipo': 'np'},
+        {'id': 'prestacao_scdp',         'nome': 'Comprovante de prestação de contas no SCDP', 'doc_tipo': 'prestacao_scdp'},
+    ],
+}
+
+# Tipos de solicitação que incluem passagens aéreas
+TIPOS_COM_PASSAGENS = {2, 3}  # Diárias+Passagens, Apenas Passagens
 
 
 # =============================================================================

@@ -1,16 +1,16 @@
-{# Timeline horizontal do modulo de Diarias.
+{# Timeline horizontal do modulo de Diarias e Passagens.
    Espera variaveis:
      - timeline_data (lista de dicts do DiariaService.obter_timeline)
-     - itinerario (objeto DiariasItinerario, para o botao de verificar autorizacao)
+       Cada item tem: etapa, concluida, data, data_fim, atual, comentario,
+                      tempo_decorrido, subitens[]
+       Cada subitem tem: id, nome, concluido, doc_formatado, link_acesso, data, data_str
+     - itinerario (objeto DiariasItinerario)
    Reutiliza CSS de app/static/css/components/timeline.css via main.css
 #}
 
 {% if timeline_data %}
 <style>
-    /* Override: corrige sobreposicao do conector sobre os circulos
-       quando ha poucos itens (itens mais largos).
-       Remove stacking context do .timeline-item para que z-index dos
-       filhos participe do mesmo contexto global. */
+    /* Override: corrige sobreposicao do conector sobre os circulos */
     .timeline-diarias .timeline-item {
         z-index: auto;
     }
@@ -26,7 +26,6 @@
     .timeline-diarias .duration-pill {
         z-index: 2;
     }
-    /* Com 3 etapas, nao precisa de min-width 750px */
     .timeline-diarias .timeline-flex-container {
         min-width: 400px;
     }
@@ -36,6 +35,104 @@
         padding: 2px 8px;
         margin-top: 4px;
         border-radius: 12px;
+    }
+    /* Sub-itens checklist */
+    .timeline-subitens {
+        font-size: 0.75rem;
+        min-width: 170px;
+    }
+    .timeline-subitens .subitem-row {
+        white-space: normal;
+        margin-bottom: 2px;
+    }
+    .timeline-subitens .subitem-doc {
+        font-size: 0.65rem;
+        color: #6c757d;
+    }
+    /* Links de documentos SEI nos sub-itens */
+    .timeline-subitens .subitem-link {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px dotted transparent;
+        transition: all 0.15s ease;
+        position: relative;
+    }
+    .timeline-subitens .subitem-link:hover {
+        color: #2e59d9;
+        border-bottom-color: #2e59d9;
+    }
+    /* Tooltip customizado para datas */
+    .tl-tooltip {
+        position: relative;
+        cursor: default;
+    }
+    .tl-tooltip .tl-tooltip-text {
+        visibility: hidden;
+        opacity: 0;
+        position: absolute;
+        bottom: calc(100% + 6px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, #343990 0%, #5b5fc7 100%);
+        color: #fff;
+        font-size: 0.65rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 6px;
+        white-space: nowrap;
+        z-index: 100;
+        box-shadow: 0 3px 10px rgba(52, 57, 144, 0.3);
+        letter-spacing: 0.3px;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+        pointer-events: none;
+    }
+    .tl-tooltip .tl-tooltip-text::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 5px solid transparent;
+        border-top-color: #5b5fc7;
+    }
+    .tl-tooltip:hover .tl-tooltip-text {
+        visibility: visible;
+        opacity: 1;
+    }
+    /* Tooltip para sub-itens (posicao lateral) */
+    .tl-tooltip-sub {
+        position: relative;
+    }
+    .tl-tooltip-sub .tl-tooltip-text {
+        visibility: hidden;
+        opacity: 0;
+        position: absolute;
+        bottom: calc(100% + 4px);
+        left: 0;
+        transform: none;
+        background: #495057;
+        color: #fff;
+        font-size: 0.62rem;
+        font-weight: 500;
+        padding: 3px 8px;
+        border-radius: 4px;
+        white-space: nowrap;
+        z-index: 100;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        transition: opacity 0.15s ease, visibility 0.15s ease;
+        pointer-events: none;
+    }
+    .tl-tooltip-sub .tl-tooltip-text::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: 12px;
+        border: 4px solid transparent;
+        border-top-color: #495057;
+    }
+    .tl-tooltip-sub:hover .tl-tooltip-text {
+        visibility: visible;
+        opacity: 1;
     }
 </style>
 
@@ -59,30 +156,38 @@
                     </div>
                     {% endif %}
 
-                    {# Data acima do circulo #}
+                    {# Data acima do circulo — mostra a mais recente (data_fim) se disponivel #}
                     <div class="timeline-date-block">
-                        {% if item.data %}
+                        {% if item.data_fim %}
+                        <span class="date-day">{{ item.data_fim.strftime('%d/%m') }}</span>
+                        {% elif item.data %}
                         <span class="date-day">{{ item.data.strftime('%d/%m') }}</span>
                         {% endif %}
                     </div>
 
-                    {# Circulo da etapa #}
-                    <div class="step-circle {{ 'completed' if item.concluida }} {{ 'current' if (item.atual and not item.concluida) }}">
+                    {# Circulo da etapa — com tooltip de range de datas #}
+                    {% set tem_range = item.data and item.data_fim %}
+                    <div class="step-circle {{ 'completed' if item.concluida }} {{ 'current' if (item.atual and not item.concluida) }} {% if tem_range %}tl-tooltip{% endif %}" style="position: relative; z-index: 5;">
                         {% if item.atual and not item.concluida %}
                             <i class="fas fa-map-marker-alt fs-5 pin-pulse"></i>
                         {% else %}
                             <i class="{{ item.etapa.icone or 'fas fa-circle' }} fs-6"></i>
                         {% endif %}
+                        {% if tem_range %}
+                        <span class="tl-tooltip-text">
+                            {{ item.data.strftime('%d/%m/%Y') }} — {{ item.data_fim.strftime('%d/%m/%Y') }}
+                        </span>
+                        {% endif %}
                     </div>
 
-                    {# Titulo da etapa #}
+                    {# Titulo da etapa + sub-itens #}
                     <div class="step-info">
                         <span class="step-title {{ 'active-text' if item.atual }}">
                             {{ item.etapa.nome }}
                         </span>
 
-                        {# Etapa 2 (Autorizada): botao de verificar autorizacao no SEI #}
-                        {% if item.etapa.id == 2 and not item.concluida and itinerario.sei_protocolo %}
+                        {# Botao verificar autorizacao — Etapa 1 (Solicitacao Inicial) #}
+                        {% if item.etapa.id == 1 and not item.concluida and itinerario.sei_protocolo %}
                         <button type="button"
                                 class="btn btn-outline-primary btn-verificar-autorizacao"
                                 id="btn-verificar-autorizacao"
@@ -90,6 +195,53 @@
                             <i class="fas fa-sync-alt me-1"></i>Verificar
                         </button>
                         <div id="resultado-autorizacao" class="mt-1" style="font-size: 0.7rem;"></div>
+                        {% endif %}
+
+                        {# Sub-itens checklist com links e tooltips de data #}
+                        {% if item.subitens %}
+                        <div class="mt-2 text-start border-top pt-1 timeline-subitens">
+                            {% for sub in item.subitens %}
+                            <div class="subitem-row tl-tooltip-sub">
+                                {% if sub.concluido %}
+                                    <i class="fas fa-check-circle text-success"></i>
+                                {% else %}
+                                    <i class="far fa-circle text-muted"></i>
+                                {% endif %}
+
+                                {# Nome: se tem link_acesso, é um link clicável #}
+                                {% if sub.link_acesso and sub.concluido %}
+                                <a href="{{ sub.link_acesso }}" target="_blank" rel="noopener"
+                                   class="subitem-link {{ 'text-body' if sub.concluido else 'text-muted' }}">
+                                    {{ sub.nome }}
+                                </a>
+                                {% else %}
+                                <span class="{{ 'text-body' if sub.concluido else 'text-muted' }}">{{ sub.nome }}</span>
+                                {% endif %}
+
+                                {# Doc formatado abaixo #}
+                                {% if sub.doc_formatado %}
+                                <span class="subitem-doc d-block ps-3">
+                                    {% if sub.link_acesso and sub.concluido %}
+                                    <a href="{{ sub.link_acesso }}" target="_blank" rel="noopener"
+                                       class="text-decoration-none" style="color: #6c757d;">
+                                        <i class="bi bi-box-arrow-up-right" style="font-size: 0.55rem;"></i>
+                                        {{ sub.doc_formatado }}
+                                    </a>
+                                    {% else %}
+                                    {{ sub.doc_formatado }}
+                                    {% endif %}
+                                </span>
+                                {% endif %}
+
+                                {# Tooltip com data de inclusão do documento #}
+                                {% if sub.data %}
+                                <span class="tl-tooltip-text">
+                                    <i class="bi bi-calendar3 me-1"></i>{{ sub.data.strftime('%d/%m/%Y') }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
                         {% endif %}
 
                         {% if item.comentario and item.concluida %}

@@ -143,6 +143,7 @@ class DiariasServidor(db.Model):
     __tablename__ = 'diarias_servidores'
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    idpessoa = db.Column(db.Integer, unique=True, nullable=False)
     nome = db.Column(db.String(255), nullable=False)
     matricula = db.Column(db.String(20), unique=True, nullable=True)
     cpf = db.Column(db.String(20), nullable=False, unique=True, index=True)
@@ -193,49 +194,13 @@ class DiariasItinerario(db.Model):
     objetivo = db.Column(db.Text, nullable=True)
     valor_total = db.Column(db.Numeric(10, 2))
 
-    # SEI Integration
+    # SEI Integration (identidade do processo - ficam aqui)
     sei_protocolo = db.Column(db.String(50), nullable=True)         # Número formatado do processo SEI
     sei_id_procedimento = db.Column(db.String(50), nullable=True)   # ID interno do procedimento SEI
-    sei_id_memorando = db.Column(db.String(50), nullable=True)      # ID do documento MEMORANDO_SGA
-    sei_memorando_formatado = db.Column(db.String(50), nullable=True)  # Número formatado do memorando
-    sei_id_requisicao = db.Column(db.String(50), nullable=True)     # ID do documento REQUISIÇÃO DE DIÁRIAS
-    sei_requisicao_formatado = db.Column(db.String(50), nullable=True)  # Número formatado da requisição
-    sei_id_requisicao_passagens = db.Column(db.String(50), nullable=True)  # ID do documento REQUISIÇÃO DE PASSAGENS AÉREAS
-    sei_requisicao_passagens_formatado = db.Column(db.String(50), nullable=True)  # Número formatado da req. passagens
-    sei_id_doc_externo = db.Column(db.String(50), nullable=True)     # ID do documento externo (anexo)
-    sei_doc_externo_formatado = db.Column(db.String(50), nullable=True)  # Número formatado do doc externo
 
     # Assinatura do Superintendente nas Requisições (antes do Secretário)
     superintendente_assinou = db.Column(db.Boolean, default=False, nullable=False)
     superintendente_assinou_data = db.Column(db.DateTime, nullable=True)
-
-    # Autorização do Secretário (gerada pelo sistema ou detectada via SEI)
-    sei_id_autorizacao = db.Column(db.String(50), nullable=True)
-    sei_autorizacao_formatado = db.Column(db.String(50), nullable=True)
-
-    # Despacho DFIN (gerado automaticamente após autorização)
-    sei_id_despacho_dfin = db.Column(db.String(50), nullable=True)
-    sei_despacho_dfin_formatado = db.Column(db.String(50), nullable=True)
-
-    # Nota de Reserva (inserida pelo Financeiro)
-    nota_reserva = db.Column(db.String(50), nullable=True)
-    sei_id_nota_reserva = db.Column(db.String(50), nullable=True)
-    sei_nota_reserva_formatado = db.Column(db.String(50), nullable=True)
-
-    # Quadro Orçamentário (inserido pelo Financeiro após NR)
-    quadro_ug = db.Column(db.String(20), nullable=True)
-    quadro_funcao = db.Column(db.String(10), nullable=True)
-    quadro_subfuncao = db.Column(db.String(10), nullable=True)
-    quadro_programa = db.Column(db.String(10), nullable=True)
-    quadro_plano_interno = db.Column(db.String(10), nullable=True)
-    quadro_fonte_recursos = db.Column(db.String(20), nullable=True)
-    quadro_natureza_despesa = db.Column(db.String(20), nullable=True)
-    quadro_valor_inicial_nr = db.Column(db.Numeric(14, 2), nullable=True)
-    quadro_saldo_nr = db.Column(db.Numeric(14, 2), nullable=True)
-    quadro_valor_despesa = db.Column(db.Numeric(14, 2), nullable=True)
-    quadro_saldo_atual_nr = db.Column(db.Numeric(14, 2), nullable=True)
-    sei_id_quadro_orcamentario = db.Column(db.String(50), nullable=True)
-    sei_quadro_orcamentario_formatado = db.Column(db.String(50), nullable=True)
 
     # Escolha de Passagens (administração)
     escolha_voo_ida_id = db.Column(db.BigInteger, db.ForeignKey('diarias_cotacoes_voos.id'), nullable=True)
@@ -244,93 +209,30 @@ class DiariasItinerario(db.Model):
     escolha_justificativa_codigos = db.Column(db.String(500), nullable=True)
     escolha_justificativa_outros = db.Column(db.Text, nullable=True)
     escolha_declaracao_responsabilidade = db.Column(db.Boolean, default=False)
-    sei_id_escolha_passagens = db.Column(db.String(50), nullable=True)
-    sei_escolha_passagens_formatado = db.Column(db.String(50), nullable=True)
-    sei_id_memorando_cotacoes = db.Column(db.String(50), nullable=True)      # ID do 2º memorando (cotações)
-    sei_memorando_cotacoes_formatado = db.Column(db.String(50), nullable=True)  # Número formatado
+    escolha_via_sei = db.Column(db.Boolean, default=False)  # escolha feita externamente no SEI (doc 2977/543)
+    escolha_sei_opcoes = db.Column(db.String(100), nullable=True)  # opcoes escolhidas extraidas do PDF, ex: "1,2"
 
-    # Autorização SCDP (PDF externo, inserido pelo CCDP no financeiro)
-    sei_id_autorizacao_scdp = db.Column(db.String(50), nullable=True)
-    sei_autorizacao_scdp_formatado = db.Column(db.String(50), nullable=True)
-
-    # Nota de Empenho (documento SEI gerado pelo financeiro, idSerie 419)
-    nota_empenho_codigo = db.Column(db.String(50), nullable=True)
-    sei_id_nota_empenho = db.Column(db.String(50), nullable=True)
-    sei_nota_empenho_formatado = db.Column(db.String(50), nullable=True)
-
-    # Despacho CCDP → SGA (idSerie 754, pós NE)
-    sei_id_despacho_ccdp = db.Column(db.String(50), nullable=True)
-    sei_despacho_ccdp_formatado = db.Column(db.String(50), nullable=True)
-
-    # Ciência Superintendente + Despacho SGA → NCI (idSerie 2987)
+    # Ciência Superintendente
     ciencia_superintendente = db.Column(db.Boolean, default=False)
     ciencia_superintendente_data = db.Column(db.DateTime, nullable=True)
-    sei_id_despacho_sga = db.Column(db.String(50), nullable=True)
-    sei_despacho_sga_formatado = db.Column(db.String(50), nullable=True)
 
-    # Análise de Pagamento NCI (idSerie 461) + Despacho NCI (idSerie 5)
+    # Ciência NCI
     ciencia_nci = db.Column(db.Boolean, default=False)
     ciencia_nci_data = db.Column(db.DateTime, nullable=True)
     analise_pagamento_respostas = db.Column(db.Text, nullable=True)      # JSON com respostas S/N
     analise_pagamento_observacoes = db.Column(db.Text, nullable=True)
-    sei_id_analise_pagamento = db.Column(db.String(50), nullable=True)
-    sei_analise_pagamento_formatado = db.Column(db.String(50), nullable=True)
-    sei_id_despacho_nci = db.Column(db.String(50), nullable=True)
-    sei_despacho_nci_formatado = db.Column(db.String(50), nullable=True)
 
-    # Despacho APOIO/DFIN (idSerie 754, pós Análise NCI - Superintendente)
+    # Ciência APOIO/DFIN
     ciencia_apoio = db.Column(db.Boolean, default=False)
     ciencia_apoio_data = db.Column(db.DateTime, nullable=True)
-    sei_id_despacho_apoio = db.Column(db.String(50), nullable=True)
-    sei_despacho_apoio_formatado = db.Column(db.String(50), nullable=True)
 
-    # Despacho Diretor DFIN (idSerie 754 - Diretor → GEO)
+    # Ciência Diretor DFIN
     ciencia_diretor = db.Column(db.Boolean, default=False)
     ciencia_diretor_data = db.Column(db.DateTime, nullable=True)
-    sei_id_despacho_diretor = db.Column(db.String(50), nullable=True)
-    sei_despacho_diretor_formatado = db.Column(db.String(50), nullable=True)
 
-    # Despacho GEO (idSerie 754 - GEO → CCDP) + NL/PD/OB
+    # Ciência GEO
     ciencia_geo = db.Column(db.Boolean, default=False)
     ciencia_geo_data = db.Column(db.DateTime, nullable=True)
-    sei_id_despacho_geo = db.Column(db.String(50), nullable=True)
-    sei_despacho_geo_formatado = db.Column(db.String(50), nullable=True)
-
-    # NL - Nota de Liquidação (idSerie 420)
-    nl_codigo = db.Column(db.String(50), nullable=True)
-    sei_id_nl = db.Column(db.String(50), nullable=True)
-    sei_nl_formatado = db.Column(db.String(50), nullable=True)
-
-    # PD - Programação de Desembolso (idSerie 421)
-    pd_codigo = db.Column(db.String(50), nullable=True)
-    sei_id_pd = db.Column(db.String(50), nullable=True)
-    sei_pd_formatado = db.Column(db.String(50), nullable=True)
-
-    # OB - Ordem Bancária (idSerie 422)
-    ob_codigo = db.Column(db.String(50), nullable=True)
-    sei_id_ob = db.Column(db.String(50), nullable=True)
-    sei_ob_formatado = db.Column(db.String(50), nullable=True)
-
-    # Relatório de Viagem (idSerie 1908, gerado pelo solicitante após OB)
-    sei_id_relatorio_viagem = db.Column(db.String(50), nullable=True)
-    sei_relatorio_viagem_formatado = db.Column(db.String(50), nullable=True)
-
-    # Comprovante de Viagem (idSerie 35, upload PDF pelo solicitante após relatório)
-    sei_id_comprovante_viagem = db.Column(db.String(50), nullable=True)
-    sei_comprovante_viagem_formatado = db.Column(db.String(50), nullable=True)
-
-    # NP - Nota Patrimonial (idSerie 423, inserida pela CCDP)
-    np_codigo = db.Column(db.String(50), nullable=True)
-    sei_id_np = db.Column(db.String(50), nullable=True)
-    sei_np_formatado = db.Column(db.String(50), nullable=True)
-
-    # Documento Prestação SCDP (idSerie 264, upload externo pela CCDP)
-    sei_id_prestacao_scdp = db.Column(db.String(50), nullable=True)
-    sei_prestacao_scdp_formatado = db.Column(db.String(50), nullable=True)
-
-    # Despacho Final CCDP (idSerie 754, "Processo pago e concluído nesta unidade.")
-    sei_id_despacho_final = db.Column(db.String(50), nullable=True)
-    sei_despacho_final_formatado = db.Column(db.String(50), nullable=True)
 
     # Timeline / Etapa atual
     etapa_atual_id = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), default=1, index=True)
@@ -346,6 +248,12 @@ class DiariasItinerario(db.Model):
     etapa_atual = db.relationship('DiariasEtapa', foreign_keys=[etapa_atual_id], lazy='joined')
     escolha_voo_ida = db.relationship('DiariasCotacaoVoo', foreign_keys=[escolha_voo_ida_id], lazy='joined')
     escolha_voo_volta = db.relationship('DiariasCotacaoVoo', foreign_keys=[escolha_voo_volta_id], lazy='joined')
+    documentos_sei = db.relationship('DiariasDocumentoSei', lazy='select',
+                                      cascade='all, delete-orphan',
+                                      backref=db.backref('itinerario', lazy='select'))
+    quadro_orcamentario = db.relationship('DiariasQuadroOrcamentario', uselist=False,
+                                           lazy='joined', cascade='all, delete-orphan',
+                                           backref=db.backref('itinerario', lazy='select'))
     itens = db.relationship('DiariasItemItinerario', backref='itinerario', lazy='dynamic',
                             cascade='all, delete-orphan')
     paradas = db.relationship('DiariasParada', backref='itinerario', lazy='dynamic',
@@ -385,12 +293,88 @@ class DiariasItinerario(db.Model):
                 return None
         return None
 
+    # ── Helpers para documentos SEI normalizados ──────────────────────────
+
+    def _load_docs(self):
+        """Carrega e cacheia documentos SEI em dict por tipo."""
+        if not hasattr(self, '_docs_cache') or self._docs_cache is None:
+            self._docs_cache = {d.tipo_documento: d for d in self.documentos_sei}
+        return self._docs_cache
+
+    def get_doc(self, tipo):
+        """Retorna DiariasDocumentoSei ou None."""
+        docs = self._load_docs()
+        return docs.get(tipo)
+
+    def set_doc(self, tipo, sei_id=None, sei_formatado=None, codigo=None):
+        """Cria ou atualiza documento SEI."""
+        doc = self.get_doc(tipo)
+        if not doc:
+            doc = DiariasDocumentoSei(itinerario_id=self.id, tipo_documento=tipo)
+            db.session.add(doc)
+            self.documentos_sei.append(doc)
+            self._docs_cache[tipo] = doc
+        if sei_id is not None:
+            doc.sei_id = sei_id
+        if sei_formatado is not None:
+            doc.sei_formatado = sei_formatado
+        if codigo is not None:
+            doc.codigo = codigo
+        return doc
+
+    def has_doc(self, tipo):
+        """Verifica se documento existe e tem sei_id preenchido."""
+        doc = self.get_doc(tipo)
+        return doc is not None and doc.sei_id is not None
+
     @property
     def valor_total_formatado(self):
         """Retorna o valor total formatado em moeda brasileira."""
         if self.valor_total is None:
             return 'R$ 0,00'
         return f'R$ {self.valor_total:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+class DiariasDocumentoSei(db.Model):
+    """Documento SEI vinculado ao itinerário (N linhas por itinerário, 1 por tipo)."""
+    __tablename__ = 'diarias_itinerario_documentos'
+    __table_args__ = (
+        db.UniqueConstraint('itinerario_id', 'tipo_documento', name='uq_itin_tipo_doc'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    itinerario_id = db.Column(db.Integer, db.ForeignKey('diarias_itinerario.id', ondelete='CASCADE'),
+                              nullable=False, index=True)
+    tipo_documento = db.Column(db.String(50), nullable=False)
+    sei_id = db.Column(db.String(50), nullable=True)
+    sei_formatado = db.Column(db.String(50), nullable=True)
+    codigo = db.Column(db.String(50), nullable=True)
+
+    def __repr__(self):
+        return f'<DiariasDocumentoSei {self.tipo_documento} itinerario_id={self.itinerario_id}>'
+
+
+class DiariasQuadroOrcamentario(db.Model):
+    """Quadro orçamentário vinculado ao itinerário (relação 1:1)."""
+    __tablename__ = 'diarias_itinerario_quadro_orcamentario'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    itinerario_id = db.Column(db.Integer, db.ForeignKey('diarias_itinerario.id', ondelete='CASCADE'),
+                              unique=True, nullable=False)
+    ug = db.Column(db.String(20), nullable=True)
+    funcao = db.Column(db.String(10), nullable=True)
+    subfuncao = db.Column(db.String(10), nullable=True)
+    programa = db.Column(db.String(10), nullable=True)
+    plano_interno = db.Column(db.String(10), nullable=True)
+    fonte_recursos = db.Column(db.String(20), nullable=True)
+    natureza_despesa = db.Column(db.String(20), nullable=True)
+    valor_inicial_nr = db.Column(db.Numeric(14, 2), nullable=True)
+    saldo_nr = db.Column(db.Numeric(14, 2), nullable=True)
+    valor_despesa = db.Column(db.Numeric(14, 2), nullable=True)
+    saldo_atual_nr = db.Column(db.Numeric(14, 2), nullable=True)
+
+    def __repr__(self):
+        return f'<DiariasQuadroOrcamentario itinerario_id={self.itinerario_id}>'
 
 
 class DiariasItemItinerario(db.Model):
@@ -557,6 +541,7 @@ class DiariasCotacaoVoo(db.Model):
     # Dados gerais da opcao
     bagagem = db.Column(db.String(50), nullable=True)
     valor = db.Column(db.Numeric(10, 2), nullable=False)
+    fonte = db.Column(db.String(20), nullable=True, default='manual')  # 'manual' ou 'ocr_sei'
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     contrato = db.relationship('Contrato', lazy='joined',
@@ -704,3 +689,45 @@ class DiariasControlePrestacao(db.Model):
 
     def __repr__(self):
         return f'<DiariasControlePrestacao {self.id} - status={self.status}>'
+
+
+# ── Movimentação SEI (espelho de documentos no processo) ────────────────────
+
+class DiariasMovimentacao(db.Model):
+    """Movimentação de documentos SEI para processos de diárias.
+    Espelha a estrutura de SeiMovimentacao / CgfrMovimentacao.
+    """
+
+    __tablename__ = 'diarias_movimentacao'
+
+    # Chaves Principais
+    id_documento = db.Column('IdDocumento', db.String(50), primary_key=True)
+    protocolo_procedimento = db.Column(db.String(50), index=True)
+
+    # Dados do Procedimento
+    id_procedimento = db.Column('IdProcedimento', db.String(50))
+    procedimento_formatado = db.Column('ProcedimentoFormatado', db.String(50))
+
+    # Dados do Documento
+    documento_formatado = db.Column('DocumentoFormatado', db.String(50))
+    link_acesso = db.Column('LinkAcesso', db.Text)
+    descricao = db.Column('Descricao', db.Text)
+    data = db.Column('Data', db.String(20))
+    numero = db.Column('Numero', db.String(50))
+
+    # Dados da Série
+    id_serie = db.Column('IdSerie', db.Integer)
+    serie_nome = db.Column('Serie.Nome', db.String(255))
+    serie_aplicabilidade = db.Column('Serie.Aplicabilidade', db.String(100))
+
+    # Dados da Unidade Elaboradora
+    unidade_id = db.Column('UnidadeElaboradora.IdUnidade', db.String(50))
+    unidade_sigla = db.Column('UnidadeElaboradora.Sigla', db.String(50))
+    unidade_descricao = db.Column('UnidadeElaboradora.Descricao', db.String(255))
+
+    # Campos de Controle
+    obs = db.Column(db.Text)
+    tempo_execucao = db.Column(db.Float)
+
+    def __repr__(self):
+        return f'<DiariasMovimentacao {self.id_documento}>'
