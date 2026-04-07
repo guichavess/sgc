@@ -14,28 +14,86 @@
 {# Filtros #}
 <div class="card mb-4 border-0 shadow-sm" style="overflow: visible; position: relative; z-index: 10;">
     <div class="card-body p-3" style="overflow: visible;">
-        <form method="get" action="{{ url_for('diarias.administracao') }}">
+        <form method="get" action="{{ url_for('diarias.administracao') }}" id="filtro-form">
             <div class="row g-2 align-items-center">
-                <div class="col-md-4">
+                <div class="col-auto">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                         <input type="text" name="q" class="form-control border-start-0 ps-0"
                                placeholder="Processo, CPF, solicitante..." value="{{ request.args.get('q', '') }}">
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <select name="etapa" class="form-select form-select-sm">
-                        <option value="">Etapa: Todas</option>
-                        {% for e in etapas %}
-                        <option value="{{ e.id }}" {{ 'selected' if filtro_etapa == e.id|string }}>{{ e.nome }}</option>
-                        {% endfor %}
-                    </select>
+                <div class="col-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
+                                type="button" id="dropdownEtapas" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                            <i class="fas fa-tasks me-1"></i>
+                            <span id="labelEtapas">Etapa</span>
+                            <span class="badge bg-primary ms-1" id="badgeEtapas" style="display: none;">0</span>
+                        </button>
+                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 280px; z-index: 1060;">
+                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                                <small class="text-muted fw-bold">Etapas desejadas:</small>
+                                <a href="#" class="text-decoration-none small" onclick="limparSelecaoEtapa(this); return false;">Limpar</a>
+                            </div>
+                            <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
+                                {% for e in etapas %}
+                                <div class="form-check item-filtro py-1">
+                                    <input class="form-check-input filtro-check-etapa" type="checkbox" name="filtro_etapa"
+                                        value="{{ e.id }}" id="et_{{ loop.index }}"
+                                        {% if e.id in filtro_etapas %}checked{% endif %}
+                                        onchange="atualizarLabelEtapa()">
+                                    <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="et_{{ loop.index }}" style="cursor: pointer;">
+                                        <span>
+                                            <span class="d-inline-block rounded-circle me-1" style="width: 10px; height: 10px; background-color: {{ e.cor_hex }};"></span>
+                                            {{ e.nome }}
+                                        </span>
+                                        <span class="badge bg-light text-muted border ms-2">{{ etapa_counts.get(e.id, 0) }}</span>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-2 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold" title="Filtrar">
-                        <i class="bi bi-funnel"></i>
+                <div class="col-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
+                                type="button" id="dropdownTipos" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                            <i class="bi bi-signpost-split me-1"></i>
+                            <span id="labelTipos">Tipo</span>
+                            <span class="badge bg-primary ms-1" id="badgeTipos" style="display: none;">0</span>
+                        </button>
+                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 240px; z-index: 1060;">
+                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                                <small class="text-muted fw-bold">Tipo de diária:</small>
+                                <a href="#" class="text-decoration-none small" onclick="limparSelecaoTipo(this); return false;">Limpar</a>
+                            </div>
+                            {% for t in tipos_itinerario %}
+                            <div class="form-check item-filtro py-1">
+                                <input class="form-check-input filtro-check-tipo" type="checkbox" name="filtro_tipo"
+                                    value="{{ t.id }}" id="tipo_{{ t.id }}"
+                                    {% if t.id in filtro_tipos %}checked{% endif %}
+                                    onchange="atualizarLabelTipo()">
+                                <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="tipo_{{ t.id }}" style="cursor: pointer;">
+                                    <span>
+                                        <i class="bi {{ t.icone }} me-1" style="color: {{ t.cor }};"></i>
+                                        {{ t.nome }}
+                                    </span>
+                                    <span class="badge bg-light text-muted border ms-2">{{ tipo_counts.get(t.id, 0) }}</span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold" title="Filtrar">
+                        <i class="bi bi-funnel me-1"></i>Filtrar
                     </button>
-                    {% if request.args.get('q') or filtro_etapa %}
+                </div>
+                <div class="col-auto">
+                    {% if request.args.get('q') or filtro_etapas or filtro_tipos %}
                     <a href="{{ url_for('diarias.administracao') }}" class="btn btn-outline-danger btn-sm" title="Limpar Filtros">
                         <i class="bi bi-x-lg"></i>
                     </a>
@@ -162,21 +220,21 @@
             <nav aria-label="Navegação de páginas">
                 <ul class="pagination pagination-sm mb-0">
                     <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-                        <a class="page-link" href="{{ url_for('diarias.administracao', page=pagination.prev_num, q=request.args.get('q',''), etapa=filtro_etapa) if pagination.has_prev else '#' }}">
+                        <a class="page-link" href="{{ url_for('diarias.administracao', page=pagination.prev_num, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos) if pagination.has_prev else '#' }}">
                             <i class="bi bi-chevron-left"></i>
                         </a>
                     </li>
                     {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                         {% if p %}
                         <li class="page-item {{ 'active' if p == pagination.page }}">
-                            <a class="page-link" href="{{ url_for('diarias.administracao', page=p, q=request.args.get('q',''), etapa=filtro_etapa) }}">{{ p }}</a>
+                            <a class="page-link" href="{{ url_for('diarias.administracao', page=p, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos) }}">{{ p }}</a>
                         </li>
                         {% else %}
                         <li class="page-item disabled"><span class="page-link">...</span></li>
                         {% endif %}
                     {% endfor %}
                     <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-                        <a class="page-link" href="{{ url_for('diarias.administracao', page=pagination.next_num, q=request.args.get('q',''), etapa=filtro_etapa) if pagination.has_next else '#' }}">
+                        <a class="page-link" href="{{ url_for('diarias.administracao', page=pagination.next_num, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos) if pagination.has_next else '#' }}">
                             <i class="bi bi-chevron-right"></i>
                         </a>
                     </li>
@@ -186,4 +244,55 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+function atualizarLabelEtapa() {
+    const checkboxes = document.querySelectorAll('.filtro-check-etapa:checked');
+    const count = checkboxes.length;
+    const label = document.getElementById('labelEtapas');
+    const badge = document.getElementById('badgeEtapas');
+    if (count > 0) {
+        label.innerText = count === 1 ? '1 Selecionada' : count + ' Selecionadas';
+        badge.innerText = count;
+        badge.style.display = 'inline-block';
+    } else {
+        label.innerText = 'Etapa';
+        badge.style.display = 'none';
+    }
+}
+
+function limparSelecaoEtapa(link) {
+    const dropdown = link.closest('.dropdown-menu');
+    const inputs = dropdown.querySelectorAll('input[type="checkbox"]');
+    inputs.forEach(function(input) { input.checked = false; });
+    atualizarLabelEtapa();
+}
+
+function atualizarLabelTipo() {
+    const checkboxes = document.querySelectorAll('.filtro-check-tipo:checked');
+    const count = checkboxes.length;
+    const label = document.getElementById('labelTipos');
+    const badge = document.getElementById('badgeTipos');
+    if (count > 0) {
+        label.innerText = count === 1 ? '1 Selecionado' : count + ' Selecionados';
+        badge.innerText = count;
+        badge.style.display = 'inline-block';
+    } else {
+        label.innerText = 'Tipo';
+        badge.style.display = 'none';
+    }
+}
+
+function limparSelecaoTipo(link) {
+    const dropdown = link.closest('.dropdown-menu');
+    const inputs = dropdown.querySelectorAll('input[type="checkbox"]');
+    inputs.forEach(function(input) { input.checked = false; });
+    atualizarLabelTipo();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    atualizarLabelEtapa();
+    atualizarLabelTipo();
+});
+</script>
 {% endblock %}

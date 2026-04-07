@@ -187,7 +187,7 @@ def assinar_documento(token, unidade_id, dados_assinatura):
 
     try:
         print(f"✍️ Tentando assinar documento {dados_assinatura['protocolo_doc']}...")
-        response = requests.patch(url, json=payload, headers=headers, verify=False)
+        response = requests.patch(url, json=payload, headers=headers, verify=False, timeout=30)
 
         if response.status_code == 204:
             return {"sucesso": True}

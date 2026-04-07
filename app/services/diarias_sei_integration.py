@@ -4,6 +4,7 @@ Integração SEI para o módulo de Diárias.
 Cria procedimento (processo), documento SEAD_MEMORANDO_SGA, requisição de diárias
 e documentos externos (anexos) no SEI quando uma solicitação Nacional é criada.
 """
+import io
 import requests
 import base64
 from datetime import date, datetime
@@ -26,6 +27,7 @@ ID_SERIE_AUTORIZACAO_SECRETARIO = "574"  # "SEAD_AUTORIZAÇÃO_DO_SECRETÁRIO"
 ID_SERIE_QUADRO_ORCAMENTARIO = "723"   # "SEAD_QUADRO_ORCAMENTARIO"
 ID_SERIE_DESPACHO = "754"              # "SEAD_DESPACHO"
 ID_SERIE_ESCOLHA_PASSAGENS = "2977"    # "SEAD_ESCOLHA_PASSAGENS"
+ID_SERIE_REQUISICAO_INTERNA = "543"    # "SEAD_REQUISIÇÃO_INTERNA" (alternativa para escolha passagens)
 ID_SERIE_NOTA_EMPENHO = "419"         # "NE - Nota de Empenho"
 ID_SERIE_AUTORIZACAO_SCDP = "264"     # Doc externo para Autorização SCDP
 ID_SERIE_DESPACHO_SGA = "2987"        # "SEAD_DESPACHO_SGA" (Despacho do Superintendente)
@@ -38,7 +40,77 @@ ID_SERIE_RELATORIO_VIAGEM = "1908"  # "SEAD_RELATÓRIO DE VIAGEM (DIÁRIA)"
 ID_SERIE_COMPROVANTE_VIAGEM = "35"    # "Comprovante" (upload externo pelo solicitante)
 ID_SERIE_NP = "423"                   # "NP - Nota Patrimonial"
 ID_SERIE_PRESTACAO_SCDP = "264"       # "Documento" (Externo - Prestação SCDP)
+
+# Conjuntos de IdSeries para tipos de documento com múltiplas variantes.
+# Diferentes processos podem usar IdSeries distintas para o mesmo tipo de documento.
+ID_SERIES_RELATORIO_VIAGEM = {
+    "1908",  # SEAD_RELATÓRIO DE VIAGEM (DIÁRIA) — padrão do fluxo SGC
+    "261",   # Relatório de Viagem a Serviço — variante encontrada em processos
+}
+ID_SERIES_ANALISE_HABILITACAO = {
+    "7",     # Análise — variante encontrada em processos
+}
+ID_SERIES_AUTORIZACAO_SCDP = {
+    "35",    # Comprovante — variante encontrada em processos
+}
+ID_SERIES_PRESTACAO_SCDP = {
+    "264",   # Documento (Externo) — detectado por keyword no campo Numero/Descricao
+}
+ID_SERIE_MEMORANDO_GENERICO = "12"    # "Memorando" (genérico, usado em processos importados)
+ID_SERIE_MEMORANDO_SEAD = "534"       # "SEAD_MEMORANDO" (usado em processos antigos/importados)
+ID_SERIE_MEMORANDO_DIARIA = "1907"    # "SEAD MEMORANDO DE DIÁRIA" (variante encontrada em processos)
+
+# Conjunto completo de IdSeries que representam memorandos em processos de diárias.
+# Inclui variantes de diferentes unidades/períodos do SEI.
+ID_SERIES_MEMORANDO = {
+    "534",   # SEAD_MEMORANDO
+    "1907",  # SEAD MEMORANDO DE DIÁRIA
+    "2186",  # Variante memorando
+    "2187",  # Variante memorando
+    "2188",  # Variante memorando
+    "2189",  # Variante memorando
+    "2195",  # Variante memorando
+    "2986",  # SEAD_MEMORANDO_SGA (padrão atual)
+    "3517",  # Variante memorando
+    "3550",  # Variante memorando
+    "3591",  # Variante memorando
+    "3950",  # Variante memorando
+    "12",    # Memorando (genérico)
+}
+ID_SERIE_AUTORIZACAO_GENERICA = "269" # "Autorização" (alternativa à SEAD_AUTORIZAÇÃO_DO_SECRETÁRIO)
+ID_SERIE_CONVITE = "127"              # "Convite" (folder/doc do evento em processos importados)
+ID_SERIE_ANEXO = "263"                # "Anexo" (folder/doc do evento em processos importados)
+ID_SERIE_NOTA_RESERVA = "425"         # "SEAD_NOTA_DE_RESERVA" (usada no financeiro)
 ID_HIPOTESE_LEGAL_INFO_PESSOAL = "4"  # "Informação Pessoal" - Art. 31 da Lei nº 12.527/2011
+
+# Mapeamento: IdSerie SEI → tipo_documento na tabela diarias_itinerario_documentos
+# Usado pela sincronização para detectar documentos existentes no SEI
+SERIE_TIPO_DOCUMENTO_MAP = {
+    **{sid: 'memorando' for sid in ID_SERIES_MEMORANDO},
+    ID_SERIE_REQUISICAO_DIARIAS: 'requisicao',
+    ID_SERIE_REQUISICAO_PASSAGENS: 'requisicao_passagens',
+    ID_SERIE_CONVITE: 'doc_externo',
+    ID_SERIE_ANEXO: 'doc_externo',
+    ID_SERIE_DOCUMENTO_EXTERNO: 'doc_externo',
+    ID_SERIE_AUTORIZACAO_SECRETARIO: 'autorizacao',
+    ID_SERIE_AUTORIZACAO_GENERICA: 'autorizacao',
+    ID_SERIE_QUADRO_ORCAMENTARIO: 'quadro_orcamentario',
+    ID_SERIE_NOTA_RESERVA: 'nota_reserva',
+    ID_SERIE_NOTA_EMPENHO: 'nota_empenho',
+    ID_SERIE_COTACAO: 'memorando_cotacoes',
+    ID_SERIE_ESCOLHA_PASSAGENS: 'escolha_passagens',
+    ID_SERIE_REQUISICAO_INTERNA: 'escolha_passagens',
+    ID_SERIE_DESPACHO_SGA: 'despacho_sga',
+    ID_SERIE_ANALISE_PAGAMENTO: 'analise_pagamento',
+    ID_SERIE_DESPACHO_NCI: 'despacho_nci',
+    ID_SERIE_NL: 'nl',
+    ID_SERIE_PD: 'pd',
+    ID_SERIE_OB: 'ob',
+    **{sid: 'relatorio_viagem' for sid in ID_SERIES_RELATORIO_VIAGEM},
+    **{sid: 'analise_habilitacao' for sid in ID_SERIES_ANALISE_HABILITACAO},
+    **{sid: 'autorizacao_scdp' for sid in ID_SERIES_AUTORIZACAO_SCDP},
+    ID_SERIE_NP: 'np',
+}
 
 # Unidade destino pós-autorização (Diretoria de Planejamento e Finanças)
 UNIDADE_DFIN_APOIO = "110009066"  # "SEAD-PI/GAB/SGACG/DFIN/APOIO"
@@ -186,16 +258,34 @@ def gerar_memorando_diarias(token, id_procedimento, dados_memorando,
     data_viagem_extenso = _formatar_data_extenso(data_viagem) if data_viagem else ''
     data_retorno_extenso = _formatar_data_extenso(data_retorno) if data_retorno else ''
 
-    # Monta referências dos documentos criados anteriormente
+    # Monta referências dos documentos criados anteriormente (com links clicáveis)
+    SEI_LINK_BASE = "https://sei.pi.gov.br/sei/controlador.php"
+
     ref_diarias = ''
     if doc_req_diarias:
         doc_fmt = doc_req_diarias.get('DocumentoFormatado', '')
-        ref_diarias = f'<i>({doc_fmt})</i>' if doc_fmt else ''
+        id_doc = doc_req_diarias.get('IdDocumento', '')
+        if doc_fmt and id_doc:
+            link = (
+                f"{SEI_LINK_BASE}?acao=procedimento_trabalhar"
+                f"&id_procedimento={id_procedimento}&id_documento={id_doc}"
+            )
+            ref_diarias = f'(<a href="{link}">{doc_fmt}</a>)'
+        elif doc_fmt:
+            ref_diarias = f'<i>({doc_fmt})</i>'
 
     ref_passagens = ''
     if doc_req_passagens:
         doc_fmt = doc_req_passagens.get('DocumentoFormatado', '')
-        ref_passagens = f'<i>({doc_fmt})</i>' if doc_fmt else ''
+        id_doc = doc_req_passagens.get('IdDocumento', '')
+        if doc_fmt and id_doc:
+            link = (
+                f"{SEI_LINK_BASE}?acao=procedimento_trabalhar"
+                f"&id_procedimento={id_procedimento}&id_documento={id_doc}"
+            )
+            ref_passagens = f'(<a href="{link}">{doc_fmt}</a>)'
+        elif doc_fmt:
+            ref_passagens = f'<i>({doc_fmt})</i>'
 
     # Monta o texto de solicitação conforme os documentos disponíveis
     if ref_diarias and ref_passagens:
@@ -408,6 +498,38 @@ def gerar_requisicao_diarias(token, id_procedimento, dados_requisicao):
             <tr>
                 <td style="border:1px solid #000; padding:8px; width:50%;"><b>TRECHO:</b> {trecho}</td>
                 <td style="border:1px solid #000; padding:8px; width:50%;"><b>PERÍODO:</b> {periodo_viagem} a {periodo_retorno}</td>
+            </tr>
+        </table>
+
+        <br><br>
+
+        <p style="text-align: center; font-size: 10pt;">
+            (assinado eletronicamente)<br>
+            <b>PEDRO ALEXANDRE CABRAL DE OLIVEIRA</b><br>
+            Superintendente de Gestão Administrativa - SEAD
+        </p>
+
+        <br>
+
+        <table style="width:100%; border-collapse:collapse; border:2px solid #000;">
+            <tr>
+                <td style="border:1px solid #000; padding:8px; background-color:#d9e2f3; font-weight:bold;">DESPACHO DO SECRETÁRIO:</td>
+            </tr>
+            <tr>
+                <td style="border:1px solid #000; padding:12px;">
+                    <p style="text-indent: 2em; text-align: justify;">
+                        Autorizo o pagamento das diárias, na forma legal.
+                    </p>
+                    <p style="text-indent: 2em; text-align: justify;">
+                        À DFIN, para conhecimento e demais providências necessárias.
+                    </p>
+                    <br>
+                    <p style="text-align: center; font-size: 10pt;">
+                        (assinado eletronicamente)<br>
+                        <b>SAMUEL PONTES DO NASCIMENTO</b><br>
+                        Secretário da Administração do Estado
+                    </p>
+                </td>
             </tr>
         </table>
     </div>
@@ -952,7 +1074,7 @@ def consultar_documentos_procedimento(protocolo_procedimento):
         }
 
         print(f"[DEBUG SEI] Listando documentos: {url}?protocolo_procedimento={protocolo_procedimento}")
-        response = requests.get(url, params=params, headers=headers, timeout=30, verify=False)
+        response = requests.get(url, params=params, headers=headers, timeout=60, verify=False)
         print(f"[DEBUG SEI] Listar documentos - Status: {response.status_code}")
 
         if response.status_code != 200:
@@ -1152,8 +1274,8 @@ def verificar_autorizacao_diaria(itinerario):
             'assinaturas': info_assinaturas['assinaturas'],
         }
 
-        # Avanca para etapa 2 se ainda estiver na etapa 1
-        if itinerario.etapa_atual_id == DiariasEtapaID.SOLICITACAO_INICIADA:
+        # Avanca etapa se ainda estiver na etapa 1 (Solicitação Inicial)
+        if itinerario.etapa_atual_id == DiariasEtapaID.SOLICITACAO_INICIAL:
             doc_fmt = doc_encontrado.get('DocumentoFormatado', '?')
             nomes = info_assinaturas['nomes']
 
@@ -1162,16 +1284,22 @@ def verificar_autorizacao_diaria(itinerario):
                 f"{', '.join(nomes)}"
             )
 
+            # Próxima etapa: Escolha do Voo (se passagens) ou Análise da Solicitação
+            from app.constants import TIPOS_COM_PASSAGENS
+            proxima_etapa = (DiariasEtapaID.ESCOLHA_VOO
+                             if itinerario.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
+                             else DiariasEtapaID.ANALISE_SOLICITACAO)
+
             DiariaService.registrar_movimentacao(
                 itinerario.id,
-                DiariasEtapaID.FINANCEIRO,
+                proxima_etapa,
                 usuario_id=None,
                 comentario=comentario,
             )
             resultado['avancou_etapa'] = True
             current_app.logger.info(
-                f"SEI Diarias: Itinerario {itinerario.id} avancou para etapa 2 "
-                f"(Financeiro) - Documento {doc_fmt}."
+                f"SEI Diarias: Itinerario {itinerario.id} avancou para etapa {int(proxima_etapa)} "
+                f"- Documento {doc_fmt}."
             )
 
             # Encaminha o processo para DFIN/APOIO (Diretoria de Planejamento e Financas)
@@ -1208,12 +1336,9 @@ def verificar_autorizacao_diaria(itinerario):
                             interessados=nomes_interessados,
                         )
                         if despacho_ret:
-                            itinerario.sei_id_despacho_dfin = str(
-                                despacho_ret.get('IdDocumento', '')
-                            )
-                            itinerario.sei_despacho_dfin_formatado = despacho_ret.get(
-                                'DocumentoFormatado', ''
-                            )
+                            itinerario.set_doc('despacho_dfin',
+                                               sei_id=str(despacho_ret.get('IdDocumento', '')),
+                                               sei_formatado=despacho_ret.get('DocumentoFormatado', ''))
                             from app.extensions import db
                             db.session.commit()
                             resultado['despacho_dfin'] = despacho_ret
@@ -3427,3 +3552,566 @@ def gerar_despacho_final_ccdp(token, id_procedimento, sei_protocolo):
     except Exception as e:
         current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho final CCDP: {e}")
         return None
+
+
+def _vincular_escolha_a_voos(itinerario, dados_escolha):
+    """
+    Tenta vincular as opcoes escolhidas (extraidas do PDF) aos DiariasCotacaoVoo
+    ja importados. Best-effort: se falhar, os dados textuais ficam disponiveis.
+
+    Estrategia:
+    - Ordena cotacoes por tipo_trecho (ida/volta) e por id (ordem de insercao = ordem no PDF)
+    - Se ha 2 opcoes escolhidas: assume 1a = IDA, 2a = VOLTA
+    - Se ha 1 opcao: tenta vincular como IDA
+    """
+    from app.models.diaria import DiariasCotacaoVoo
+
+    opcoes = dados_escolha.get('opcoes_escolhidas', [])
+    if not opcoes:
+        return
+
+    voos_ida = DiariasCotacaoVoo.query.filter_by(
+        itinerario_id=itinerario.id, tipo_trecho='ida'
+    ).order_by(DiariasCotacaoVoo.id).all()
+
+    voos_volta = DiariasCotacaoVoo.query.filter_by(
+        itinerario_id=itinerario.id, tipo_trecho='volta'
+    ).order_by(DiariasCotacaoVoo.id).all()
+
+    if not voos_ida and not voos_volta:
+        return
+
+    try:
+        if len(opcoes) >= 2 and voos_ida and voos_volta:
+            # 2 opcoes: 1a = IDA, 2a = VOLTA (opcoes sao 1-indexed)
+            idx_ida = opcoes[0] - 1
+            idx_volta = opcoes[1] - 1
+            if 0 <= idx_ida < len(voos_ida):
+                itinerario.escolha_voo_ida_id = voos_ida[idx_ida].id
+            if 0 <= idx_volta < len(voos_volta):
+                itinerario.escolha_voo_volta_id = voos_volta[idx_volta].id
+        elif len(opcoes) == 1 and voos_ida:
+            idx = opcoes[0] - 1
+            if 0 <= idx < len(voos_ida):
+                itinerario.escolha_voo_ida_id = voos_ida[idx].id
+    except (IndexError, ValueError):
+        pass  # Falha silenciosa — dados textuais permanecem
+
+
+# =============================================================================
+# SINCRONIZAÇÃO INDIVIDUAL — Atualizar documentos e etapa a partir do SEI
+# =============================================================================
+
+def sincronizar_documentos_diaria(itinerario, force_cotacoes=False):
+    """
+    Consulta documentos do processo no SEI e atualiza:
+    1. Tabela diarias_itinerario_documentos (upsert por tipo_documento)
+    2. etapa_atual_id baseada nos documentos encontrados
+
+    Lógica de determinação de etapa (da mais avançada para a mais recente):
+        - Tem OB/PD/NL → Concessão (4) ou Prestação (5) se tem relatório
+        - Tem NR/análise_pagamento → Análise (3)
+        - Tem cotações/escolha_passagens → Escolha do Voo (2)
+        - Tem autorização assinada → Escolha do Voo (2) ou Análise (3) conforme tipo
+        - Default: Solicitação Inicial (1)
+
+    Args:
+        itinerario: objeto DiariasItinerario (com sei_protocolo preenchido)
+
+    Returns:
+        dict com {sucesso, docs_atualizados, etapa_anterior, etapa_nova, msgs, erro}
+    """
+    from app.extensions import db
+    from app.constants import DiariasEtapaID, TIPOS_COM_PASSAGENS
+
+    resultado = {
+        'sucesso': False,
+        'docs_atualizados': 0,
+        'docs_encontrados': [],
+        'etapa_anterior': itinerario.etapa_atual_id,
+        'etapa_nova': itinerario.etapa_atual_id,
+        'msgs': [],
+        'erro': None,
+    }
+
+    if not itinerario.sei_protocolo:
+        resultado['erro'] = 'Itinerário sem protocolo SEI.'
+        return resultado
+
+    # 1. Buscar documentos do SEI
+    res_docs = consultar_documentos_procedimento(itinerario.sei_protocolo)
+    if not res_docs['sucesso']:
+        resultado['erro'] = res_docs.get('erro', 'Erro ao consultar SEI.')
+        return resultado
+
+    documentos_sei = res_docs['documentos']
+    resultado['msgs'].append(f'{len(documentos_sei)} documento(s) encontrado(s) no SEI.')
+
+    # 2. Mapear documentos SEI → tipo_documento local e fazer upsert
+    tipos_encontrados = set()
+    docs_count = 0
+
+    for doc in documentos_sei:
+        id_serie = doc.get('Serie', {}).get('IdSerie', '')
+        serie_nome = doc.get('Serie', {}).get('Nome', '')
+        tipo_doc = SERIE_TIPO_DOCUMENTO_MAP.get(id_serie)
+
+        # Refinamento: IdSerie 264 (Documento Externo) pode ser prestação SCDP
+        # Detecta pela descrição ou número quando o doc externo é um comprovante SCDP
+        if id_serie == ID_SERIE_DOCUMENTO_EXTERNO:
+            texto_ref = ((doc.get('Descricao', '') or '') + ' ' + (doc.get('Numero', '') or '')).lower()
+            if any(kw in texto_ref for kw in ('scdp', 'prestação', 'prestacao')):
+                tipo_doc = 'prestacao_scdp'
+
+        if not tipo_doc:
+            continue
+
+        sei_id = str(doc.get('IdDocumento', ''))
+        sei_formatado = str(doc.get('DocumentoFormatado', ''))
+
+        if not sei_id:
+            continue
+
+        tipos_encontrados.add(tipo_doc)
+
+        # Upsert: só atualiza se não existe ou se o sei_id é diferente/vazio
+        doc_local = itinerario.get_doc(tipo_doc)
+        novo = False
+        if not doc_local:
+            itinerario.set_doc(tipo_doc, sei_id=sei_id, sei_formatado=sei_formatado)
+            docs_count += 1
+            novo = True
+        elif not doc_local.sei_id or doc_local.sei_id != sei_id:
+            itinerario.set_doc(tipo_doc, sei_id=sei_id, sei_formatado=sei_formatado)
+            docs_count += 1
+            novo = True
+
+        resultado['docs_encontrados'].append({
+            'tipo': tipo_doc,
+            'serie_nome': serie_nome,
+            'sei_formatado': sei_formatado,
+            'novo': novo,
+        })
+
+    resultado['docs_atualizados'] = docs_count
+    if docs_count:
+        resultado['msgs'].append(f'{docs_count} documento(s) atualizado(s) no banco.')
+
+    # 2b. Se tem cotação, tenta importar opções de voo via OCR
+    # Detecta docs de cotação: IdSerie 272 (Cotação) OU secundários (264, 263) com keywords
+    _kw_cotacao = ('cotaç', 'cotac', 'passag', 'voo', 'vôo')
+    _tem_doc_cotacao = 'memorando_cotacoes' in tipos_encontrados or any(
+        str(d.get('Serie', {}).get('IdSerie', '')) == ID_SERIE_COTACAO
+        or (
+            str(d.get('Serie', {}).get('IdSerie', '')) in (ID_SERIE_DOCUMENTO_EXTERNO, ID_SERIE_ANEXO)
+            and any(kw in (d.get('Serie', {}).get('Nome', '') + ' ' + d.get('Descricao', '')).lower()
+                    for kw in _kw_cotacao)
+        )
+        for d in documentos_sei
+    )
+    if _tem_doc_cotacao:
+        try:
+            res_cot = importar_cotacoes_do_sei(itinerario, documentos_sei, force=force_cotacoes)
+            resultado['msgs'].extend(res_cot.get('msgs', []))
+            resultado['cotacoes_importadas'] = res_cot.get('cotacoes_importadas', 0)
+        except Exception as e:
+            resultado['msgs'].append(f'Erro ao importar cotações: {str(e)[:100]}')
+
+    # 2c. Extrair dados de escolha de passagens do PDF no SEI (doc 2977 ou 543)
+    if 'escolha_passagens' in tipos_encontrados and not itinerario.escolha_voo_ida_id and not itinerario.escolha_sei_opcoes:
+        doc_escolha = itinerario.get_doc('escolha_passagens')
+        if doc_escolha and doc_escolha.sei_formatado:
+            try:
+                pdf_bytes = baixar_documento_sei(doc_escolha.sei_formatado)
+                if pdf_bytes:
+                    from app.services.escolha_passagens_parser import extrair_escolha_passagens
+                    dados_escolha = extrair_escolha_passagens(pdf_bytes)
+
+                    itinerario.escolha_via_sei = True
+                    itinerario.escolha_sei_opcoes = ','.join(
+                        str(n) for n in dados_escolha.get('opcoes_escolhidas', [])
+                    ) or None
+                    if dados_escolha.get('menor_valor') is not None:
+                        itinerario.escolha_menor_valor = dados_escolha['menor_valor']
+                    itinerario.escolha_justificativa_codigos = ','.join(
+                        dados_escolha.get('justificativa_codigos', [])
+                    ) or None
+                    itinerario.escolha_justificativa_outros = dados_escolha.get('justificativa_outros_texto') or None
+                    itinerario.escolha_declaracao_responsabilidade = dados_escolha.get('declaracao', False)
+
+                    # Cruzamento best-effort: vincular opcoes aos DiariasCotacaoVoo
+                    _vincular_escolha_a_voos(itinerario, dados_escolha)
+
+                    opcoes = dados_escolha.get('opcoes_escolhidas', [])
+                    resultado['msgs'].append(
+                        f'Escolha de passagens extraída do PDF (opções: {opcoes}, '
+                        f'menor_valor={dados_escolha.get("menor_valor")}).'
+                    )
+                    if dados_escolha.get('erros'):
+                        resultado['msgs'].extend(dados_escolha['erros'])
+                else:
+                    itinerario.escolha_via_sei = True
+                    resultado['msgs'].append('Escolha de passagens: falha no download do PDF.')
+            except Exception as e:
+                itinerario.escolha_via_sei = True
+                resultado['msgs'].append(f'Escolha de passagens: erro na extração: {str(e)[:100]}')
+        else:
+            itinerario.escolha_via_sei = True
+
+    # 3. Determinar etapa correta com base nos documentos encontrados
+    tem_passagens = itinerario.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
+
+    # Checa presença de documentos-chave por etapa (do mais avançado ao inicial)
+    has = lambda t: t in tipos_encontrados  # noqa: E731
+
+    etapa_nova = DiariasEtapaID.SOLICITACAO_INICIAL  # default
+
+    if has('relatorio_viagem') or has('np'):
+        etapa_nova = DiariasEtapaID.PRESTACAO_CONTAS
+    elif has('ob') or has('pd') or has('nl'):
+        etapa_nova = DiariasEtapaID.CONCESSAO_DIARIAS
+    elif has('nota_reserva') or has('analise_pagamento') or has('despacho_nci'):
+        etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO
+    elif tem_passagens and (has('memorando_cotacoes') or has('escolha_passagens')):
+        etapa_nova = DiariasEtapaID.ESCOLHA_VOO
+    elif has('autorizacao'):
+        # Autorização encontrada — avança para Escolha do Voo ou Análise
+        if tem_passagens:
+            etapa_nova = DiariasEtapaID.ESCOLHA_VOO
+        else:
+            etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO
+
+    resultado['etapa_nova'] = int(etapa_nova)
+
+    if itinerario.etapa_atual_id != int(etapa_nova):
+        resultado['msgs'].append(
+            f'Etapa atualizada: {itinerario.etapa_atual_id} → {int(etapa_nova)}'
+        )
+        itinerario.etapa_atual_id = int(etapa_nova)
+    else:
+        resultado['msgs'].append(f'Etapa mantida: {int(etapa_nova)}')
+
+    db.session.commit()
+    resultado['sucesso'] = True
+    return resultado
+
+
+def baixar_documento_sei(protocolo_documento):
+    """
+    Baixa o conteúdo binário de um documento do SEI.
+
+    Usa GET /v1/unidades/{id}/documentos/baixar?protocolo_documento={id}.
+
+    Args:
+        protocolo_documento: IdDocumento do documento SEI
+
+    Returns:
+        bytes do documento (PDF) ou None em caso de erro
+    """
+    try:
+        token = gerar_token_sei_admin()
+        if not token:
+            current_app.logger.error("SEI Diarias: falha na autenticação para baixar documento.")
+            return None
+
+        url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos/baixar"
+        params = {'protocolo_documento': str(protocolo_documento)}
+        headers = {
+            'token': token,
+            'Accept': 'application/octet-stream',
+        }
+
+        response = requests.get(url, params=params, headers=headers, timeout=60, verify=False)
+
+        if response.status_code != 200:
+            body_preview = response.text[:300] if response.text else '(vazio)'
+            current_app.logger.error(
+                f"SEI Diarias: erro ao baixar documento {protocolo_documento}: "
+                f"HTTP {response.status_code} - {body_preview}"
+            )
+            return None
+
+        content = response.content
+        if not content or len(content) < 100:
+            current_app.logger.warning(
+                f"SEI Diarias: documento {protocolo_documento} retornou conteúdo vazio/pequeno ({len(content)} bytes)."
+            )
+            return None
+
+        current_app.logger.info(
+            f"SEI Diarias: documento {protocolo_documento} baixado ({len(content)} bytes)."
+        )
+        return content
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diarias: erro ao baixar documento: {str(e)}")
+        return None
+
+
+def extrair_nr_de_pdf(pdf_bytes):
+    """
+    Extrai o código da Nota de Reserva de um PDF textual do SEI.
+
+    Usa pypdfium2 para extrair texto e regex para capturar o padrão
+    de NR (ex: 2026NR00223).
+
+    Args:
+        pdf_bytes: bytes do PDF
+
+    Returns:
+        str com o código NR ou None se não encontrado
+    """
+    import re
+    import pypdfium2 as pdfium
+
+    _RE_NR = re.compile(r'\d{4}NR\d{5}')
+
+    try:
+        pdf = pdfium.PdfDocument(pdf_bytes)
+        for page_idx in range(len(pdf)):
+            page = pdf[page_idx]
+            text = page.get_textpage().get_text_bounded()
+            match = _RE_NR.search(text)
+            if match:
+                pdf.close()
+                return match.group(0)
+        pdf.close()
+        return None
+    except Exception as e:
+        current_app.logger.error(f"[DIARIAS NR] Erro ao extrair NR do PDF: {e}")
+        return None
+
+
+def varrer_nota_reserva(itinerario, token=None):
+    """
+    Busca a Nota de Reserva (IdSerie=425) no SEI para um itinerário,
+    baixa o PDF e extrai o código NR.
+
+    Args:
+        itinerario: DiariasItinerario com n_processo preenchido
+        token: token SEI pré-gerado (opcional, para reutilização em batch)
+
+    Returns:
+        dict com {sucesso: bool, nr_codigo: str, doc_formatado: str, erro: str}
+    """
+    from app.extensions import db
+    from app.models.diaria import DiariasMovimentacao
+
+    resultado = {'sucesso': False, 'nr_codigo': None, 'doc_formatado': None, 'erro': None}
+
+    protocolo = itinerario.sei_protocolo
+    if not protocolo:
+        resultado['erro'] = 'Itinerário sem protocolo SEI'
+        return resultado
+
+    # Busca documento de NR na tabela diarias_movimentacao
+    mov_nr = DiariasMovimentacao.query.filter_by(
+        protocolo_procedimento=protocolo,
+        id_serie=425
+    ).first()
+
+    if not mov_nr:
+        resultado['erro'] = 'Sem NR no SEI'
+        return resultado
+
+    doc_formatado = mov_nr.documento_formatado
+    resultado['doc_formatado'] = doc_formatado
+
+    # Baixa o PDF
+    pdf_bytes = _baixar_documento_com_token(doc_formatado, token)
+    if not pdf_bytes:
+        resultado['erro'] = f'Falha ao baixar PDF {doc_formatado}'
+        return resultado
+
+    # Extrai código NR
+    nr_codigo = extrair_nr_de_pdf(pdf_bytes)
+    if not nr_codigo:
+        resultado['erro'] = f'NR não encontrada no PDF {doc_formatado}'
+        return resultado
+
+    resultado['sucesso'] = True
+    resultado['nr_codigo'] = nr_codigo
+
+    # Salva no itinerário
+    itinerario.set_doc('nota_reserva', sei_formatado=doc_formatado, codigo=nr_codigo)
+
+    return resultado
+
+
+def _baixar_documento_com_token(protocolo_documento, token=None):
+    """
+    Baixa documento do SEI, reutilizando token se fornecido.
+    Versão interna para uso em batch (evita gerar token por documento).
+    """
+    try:
+        if not token:
+            token = gerar_token_sei_admin()
+        if not token:
+            return None
+
+        url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos/baixar"
+        params = {'protocolo_documento': str(protocolo_documento)}
+        headers = {
+            'token': token,
+            'Accept': 'application/octet-stream',
+        }
+
+        response = requests.get(url, params=params, headers=headers, timeout=60, verify=False)
+
+        if response.status_code != 200:
+            return None
+
+        content = response.content
+        if not content or len(content) < 100:
+            return None
+
+        return content
+
+    except Exception:
+        return None
+
+
+def importar_cotacoes_do_sei(itinerario, documentos_sei, force=False):
+    """
+    Identifica documentos de cotação no processo SEI, baixa os PDFs,
+    extrai opções de voo via OCR e salva como DiariasCotacaoVoo.
+
+    Args:
+        itinerario: DiariasItinerario
+        documentos_sei: lista de documentos retornados pelo SEI
+        force: se True, remove cotações existentes antes de reimportar
+
+    Returns:
+        dict com {cotacoes_importadas: int, msgs: list de str}
+    """
+    from app.extensions import db
+    from app.models.diaria import DiariasCotacaoVoo
+    from app.services.cotacao_pdf_parser import extrair_cotacoes_pdf
+    from decimal import Decimal
+
+    resultado = {'cotacoes_importadas': 0, 'msgs': []}
+
+    # Verifica se já existem cotações de voo para este itinerário
+    existentes = DiariasCotacaoVoo.query.filter_by(itinerario_id=itinerario.id).count()
+    if existentes > 0:
+        if force:
+            DiariasCotacaoVoo.query.filter_by(itinerario_id=itinerario.id).delete()
+            resultado['msgs'].append(f'{existentes} cotações existentes removidas (reimportação forçada).')
+        else:
+            resultado['msgs'].append(f'Cotações de voo já existem ({existentes} opções). Ignorando importação.')
+            return resultado
+
+    # Filtra documentos de cotação — aceita IdSerie 272 ("Cotação") como primário,
+    # mas também tenta IdSerie 264 ("Documento") se o nome contiver "cotação/cotacao"
+    ID_SERIES_COTACAO_PRIMARIAS = {ID_SERIE_COTACAO}  # 272
+    ID_SERIES_COTACAO_SECUNDARIAS = {ID_SERIE_DOCUMENTO_EXTERNO, ID_SERIE_ANEXO}  # 264, 263
+
+    docs_cotacao = []
+    for d in documentos_sei:
+        id_serie = str(d.get('Serie', {}).get('IdSerie', ''))
+        nome_serie = d.get('Serie', {}).get('Nome', '')
+        descricao = d.get('Descricao', '')
+        # Primários: sempre incluir
+        if id_serie in ID_SERIES_COTACAO_PRIMARIAS:
+            docs_cotacao.append(d)
+        # Secundários: incluir se nome/descrição sugere cotação
+        elif id_serie in ID_SERIES_COTACAO_SECUNDARIAS:
+            texto_ref = (nome_serie + ' ' + descricao).lower()
+            if any(kw in texto_ref for kw in ['cotaç', 'cotac', 'passag', 'voo', 'vôo']):
+                docs_cotacao.append(d)
+                current_app.logger.info(
+                    f"[DIARIAS] Doc secundário incluído como cotação: {d.get('DocumentoFormatado', '')} "
+                    f"(IdSerie={id_serie}, Nome='{nome_serie}', Desc='{descricao}')"
+                )
+
+    if not docs_cotacao:
+        resultado['msgs'].append('Nenhum documento de cotação encontrado no processo.')
+        return resultado
+
+    resultado['msgs'].append(f'{len(docs_cotacao)} documento(s) de cotação encontrado(s).')
+    total_importados = 0
+
+    for doc in docs_cotacao:
+        doc_fmt = doc.get('DocumentoFormatado', '')
+
+        if not doc_fmt:
+            continue
+
+        # Baixa o PDF (usa DocumentoFormatado como protocolo_documento)
+        pdf_bytes = baixar_documento_sei(doc_fmt)
+        if not pdf_bytes:
+            resultado['msgs'].append(f'Cotação {doc_fmt}: falha no download.')
+            continue
+
+        # Extrai voos via OCR
+        try:
+            dados = extrair_cotacoes_pdf(pdf_bytes)
+        except Exception as e:
+            resultado['msgs'].append(f'Cotação {doc_fmt}: erro no OCR: {str(e)[:80]}')
+            continue
+
+        if dados.get('erros'):
+            resultado['msgs'].append(f'Cotação {doc_fmt}: {"; ".join(dados["erros"])}')
+
+        total_extraido = len(dados.get('ida', [])) + len(dados.get('volta', []))
+        if total_extraido == 0:
+            # Log diagnóstico: tenta extrair texto para entender o conteúdo do PDF
+            try:
+                import PyPDF2
+                reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+                sample = ''
+                for page in reader.pages[:2]:
+                    sample += (page.extract_text() or '')
+                sample = sample[:500].replace('\n', ' | ')
+                current_app.logger.warning(
+                    f"[DIARIAS] Cotação {doc_fmt}: OCR não extraiu voos. "
+                    f"PDF={len(pdf_bytes)} bytes, texto amostra: {sample}"
+                )
+            except Exception:
+                current_app.logger.warning(
+                    f"[DIARIAS] Cotação {doc_fmt}: OCR não extraiu voos. PDF={len(pdf_bytes)} bytes."
+                )
+
+        # Salva opções de voo extraídas
+        count = 0
+        for tipo_trecho, voos in [('ida', dados.get('ida', [])), ('volta', dados.get('volta', []))]:
+            for voo in voos:
+                if not voo.get('voo') or not voo.get('saida'):
+                    current_app.logger.info(
+                        f"[DIARIAS] Cotação {doc_fmt}: voo descartado (sem data de saída) — "
+                        f"cia={voo.get('cia')}, voo={voo.get('voo')}, origem={voo.get('origem')}, destino={voo.get('destino')}"
+                    )
+                    continue  # Pula opções incompletas (saida é NOT NULL no modelo)
+
+                cotacao_voo = DiariasCotacaoVoo(
+                    itinerario_id=itinerario.id,
+                    contrato_codigo=None,  # Será preenchido depois se necessário
+                    tipo_trecho=tipo_trecho,
+                    cia=voo['cia'],
+                    voo=voo['voo'],
+                    saida=voo['saida'],
+                    chegada=voo['chegada'],
+                    origem=voo.get('origem', ''),
+                    destino=voo.get('destino', ''),
+                    bagagem=voo.get('bagagem', '1'),
+                    valor=Decimal(str(voo['valor'])) if voo.get('valor') else Decimal('0'),
+                    fonte='ocr_sei',
+                    cia_conexao=voo.get('cia_conexao'),
+                    voo_conexao=voo.get('voo_conexao'),
+                    saida_conexao=voo.get('saida_conexao'),
+                    chegada_conexao=voo.get('chegada_conexao'),
+                    origem_conexao=voo.get('origem_conexao') or None,
+                    destino_conexao=voo.get('destino_conexao') or None,
+                )
+                db.session.add(cotacao_voo)
+                count += 1
+
+        if count:
+            db.session.flush()
+            total_importados += count
+            resultado['msgs'].append(f'Cotação {doc_fmt}: {count} opções de voo extraídas (IDA: {len(dados.get("ida", []))}, VOLTA: {len(dados.get("volta", []))}).')
+        else:
+            resultado['msgs'].append(f'Cotação {doc_fmt}: nenhuma opção de voo válida extraída.')
+
+    resultado['cotacoes_importadas'] = total_importados
+    return resultado

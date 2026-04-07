@@ -13,7 +13,7 @@ from app.services.sei_auth import autenticar_usuario_sei
 from app.services.sei_integration import assinar_documento
 from app.services.diarias_sei_integration import (
     gerar_token_sei_admin, gerar_despacho_sga, gerar_analise_pagamento,
-    gerar_despacho_nci, enviar_procedimento,
+    gerar_despacho_nci, enviar_procedimento, sincronizar_documentos_diaria,
     UNIDADE_APOIOSGA, UNIDADE_NCI, PERGUNTAS_ANALISE_PAGAMENTO,
 )
 from app.models.diaria import (
@@ -96,7 +96,8 @@ def administracao():
     e progresso na timeline para o gestor acompanhar.
     """
     busca = request.args.get('q', '').strip()
-    filtro_etapa = request.args.get('etapa', '')
+    filtro_etapas = request.args.getlist('filtro_etapa', type=int)
+    filtro_tipos = request.args.getlist('filtro_tipo', type=int)
     page = request.args.get('page', 1, type=int)
 
     query = DiariasItinerario.query
@@ -110,8 +111,11 @@ def administracao():
             )
         )
 
-    if filtro_etapa:
-        query = query.filter(DiariasItinerario.etapa_atual_id == int(filtro_etapa))
+    if filtro_etapas:
+        query = query.filter(DiariasItinerario.etapa_atual_id.in_(filtro_etapas))
+
+    if filtro_tipos:
+        query = query.filter(DiariasItinerario.tipo_itinerario.in_(filtro_tipos))
 
     pagination = query.order_by(
         DiariasItinerario.data_solicitacao.desc()
@@ -134,13 +138,58 @@ def administracao():
     from app.models.diaria import DiariasEtapa
     etapas = DiariasEtapa.query.order_by(DiariasEtapa.ordem).all()
 
+    # ── Contagens dinâmicas (cruzadas entre filtros) ──────────────────────
+    # Base query com busca textual (comum a ambos os filtros)
+    base_q = DiariasItinerario.query
+    if busca:
+        base_q = base_q.filter(
+            db.or_(
+                DiariasItinerario.sei_protocolo.ilike(f'%{busca}%'),
+                DiariasItinerario.n_processo.ilike(f'%{busca}%'),
+                DiariasItinerario.usuario_gerador.ilike(f'%{busca}%'),
+            )
+        )
+
+    # Contagem de etapas: aplica filtro de tipo (para que mudem ao filtrar tipo)
+    etapa_count_q = base_q
+    if filtro_tipos:
+        etapa_count_q = etapa_count_q.filter(DiariasItinerario.tipo_itinerario.in_(filtro_tipos))
+    etapa_counts = {
+        row[0]: row[1] for row in etapa_count_q.with_entities(
+            DiariasItinerario.etapa_atual_id,
+            db.func.count(DiariasItinerario.id)
+        ).group_by(DiariasItinerario.etapa_atual_id).all()
+    }
+
+    # Contagem de tipos: aplica filtro de etapa (para que mudem ao filtrar etapa)
+    tipo_count_q = base_q
+    if filtro_etapas:
+        tipo_count_q = tipo_count_q.filter(DiariasItinerario.etapa_atual_id.in_(filtro_etapas))
+    tipo_counts = {
+        row[0]: row[1] for row in tipo_count_q.with_entities(
+            DiariasItinerario.tipo_itinerario,
+            db.func.count(DiariasItinerario.id)
+        ).group_by(DiariasItinerario.tipo_itinerario).all()
+    }
+
+    # Tipos de itinerário fixos (1=Estadual, 2=Nacional, 3=Internacional)
+    tipos_itinerario = [
+        {'id': 1, 'nome': 'Estadual', 'cor': '#0dcaf0', 'icone': 'bi-geo-alt'},
+        {'id': 2, 'nome': 'Nacional', 'cor': '#ffc107', 'icone': 'bi-airplane'},
+        {'id': 3, 'nome': 'Internacional', 'cor': '#dc3545', 'icone': 'bi-globe'},
+    ]
+
     return render_template(
         'diarias/administracao.html',
         itinerarios=itinerarios,
         pagination=pagination,
         pessoas_count=pessoas_count,
         etapas=etapas,
-        filtro_etapa=filtro_etapa,
+        etapa_counts=etapa_counts,
+        filtro_etapas=filtro_etapas,
+        tipos_itinerario=tipos_itinerario,
+        tipo_counts=tipo_counts,
+        filtro_tipos=filtro_tipos,
     )
 
 
@@ -158,6 +207,7 @@ def administracao_detalhe(id):
 
     itinerario = dados['itinerario']
     timeline_data = DiariaService.obter_timeline(itinerario)
+    aba = request.args.get('aba', 'resumo')
 
     return render_template(
         'diarias/administracao_detalhe.html',
@@ -168,6 +218,7 @@ def administracao_detalhe(id):
         cotacoes_voos=dados.get('cotacoes_voos', []),
         timeline_data=timeline_data,
         agencias=DiariaService.get_agencias(),
+        aba=aba,
     )
 
 
@@ -337,8 +388,9 @@ def escolha_passagens(id):
                     sei_protocolo=sei_protocolo,
                 )
                 if retorno:
-                    itinerario.sei_id_escolha_passagens = str(retorno.get('IdDocumento', ''))
-                    itinerario.sei_escolha_passagens_formatado = retorno.get('DocumentoFormatado', '')
+                    itinerario.set_doc('escolha_passagens',
+                        sei_id=str(retorno.get('IdDocumento', '')),
+                        sei_formatado=retorno.get('DocumentoFormatado', ''))
                     sei_ok = True
 
                     # 2) 2º SEAD_MEMORANDO_SGA — Encaminhamento de Cotações
@@ -354,7 +406,8 @@ def escolha_passagens(id):
                             ]
                             ref_cotacoes = ', '.join(ids_cotacao) if ids_cotacao else ''
 
-                    ref_req_passagens = itinerario.sei_requisicao_passagens_formatado or ''
+                    doc_req_pass = itinerario.get_doc('requisicao_passagens')
+                    ref_req_passagens = (doc_req_pass.sei_formatado if doc_req_pass else '') or ''
 
                     if ref_cotacoes and ref_req_passagens:
                         ret_memo = gerar_memorando_cotacoes(
@@ -365,8 +418,9 @@ def escolha_passagens(id):
                             ref_requisicao_passagens_fmt=ref_req_passagens,
                         )
                         if ret_memo:
-                            itinerario.sei_id_memorando_cotacoes = str(ret_memo.get('IdDocumento', ''))
-                            itinerario.sei_memorando_cotacoes_formatado = ret_memo.get('DocumentoFormatado', '')
+                            itinerario.set_doc('memorando_cotacoes',
+                                sei_id=str(ret_memo.get('IdDocumento', '')),
+                                sei_formatado=ret_memo.get('DocumentoFormatado', ''))
                         else:
                             current_app.logger.warning("SEI: Escolha OK mas memorando cotações falhou.")
                     else:
@@ -380,6 +434,15 @@ def escolha_passagens(id):
                 flash('Aviso: Escolha salva, mas não foi possível autenticar no SEI.', 'warning')
         except Exception as e:
             flash(f'Aviso: Escolha salva, mas erro na integração SEI: {e}', 'warning')
+
+    # Escolha completa → avança para Análise da Solicitação (etapa 3)
+    if itinerario.etapa_atual_id == DiariasEtapaID.ESCOLHA_VOO:
+        DiariaService.registrar_movimentacao(
+            id_itinerario=id,
+            etapa_nova_id=DiariasEtapaID.ANALISE_SOLICITACAO,
+            usuario_id=current_user.id if current_user else None,
+            comentario='Escolha de passagens registrada. Avançando para Análise da Solicitação.',
+        )
 
     db.session.commit()
 
@@ -415,14 +478,14 @@ def assinar_superintendente(id):
         }), 403
 
     # Guard: só permite na etapa 1 (Solicitação Iniciada)
-    if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_INICIADA:
+    if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_INICIAL:
         return jsonify({
             'sucesso': False,
             'erro': 'Esta solicitação não está na etapa de autorização (etapa 1).'
         }), 400
 
     # Guard: precisa de processo SEI e requisição gerada
-    if not itinerario.sei_id_procedimento or not itinerario.sei_id_requisicao:
+    if not itinerario.sei_id_procedimento or not itinerario.has_doc('requisicao'):
         return jsonify({
             'sucesso': False,
             'erro': 'Esta solicitação não possui processo SEI ou requisição de diárias vinculada.'
@@ -468,18 +531,19 @@ def assinar_superintendente(id):
         f"[DIARIAS] Assinatura superintendente - usuario={sei_usuario} "
         f"id_usuario={id_usuario!r} id_login={id_login!r} "
         f"unidade_assinatura={unidade_assinatura!r} "
-        f"protocolo_doc={itinerario.sei_requisicao_formatado!r}"
+        f"protocolo_doc={(itinerario.get_doc('requisicao').sei_formatado if itinerario.has_doc('requisicao') else '')!r}"
     )
 
     documentos_assinados = []
 
     # 2. Assinar Memorando SGA (se existir)
-    if itinerario.sei_id_memorando:
+    doc_memorando = itinerario.get_doc('memorando')
+    if doc_memorando and doc_memorando.sei_id:
         ret_memo = assinar_documento(
             token=token_super,
             unidade_id=unidade_assinatura,
             dados_assinatura={
-                'protocolo_doc': itinerario.sei_memorando_formatado,
+                'protocolo_doc': doc_memorando.sei_formatado,
                 'orgao': 'SEAD-PI',
                 'cargo': cargo,
                 'id_login': id_login,
@@ -488,7 +552,7 @@ def assinar_superintendente(id):
             },
         )
         if ret_memo and ret_memo.get('sucesso'):
-            documentos_assinados.append(itinerario.sei_memorando_formatado or 'Memorando SGA')
+            documentos_assinados.append(doc_memorando.sei_formatado or 'Memorando SGA')
         else:
             current_app.logger.warning(
                 f"SEI Diárias: Falha ao assinar Memorando SGA: "
@@ -496,8 +560,9 @@ def assinar_superintendente(id):
             )
 
     # 3. Assinar Requisição de Diárias
+    doc_requisicao = itinerario.get_doc('requisicao')
     dados_assinatura = {
-        'protocolo_doc': itinerario.sei_requisicao_formatado,
+        'protocolo_doc': doc_requisicao.sei_formatado if doc_requisicao else '',
         'orgao': 'SEAD-PI',
         'cargo': cargo,
         'id_login': id_login,
@@ -518,12 +583,13 @@ def assinar_superintendente(id):
             'erro': f'Falha ao assinar Requisição de Diárias: {erro}'
         }), 500
 
-    documentos_assinados.append(itinerario.sei_requisicao_formatado or 'Req. Diárias')
+    documentos_assinados.append((doc_requisicao.sei_formatado if doc_requisicao else '') or 'Req. Diárias')
 
     # 4. Assinar Requisição de Passagens (se existir)
-    if itinerario.sei_id_requisicao_passagens:
+    doc_req_passagens = itinerario.get_doc('requisicao_passagens')
+    if doc_req_passagens and doc_req_passagens.sei_id:
         dados_assinatura_pass = {
-            'protocolo_doc': itinerario.sei_requisicao_passagens_formatado,
+            'protocolo_doc': doc_req_passagens.sei_formatado,
             'orgao': 'SEAD-PI',
             'cargo': cargo,
             'id_login': id_login,
@@ -538,7 +604,7 @@ def assinar_superintendente(id):
         )
 
         if ret_pass and ret_pass.get('sucesso'):
-            documentos_assinados.append(itinerario.sei_requisicao_passagens_formatado or 'Req. Passagens')
+            documentos_assinados.append(doc_req_passagens.sei_formatado or 'Req. Passagens')
         else:
             current_app.logger.warning(
                 f"SEI Diárias: Superintendente assinou Req. Diárias mas falhou na Req. Passagens: "
@@ -599,7 +665,7 @@ def autorizar_solicitacao(id):
         }), 403
 
     # Guard: só permite na etapa 1 (Solicitação Iniciada)
-    if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_INICIADA:
+    if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_INICIAL:
         return jsonify({
             'sucesso': False,
             'erro': 'Esta solicitação não está na etapa de autorização (etapa 1).'
@@ -654,12 +720,13 @@ def autorizar_solicitacao(id):
     )
 
     # 1.5 Secretário assina as Requisições (Diárias + Passagens)
-    if itinerario.sei_id_requisicao:
+    doc_req_sec = itinerario.get_doc('requisicao')
+    if doc_req_sec and doc_req_sec.sei_id:
         ret_req = assinar_documento(
             token=token_secretario,
             unidade_id=unidade_assinatura_sec,
             dados_assinatura={
-                'protocolo_doc': itinerario.sei_requisicao_formatado,
+                'protocolo_doc': doc_req_sec.sei_formatado,
                 'orgao': 'SEAD-PI',
                 'cargo': cargo,
                 'id_login': id_login,
@@ -671,12 +738,13 @@ def autorizar_solicitacao(id):
             erro = ret_req.get('erro', 'Erro desconhecido') if ret_req else 'Sem resposta'
             current_app.logger.warning(f"SEI: Secretário falhou ao assinar Req. Diárias: {erro}")
 
-    if itinerario.sei_id_requisicao_passagens:
+    doc_req_pass_sec = itinerario.get_doc('requisicao_passagens')
+    if doc_req_pass_sec and doc_req_pass_sec.sei_id:
         ret_req_pass = assinar_documento(
             token=token_secretario,
             unidade_id=unidade_assinatura_sec,
             dados_assinatura={
-                'protocolo_doc': itinerario.sei_requisicao_passagens_formatado,
+                'protocolo_doc': doc_req_pass_sec.sei_formatado,
                 'orgao': 'SEAD-PI',
                 'cargo': cargo,
                 'id_login': id_login,
@@ -739,13 +807,18 @@ def autorizar_solicitacao(id):
         }), 500
 
     # 5. Salva referência no banco
-    itinerario.sei_id_autorizacao = id_documento
-    itinerario.sei_autorizacao_formatado = doc_formatado
+    itinerario.set_doc('autorizacao',
+        sei_id=id_documento,
+        sei_formatado=doc_formatado)
 
-    # 6. Avança etapa para FINANCEIRO
+    # 6. Avança etapa: Escolha do Voo (se passagens) ou Análise da Solicitação
+    TIPOS_COM_PASSAGENS = {2, 3}
+    proxima_etapa = (DiariasEtapaID.ESCOLHA_VOO
+                     if itinerario.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
+                     else DiariasEtapaID.ANALISE_SOLICITACAO)
     DiariaService.registrar_movimentacao(
         id_itinerario=id,
-        etapa_nova_id=DiariasEtapaID.FINANCEIRO,
+        etapa_nova_id=proxima_etapa,
         usuario_id=current_user.id if current_user else None,
         comentario=f'Autorização do Secretário ({doc_formatado}) gerada e assinada pelo sistema',
     )
@@ -783,8 +856,9 @@ def autorizar_solicitacao(id):
                     interessados=nomes_interessados,
                 )
                 if despacho_ret:
-                    itinerario.sei_id_despacho_dfin = str(despacho_ret.get('IdDocumento', ''))
-                    itinerario.sei_despacho_dfin_formatado = despacho_ret.get('DocumentoFormatado', '')
+                    itinerario.set_doc('despacho_dfin',
+                        sei_id=str(despacho_ret.get('IdDocumento', '')),
+                        sei_formatado=despacho_ret.get('DocumentoFormatado', ''))
                     resultado['despacho_dfin'] = despacho_ret.get('DocumentoFormatado', '')
             except Exception as e:
                 current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho DFIN: {e}")
@@ -824,10 +898,10 @@ def ciencia_sga(id):
     itinerario = DiariasItinerario.query.get_or_404(id)
 
     # Guards
-    if not itinerario.sei_id_despacho_ccdp:
+    if not itinerario.has_doc('despacho_ccdp'):
         return jsonify({'sucesso': False, 'erro': 'O Despacho CCDP ainda não foi gerado.'}), 400
 
-    if itinerario.sei_id_despacho_sga:
+    if itinerario.has_doc('despacho_sga'):
         return jsonify({'sucesso': False, 'erro': 'O Despacho SGA já foi gerado.'}), 400
 
     if not itinerario.sei_id_procedimento:
@@ -860,12 +934,13 @@ def ciencia_sga(id):
             return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
 
         # 3. Gerar Despacho SGA (série 2987)
+        doc_despacho_ccdp = itinerario.get_doc('despacho_ccdp')
         retorno_doc = gerar_despacho_sga(
             token=token_admin,
             id_procedimento=itinerario.sei_id_procedimento,
             sei_protocolo=itinerario.sei_protocolo or itinerario.n_processo or '',
-            ref_despacho_ccdp_id=itinerario.sei_id_despacho_ccdp,
-            ref_despacho_ccdp_formatado=itinerario.sei_despacho_ccdp_formatado,
+            ref_despacho_ccdp_id=doc_despacho_ccdp.sei_id if doc_despacho_ccdp else '',
+            ref_despacho_ccdp_formatado=doc_despacho_ccdp.sei_formatado if doc_despacho_ccdp else '',
             nome_assinante=current_user.nome.upper() if current_user and current_user.nome else None,
             cargo_assinante=cargo or 'Superintendente de Gestão Administrativa – SEAD',
         )
@@ -906,16 +981,12 @@ def ciencia_sga(id):
         # 6. Salvar no banco
         itinerario.ciencia_superintendente = True
         itinerario.ciencia_superintendente_data = datetime.now()
-        itinerario.sei_id_despacho_sga = doc_id
-        itinerario.sei_despacho_sga_formatado = doc_formatado
+        itinerario.set_doc('despacho_sga',
+            sei_id=doc_id,
+            sei_formatado=doc_formatado)
 
-        # 7. Avançar etapa
-        DiariaService.registrar_movimentacao(
-            id_itinerario=id,
-            etapa_nova_id=DiariasEtapaID.CIENCIA_SGA,
-            usuario_id=current_user.id if current_user else None,
-            comentario=f'Ciência Superintendente. Despacho SGA ({doc_formatado}) enviado ao NCI.',
-        )
+        # 7. Ação interna (Análise da Solicitação) — não avança etapa principal
+        # Despacho SGA é sub-ação dentro da etapa "Análise da Solicitação"
 
         db.session.commit()
 
@@ -958,10 +1029,10 @@ def analise_nci(id):
     itinerario = DiariasItinerario.query.get_or_404(id)
 
     # Guards
-    if not itinerario.sei_id_despacho_sga:
+    if not itinerario.has_doc('despacho_sga'):
         return jsonify({'sucesso': False, 'erro': 'O Despacho SGA ainda não foi gerado.'}), 400
 
-    if itinerario.sei_id_analise_pagamento:
+    if itinerario.has_doc('analise_pagamento'):
         return jsonify({'sucesso': False, 'erro': 'A Análise de Pagamento já foi gerada.'}), 400
 
     if not itinerario.sei_id_procedimento:
@@ -1063,15 +1134,17 @@ def analise_nci(id):
         itinerario.ciencia_nci_data = datetime.now()
         itinerario.analise_pagamento_respostas = json.dumps(respostas, ensure_ascii=False)
         itinerario.analise_pagamento_observacoes = observacoes
-        itinerario.sei_id_analise_pagamento = analise_id
-        itinerario.sei_analise_pagamento_formatado = analise_formatado
-        itinerario.sei_id_despacho_nci = despacho_id
-        itinerario.sei_despacho_nci_formatado = despacho_formatado
+        itinerario.set_doc('analise_pagamento',
+            sei_id=analise_id,
+            sei_formatado=analise_formatado)
+        itinerario.set_doc('despacho_nci',
+            sei_id=despacho_id,
+            sei_formatado=despacho_formatado)
 
-        # 8. Avançar etapa
+        # 8. Análise NCI é o último sub-item da etapa 3 → avança para Concessão das Diárias
         DiariaService.registrar_movimentacao(
             id_itinerario=id,
-            etapa_nova_id=DiariasEtapaID.ANALISE_NCI,
+            etapa_nova_id=DiariasEtapaID.CONCESSAO_DIARIAS,
             usuario_id=current_user.id if current_user else None,
             comentario=f'Análise NCI ({analise_formatado}) e Despacho NCI ({despacho_formatado}) gerados.',
         )
@@ -1097,3 +1170,48 @@ def analise_nci(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500
+
+
+# =============================================================================
+# ATUALIZAR ETAPAS INDIVIDUAL (sincronizar documentos do SEI)
+# =============================================================================
+
+@diarias_bp.route('/api/atualizar-individual/<int:id_itinerario>', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def api_atualizar_individual(id_itinerario):
+    """Sincroniza documentos do SEI e recalcula etapa de um itinerário."""
+    if not current_user.is_admin:
+        return jsonify({'sucesso': False, 'msg': 'Acesso restrito a administradores.'}), 403
+
+    itinerario = DiariasItinerario.query.get(id_itinerario)
+    if not itinerario:
+        return jsonify({'sucesso': False, 'msg': 'Itinerário não encontrado.'}), 404
+
+    # Flag para forçar reimportação de cotações (remove existentes e reimporta)
+    force_cotacoes = False
+    if request.is_json and request.get_json(silent=True):
+        force_cotacoes = bool(request.get_json(silent=True).get('force_cotacoes', False))
+
+    try:
+        resultado = sincronizar_documentos_diaria(itinerario, force_cotacoes=force_cotacoes)
+        if resultado['sucesso']:
+            # Busca nome da etapa nova para exibir no frontend
+            from app.models.diaria import DiariasEtapa
+            etapa_obj = DiariasEtapa.query.get(resultado['etapa_nova'])
+            return jsonify({
+                'sucesso': True,
+                'msg': ' | '.join(resultado['msgs']),
+                'msgs': resultado['msgs'],
+                'docs_encontrados': resultado.get('docs_encontrados', []),
+                'docs_atualizados': resultado['docs_atualizados'],
+                'cotacoes_importadas': resultado.get('cotacoes_importadas', 0),
+                'etapa_anterior': resultado['etapa_anterior'],
+                'etapa_nova': resultado['etapa_nova'],
+                'etapa_nova_nome': etapa_obj.nome if etapa_obj else str(resultado['etapa_nova']),
+            })
+        else:
+            return jsonify({'sucesso': False, 'msg': resultado.get('erro', 'Erro desconhecido.')}), 500
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'msg': f'Erro: {str(e)}'}), 500
