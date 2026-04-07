@@ -32,6 +32,9 @@ class CgfrProcessoEnviado(db.Model):
 
     __tablename__ = 'cgfr_processo_enviado'
 
+    # Prefixo SEAD — listagens filtram apenas processos da unidade
+    PREFIXO_SEAD = '00002.'
+
     # === PK ===
     processo_formatado = db.Column(db.String(255), primary_key=True)
 

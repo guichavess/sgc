@@ -41,7 +41,9 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
         Returns:
             Query SQLAlchemy filtrada.
         """
-        query = cls.model.query.options(
+        query = cls.model.query.filter(
+            cls.model.processo_formatado.like(f'{cls.model.PREFIXO_SEAD}%')
+        ).options(
             joinedload(cls.model.natureza_rel),
             joinedload(cls.model.fonte_rel),
         )
@@ -185,9 +187,12 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
     @classmethod
     def contar_por_status(cls) -> dict:
         """Conta processos por status de classificação."""
-        total = cls.model.query.count()
+        base = cls.model.query.filter(
+            cls.model.processo_formatado.like(f'{cls.model.PREFIXO_SEAD}%')
+        )
+        total = base.count()
 
-        classificados = cls.model.query.filter(
+        classificados = base.filter(
             and_(
                 cls.model.natureza_despesa_id.isnot(None),
                 cls.model.fonte_id.isnot(None),

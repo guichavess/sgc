@@ -232,7 +232,9 @@ def sync_documentos_bulk():
     except Exception as e:
         return jsonify({'success': False, 'error': f'Erro autenticacao SEI: {str(e)}'}), 500
 
-    all_processos = CgfrProcessoEnviado.query.all()
+    all_processos = CgfrProcessoEnviado.query.filter(
+        CgfrProcessoEnviado.processo_formatado.like(f'{CgfrProcessoEnviado.PREFIXO_SEAD}%')
+    ).all()
     protocolos = [p.processo_formatado for p in all_processos]
 
     if not protocolos:
