@@ -18,7 +18,7 @@ from app.cgfr.models import CgfrProcessoEnviado
 from app.cgfr.routes.acompanhar import _fetch_and_save_docs
 from app.extensions import db
 from app.services.sei_auth import gerar_token_sei_admin
-from app.utils.permissions import requires_admin
+from app.utils.permissions import requires_permission
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def _consultar_procedimento_completo(token, protocolo):
 
 @cgfr_bp.route('/vincular', methods=['GET'])
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def vincular_processo():
     """Página de vinculação manual de processo CGFR."""
     return render_template('cgfr/vincular.html')
@@ -62,7 +62,7 @@ def vincular_processo():
 
 @cgfr_bp.route('/api/consultar-sei', methods=['POST'])
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def api_consultar_sei():
     """AJAX: Consulta processo no SEI e retorna preview dos dados."""
     protocolo = (request.json or {}).get('protocolo', '').strip()
@@ -136,7 +136,7 @@ def api_consultar_sei():
 
 @cgfr_bp.route('/vincular', methods=['POST'])
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def vincular_processo_post():
     """Salva processo CGFR vinculado manualmente + sincroniza documentos SEI."""
     protocolo = request.form.get('processo_formatado', '').strip()

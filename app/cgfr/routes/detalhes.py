@@ -6,12 +6,12 @@ from flask_login import login_required
 
 from app.cgfr.routes import cgfr_bp
 from app.cgfr.services.processo_service import ProcessoService
-from app.utils.permissions import requires_admin
+from app.utils.permissions import requires_permission
 
 
 @cgfr_bp.route('/detalhe/<path:protocolo>')
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def detalhes(protocolo):
     """Página de detalhe de um processo CGFR."""
     processo = ProcessoService.get_detalhes(protocolo)

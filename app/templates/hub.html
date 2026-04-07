@@ -236,14 +236,14 @@
         </div>
         {% endif %}
 
-        {# Modulo Usuarios (visivel apenas para administradores) #}
+        {# Modulo Admin (visivel apenas para administradores) #}
         {% if current_user.is_admin %}
         <div class="col-md-4">
             <a href="{{ url_for('usuarios.dashboard') }}" class="module-card module-card-usuarios">
                 <div class="module-icon module-icon-usuarios">
                     <i class="bi bi-people-fill"></i>
                 </div>
-                <h3 class="module-name">Usuários</h3>
+                <h3 class="module-name">Admin</h3>
                 <p class="module-description">
                     Gerenciamento de usuários, perfis e controle de acesso
                 </p>
@@ -266,8 +266,8 @@
         </div>
         {% endif %}
 
-        {# Modulo CGFR (visivel apenas para administradores) #}
-        {% if current_user.is_admin %}
+        {# Modulo CGFR (visivel para quem tem permissão ou admins) #}
+        {% if current_user.tem_permissao('cgfr') %}
         <div class="col-md-4">
             <a href="{{ url_for('cgfr.dashboard') }}" class="module-card module-card-cgfr">
                 <div class="module-icon module-icon-cgfr">
@@ -288,7 +288,8 @@
         and not current_user.tem_permissao('solicitacoes', 'visualizar')
         and not current_user.tem_permissao('financeiro', 'visualizar')
         and not current_user.tem_permissao('prestacoes_contratos', 'visualizar')
-        and not current_user.tem_permissao('diarias', 'visualizar') %}
+        and not current_user.tem_permissao('diarias', 'visualizar')
+        and not current_user.tem_permissao('cgfr', 'visualizar') %}
     <div class="mt-4" style="max-width: 600px; width: 100%;">
         <div class="card border-0 shadow-sm text-center p-5">
             <div class="mb-3">

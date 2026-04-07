@@ -10,14 +10,14 @@ from flask_login import login_required, current_user
 from app.cgfr.routes import cgfr_bp
 from app.cgfr.services.processo_service import ProcessoService
 from app.cgfr.services.sync_service import SyncService
-from app.utils.permissions import requires_admin
+from app.utils.permissions import requires_permission
 
 logger = logging.getLogger(__name__)
 
 
 @cgfr_bp.route('/api/data', methods=['POST'])
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def api_data():
     """Endpoint POST principal para carregar a DataTable (client-side).
     Espelha website/app/processos/routes/api.py::api_data.
@@ -41,7 +41,7 @@ def api_data():
 
 @cgfr_bp.route('/api/get_record', methods=['POST'])
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def api_get_record():
     """Busca dados completos de um processo (para o modal de edicao).
     Espelha website/app/processos/routes/api.py::api_get_record.
@@ -66,7 +66,7 @@ def api_get_record():
 
 @cgfr_bp.route('/api/datatable', methods=['POST'])
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def api_datatable():
     """Endpoint DataTable server-side processing (legado, mantido para compat)."""
     data = request.get_json() or {}
@@ -93,7 +93,7 @@ def api_datatable():
 
 @cgfr_bp.route('/api/salvar', methods=['POST'])
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def api_salvar():
     """Salva classificação de um processo."""
     data = request.get_json()
@@ -125,7 +125,7 @@ def api_salvar():
 
 @cgfr_bp.route('/api/filter-options')
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def api_filter_options():
     """Retorna opções para Select2 (naturezas, fontes, ações)."""
     options = ProcessoService.get_filter_options()
@@ -134,7 +134,7 @@ def api_filter_options():
 
 @cgfr_bp.route('/api/stats')
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def api_stats():
     """Retorna KPIs atualizados."""
     stats = ProcessoService.get_dashboard_stats()
@@ -143,7 +143,7 @@ def api_stats():
 
 @cgfr_bp.route('/admin/sync', methods=['POST'])
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def admin_sync():
     """Executa sincronização Trino → MySQL (admin only)."""
     try:
@@ -173,7 +173,7 @@ def admin_sync():
 
 @cgfr_bp.route('/api/export-excel')
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def api_export_excel():
     """Exporta processos filtrados como arquivo Excel."""
     filtros = {

@@ -16,7 +16,7 @@ from app.cgfr.routes import cgfr_bp
 from app.cgfr.models import CgfrProcessoEnviado, Acao
 from app.cgfr.services.processo_service import ProcessoService, _format_record, _to_float
 from app.models.nat_despesa import NatDespesa
-from app.utils.permissions import requires_admin
+from app.utils.permissions import requires_permission
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ def _extract_filter_values(dados_por_natureza):
 
 @cgfr_bp.route('/report/')
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def report():
     """Pagina do relatorio com filtros e preview paginado — espelha o original."""
     naturezas_com, naturezas_sem, total_processos, valor_total, active_filters, filter_values = \
@@ -210,7 +210,7 @@ def report():
 
 @cgfr_bp.route('/report/pdf')
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def report_pdf():
     """Versao print-friendly do relatorio — abre em nova aba e dispara window.print()."""
     naturezas_com, naturezas_sem, total_processos, valor_total, active_filters, _ = \
@@ -229,7 +229,7 @@ def report_pdf():
 
 @cgfr_bp.route('/report/excel')
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def report_excel():
     """Exporta relatorio em formato Excel (.xlsx) com filtros aplicados."""
     from openpyxl import Workbook

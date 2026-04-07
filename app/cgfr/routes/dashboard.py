@@ -6,12 +6,12 @@ from flask_login import login_required
 
 from app.cgfr.routes import cgfr_bp
 from app.cgfr.services.processo_service import ProcessoService
-from app.utils.permissions import requires_admin
+from app.utils.permissions import requires_permission
 
 
 @cgfr_bp.route('/')
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def dashboard():
     """Dashboard CGFR com KPIs e DataTable."""
     stats = ProcessoService.get_dashboard_stats()

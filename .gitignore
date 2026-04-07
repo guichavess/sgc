@@ -53,6 +53,11 @@ placeholder
 consulta-pessoa-sga-gestor.txt
 consultaProcedimento.json
 listagem de documentos.json
+API SEI.txt
+processos de diárias.txt
+despacho_cgfr_*.html
+response_docs_*.json
+response_procedimento_*.json
 
 # Rascunhos e arquivos temporarios na raiz
 /_*.py.txt

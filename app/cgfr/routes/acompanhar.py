@@ -22,7 +22,7 @@ from app.cgfr.services.processo_service import obter_timeline_acompanhamento
 from app.extensions import db
 from app.services.sei_auth import gerar_token_sei_admin
 from app.services.sei_integration import consultar_procedimento_sei, listar_documentos_procedimento_sei
-from app.utils.permissions import requires_admin
+from app.utils.permissions import requires_permission
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +173,7 @@ def _fetch_and_save_docs(protocolo, token_sei, app_obj):
 
 @cgfr_bp.route('/acompanhar/<path:protocolo>')
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def acompanhar(protocolo):
     """Pagina de acompanhamento de processo CGFR com timeline."""
     dados = obter_timeline_acompanhamento(protocolo)
@@ -192,7 +192,7 @@ def acompanhar(protocolo):
 
 @cgfr_bp.route('/acompanhar/<path:protocolo>/sync', methods=['POST'])
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def sync_documentos(protocolo):
     """Sincroniza documentos SEI de um processo CGFR via API SEI."""
     processo = CgfrProcessoEnviado.query.get(protocolo)
@@ -222,7 +222,7 @@ def sync_documentos(protocolo):
 
 @cgfr_bp.route('/acompanhar/sync-bulk')
 @login_required
-@requires_admin
+@requires_permission('cgfr')
 def sync_documentos_bulk():
     """Sincroniza documentos SEI de TODOS os processos via SSE para progresso em tempo real."""
     try:
