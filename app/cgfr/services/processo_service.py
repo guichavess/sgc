@@ -5,7 +5,7 @@ Espelha a implementacao do sistema original (website/app/services/processo_servi
 """
 import io
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import or_, func
@@ -110,13 +110,9 @@ class ProcessoService:
                     CgfrProcessoEnviado.acao_id.isnot(None),
                 )
 
-            # Ordena: registros com dados SEI primeiro, depois por data_inclusao desc
+            # Ordena pela data real do processo no SEI (mais recentes primeiro)
             processos = query.order_by(
-                db.case(
-                    (CgfrProcessoEnviado.objeto_do_pedido.isnot(None), 0),
-                    else_=1,
-                ),
-                CgfrProcessoEnviado.data_inclusao.desc(),
+                CgfrProcessoEnviado.data_hora_processo.desc(),
             ).all()
 
             acao_ids = {p.acao_id for p in processos if p.acao_id}
@@ -396,9 +392,14 @@ def _format_record(p, acao_map=None):
     di = p.data_inclusao
     if di:
         d['data_inclusao_fmt'] = di.strftime('%d/%m/%Y')
-        d['is_novo'] = di > datetime(2026, 1, 1, 0, 0, 0)
     else:
         d['data_inclusao_fmt'] = '-'
+
+    # "Novo" = data real do processo no SEI (data_hora_processo) nos últimos 90 dias
+    dhp = p.data_hora_processo
+    if dhp:
+        d['is_novo'] = dhp > (datetime.now() - timedelta(days=90))
+    else:
         d['is_novo'] = False
 
     d['data_recebido_cgfr'] = _strip_time(d.get('data_recebido_cgfr')) or '-'
