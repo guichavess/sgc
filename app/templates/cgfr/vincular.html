@@ -333,6 +333,7 @@ $(document).ready(function() {
             url: "{{ url_for('cgfr.api_consultar_sei') }}",
             method: 'POST',
             contentType: 'application/json',
+            timeout: 90000,
             data: JSON.stringify({ protocolo: protocolo }),
             success: function(resp) {
                 if (resp.sucesso && resp.adotavel) {
@@ -391,8 +392,10 @@ $(document).ready(function() {
                     $('#hdn_acao_vincular').val('novo');
                 }
             },
-            error: function(xhr) {
-                var msg = 'Erro de comunicacao com o servidor.';
+            error: function(xhr, status) {
+                var msg = status === 'timeout'
+                    ? 'A consulta ao SEI demorou demais (timeout). Tente novamente.'
+                    : 'Erro de comunicacao com o servidor.';
                 try { msg = xhr.responseJSON.erro || msg; } catch(e) {}
                 $('#sei-erro-msg').text(msg);
                 $('#sei-erro').removeClass('d-none');
