@@ -92,15 +92,21 @@ def api_consultar_sei():
             })
 
         # Processo existe no banco mas está oculto pelo filtro → permitir adoção
+        def _fmt(val):
+            """Formata datetime ou string para exibição."""
+            if not val:
+                return ''
+            return val.strftime('%d/%m/%Y %H:%M:%S') if hasattr(val, 'strftime') else str(val)
+
         preview = {
             'processo_formatado': existente.processo_formatado,
             'link_acesso': existente.link_acesso or '',
             'especificacao': existente.especificacao or '',
             'tipo_processo': existente.tipo_processo or '',
-            'data_hora_processo': existente.data_hora_processo.strftime('%d/%m/%Y %H:%M:%S') if existente.data_hora_processo else '',
+            'data_hora_processo': _fmt(existente.data_hora_processo),
             'geracao_sigla': existente.geracao_sigla or '',
             'ultimo_andamento_sigla': existente.ultimo_andamento_sigla or '',
-            'ultimo_andamento_data': existente.ultimo_andamento_data.strftime('%d/%m/%Y %H:%M:%S') if existente.ultimo_andamento_data else '',
+            'ultimo_andamento_data': _fmt(existente.ultimo_andamento_data),
         }
         return jsonify({
             'sucesso': True,
