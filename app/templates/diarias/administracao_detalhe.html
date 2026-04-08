@@ -95,6 +95,9 @@
 {% endblock %}
 
 {% block content %}
+{# Processos importados do SEI podem ser editados manualmente #}
+{% set is_importado = itinerario.usuario_gerador == 'IMPORTACAO_SEI' %}
+{% set pode_editar = is_importado and current_user.tem_permissao('diarias', 'aprovar') %}
 <div class="mb-3 d-flex justify-content-between align-items-center">
     <a href="{{ url_for('diarias.administracao') }}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1"></i> Voltar
@@ -136,6 +139,11 @@
                 | <span class="badge" style="background-color: {{ itinerario.etapa_atual.cor_hex or '#6c757d' }};">
                     <i class="{{ itinerario.etapa_atual.icone }} me-1"></i>{{ itinerario.etapa_atual.nome }}
                 </span>
+                {% if current_user.tem_permissao('diarias', 'aprovar') %}
+                <button class="btn btn-outline-secondary btn-sm ms-1 py-0 px-1" data-bs-toggle="modal" data-bs-target="#modalAlterarEtapa" title="Alterar etapa manualmente">
+                    <i class="bi bi-pencil" style="font-size: 0.7rem;"></i>
+                </button>
+                {% endif %}
                 {% endif %}
             </p>
             <p class="text-secondary mb-0" style="font-size: 0.95rem;">
@@ -148,6 +156,16 @@
             {% include 'diarias/partials/timeline_diarias.html' %}
 
             {# --- CARDS RESUMO (abaixo da timeline) --- #}
+            {% if pode_editar %}
+            <div class="d-flex justify-content-end mb-1 gap-1">
+                <button class="btn btn-outline-primary btn-sm py-0 px-2" data-bs-toggle="modal" data-bs-target="#modalEditarDadosBasicos" title="Editar dados basicos">
+                    <i class="bi bi-pencil-square me-1" style="font-size: 0.75rem;"></i><span style="font-size: 0.75rem;">Editar Dados</span>
+                </button>
+                <button class="btn btn-outline-info btn-sm py-0 px-2" data-bs-toggle="modal" data-bs-target="#modalEditarDocumentos" title="Editar documentos SEI">
+                    <i class="bi bi-file-earmark-text me-1" style="font-size: 0.75rem;"></i><span style="font-size: 0.75rem;">Documentos SEI</span>
+                </button>
+            </div>
+            {% endif %}
             <div class="row g-2 mb-3">
                 <div class="col-md-3">
                     <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #0d6efd !important;">
@@ -546,36 +564,18 @@
 
             {# ── UPLOAD + FORMULARIO + TABELAS DE COTACOES ── #}
 
-            {# --- UPLOAD COTACAO AO SEI (só na etapa 2) --- #}
-            {% if itinerario.sei_protocolo and itinerario.etapa_atual_id == 2 %}
+            {# --- GERAR DOCUMENTO DE COTACOES NO SEI (só na etapa 2, com cotações cadastradas) --- #}
+            {% if itinerario.sei_protocolo and itinerario.etapa_atual_id == 2 and cotacoes_voos|length > 0 %}
             <section class="mb-4">
-                <h6 class="section-title mb-2"><i class="bi bi-cloud-upload me-1"></i>Enviar Cotação ao SEI</h6>
-                <div class="card border-primary">
-                    <div class="card-body py-2">
-                        <form action="{{ url_for('diarias.upload_cotacao', id=itinerario.id) }}" method="post" enctype="multipart/form-data">
-                            <div class="row g-2 align-items-end">
-                                <div class="col-md-5">
-                                    <label class="form-label small fw-semibold mb-1">Descrição</label>
-                                    <input type="text" name="descricao_cotacao" class="form-control form-control-sm"
-                                           placeholder="Ex: cotação agência X">
-                                </div>
-                                <div class="col-md-5">
-                                    <label class="form-label small fw-semibold mb-1">Arquivo (PDF) <span class="text-danger">*</span></label>
-                                    <input type="file" name="arquivo_cotacao" class="form-control form-control-sm"
-                                           accept=".pdf,.jpg,.jpeg,.png" required>
-                                </div>
-                                <div class="col-md-2">
-                                    <button type="submit" class="btn btn-primary btn-sm w-100">
-                                        <i class="bi bi-cloud-upload me-1"></i>Enviar
-                                    </button>
-                                </div>
-                            </div>
-                            <small class="text-muted d-block mt-1">
-                                <i class="bi bi-info-circle me-1"></i>Documento enviado ao SEI como "Cotação" (série 272). O OCR será aplicado automaticamente na sincronização.
-                            </small>
-                        </form>
-                    </div>
-                </div>
+                <form action="{{ url_for('diarias.gerar_cotacoes_sei', id=itinerario.id) }}" method="post"
+                      onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').innerHTML='<span class=\'spinner-border spinner-border-sm me-1\'></span> Gerando...';">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-file-earmark-plus me-1"></i>Gerar Documento de Cotações no SEI
+                    </button>
+                    <small class="text-muted ms-2">
+                        <i class="bi bi-info-circle me-1"></i>Gera tabela formatada com {{ cotacoes_voos|length }} cotação(ões) como documento "Cotação" (série 272) no processo SEI.
+                    </small>
+                </form>
             </section>
             {% endif %}
 
@@ -747,19 +747,30 @@
                                             <th>Rota</th>
                                             <th>Bagagem</th>
                                             <th class="text-end">Total</th>
-                                            {% if itinerario.etapa_atual_id == 2 %}<th style="width:50px"></th>{% endif %}
+                                            <th style="width:70px"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="tbody-ida">
                                         {% for c in voos_ida %}
-                                        <tr data-id="{{ c.id }}">
+                                        <tr data-id="{{ c.id }}"
+                                            data-tipo-trecho="{{ c.tipo_trecho }}"
+                                            data-contrato="{{ c.contrato_codigo or '' }}"
+                                            data-cia="{{ c.cia }}" data-voo="{{ c.voo }}"
+                                            data-saida="{{ c.saida.strftime('%Y-%m-%dT%H:%M') if c.saida else '' }}"
+                                            data-chegada="{{ c.chegada.strftime('%Y-%m-%dT%H:%M') if c.chegada else '' }}"
+                                            data-origem="{{ c.origem }}" data-destino="{{ c.destino }}"
+                                            data-valor="{{ c.valor }}" data-bagagem="{{ c.bagagem or '' }}"
+                                            data-cia-cx="{{ c.cia_conexao or '' }}" data-voo-cx="{{ c.voo_conexao or '' }}"
+                                            data-saida-cx="{{ c.saida_conexao.strftime('%Y-%m-%dT%H:%M') if c.saida_conexao else '' }}"
+                                            data-chegada-cx="{{ c.chegada_conexao.strftime('%Y-%m-%dT%H:%M') if c.chegada_conexao else '' }}"
+                                            data-origem-cx="{{ c.origem_conexao or '' }}" data-destino-cx="{{ c.destino_conexao or '' }}">
                                             <td class="text-center">
                                                 {% if c.fonte == 'manual' %}
                                                 <span class="badge bg-success" style="font-size: 0.6rem;" title="Cadastrado manualmente no SGC"><i class="bi bi-pencil-square"></i></span>
                                                 {% elif c.fonte == 'ocr_sei' %}
-                                                <span class="badge" style="font-size: 0.6rem; background: #1565C0;" title="Extraído via OCR do SEI"><i class="bi bi-file-earmark-pdf"></i></span>
+                                                <span class="badge" style="font-size: 0.6rem; background: #1565C0;" title="Extraido via OCR do SEI"><i class="bi bi-file-earmark-pdf"></i></span>
                                                 {% else %}
-                                                <span class="badge bg-secondary" style="font-size: 0.6rem;" title="Fonte não identificada"><i class="bi bi-question-circle"></i></span>
+                                                <span class="badge bg-secondary" style="font-size: 0.6rem;" title="Fonte nao identificada"><i class="bi bi-question-circle"></i></span>
                                                 {% endif %}
                                             </td>
                                             <td>{{ c.nome_agencia or '-' }}</td>
@@ -775,13 +786,14 @@
                                             </td>
                                             <td>{{ c.bagagem or '-' }}</td>
                                             <td class="text-end fw-bold text-success">{{ c.valor_formatado }}</td>
-                                            {% if itinerario.etapa_atual_id == 2 %}
-                                            <td class="text-center">
-                                                <button class="btn btn-outline-danger btn-excluir-cotacao" onclick="excluirCotacaoVoo({{ c.id }}, this)">
+                                            <td class="text-center text-nowrap">
+                                                <button class="btn btn-outline-primary py-0 px-1" style="font-size:0.7rem;" onclick="abrirModalEditCotacao(this.closest('tr'))" title="Editar">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <button class="btn btn-outline-danger py-0 px-1" style="font-size:0.7rem;" onclick="excluirCotacaoVoo({{ c.id }}, this)">
                                                     <i class="bi bi-x"></i>
                                                 </button>
                                             </td>
-                                            {% endif %}
                                         </tr>
                                         {% endfor %}
                                     </tbody>
@@ -790,7 +802,7 @@
 
                             {# VOLTA #}
                             <h6 class="fw-bold text-info mb-2" style="font-size: 0.8rem;">
-                                <i class="bi bi-arrow-left-circle me-1"></i>OPÇÕES DE VOOS — VOLTA
+                                <i class="bi bi-arrow-left-circle me-1"></i>OPCOES DE VOOS — VOLTA
                                 <span class="badge bg-info ms-1" id="count-volta">{{ voos_volta|length }}</span>
                             </h6>
                             <div class="table-responsive mb-3">
@@ -798,27 +810,38 @@
                                     <thead class="table-light">
                                         <tr>
                                             <th>Fonte</th>
-                                            <th>Agência</th>
+                                            <th>Agencia</th>
                                             <th>CIA</th>
                                             <th>Voo</th>
-                                            <th>Saída</th>
+                                            <th>Saida</th>
                                             <th>Chegada</th>
                                             <th>Rota</th>
                                             <th>Bagagem</th>
                                             <th class="text-end">Total</th>
-                                            {% if itinerario.etapa_atual_id == 2 %}<th style="width:50px"></th>{% endif %}
+                                            <th style="width:70px"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="tbody-volta">
                                         {% for c in voos_volta %}
-                                        <tr data-id="{{ c.id }}">
+                                        <tr data-id="{{ c.id }}"
+                                            data-tipo-trecho="{{ c.tipo_trecho }}"
+                                            data-contrato="{{ c.contrato_codigo or '' }}"
+                                            data-cia="{{ c.cia }}" data-voo="{{ c.voo }}"
+                                            data-saida="{{ c.saida.strftime('%Y-%m-%dT%H:%M') if c.saida else '' }}"
+                                            data-chegada="{{ c.chegada.strftime('%Y-%m-%dT%H:%M') if c.chegada else '' }}"
+                                            data-origem="{{ c.origem }}" data-destino="{{ c.destino }}"
+                                            data-valor="{{ c.valor }}" data-bagagem="{{ c.bagagem or '' }}"
+                                            data-cia-cx="{{ c.cia_conexao or '' }}" data-voo-cx="{{ c.voo_conexao or '' }}"
+                                            data-saida-cx="{{ c.saida_conexao.strftime('%Y-%m-%dT%H:%M') if c.saida_conexao else '' }}"
+                                            data-chegada-cx="{{ c.chegada_conexao.strftime('%Y-%m-%dT%H:%M') if c.chegada_conexao else '' }}"
+                                            data-origem-cx="{{ c.origem_conexao or '' }}" data-destino-cx="{{ c.destino_conexao or '' }}">
                                             <td class="text-center">
                                                 {% if c.fonte == 'manual' %}
                                                 <span class="badge bg-success" style="font-size: 0.6rem;" title="Cadastrado manualmente no SGC"><i class="bi bi-pencil-square"></i></span>
                                                 {% elif c.fonte == 'ocr_sei' %}
-                                                <span class="badge" style="font-size: 0.6rem; background: #1565C0;" title="Extraído via OCR do SEI"><i class="bi bi-file-earmark-pdf"></i></span>
+                                                <span class="badge" style="font-size: 0.6rem; background: #1565C0;" title="Extraido via OCR do SEI"><i class="bi bi-file-earmark-pdf"></i></span>
                                                 {% else %}
-                                                <span class="badge bg-secondary" style="font-size: 0.6rem;" title="Fonte não identificada"><i class="bi bi-question-circle"></i></span>
+                                                <span class="badge bg-secondary" style="font-size: 0.6rem;" title="Fonte nao identificada"><i class="bi bi-question-circle"></i></span>
                                                 {% endif %}
                                             </td>
                                             <td>{{ c.nome_agencia or '-' }}</td>
@@ -834,13 +857,14 @@
                                             </td>
                                             <td>{{ c.bagagem or '-' }}</td>
                                             <td class="text-end fw-bold text-success">{{ c.valor_formatado }}</td>
-                                            {% if itinerario.etapa_atual_id == 2 %}
-                                            <td class="text-center">
-                                                <button class="btn btn-outline-danger btn-excluir-cotacao" onclick="excluirCotacaoVoo({{ c.id }}, this)">
+                                            <td class="text-center text-nowrap">
+                                                <button class="btn btn-outline-primary py-0 px-1" style="font-size:0.7rem;" onclick="abrirModalEditCotacao(this.closest('tr'))" title="Editar">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <button class="btn btn-outline-danger py-0 px-1" style="font-size:0.7rem;" onclick="excluirCotacaoVoo({{ c.id }}, this)">
                                                     <i class="bi bi-x"></i>
                                                 </button>
                                             </td>
-                                            {% endif %}
                                         </tr>
                                         {% endfor %}
                                     </tbody>
@@ -1192,6 +1216,14 @@
 
             {# ===================== ABA FINANCEIRO ===================== #}
             {% if aba == 'financeiro' %}
+
+            {% if pode_editar %}
+            <div class="d-flex justify-content-end mb-2">
+                <button class="btn btn-outline-success btn-sm py-0 px-2" data-bs-toggle="modal" data-bs-target="#modalEditarQuadro" title="Editar quadro orcamentario">
+                    <i class="bi bi-calculator me-1" style="font-size: 0.75rem;"></i><span style="font-size: 0.75rem;">Editar Quadro Orcamentario</span>
+                </button>
+            </div>
+            {% endif %}
 
             {# --- NOTA DE RESERVA + VERIFICAÇÕES PÓS-DESPACHO (accordion) --- #}
             {% set doc_nr = itinerario.get_doc('nota_reserva') %}
@@ -1548,7 +1580,14 @@
                     <div class="card-header bg-white border-bottom py-2">
                         <div class="d-flex justify-content-between align-items-center">
                             <h6 class="mb-0 section-title"><i class="bi bi-people me-1"></i>Pessoas</h6>
-                            <span class="badge bg-secondary">{{ itens|length }}</span>
+                            <div>
+                                {% if pode_editar %}
+                                <button class="btn btn-success btn-sm py-0 px-2 me-1" onclick="abrirModalPessoa()" title="Adicionar pessoa">
+                                    <i class="bi bi-person-plus me-1" style="font-size: 0.75rem;"></i><span style="font-size: 0.75rem;">Adicionar</span>
+                                </button>
+                                {% endif %}
+                                <span class="badge bg-secondary">{{ itens|length }}</span>
+                            </div>
                         </div>
                     </div>
                     <div class="card-body p-0">
@@ -1560,14 +1599,30 @@
                                         <th>CPF / Mat.</th>
                                         <th>Cargo (Folha)</th>
                                         <th>Setor / Orgao</th>
-                                        <th>Cargo Diária</th>
+                                        <th>Cargo Diaria</th>
                                         <th>Assessorando</th>
-                                        <th class="text-end pe-3">Valor Diária</th>
+                                        <th class="text-end">Valor Diaria</th>
+                                        {% if pode_editar %}
+                                        <th class="text-center" style="width: 80px;">Acoes</th>
+                                        {% endif %}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for item in itens %}
-                                    <tr>
+                                    <tr data-item-id="{{ item.id }}"
+                                        data-cpf="{{ item.cpf_pessoa or '' }}"
+                                        data-nome="{{ item.nome_pessoa or '' }}"
+                                        data-matricula="{{ item.matricula_pessoa or '' }}"
+                                        data-cargo-id="{{ item.cargo_id or '' }}"
+                                        data-cargo-assessorado-id="{{ item.cargo_assessorado_id or '' }}"
+                                        data-natureza-id="{{ item.natureza_id or '' }}"
+                                        data-valor-cargo="{{ item.valor_cargo or '' }}"
+                                        data-banco-agencia="{{ item.banco_agencia or '' }}"
+                                        data-banco-conta="{{ item.banco_conta or '' }}"
+                                        data-vinculo="{{ item.vinculo or '' }}"
+                                        data-cargo-folha="{{ item.cargo_folha or '' }}"
+                                        data-setor="{{ item.setor or '' }}"
+                                        data-orgao="{{ item.orgao or '' }}">
                                         <td class="ps-3 fw-semibold">{{ item.nome_pessoa or item.cpf_pessoa }}</td>
                                         <td>
                                             <small>{{ item.cpf_pessoa }}</small>
@@ -1585,15 +1640,25 @@
                                             <span class="badge rounded-pill bg-success">{{ item.cargo_assessorado.nome }}</span>
                                             {% else %}<span class="text-muted small">---</span>{% endif %}
                                         </td>
-                                        <td class="text-end pe-3">
+                                        <td class="text-end">
                                             {% if item.valor_cargo %}
                                             <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(item.valor_cargo).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
                                             {% else %}<span class="text-muted small">---</span>{% endif %}
                                         </td>
+                                        {% if pode_editar %}
+                                        <td class="text-center">
+                                            <button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="abrirModalPessoa(this.closest('tr'))" title="Editar">
+                                                <i class="bi bi-pencil" style="font-size: 0.7rem;"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removerPessoa({{ item.id }}, this)" title="Remover">
+                                                <i class="bi bi-trash" style="font-size: 0.7rem;"></i>
+                                            </button>
+                                        </td>
+                                        {% endif %}
                                     </tr>
                                     {% else %}
                                     <tr>
-                                        <td colspan="7" class="text-center py-4 text-muted">
+                                        <td colspan="{{ 8 if pode_editar else 7 }}" class="text-center py-4 text-muted">
                                             <i class="bi bi-inbox fs-3 d-block mb-2"></i>
                                             Nenhuma pessoa adicionada.
                                         </td>
@@ -1736,6 +1801,11 @@
         </div>
     </div>
 </div>
+{% endif %}
+
+{# ── Modais de edição admin (processos importados) ── #}
+{% if pode_editar %}
+{% include 'diarias/partials/modais_edicao_admin.html' %}
 {% endif %}
 
 {% endblock %}
@@ -2332,5 +2402,282 @@ async function autorizarSolicitacao() {
         </div>
     </div>
 </div>
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   JavaScript — Modais de edição admin (processos importados)
+   ══════════════════════════════════════════════════════════════════════════════ #}
+{% if pode_editar %}
+<script>
+const ITINERARIO_ID = {{ itinerario.id }};
+
+// ── Helper: POST JSON e recarregar ──
+async function _postJSON(url, payload) {
+    var resp = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    });
+    var data = await resp.json();
+    if (!resp.ok || !data.sucesso) {
+        throw new Error(data.error || 'Erro desconhecido');
+    }
+    return data;
+}
+
+// ── Modal E: Alterar Etapa ──
+async function salvarAlteracaoEtapa() {
+    if (!confirm('Deseja alterar a etapa manualmente?')) return;
+    try {
+        await _postJSON('{{ url_for("diarias.api_admin_alterar_etapa") }}', {
+            itinerario_id: ITINERARIO_ID,
+            etapa_id: document.getElementById('edit_etapa_id').value,
+            comentario: document.getElementById('edit_etapa_comentario').value
+        });
+        location.reload();
+    } catch (e) { alert('Erro: ' + e.message); }
+}
+
+// ── Modal A: Editar Dados Basicos ──
+async function salvarDadosBasicos() {
+    if (!confirm('Deseja salvar as alteracoes nos dados basicos?')) return;
+    try {
+        await _postJSON('{{ url_for("diarias.api_admin_editar_dados_basicos") }}', {
+            itinerario_id: ITINERARIO_ID,
+            tipo_solicitacao_id: document.getElementById('edit_tipo_solicitacao_id').value,
+            tipo_itinerario: document.getElementById('edit_tipo_itinerario').value,
+            data_viagem: document.getElementById('edit_data_viagem').value,
+            data_retorno: document.getElementById('edit_data_retorno').value,
+            qtd_diarias_solicitadas: document.getElementById('edit_qtd_diarias').value,
+            estado_origem: document.getElementById('edit_estado_origem').value,
+            origem: document.getElementById('edit_origem').value,
+            estado_destino: document.getElementById('edit_estado_destino').value,
+            valor_total: document.getElementById('edit_valor_total').value,
+            objetivo: document.getElementById('edit_objetivo').value,
+        });
+        location.reload();
+    } catch (e) { alert('Erro: ' + e.message); }
+}
+
+// ── Modal B: Pessoas ──
+function abrirModalPessoa(trEl) {
+    var title = document.getElementById('modalPessoaTitle');
+    // Limpar campos
+    ['edit_pessoa_item_id','edit_pessoa_cpf','edit_pessoa_nome','edit_pessoa_matricula',
+     'edit_pessoa_valor_cargo','edit_pessoa_vinculo','edit_pessoa_banco_agencia',
+     'edit_pessoa_banco_conta','edit_pessoa_cargo_folha','edit_pessoa_setor','edit_pessoa_orgao'
+    ].forEach(function(id) { document.getElementById(id).value = ''; });
+    ['edit_pessoa_cargo_id','edit_pessoa_cargo_assessorado_id','edit_pessoa_natureza_id'
+    ].forEach(function(id) { document.getElementById(id).value = ''; });
+
+    if (trEl) {
+        title.innerHTML = '<i class="bi bi-person-gear me-1"></i> Editar Pessoa';
+        var d = trEl.dataset;
+        document.getElementById('edit_pessoa_item_id').value = d.itemId;
+        document.getElementById('edit_pessoa_cpf').value = d.cpf;
+        document.getElementById('edit_pessoa_nome').value = d.nome;
+        document.getElementById('edit_pessoa_matricula').value = d.matricula;
+        document.getElementById('edit_pessoa_cargo_id').value = d.cargoId;
+        document.getElementById('edit_pessoa_cargo_assessorado_id').value = d.cargoAssessoradoId;
+        document.getElementById('edit_pessoa_natureza_id').value = d.naturezaId;
+        document.getElementById('edit_pessoa_valor_cargo').value = d.valorCargo;
+        document.getElementById('edit_pessoa_vinculo').value = d.vinculo;
+        document.getElementById('edit_pessoa_banco_agencia').value = d.bancoAgencia;
+        document.getElementById('edit_pessoa_banco_conta').value = d.bancoConta;
+        document.getElementById('edit_pessoa_cargo_folha').value = d.cargoFolha;
+        document.getElementById('edit_pessoa_setor').value = d.setor;
+        document.getElementById('edit_pessoa_orgao').value = d.orgao;
+    } else {
+        title.innerHTML = '<i class="bi bi-person-plus me-1"></i> Adicionar Pessoa';
+    }
+    new bootstrap.Modal(document.getElementById('modalEditarPessoa')).show();
+}
+
+async function buscarPessoaCPF() {
+    var cpf = document.getElementById('edit_pessoa_cpf').value.trim();
+    if (!cpf) return;
+    try {
+        var resp = await fetch('{{ url_for("diarias.api_buscar_pessoa_cpf") }}?cpf=' + encodeURIComponent(cpf));
+        var data = await resp.json();
+        if (data.encontrado) {
+            document.getElementById('edit_pessoa_nome').value = data.nome || '';
+            document.getElementById('edit_pessoa_matricula').value = data.matricula || '';
+            document.getElementById('edit_pessoa_vinculo').value = data.vinculo || '';
+            document.getElementById('edit_pessoa_banco_agencia').value = data.banco_agencia || '';
+            document.getElementById('edit_pessoa_banco_conta').value = data.banco_conta || '';
+            document.getElementById('edit_pessoa_cargo_folha').value = data.cargo || '';
+            document.getElementById('edit_pessoa_setor').value = data.setor || '';
+            document.getElementById('edit_pessoa_orgao').value = data.orgao || '';
+        } else {
+            alert('Servidor nao encontrado para este CPF.');
+        }
+    } catch (e) { alert('Erro na busca: ' + e.message); }
+}
+
+async function salvarPessoa() {
+    var cpf = document.getElementById('edit_pessoa_cpf').value.trim();
+    if (!cpf) { alert('CPF e obrigatorio.'); return; }
+    if (!confirm('Deseja salvar esta pessoa?')) return;
+    try {
+        await _postJSON('{{ url_for("diarias.api_admin_salvar_pessoa") }}', {
+            itinerario_id: ITINERARIO_ID,
+            item_id: document.getElementById('edit_pessoa_item_id').value || null,
+            cpf_pessoa: cpf,
+            nome_pessoa: document.getElementById('edit_pessoa_nome').value,
+            matricula_pessoa: document.getElementById('edit_pessoa_matricula').value,
+            cargo_id: document.getElementById('edit_pessoa_cargo_id').value || null,
+            cargo_assessorado_id: document.getElementById('edit_pessoa_cargo_assessorado_id').value || null,
+            natureza_id: document.getElementById('edit_pessoa_natureza_id').value || null,
+            valor_cargo: document.getElementById('edit_pessoa_valor_cargo').value || null,
+            vinculo: document.getElementById('edit_pessoa_vinculo').value,
+            banco_agencia: document.getElementById('edit_pessoa_banco_agencia').value,
+            banco_conta: document.getElementById('edit_pessoa_banco_conta').value,
+            cargo_folha: document.getElementById('edit_pessoa_cargo_folha').value,
+            setor: document.getElementById('edit_pessoa_setor').value,
+            orgao: document.getElementById('edit_pessoa_orgao').value,
+        });
+        location.reload();
+    } catch (e) { alert('Erro: ' + e.message); }
+}
+
+async function removerPessoa(itemId, btnEl) {
+    if (!confirm('Remover esta pessoa do itinerario?')) return;
+    btnEl.disabled = true;
+    try {
+        var resp = await fetch('/diarias/api/admin/remover-pessoa/' + itemId, { method: 'DELETE' });
+        var data = await resp.json();
+        if (resp.ok && data.sucesso) {
+            btnEl.closest('tr').remove();
+        } else {
+            alert(data.error || 'Erro ao remover.');
+            btnEl.disabled = false;
+        }
+    } catch (e) {
+        alert('Erro de conexao.');
+        btnEl.disabled = false;
+    }
+}
+
+// ── Modal D: Documentos SEI ──
+async function salvarDocumentosSEI() {
+    if (!confirm('Deseja salvar as alteracoes nos documentos SEI?')) return;
+    var documentos = [];
+    document.querySelectorAll('.doc-sei-id').forEach(function(el) {
+        var tipo = el.dataset.tipo;
+        var seiId = el.value.trim();
+        var seiFmt = document.querySelector('.doc-sei-formatado[data-tipo="' + tipo + '"]').value.trim();
+        var codigo = document.querySelector('.doc-codigo[data-tipo="' + tipo + '"]').value.trim();
+        if (seiId || seiFmt || codigo) {
+            documentos.push({ tipo_documento: tipo, sei_id: seiId, sei_formatado: seiFmt, codigo: codigo });
+        }
+    });
+    if (documentos.length === 0) { alert('Nenhum documento preenchido.'); return; }
+    try {
+        await _postJSON('{{ url_for("diarias.api_admin_editar_documentos_sei") }}', {
+            itinerario_id: ITINERARIO_ID,
+            documentos: documentos
+        });
+        location.reload();
+    } catch (e) { alert('Erro: ' + e.message); }
+}
+
+// ── Modal C: Editar Cotacao Voo ──
+function toggleEditConexao() {
+    var chk = document.getElementById('edit_cot_chk_conexao');
+    var fields = document.getElementById('edit_conexao_fields');
+    if (chk.checked) { fields.classList.add('show'); } else { fields.classList.remove('show'); }
+}
+
+function abrirModalEditCotacao(trEl) {
+    var d = trEl.dataset;
+    document.getElementById('edit_cotacao_id').value = d.id;
+    document.getElementById('edit_cot_tipo_trecho').value = d.tipoTrecho;
+    document.getElementById('edit_cot_contrato').value = d.contrato;
+    document.getElementById('edit_cot_cia').value = d.cia;
+    document.getElementById('edit_cot_voo').value = d.voo;
+    document.getElementById('edit_cot_saida').value = d.saida;
+    document.getElementById('edit_cot_chegada').value = d.chegada;
+    document.getElementById('edit_cot_origem').value = d.origem;
+    document.getElementById('edit_cot_destino').value = d.destino;
+    document.getElementById('edit_cot_valor').value = d.valor;
+    // Bagagem
+    var bagSel = document.getElementById('edit_cot_bagagem');
+    var bagVal = d.bagagem || '';
+    var found = false;
+    for (var i = 0; i < bagSel.options.length; i++) {
+        if (bagSel.options[i].value === bagVal) { found = true; break; }
+    }
+    bagSel.value = found ? bagVal : '';
+
+    // Conexao
+    var temConexao = !!(d.vooCx);
+    document.getElementById('edit_cot_chk_conexao').checked = temConexao;
+    var cxFields = document.getElementById('edit_conexao_fields');
+    if (temConexao) { cxFields.classList.add('show'); } else { cxFields.classList.remove('show'); }
+    document.getElementById('edit_cot_cia_cx').value = d.ciaCx || '';
+    document.getElementById('edit_cot_voo_cx').value = d.vooCx || '';
+    document.getElementById('edit_cot_saida_cx').value = d.saidaCx || '';
+    document.getElementById('edit_cot_chegada_cx').value = d.chegadaCx || '';
+    document.getElementById('edit_cot_origem_cx').value = d.origemCx || '';
+    document.getElementById('edit_cot_destino_cx').value = d.destinoCx || '';
+
+    new bootstrap.Modal(document.getElementById('modalEditarCotacaoVoo')).show();
+}
+
+async function salvarEditCotacaoVoo() {
+    if (!confirm('Deseja salvar as alteracoes nesta cotacao?')) return;
+    var payload = {
+        cotacao_id: document.getElementById('edit_cotacao_id').value,
+        tipo_trecho: document.getElementById('edit_cot_tipo_trecho').value,
+        contrato_codigo: document.getElementById('edit_cot_contrato').value || null,
+        cia: document.getElementById('edit_cot_cia').value,
+        voo: document.getElementById('edit_cot_voo').value,
+        saida: document.getElementById('edit_cot_saida').value,
+        chegada: document.getElementById('edit_cot_chegada').value,
+        origem: document.getElementById('edit_cot_origem').value,
+        destino: document.getElementById('edit_cot_destino').value,
+        valor: parseFloat(document.getElementById('edit_cot_valor').value),
+        bagagem: document.getElementById('edit_cot_bagagem').value || null,
+    };
+    if (document.getElementById('edit_cot_chk_conexao').checked) {
+        payload.cia_conexao = document.getElementById('edit_cot_cia_cx').value;
+        payload.voo_conexao = document.getElementById('edit_cot_voo_cx').value;
+        payload.saida_conexao = document.getElementById('edit_cot_saida_cx').value;
+        payload.chegada_conexao = document.getElementById('edit_cot_chegada_cx').value;
+        payload.origem_conexao = document.getElementById('edit_cot_origem_cx').value;
+        payload.destino_conexao = document.getElementById('edit_cot_destino_cx').value;
+    } else {
+        payload.cia_conexao = null; payload.voo_conexao = null;
+        payload.saida_conexao = null; payload.chegada_conexao = null;
+        payload.origem_conexao = null; payload.destino_conexao = null;
+    }
+    try {
+        await _postJSON('{{ url_for("diarias.api_admin_editar_cotacao_voo") }}', payload);
+        location.reload();
+    } catch (e) { alert('Erro: ' + e.message); }
+}
+
+// ── Modal F: Quadro Orcamentario ──
+async function salvarQuadroOrcamentario() {
+    if (!confirm('Deseja salvar o quadro orcamentario?')) return;
+    try {
+        await _postJSON('{{ url_for("diarias.api_admin_editar_quadro_orcamentario") }}', {
+            itinerario_id: ITINERARIO_ID,
+            ug: document.getElementById('edit_quadro_ug').value,
+            funcao: document.getElementById('edit_quadro_funcao').value,
+            subfuncao: document.getElementById('edit_quadro_subfuncao').value,
+            programa: document.getElementById('edit_quadro_programa').value,
+            plano_interno: document.getElementById('edit_quadro_plano_interno').value,
+            fonte_recursos: document.getElementById('edit_quadro_fonte_recursos').value,
+            natureza_despesa: document.getElementById('edit_quadro_natureza_despesa').value,
+            valor_inicial_nr: document.getElementById('edit_quadro_valor_inicial_nr').value || null,
+            saldo_nr: document.getElementById('edit_quadro_saldo_nr').value || null,
+            valor_despesa: document.getElementById('edit_quadro_valor_despesa').value || null,
+            saldo_atual_nr: document.getElementById('edit_quadro_saldo_atual_nr').value || null,
+        });
+        location.reload();
+    } catch (e) { alert('Erro: ' + e.message); }
+}
+</script>
+{% endif %}
 
 {% endblock %}

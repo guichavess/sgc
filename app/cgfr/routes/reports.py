@@ -62,7 +62,7 @@ def _get_processos_filtrados():
             active_filters[col] = values
 
     query = CgfrProcessoEnviado.query.filter(
-        CgfrProcessoEnviado.processo_formatado.like(f'{CgfrProcessoEnviado.PREFIXO_SEAD}%')
+        CgfrProcessoEnviado.filtro_visiveis()
     ).options(
         joinedload(CgfrProcessoEnviado.natureza_rel),
         joinedload(CgfrProcessoEnviado.fonte_rel),

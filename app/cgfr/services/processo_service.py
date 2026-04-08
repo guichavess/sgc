@@ -36,12 +36,11 @@ class ProcessoService:
             classificados = contagem['classificados']
             pendentes = contagem['pendentes']
 
-            prefixo = CgfrProcessoEnviado.PREFIXO_SEAD
             row = db.session.query(
                 func.coalesce(func.sum(CgfrProcessoEnviado.valor_solicitado), 0),
                 func.coalesce(func.sum(CgfrProcessoEnviado.valor_aprovado), 0),
             ).filter(
-                CgfrProcessoEnviado.processo_formatado.like(f'{prefixo}%')
+                CgfrProcessoEnviado.filtro_visiveis()
             ).first()
             valor_total_solicitado = float(row[0]) if row else 0.0
             valor_total_acordado = float(row[1]) if row else 0.0
@@ -76,7 +75,7 @@ class ProcessoService:
         """
         try:
             query = CgfrProcessoEnviado.query.filter(
-                CgfrProcessoEnviado.processo_formatado.like(f'{CgfrProcessoEnviado.PREFIXO_SEAD}%')
+                CgfrProcessoEnviado.filtro_visiveis()
             ).options(
                 joinedload(CgfrProcessoEnviado.natureza_rel),
                 joinedload(CgfrProcessoEnviado.fonte_rel),
@@ -189,7 +188,7 @@ class ProcessoService:
         """Retorna dados formatados para DataTable server-side."""
         query = ProcessoLocalRepository.listar_com_filtros(filtros, search)
         records_total = CgfrProcessoEnviado.query.filter(
-            CgfrProcessoEnviado.processo_formatado.like(f'{CgfrProcessoEnviado.PREFIXO_SEAD}%')
+            CgfrProcessoEnviado.filtro_visiveis()
         ).count()
         records_filtered = query.count()
 

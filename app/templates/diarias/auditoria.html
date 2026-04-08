@@ -1,0 +1,268 @@
+{% extends "diarias/base_diarias.html" %}
+{% block title %}SGC - Auditoria de Diarias{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h2 class="fw-bold"><i class="bi bi-clipboard-check me-2"></i>Auditoria de Dados</h2>
+            <p class="text-muted mb-0">Identifica informacoes faltantes nos processos de diarias.</p>
+        </div>
+    </div>
+</div>
+
+{# === KPI CARDS === #}
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center py-3">
+                <div class="fs-2 fw-bold text-dark">{{ contadores.total }}</div>
+                <small class="text-muted fw-bold text-uppercase">Total de Processos</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center py-3">
+                <div class="fs-2 fw-bold text-success">{{ contadores.completos }}</div>
+                <small class="text-muted fw-bold text-uppercase">Completos</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center py-3">
+                <div class="fs-2 fw-bold text-danger">{{ contadores.total - contadores.completos }}</div>
+                <small class="text-muted fw-bold text-uppercase">Incompletos</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# === FILTROS === #}
+<div class="card mb-4 border-0 shadow-sm" style="overflow: visible; position: relative; z-index: 10;">
+    <div class="card-body p-3" style="overflow: visible;">
+        <form method="GET" action="{{ url_for('diarias.auditoria') }}" id="formFiltrosAuditoria">
+            <div class="row g-2 align-items-center">
+
+                {# Etapa #}
+                <div class="col-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+                                type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                            <i class="bi bi-signpost-split me-1"></i>
+                            <span id="labelEtapaAud">Etapa</span>
+                        </button>
+                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
+                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                                <small class="text-muted fw-bold">Selecione:</small>
+                                <a href="#" class="text-decoration-none small" onclick="document.querySelectorAll('.chk-etapa-aud').forEach(c=>c.checked=false); return false;">Limpar</a>
+                            </div>
+                            {% for et in etapas %}
+                            <div class="form-check py-1">
+                                <input class="form-check-input chk-etapa-aud" type="checkbox" name="filtro_etapa"
+                                       value="{{ et.id }}" id="aud_et_{{ et.id }}"
+                                       {% if et.id|string in request.args.getlist('filtro_etapa') %}checked{% endif %}>
+                                <label class="form-check-label small" for="aud_et_{{ et.id }}">{{ et.nome }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                {# Tipo #}
+                <div class="col-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+                                type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                            <i class="bi bi-geo-alt me-1"></i>
+                            <span>Tipo</span>
+                        </button>
+                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 180px; z-index: 1060;">
+                            {% for tid, tnome in [(1, 'Estadual'), (2, 'Nacional'), (3, 'Internacional')] %}
+                            <div class="form-check py-1">
+                                <input class="form-check-input" type="checkbox" name="filtro_tipo"
+                                       value="{{ tid }}" id="aud_tipo_{{ tid }}"
+                                       {% if tid|string in request.args.getlist('filtro_tipo') %}checked{% endif %}>
+                                <label class="form-check-label small" for="aud_tipo_{{ tid }}">{{ tnome }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                {# Pendencia #}
+                <div class="col-auto">
+                    <select name="filtro_pendencia" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+                        <option value="">Todos</option>
+                        <option value="completos" {{ 'selected' if request.args.get('filtro_pendencia') == 'completos' }}>Completos</option>
+                        <option value="incompletos" {{ 'selected' if request.args.get('filtro_pendencia') == 'incompletos' }}>Incompletos</option>
+                    </select>
+                </div>
+
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-funnel me-1"></i> Filtrar
+                    </button>
+                </div>
+                {% if request.args %}
+                <div class="col-auto">
+                    <a href="{{ url_for('diarias.auditoria') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-x-lg me-1"></i> Limpar
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+{# === TABELA === #}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size: 0.82rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Solicitante</th>
+                        <th>Tipo</th>
+                        <th>Processo SEI</th>
+                        <th class="text-center">Pessoas</th>
+                        <th>Periodo</th>
+                        <th class="text-end">Valor</th>
+                        <th class="text-center">Etapa</th>
+                        {# Documentos-chave #}
+                        <th class="text-center" title="Memorando">Mem</th>
+                        <th class="text-center" title="Requisicao de Diarias">Req</th>
+                        <th class="text-center" title="Autorizacao do Secretario">Aut</th>
+                        <th class="text-center" title="Nota de Reserva">NR</th>
+                        <th class="text-center" title="Analise NCI">NCI</th>
+                        <th class="text-center" title="Nota de Liquidacao">NL</th>
+                        <th class="text-center" title="Programacao de Desembolso">PD</th>
+                        <th class="text-center" title="Ordem Bancaria">OB</th>
+                        <th class="text-center" title="Quadro Orcamentario">Quadro</th>
+                        <th class="text-center">Pendencias</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in resultados %}
+                    {% set it = r.itinerario %}
+                    <tr style="cursor: pointer;" onclick="window.location='{{ url_for('diarias.administracao_detalhe', id=it.id) }}'">
+                        <td class="ps-3">
+                            <span class="fw-semibold">{{ it.usuario_gerador.split('@')[0].replace('.', ' ').title() if '@' in it.usuario_gerador else it.usuario_gerador }}</span>
+                            <br><small class="text-muted">{{ it.data_solicitacao.strftime('%d/%m/%Y') if it.data_solicitacao else '' }}</small>
+                        </td>
+                        <td>
+                            {% if it.tipo_itinerario == 1 %}
+                            <span class="badge rounded-pill bg-info text-white" style="font-size:0.7rem;">Estadual</span>
+                            {% elif it.tipo_itinerario == 3 %}
+                            <span class="badge rounded-pill bg-danger text-white" style="font-size:0.7rem;">Internacional</span>
+                            {% else %}
+                            <span class="badge rounded-pill bg-warning text-dark" style="font-size:0.7rem;">Nacional</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if r.tem_protocolo %}
+                            <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ it.sei_id_procedimento }}"
+                               target="_blank" class="fw-bold text-decoration-none" onclick="event.stopPropagation()">
+                                {{ it.sei_protocolo }} <i class="bi bi-box-arrow-up-right" style="font-size:0.65rem;"></i>
+                            </a>
+                            {% else %}
+                            <span class="text-danger"><i class="bi bi-exclamation-circle"></i> Ausente</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if r.tem_pessoas %}
+                            <span class="badge bg-light text-dark border">{{ r.qtd_pessoas }}</span>
+                            {% else %}
+                            <i class="bi bi-x-circle text-danger"></i>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if r.tem_datas %}
+                            <small>{{ it.data_viagem.strftime('%d/%m') }} a {{ it.data_retorno.strftime('%d/%m/%Y') }}</small>
+                            {% else %}
+                            <i class="bi bi-x-circle text-danger"></i>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if r.tem_valor %}
+                            <span class="fw-bold">{{ it.valor_total_formatado }}</span>
+                            {% else %}
+                            <span class="text-danger">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if it.etapa_atual %}
+                            <span class="badge" style="background-color: {{ it.etapa_atual.cor_hex or '#6c757d' }}; font-size:0.65rem;">
+                                {{ it.etapa_atual.nome }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        {# Documentos-chave com check/x #}
+                        {% for doc_tipo in ['memorando', 'requisicao', 'autorizacao', 'nota_reserva', 'analise_pagamento', 'nl', 'pd', 'ob'] %}
+                        <td class="text-center">
+                            {% if r.docs_status.get(doc_tipo) %}
+                            <i class="bi bi-check-circle-fill text-success" style="font-size:0.8rem;"></i>
+                            {% elif doc_tipo in r.docs_status %}
+                            <i class="bi bi-x-circle text-danger" style="font-size:0.8rem;"></i>
+                            {% else %}
+                            <span class="text-muted" style="font-size:0.65rem;">n/a</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                        <td class="text-center">
+                            {% if r.tem_quadro %}
+                            <i class="bi bi-check-circle-fill text-success" style="font-size:0.8rem;"></i>
+                            {% else %}
+                            <i class="bi bi-x-circle text-danger" style="font-size:0.8rem;"></i>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if r.qtd_faltando == 0 %}
+                            <span class="badge bg-success"><i class="bi bi-check"></i> OK</span>
+                            {% elif r.qtd_faltando <= 3 %}
+                            <span class="badge bg-warning text-dark" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
+                            {% elif r.qtd_faltando <= 6 %}
+                            <span class="badge bg-orange text-white" style="background-color: #fd7e14;" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
+                            {% else %}
+                            <span class="badge bg-danger" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="17" class="text-center py-5 text-muted">
+                            <i class="bi bi-search me-1"></i> Nenhum resultado encontrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{# === LEGENDA === #}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body py-2">
+        <small class="text-muted">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Legenda:</strong>
+            <i class="bi bi-check-circle-fill text-success ms-2"></i> Presente |
+            <i class="bi bi-x-circle text-danger ms-2"></i> Ausente |
+            <span class="text-muted ms-2">n/a</span> Nao se aplica |
+            <span class="badge bg-success ms-2">OK</span> Sem pendencias |
+            <span class="badge bg-warning text-dark ms-2">N</span> N itens faltando
+        </small>
+        <br>
+        <small class="text-muted">
+            <strong>Colunas:</strong>
+            Mem = Memorando | Req = Requisicao | Aut = Autorizacao | NR = Nota de Reserva |
+            NCI = Analise NCI | NL = Liquidacao | PD = Progr. Desembolso | OB = Ordem Bancaria | Quadro = Quadro Orcamentario
+        </small>
+    </div>
+</div>
+{% endblock %}

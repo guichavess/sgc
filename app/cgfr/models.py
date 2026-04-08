@@ -6,6 +6,8 @@ Reutiliza tabelas existentes: natdespesas (NatDespesa), class_fonte (ClassFonte)
 from datetime import date, datetime
 from decimal import Decimal
 
+from sqlalchemy import or_
+
 from app.extensions import db
 
 
@@ -86,12 +88,21 @@ class CgfrProcessoEnviado(db.Model):
     nivel_prioridade = db.Column(db.String(10))  # 'Alto' | 'Médio' | 'Baixo'
 
     data_inclusao = db.Column(db.DateTime, default=datetime.now)
+    vinculado_manualmente = db.Column(db.Boolean, default=False, server_default='0')
 
     # === Relationships ===
     natureza_rel = db.relationship('NatDespesa', backref='cgfr_processos', lazy=True,
                                     foreign_keys=[natureza_despesa_id])
     fonte_rel = db.relationship('ClassFonte', backref='cgfr_processos', lazy=True,
                                  foreign_keys=[fonte_id])
+
+    @classmethod
+    def filtro_visiveis(cls):
+        """Retorna filtro SQLAlchemy: processos SEAD OU vinculados manualmente."""
+        return or_(
+            cls.processo_formatado.like(f'{cls.PREFIXO_SEAD}%'),
+            cls.vinculado_manualmente == True
+        )
 
     @property
     def classificado(self):

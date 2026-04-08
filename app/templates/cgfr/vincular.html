@@ -37,7 +37,7 @@
 
             {# === Preview SEI === #}
             <div id="resultado-sei" class="d-none mb-4">
-                {# Sucesso #}
+                {# Sucesso — processo novo (vindo do SEI) #}
                 <div id="sei-sucesso" class="alert alert-success d-none">
                     <div class="d-flex align-items-start">
                         <i class="bi bi-check-circle-fill fs-4 me-3 mt-1"></i>
@@ -80,6 +80,35 @@
                         </div>
                     </div>
                 </div>
+                {# Adotavel — processo já existe no banco mas está oculto #}
+                <div id="sei-adotavel" class="alert alert-warning d-none">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-database-fill-check fs-4 me-3 mt-1"></i>
+                        <div class="flex-grow-1">
+                            <strong>Processo encontrado no banco de dados!</strong>
+                            <p class="mb-2 small">Este processo ja existe no sistema (importado via Data Lake) mas nao aparece nas listagens por ser de outra unidade. Voce pode adota-lo para que passe a ser exibido.</p>
+                            <div class="mt-2 row g-2">
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">Protocolo</small>
+                                    <span id="prev-adotar-protocolo" class="fw-bold"></span>
+                                </div>
+                                <div class="col-md-3">
+                                    <small class="text-muted d-block">Tipo</small>
+                                    <span id="prev-adotar-tipo" class="small"></span>
+                                </div>
+                                <div class="col-md-3">
+                                    <a id="prev-adotar-link" href="#" target="_blank" class="btn btn-sm btn-outline-warning mt-1">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i> Abrir no SEI
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted d-block">Especificacao</small>
+                                <span id="prev-adotar-especificacao" class="small"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 {# Erro #}
                 <div id="sei-erro" class="alert alert-danger d-none">
                     <i class="bi bi-exclamation-triangle-fill me-2"></i>
@@ -90,6 +119,7 @@
             {# === PASSO 2: Dados Manuais === #}
             <form method="POST" action="{{ url_for('cgfr.vincular_processo_post') }}" id="form-vincular">
                 <input type="hidden" name="processo_formatado" id="hdn_processo_formatado">
+                <input type="hidden" name="acao_vincular" id="hdn_acao_vincular" value="novo">
 
                 <div id="secao-manual" style="opacity: 0.5; pointer-events: none;">
 
@@ -297,7 +327,7 @@ $(document).ready(function() {
         btn.html('<span class="spinner-border spinner-border-sm"></span> Consultando...').prop('disabled', true);
 
         $('#resultado-sei').removeClass('d-none');
-        $('#sei-sucesso, #sei-erro').addClass('d-none');
+        $('#sei-sucesso, #sei-erro, #sei-adotavel').addClass('d-none');
 
         $.ajax({
             url: "{{ url_for('cgfr.api_consultar_sei') }}",
@@ -305,7 +335,29 @@ $(document).ready(function() {
             contentType: 'application/json',
             data: JSON.stringify({ protocolo: protocolo }),
             success: function(resp) {
-                if (resp.sucesso) {
+                if (resp.sucesso && resp.adotavel) {
+                    // Processo existe no banco mas está oculto → oferecer adoção
+                    var p = resp.preview;
+                    $('#prev-adotar-protocolo').text(p.processo_formatado);
+                    $('#prev-adotar-tipo').text(p.tipo_processo || '-');
+                    $('#prev-adotar-especificacao').text(p.especificacao || '-');
+
+                    if (p.link_acesso) {
+                        $('#prev-adotar-link').attr('href', p.link_acesso).show();
+                    } else {
+                        $('#prev-adotar-link').hide();
+                    }
+
+                    $('#sei-adotavel').removeClass('d-none');
+                    $('#hdn_processo_formatado').val(p.processo_formatado);
+                    $('#hdn_acao_vincular').val('adotar');
+
+                    // Passo 2 fica desabilitado (adoção não precisa de dados manuais)
+                    $('#secao-manual').css({'opacity': '0.5', 'pointer-events': 'none'});
+                    $('#btn-vincular').prop('disabled', false)
+                        .html('<i class="bi bi-database-fill-check me-2"></i> Adotar Processo');
+
+                } else if (resp.sucesso) {
                     var p = resp.preview;
                     $('#prev-protocolo').text(p.processo_formatado);
                     $('#prev-tipo').text(p.tipo_processo || '-');
@@ -323,16 +375,20 @@ $(document).ready(function() {
 
                     $('#sei-sucesso').removeClass('d-none');
                     $('#hdn_processo_formatado').val(p.processo_formatado);
+                    $('#hdn_acao_vincular').val('novo');
 
                     // Habilita passo 2
                     $('#secao-manual').css({'opacity': '1', 'pointer-events': 'auto'});
-                    $('#btn-vincular').prop('disabled', false);
+                    $('#btn-vincular').prop('disabled', false)
+                        .html('<i class="bi bi-link-45deg me-2"></i> Vincular Processo');
                 } else {
                     $('#sei-erro-msg').text(resp.erro);
                     $('#sei-erro').removeClass('d-none');
                     $('#secao-manual').css({'opacity': '0.5', 'pointer-events': 'none'});
-                    $('#btn-vincular').prop('disabled', true);
+                    $('#btn-vincular').prop('disabled', true)
+                        .html('<i class="bi bi-link-45deg me-2"></i> Vincular Processo');
                     $('#hdn_processo_formatado').val('');
+                    $('#hdn_acao_vincular').val('novo');
                 }
             },
             error: function(xhr) {

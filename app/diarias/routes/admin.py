@@ -209,6 +209,12 @@ def administracao_detalhe(id):
     timeline_data = DiariaService.obter_timeline(itinerario)
     aba = request.args.get('aba', 'resumo')
 
+    # Contexto extra para modais de edição admin
+    from app.models.diaria import (
+        DiariasCargo, DiariasNatureza, DiariasEtapa,
+        Estado, DiariasTipoSolicitacao, DiariasTipoItinerario,
+    )
+
     return render_template(
         'diarias/administracao_detalhe.html',
         itinerario=itinerario,
@@ -219,6 +225,13 @@ def administracao_detalhe(id):
         timeline_data=timeline_data,
         agencias=DiariaService.get_agencias(),
         aba=aba,
+        # Dados para modais de edição
+        cargos=DiariasCargo.query.order_by(DiariasCargo.nome).all(),
+        naturezas=DiariasNatureza.query.all(),
+        etapas_lista=DiariasEtapa.query.order_by(DiariasEtapa.ordem).all(),
+        estados=Estado.query.order_by(Estado.nome).all(),
+        tipos_solicitacao=DiariasTipoSolicitacao.query.all(),
+        tipos_itinerario_list=DiariasTipoItinerario.query.all(),
     )
 
 
@@ -279,6 +292,69 @@ def upload_cotacao(id):
 
     except Exception as e:
         flash(f'Erro ao processar upload: {str(e)}', 'danger')
+
+    return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+
+# ── Gerar Documento de Cotações (interno) ──────────────────────────────────
+
+@diarias_bp.route('/administracao/<int:id>/gerar-cotacoes-sei', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def gerar_cotacoes_sei(id):
+    """
+    Gera documento interno de cotações (série 272) no processo SEI
+    com tabela formatada de todos os DiariasCotacaoVoo do itinerário.
+    """
+    from app.services.diarias_sei_integration import gerar_documento_cotacoes
+    from app.models.diaria import DiariasCotacaoVoo
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if not itinerario.sei_protocolo:
+        flash('Esta solicitação não possui processo SEI.', 'danger')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    if not itinerario.sei_id_procedimento:
+        flash('Processo SEI sem ID de procedimento.', 'danger')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    cotacoes = DiariasCotacaoVoo.query.filter_by(itinerario_id=id).all()
+    if not cotacoes:
+        flash('Não há cotações cadastradas para gerar o documento.', 'warning')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    try:
+        token = gerar_token_sei_admin()
+        if not token:
+            flash('Falha na autenticação com o SEI.', 'danger')
+            return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+        retorno = gerar_documento_cotacoes(
+            token=token,
+            id_procedimento=itinerario.sei_id_procedimento,
+            sei_protocolo=itinerario.sei_protocolo,
+            cotacoes_voos=cotacoes,
+        )
+
+        if retorno:
+            doc_fmt = retorno.get('DocumentoFormatado', '')
+            itinerario.set_doc(
+                'memorando_cotacoes',
+                sei_id=retorno.get('IdDocumento', ''),
+                sei_formatado=doc_fmt,
+            )
+            db.session.commit()
+            flash(
+                f'Documento de cotações gerado no SEI com sucesso! Documento: {doc_fmt}',
+                'success',
+            )
+        else:
+            flash('Erro ao gerar documento de cotações no SEI. Tente novamente.', 'danger')
+
+    except Exception as e:
+        current_app.logger.error(f"[DIARIAS] Erro ao gerar cotações SEI: {e}")
+        flash(f'Erro ao gerar documento: {str(e)}', 'danger')
 
     return redirect(url_for('diarias.administracao_detalhe', id=id))
 
@@ -1215,3 +1291,138 @@ def api_atualizar_individual(id_itinerario):
     except Exception as e:
         db.session.rollback()
         return jsonify({'sucesso': False, 'msg': f'Erro: {str(e)}'}), 500
+
+
+# ── Auditoria de Dados ─────────────────────────────────────────────────────
+
+@diarias_bp.route('/auditoria')
+@login_required
+@requires_permission('diarias.aprovar')
+def auditoria():
+    """
+    Página de auditoria — identifica informações faltantes em cada processo de diária.
+    Verifica dados básicos, pessoas, documentos SEI (por etapa) e quadro orçamentário.
+    """
+    from app.models.diaria import (
+        DiariasEtapa, DiariasDocumentoSei, DiariasQuadroOrcamentario,
+    )
+    from app.constants import DIARIAS_SUBITENS, TIPOS_COM_PASSAGENS
+
+    # Carregar todos os itinerários com eager loading dos docs
+    itinerarios = (
+        DiariasItinerario.query
+        .order_by(DiariasItinerario.data_solicitacao.desc())
+        .all()
+    )
+
+    # Pré-carregar contagem de pessoas
+    all_ids = [it.id for it in itinerarios]
+    pessoas_count = {}
+    if all_ids:
+        counts = db.session.query(
+            DiariasItemItinerario.id_itinerario,
+            db.func.count(DiariasItemItinerario.id)
+        ).filter(
+            DiariasItemItinerario.id_itinerario.in_(all_ids)
+        ).group_by(DiariasItemItinerario.id_itinerario).all()
+        pessoas_count = {row[0]: row[1] for row in counts}
+
+    # Pré-carregar quadros
+    quadros_existentes = set()
+    if all_ids:
+        q_ids = db.session.query(
+            DiariasQuadroOrcamentario.itinerario_id
+        ).filter(
+            DiariasQuadroOrcamentario.itinerario_id.in_(all_ids),
+            DiariasQuadroOrcamentario.ug.isnot(None),
+        ).all()
+        quadros_existentes = {row[0] for row in q_ids}
+
+    etapas = DiariasEtapa.query.order_by(DiariasEtapa.ordem).all()
+
+    resultados = []
+    contadores = {'total': 0, 'completos': 0}
+
+    for it in itinerarios:
+        contadores['total'] += 1
+        faltando = []
+        tem_passagens = it.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
+
+        # ── Dados básicos ──
+        tem_protocolo = bool(it.sei_protocolo)
+        tem_pessoas = pessoas_count.get(it.id, 0) > 0
+        tem_valor = bool(it.valor_total and float(it.valor_total) > 0)
+        tem_objetivo = bool(it.objetivo and it.objetivo.strip())
+        tem_datas = bool(it.data_viagem and it.data_retorno)
+        tem_quadro = it.id in quadros_existentes
+
+        if not tem_protocolo:
+            faltando.append('Processo SEI')
+        if not tem_pessoas:
+            faltando.append('Pessoas')
+        if not tem_valor:
+            faltando.append('Valor Total')
+        if not tem_objetivo:
+            faltando.append('Objetivo')
+        if not tem_datas:
+            faltando.append('Datas')
+
+        # ── Documentos por etapa (via DIARIAS_SUBITENS) ──
+        docs_status = {}
+        for etapa_id, subitens in DIARIAS_SUBITENS.items():
+            for sub in subitens:
+                # Pular condicionais que não se aplicam
+                if sub.get('condicional') == 'passagens' and not tem_passagens:
+                    continue
+                # Pular etapa 2 (Escolha Voo) para processos sem passagens
+                if etapa_id == DiariasEtapaID.ESCOLHA_VOO and not tem_passagens:
+                    continue
+
+                doc_tipo = sub['doc_tipo']
+                tem_doc = it.has_doc(doc_tipo)
+                docs_status[doc_tipo] = tem_doc
+                if not tem_doc:
+                    faltando.append(sub['nome'])
+
+        if not tem_quadro:
+            faltando.append('Quadro Orcamentario')
+
+        if not faltando:
+            contadores['completos'] += 1
+
+        resultados.append({
+            'itinerario': it,
+            'qtd_pessoas': pessoas_count.get(it.id, 0),
+            'tem_protocolo': tem_protocolo,
+            'tem_pessoas': tem_pessoas,
+            'tem_valor': tem_valor,
+            'tem_objetivo': tem_objetivo,
+            'tem_datas': tem_datas,
+            'tem_quadro': tem_quadro,
+            'docs_status': docs_status,
+            'faltando': faltando,
+            'qtd_faltando': len(faltando),
+        })
+
+    # Filtros
+    filtro_etapa = request.args.getlist('filtro_etapa')
+    filtro_tipo = request.args.getlist('filtro_tipo')
+    filtro_pendencia = request.args.get('filtro_pendencia', '')
+
+    if filtro_etapa:
+        filtro_etapa_int = [int(e) for e in filtro_etapa]
+        resultados = [r for r in resultados if r['itinerario'].etapa_atual_id in filtro_etapa_int]
+    if filtro_tipo:
+        filtro_tipo_int = [int(t) for t in filtro_tipo]
+        resultados = [r for r in resultados if r['itinerario'].tipo_itinerario in filtro_tipo_int]
+    if filtro_pendencia == 'completos':
+        resultados = [r for r in resultados if r['qtd_faltando'] == 0]
+    elif filtro_pendencia == 'incompletos':
+        resultados = [r for r in resultados if r['qtd_faltando'] > 0]
+
+    return render_template(
+        'diarias/auditoria.html',
+        resultados=resultados,
+        contadores=contadores,
+        etapas=etapas,
+    )

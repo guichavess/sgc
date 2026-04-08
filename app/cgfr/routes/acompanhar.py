@@ -233,7 +233,7 @@ def sync_documentos_bulk():
         return jsonify({'success': False, 'error': f'Erro autenticacao SEI: {str(e)}'}), 500
 
     all_processos = CgfrProcessoEnviado.query.filter(
-        CgfrProcessoEnviado.processo_formatado.like(f'{CgfrProcessoEnviado.PREFIXO_SEAD}%')
+        CgfrProcessoEnviado.filtro_visiveis()
     ).all()
     protocolos = [p.processo_formatado for p in all_processos]
 

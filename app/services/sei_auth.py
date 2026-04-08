@@ -34,7 +34,7 @@ def gerar_token_sei_admin():
     }
 
     try:
-        response = requests.post(url_auth, json=payload, headers=headers, timeout=15, verify=False)
+        response = requests.post(url_auth, json=payload, headers=headers, timeout=120, verify=False)
         
         if response.status_code == 200:
             dados = response.json()
@@ -90,7 +90,7 @@ def autenticar_usuario_sei(usuario, senha):
     }
 
     try:
-        response = requests.post(url_auth, json=payload, headers=headers, timeout=15, verify=False)
+        response = requests.post(url_auth, json=payload, headers=headers, timeout=120, verify=False)
 
         if response.status_code == 200:
             dados = response.json()

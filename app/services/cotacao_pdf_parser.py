@@ -594,6 +594,22 @@ def extrair_cotacoes_pdf(pdf_bytes):
         logger.info('[COTACAO_PARSER] Token-based: %d ida, %d volta',
                      len(resultado['ida']), len(resultado['volta']))
 
+    # 3b. Se token-based extraiu IDA mas NÃO VOLTA, e o texto tem seções VOLTA,
+    #     o resultado é incompleto — resetar e tentar parser tabular v2
+    texto_completo = '\n'.join(all_text_parts)
+    if resultado['ida'] and not resultado['volta']:
+        upper_check = texto_completo.upper()
+        tem_volta = bool(re.search(r'VOOS?\s*VOLTA', upper_check))
+        if tem_volta and _detectar_formato_tabular_v2(texto_completo):
+            logger.info('[COTACAO_PARSER] Token-based incompleto (sem VOLTA), tentando v2...')
+            resultado_v2 = {'ida': [], 'volta': [], 'data_cotacao': None, 'erros': []}
+            _parse_formato_tabular_v2(texto_completo, resultado_v2)
+            if resultado_v2['ida'] and resultado_v2['volta']:
+                resultado['ida'] = resultado_v2['ida']
+                resultado['volta'] = resultado_v2['volta']
+                logger.info('[COTACAO_PARSER] v2 substituiu: %d ida, %d volta',
+                             len(resultado['ida']), len(resultado['volta']))
+
     # 4. Se token-based não encontrou, tentar parsers de formato
     if not resultado['ida'] and not resultado['volta']:
         texto_completo = '\n'.join(all_text_parts)
@@ -649,8 +665,9 @@ def extrair_cotacoes_pdf(pdf_bytes):
 
 def _normalizar_ocr_tabular(texto):
     """Normaliza artefatos comuns de OCR no layout tabular."""
-    # Separadores de hora: *, ;, , → :  (ex: 18*05 → 18:05, 19;50 → 19:50)
-    texto = re.sub(r'(\d{2})[*;,](\d{2})', r'\1:\2', texto)
+    # Separadores de hora: *, ; → :  (ex: 18*05 → 18:05, 19;50 → 19:50)
+    # NÃO converter vírgula — usada em preços (R$ 4.635,35)
+    texto = re.sub(r'(\d{2})[*;](\d{2})', r'\1:\2', texto)
     # Números colados com datas que deveriam ser horas: 19840 → 19:40 (só em contexto de horário)
     texto = re.sub(r'(\d{2})8(\d{2})\b', r'\1:\2', texto)  # OCR lê : como 8
     # Voo colado: 1A → LA (OCR confunde L com 1)
@@ -671,10 +688,10 @@ def _parse_linha_tabular_v2(linha):
     Extrai dados de uma linha de tabela de cotação (layout v2).
     Retorna dict com campos extraídos ou None se não é uma linha de voo.
     """
-    linha = _normalizar_ocr_tabular(linha)
+    linha_norm = _normalizar_ocr_tabular(linha)
 
     # Procurar voo (CIA + número)
-    m_voo = _RE_VOO.search(linha)
+    m_voo = _RE_VOO.search(linha_norm)
     if not m_voo:
         return None
 
@@ -684,16 +701,16 @@ def _parse_linha_tabular_v2(linha):
     voo_str = f'{cia_code} {voo_num}'
 
     # Extrair datas (DD/MM/YYYY)
-    datas = _RE_DATA_FLEX.findall(linha)
+    datas = _RE_DATA_FLEX.findall(linha_norm)
 
     # Extrair horas (HH:MM) — pode haver várias
-    horas = _RE_HORA_FLEX.findall(linha)
+    horas = _RE_HORA_FLEX.findall(linha_norm)
     # Filtrar horas que fazem parte das datas (ex: dentro de DD/MM/YYYY)
     horas_limpas = []
     for h, m in horas:
         hora_str = f'{h}:{m}'
         # Verificar se não é parte de uma data
-        if hora_str not in linha.replace('/', ':'):
+        if hora_str not in linha_norm.replace('/', ':'):
             horas_limpas.append(hora_str)
 
     # Combinar datas e horas em datetimes
@@ -719,18 +736,18 @@ def _parse_linha_tabular_v2(linha):
     # Extrair cidades
     cidades = []
     for cidade in _CIDADES:
-        if re.search(r'\b' + re.escape(cidade) + r'\b', linha, re.IGNORECASE):
+        if re.search(r'\b' + re.escape(cidade) + r'\b', linha_norm, re.IGNORECASE):
             if cidade.lower() not in [c.lower() for c in cidades]:
                 cidades.append(cidade)
 
     origem = cidades[0] if len(cidades) >= 1 else None
     destino = cidades[1] if len(cidades) >= 2 else None
 
-    # Extrair preço
-    m_preco = _RE_PRECO.search(linha)
+    # Extrair preço (usar linha normalizada para capturar Rs/RS -> R$)
+    m_preco = _RE_PRECO.search(linha_norm)
     valor = None
     if m_preco:
-        valor = _parse_valor(m_preco.group(1))
+        valor = m_preco.group(1).replace('.', '').replace(',', '.')
 
     return {
         'cia': cia_nome,
@@ -746,42 +763,65 @@ def _parse_linha_tabular_v2(linha):
 def _parse_formato_tabular_v2(texto, resultado):
     """
     Parser para layout tabular com sub-seções (OPÇÕES POR CONGONHAS/GUARULHOS).
-    Cada sub-seção tem sub-tabelas IDA e VOLTA.
-    Conexões: 2 linhas de voo onde a 1ª não tem preço e a 2ª tem (ou vice-versa).
+    Trata artefatos de OCR: preço em linha separada, colunas desordenadas.
     """
     lines = texto.split('\n')
     secao_atual = None  # 'ida' ou 'volta'
-    voos_pendentes = []  # acumula linhas de voo da seção atual
+    voos_raw = []  # lista de (parsed_dict, secao)
 
-    def _flush_secao(voos, secao, resultado):
-        """Processa os voos acumulados de uma seção, agrupando conexões."""
+    for line in lines:
+        upper = line.upper().strip()
+        if not upper or len(upper) < 3:
+            continue
+
+        # Detectar seção IDA/VOLTA (tolerante a OCR)
+        if re.search(r'VOOS?\s*(DE\s+VOOS?\s+)?IDA', upper):
+            secao_atual = 'ida'
+            continue
+        elif re.search(r'VOOS?\s*(DE\s+VOOS?\s+)?VOLTA', upper):
+            secao_atual = 'volta'
+            continue
+
+        # Ignorar headers e seções de agrupamento
+        if re.search(r'OP.{0,4}ES\s+POR', upper):
+            continue
+        if re.search(r'\bCIA\b.*\bVOO\b', upper) and re.search(r'SA[IÍ]DA|CHEGADA|TOTAL', upper):
+            continue
+        if upper.startswith('~'):
+            continue
+
+        if not secao_atual:
+            continue
+
+        # Linha que é SÓ preço? Atribuir ao último voo sem preço
+        linha_norm = _normalizar_ocr_tabular(line)
+        m_preco_solo = re.match(r'^\s*R[\$S]\s*([\d.]+[,]\d{2})\s*$', linha_norm, re.IGNORECASE)
+        if m_preco_solo and voos_raw and voos_raw[-1][0]['valor'] is None:
+            voos_raw[-1][0]['valor'] = m_preco_solo.group(1).replace('.', '').replace(',', '.')
+            continue
+
+        # Tentar parsear como linha de voo
+        parsed = _parse_linha_tabular_v2(line)
+        if parsed:
+            voos_raw.append((parsed, secao_atual))
+
+    # Agrupar conexões por seção
+    for secao in ['ida', 'volta']:
+        voos_secao = [v for v, s in voos_raw if s == secao]
         i = 0
-        while i < len(voos):
-            v = voos[i]
-            # Verificar se é conexão: voo atual sem preço + próximo com preço (ou vice-versa)
-            if i + 1 < len(voos):
-                v_next = voos[i + 1]
-                if v['valor'] is not None and v_next['valor'] is None:
-                    # Conexão: preço no 1º, 2º é trecho de conexão
+        while i < len(voos_secao):
+            v = voos_secao[i]
+            if i + 1 < len(voos_secao):
+                v_next = voos_secao[i + 1]
+                p1, p2 = v['valor'], v_next['valor']
+                # Conexão: um tem preço e o outro não
+                if (p1 is not None and p2 is None) or (p1 is None and p2 is not None):
+                    valor_final = p1 if p1 is not None else p2
                     opcao = {
                         'cia': v['cia'], 'voo': v['voo'],
                         'saida': v['saida'], 'chegada': v['chegada'],
                         'origem': v['origem'], 'destino': v['destino'],
-                        'valor': v['valor'], 'bagagem': '1',
-                        'cia_conexao': v_next['cia'], 'voo_conexao': v_next['voo'],
-                        'saida_conexao': v_next['saida'], 'chegada_conexao': v_next['chegada'],
-                        'origem_conexao': v_next['origem'], 'destino_conexao': v_next['destino'],
-                    }
-                    resultado[secao].append(opcao)
-                    i += 2
-                    continue
-                elif v['valor'] is None and v_next['valor'] is not None:
-                    # Conexão: preço no 2º, 1º é trecho principal
-                    opcao = {
-                        'cia': v['cia'], 'voo': v['voo'],
-                        'saida': v['saida'], 'chegada': v['chegada'],
-                        'origem': v['origem'], 'destino': v['destino'],
-                        'valor': v_next['valor'], 'bagagem': '1',
+                        'valor': valor_final, 'bagagem': '1',
                         'cia_conexao': v_next['cia'], 'voo_conexao': v_next['voo'],
                         'saida_conexao': v_next['saida'], 'chegada_conexao': v_next['chegada'],
                         'origem_conexao': v_next['origem'], 'destino_conexao': v_next['destino'],
@@ -790,7 +830,7 @@ def _parse_formato_tabular_v2(texto, resultado):
                     i += 2
                     continue
 
-            # Voo standalone (com preço)
+            # Standalone (com preço)
             if v['valor'] is not None:
                 opcao = {
                     'cia': v['cia'], 'voo': v['voo'],
@@ -804,44 +844,17 @@ def _parse_formato_tabular_v2(texto, resultado):
                 resultado[secao].append(opcao)
             i += 1
 
-    for line in lines:
-        upper = line.upper().strip()
-
-        # Detectar seção IDA/VOLTA
-        if re.search(r'OP[CÇ][OÕ]ES\s+DE\s+VOOS?\s+IDA', upper) or re.search(r'VOOS?\s+IDA', upper):
-            if voos_pendentes and secao_atual:
-                _flush_secao(voos_pendentes, secao_atual, resultado)
-                voos_pendentes = []
-            secao_atual = 'ida'
-            continue
-        elif re.search(r'OP[CÇ][OÕ]ES\s+DE\s+VOOS?\s+VOLTA', upper) or re.search(r'VOOS?\s+VOLTA', upper):
-            if voos_pendentes and secao_atual:
-                _flush_secao(voos_pendentes, secao_atual, resultado)
-                voos_pendentes = []
-            secao_atual = 'volta'
-            continue
-
-        # Ignorar headers de tabela e seções de agrupamento
-        if re.search(r'OP[CÇ][OÕ]ES\s+POR', upper):
-            continue
-        if re.search(r'\bCIA\b.*\bVOO\b.*\bSA[IÍ]DA\b', upper):
-            continue
-
-        # Tentar parsear como linha de voo
-        if secao_atual and line.strip():
-            parsed = _parse_linha_tabular_v2(line)
-            if parsed:
-                voos_pendentes.append(parsed)
-
-    # Flush última seção
-    if voos_pendentes and secao_atual:
-        _flush_secao(voos_pendentes, secao_atual, resultado)
-
 
 def _detectar_formato_tabular_v2(texto):
-    """Detecta se o texto corresponde ao layout tabular v2 (com sub-seções OPÇÕES POR)."""
+    """
+    Detecta se o texto corresponde ao layout tabular v2.
+    Critério: tem seções IDA E VOLTA com cabeçalhos de tabela (CIA/VOO/SAÍDA).
+    """
     upper = texto.upper()
-    return bool(re.search(r'OP[CÇ][OÕ]ES\s+POR\s+', upper))
+    tem_ida = bool(re.search(r'VOOS?\s*(DE\s+VOOS?\s+)?IDA', upper))
+    tem_volta = bool(re.search(r'VOOS?\s*(DE\s+VOOS?\s+)?VOLTA', upper))
+    tem_header = bool(re.search(r'CIA.*VOO.*SA[IÍ]DA', upper))
+    return tem_ida and tem_volta and tem_header
 
 
 # ══════════════════════════════════════════════════════════════════════════════

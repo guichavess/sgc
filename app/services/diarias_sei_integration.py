@@ -1940,6 +1940,139 @@ def gerar_memorando_cotacoes(token, id_procedimento, sei_protocolo,
         return None
 
 
+# ── Documento de Cotações (interno, série 272) ────────────────────────────
+
+
+def gerar_documento_cotacoes(token, id_procedimento, sei_protocolo, cotacoes_voos):
+    """
+    Gera documento interno de cotações de passagens (IdSerie 272 — Cotação)
+    com tabela HTML formatada de todos os DiariasCotacaoVoo do itinerário.
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        sei_protocolo: Protocolo formatado do processo
+        cotacoes_voos: list de DiariasCotacaoVoo (ida + volta)
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para documento de cotações.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+
+    voos_ida = [v for v in cotacoes_voos if v.tipo_trecho == 'ida']
+    voos_volta = [v for v in cotacoes_voos if v.tipo_trecho == 'volta']
+
+    def _montar_linhas(voos):
+        linhas = ""
+        for voo in voos:
+            saida_fmt = _formatar_data_hora(voo.saida) if voo.saida else ''
+            chegada_fmt = _formatar_data_hora(voo.chegada) if voo.chegada else ''
+            origem = voo.origem or ''
+            destino = voo.destino or ''
+            if voo.tem_conexao and voo.destino_conexao:
+                destino = f"{voo.destino} → {voo.destino_conexao}"
+            bagagem = voo.bagagem or '—'
+            valor = _formatar_valor_brl(voo.valor)
+            linhas += f"""
+                <tr>
+                    <td style="padding:4px 6px; border:1px solid #999;">{voo.cia or ''}</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">{voo.voo or ''}</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">{saida_fmt}</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">{chegada_fmt}</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">{origem}</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">{destino}</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">{bagagem}</td>
+                    <td style="padding:4px 6px; border:1px solid #999; text-align:right;">{valor}</td>
+                </tr>"""
+        return linhas
+
+    cabecalho = """
+                <tr style="background:#f0f0f0; font-weight:bold;">
+                    <td style="padding:4px 6px; border:1px solid #999;">CIA</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">Voo</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">Saída</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">Chegada</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">Origem</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">Destino</td>
+                    <td style="padding:4px 6px; border:1px solid #999;">Bagagem</td>
+                    <td style="padding:4px 6px; border:1px solid #999; text-align:right;">Valor</td>
+                </tr>"""
+
+    html_ida = ""
+    if voos_ida:
+        html_ida = f"""
+        <p><b>TRECHO IDA</b> ({len(voos_ida)} opção(ões))</p>
+        <table style="width:100%; border-collapse:collapse; font-size:10pt; margin-bottom:12px;">
+            {cabecalho}
+            {_montar_linhas(voos_ida)}
+        </table>"""
+
+    html_volta = ""
+    if voos_volta:
+        html_volta = f"""
+        <p><b>TRECHO VOLTA</b> ({len(voos_volta)} opção(ões))</p>
+        <table style="width:100%; border-collapse:collapse; font-size:10pt; margin-bottom:12px;">
+            {cabecalho}
+            {_montar_linhas(voos_volta)}
+        </table>"""
+
+    conteudo_html = f"""
+    <div style="font-family: Arial, sans-serif; font-size: 11pt;">
+        <p style="text-align: center;"><b>COTAÇÕES DE PASSAGENS AÉREAS</b></p>
+        <p style="text-align: center;">Processo {sei_protocolo}</p>
+        <br>
+        {html_ida}
+        {html_volta}
+        <br>
+        <p><i>Documento gerado automaticamente pelo SGC — Módulo Diárias.</i></p>
+    </div>
+    """
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_COTACAO,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Cotações de Passagens - {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando documento de cotações para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar documento cotações ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Documento cotações gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar documento cotações: {e}")
+        return None
+
+
 # ── Autorização do Secretário ─────────────────────────────────────────────
 
 

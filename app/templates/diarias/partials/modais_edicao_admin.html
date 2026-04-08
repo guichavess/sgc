@@ -1,0 +1,498 @@
+{# ══════════════════════════════════════════════════════════════════════════════
+   Modais de edição manual — Administração de Diárias (processos legados)
+   Incluído em administracao_detalhe.html via {% include %}
+   ══════════════════════════════════════════════════════════════════════════════ #}
+
+{# ── MODAL E: Alterar Etapa ─────────────────────────────────────────────── #}
+<div class="modal fade" id="modalAlterarEtapa" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning bg-opacity-10 py-2">
+                <h6 class="modal-title"><i class="bi bi-signpost-split me-1"></i> Alterar Etapa</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Etapa atual</label>
+                    <input type="text" class="form-control form-control-sm" disabled
+                           value="{{ itinerario.etapa_atual.nome if itinerario.etapa_atual else '-' }}">
+                </div>
+                <div class="mb-3">
+                    <label for="edit_etapa_id" class="form-label fw-semibold small">Nova etapa <span class="text-danger">*</span></label>
+                    <select id="edit_etapa_id" class="form-select form-select-sm">
+                        {% for et in etapas_lista %}
+                        <option value="{{ et.id }}" {{ 'selected' if et.id == itinerario.etapa_atual_id }}>
+                            {{ et.ordem }}. {{ et.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label for="edit_etapa_comentario" class="form-label fw-semibold small">Comentario (opcional)</label>
+                    <textarea id="edit_etapa_comentario" class="form-control form-control-sm" rows="2"
+                              placeholder="Motivo da alteracao..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning btn-sm" onclick="salvarAlteracaoEtapa()">
+                    <i class="bi bi-check-lg me-1"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── MODAL A: Editar Dados Basicos ──────────────────────────────────────── #}
+<div class="modal fade" id="modalEditarDadosBasicos" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary bg-opacity-10 py-2">
+                <h6 class="modal-title"><i class="bi bi-pencil-square me-1"></i> Editar Dados Basicos</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="edit_tipo_solicitacao_id" class="form-label fw-semibold small">Tipo de Solicitacao</label>
+                        <select id="edit_tipo_solicitacao_id" class="form-select form-select-sm">
+                            {% for ts in tipos_solicitacao %}
+                            <option value="{{ ts.id }}" {{ 'selected' if ts.id == itinerario.tipo_solicitacao_id }}>{{ ts.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="edit_tipo_itinerario" class="form-label fw-semibold small">Tipo de Itinerario</label>
+                        <select id="edit_tipo_itinerario" class="form-select form-select-sm">
+                            {% for ti in tipos_itinerario_list %}
+                            <option value="{{ ti.id }}" {{ 'selected' if ti.id == itinerario.tipo_itinerario }}>{{ ti.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_data_viagem" class="form-label fw-semibold small">Data Viagem</label>
+                        <input type="datetime-local" id="edit_data_viagem" class="form-control form-control-sm"
+                               value="{{ itinerario.data_viagem.strftime('%Y-%m-%dT%H:%M') if itinerario.data_viagem else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_data_retorno" class="form-label fw-semibold small">Data Retorno</label>
+                        <input type="datetime-local" id="edit_data_retorno" class="form-control form-control-sm"
+                               value="{{ itinerario.data_retorno.strftime('%Y-%m-%dT%H:%M') if itinerario.data_retorno else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_qtd_diarias" class="form-label fw-semibold small">Qtd Diarias</label>
+                        <input type="number" id="edit_qtd_diarias" class="form-control form-control-sm" step="0.5"
+                               value="{{ itinerario.qtd_diarias_solicitadas or '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_estado_origem" class="form-label fw-semibold small">Estado Origem</label>
+                        <select id="edit_estado_origem" class="form-select form-select-sm">
+                            <option value="">-- Selecione --</option>
+                            {% for est in estados %}
+                            <option value="{{ est.cod_ibge }}" {{ 'selected' if est.cod_ibge == itinerario.estado_origem }}>{{ est.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_origem" class="form-label fw-semibold small">Municipio Origem (cod_ibge)</label>
+                        <input type="text" id="edit_origem" class="form-control form-control-sm"
+                               value="{{ itinerario.origem or '' }}" placeholder="Codigo IBGE">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_estado_destino" class="form-label fw-semibold small">Estado Destino</label>
+                        <select id="edit_estado_destino" class="form-select form-select-sm">
+                            <option value="">-- Selecione --</option>
+                            {% for est in estados %}
+                            <option value="{{ est.cod_ibge }}" {{ 'selected' if est.cod_ibge == itinerario.estado_destino }}>{{ est.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="edit_valor_total" class="form-label fw-semibold small">Valor Total (R$)</label>
+                        <input type="number" id="edit_valor_total" class="form-control form-control-sm" step="0.01"
+                               value="{{ itinerario.valor_total or '' }}">
+                    </div>
+                    <div class="col-12">
+                        <label for="edit_objetivo" class="form-label fw-semibold small">Objetivo da Viagem</label>
+                        <textarea id="edit_objetivo" class="form-control form-control-sm" rows="3">{{ itinerario.objetivo or '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="salvarDadosBasicos()">
+                    <i class="bi bi-check-lg me-1"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── MODAL B: Adicionar/Editar Pessoa ───────────────────────────────────── #}
+<div class="modal fade" id="modalEditarPessoa" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success bg-opacity-10 py-2">
+                <h6 class="modal-title" id="modalPessoaTitle"><i class="bi bi-person-plus me-1"></i> Adicionar Pessoa</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit_pessoa_item_id" value="">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="edit_pessoa_cpf" class="form-label fw-semibold small">CPF <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="edit_pessoa_cpf" class="form-control" placeholder="000.000.000-00">
+                            <button class="btn btn-outline-primary" type="button" onclick="buscarPessoaCPF()">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_pessoa_nome" class="form-label fw-semibold small">Nome</label>
+                        <input type="text" id="edit_pessoa_nome" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_pessoa_matricula" class="form-label fw-semibold small">Matricula</label>
+                        <input type="text" id="edit_pessoa_matricula" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_pessoa_cargo_id" class="form-label fw-semibold small">Cargo Diaria</label>
+                        <select id="edit_pessoa_cargo_id" class="form-select form-select-sm">
+                            <option value="">-- Nenhum --</option>
+                            {% for c in cargos %}
+                            <option value="{{ c.id }}">{{ c.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_pessoa_cargo_assessorado_id" class="form-label fw-semibold small">Assessorando</label>
+                        <select id="edit_pessoa_cargo_assessorado_id" class="form-select form-select-sm">
+                            <option value="">-- Nenhum --</option>
+                            {% for c in cargos %}
+                            <option value="{{ c.id }}">{{ c.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_pessoa_natureza_id" class="form-label fw-semibold small">Natureza</label>
+                        <select id="edit_pessoa_natureza_id" class="form-select form-select-sm">
+                            <option value="">-- Nenhuma --</option>
+                            {% for n in naturezas %}
+                            <option value="{{ n.id }}">{{ n.nome_subnatureza or n.nome_natureza }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_pessoa_valor_cargo" class="form-label fw-semibold small">Valor Diaria (R$)</label>
+                        <input type="number" id="edit_pessoa_valor_cargo" class="form-control form-control-sm" step="0.01">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_pessoa_vinculo" class="form-label fw-semibold small">Vinculo</label>
+                        <input type="text" id="edit_pessoa_vinculo" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_pessoa_banco_agencia" class="form-label fw-semibold small">Agencia</label>
+                        <input type="text" id="edit_pessoa_banco_agencia" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_pessoa_banco_conta" class="form-label fw-semibold small">Conta</label>
+                        <input type="text" id="edit_pessoa_banco_conta" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_pessoa_cargo_folha" class="form-label fw-semibold small">Cargo (Folha)</label>
+                        <input type="text" id="edit_pessoa_cargo_folha" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_pessoa_setor" class="form-label fw-semibold small">Setor</label>
+                        <input type="text" id="edit_pessoa_setor" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_pessoa_orgao" class="form-label fw-semibold small">Orgao</label>
+                        <input type="text" id="edit_pessoa_orgao" class="form-control form-control-sm">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm" onclick="salvarPessoa()">
+                    <i class="bi bi-check-lg me-1"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── MODAL D: Editar Documentos SEI ─────────────────────────────────────── #}
+<div class="modal fade" id="modalEditarDocumentos" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-info bg-opacity-10 py-2">
+                <h6 class="modal-title"><i class="bi bi-file-earmark-text me-1"></i> Editar Documentos SEI</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    Insira manualmente os dados dos documentos SEI. Deixe em branco os campos que nao se aplicam.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle" style="font-size: 0.8rem;">
+                        <thead>
+                            <tr>
+                                <th style="width: 28%;">Documento</th>
+                                <th style="width: 24%;">SEI ID</th>
+                                <th style="width: 24%;">SEI Formatado</th>
+                                <th style="width: 24%;">Codigo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set doc_tipos = [
+                                ('memorando', 'Memorando'),
+                                ('requisicao', 'Requisicao de Diarias'),
+                                ('requisicao_passagens', 'Requisicao de Passagens'),
+                                ('doc_externo', 'Doc. do Evento'),
+                                ('autorizacao', 'Autorizacao do Secretario'),
+                                ('memorando_cotacoes', 'Cotacoes'),
+                                ('escolha_passagens', 'Escolha de Passagens'),
+                                ('despacho_sga', 'Despacho SGA'),
+                                ('nota_reserva', 'Nota de Reserva'),
+                                ('analise_habilitacao', 'Analise de Habilitacao'),
+                                ('autorizacao_scdp', 'SCDP'),
+                                ('analise_pagamento', 'Analise NCI'),
+                                ('despacho_nci', 'Despacho NCI'),
+                                ('nl', 'NL'),
+                                ('pd', 'PD'),
+                                ('ob', 'OB'),
+                                ('nota_empenho', 'Nota de Empenho'),
+                                ('despacho_ccdp', 'Despacho CCDP'),
+                                ('despacho_apoio', 'Despacho Apoio'),
+                                ('despacho_diretor', 'Despacho Diretor'),
+                                ('despacho_geo', 'Despacho GEO'),
+                                ('relatorio_viagem', 'Relatorio de Viagem'),
+                                ('np', 'Nota Patrimonial'),
+                                ('prestacao_scdp', 'Prestacao SCDP'),
+                            ] %}
+                            {% for tipo, nome in doc_tipos %}
+                            {% set doc = itinerario.get_doc(tipo) %}
+                            <tr>
+                                <td class="fw-semibold">{{ nome }}</td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm doc-sei-id"
+                                           data-tipo="{{ tipo }}" placeholder="ID"
+                                           value="{{ doc.sei_id if doc and doc.sei_id else '' }}">
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm doc-sei-formatado"
+                                           data-tipo="{{ tipo }}" placeholder="Ex: 0012345-67.2026.1.00.0000"
+                                           value="{{ doc.sei_formatado if doc and doc.sei_formatado else '' }}">
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm doc-codigo"
+                                           data-tipo="{{ tipo }}" placeholder="Codigo"
+                                           value="{{ doc.codigo if doc and doc.codigo else '' }}">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-info btn-sm" onclick="salvarDocumentosSEI()">
+                    <i class="bi bi-check-lg me-1"></i> Salvar Documentos
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── MODAL C: Editar Cotacao de Voo ─────────────────────────────────────── #}
+<div class="modal fade" id="modalEditarCotacaoVoo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary bg-opacity-10 py-2">
+                <h6 class="modal-title"><i class="bi bi-airplane me-1"></i> Editar Cotacao de Voo</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit_cotacao_id" value="">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="edit_cot_tipo_trecho" class="form-label fw-semibold small">Trecho</label>
+                        <select id="edit_cot_tipo_trecho" class="form-select form-select-sm">
+                            <option value="ida">IDA</option>
+                            <option value="volta">VOLTA</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_cot_contrato" class="form-label fw-semibold small">Agencia (Contrato)</label>
+                        <select id="edit_cot_contrato" class="form-select form-select-sm">
+                            <option value="">-- Nenhuma --</option>
+                            {% for ag in agencias %}
+                            <option value="{{ ag.codigo }}">{{ ag.nomeContratadoResumido or ag.nomeContratado }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_cot_valor" class="form-label fw-semibold small">Valor (R$)</label>
+                        <input type="number" id="edit_cot_valor" class="form-control form-control-sm" step="0.01">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_cot_cia" class="form-label fw-semibold small">CIA</label>
+                        <input type="text" id="edit_cot_cia" class="form-control form-control-sm" placeholder="Ex: LATAM">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_cot_voo" class="form-label fw-semibold small">Voo</label>
+                        <input type="text" id="edit_cot_voo" class="form-control form-control-sm" placeholder="Ex: LA 1234">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_cot_saida" class="form-label fw-semibold small">Saida</label>
+                        <input type="datetime-local" id="edit_cot_saida" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_cot_chegada" class="form-label fw-semibold small">Chegada</label>
+                        <input type="datetime-local" id="edit_cot_chegada" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_cot_origem" class="form-label fw-semibold small">Origem</label>
+                        <input type="text" id="edit_cot_origem" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_cot_destino" class="form-label fw-semibold small">Destino</label>
+                        <input type="text" id="edit_cot_destino" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_cot_bagagem" class="form-label fw-semibold small">Bagagem</label>
+                        <select id="edit_cot_bagagem" class="form-select form-select-sm">
+                            <option value="">-- Nenhuma --</option>
+                            <option value="Sem bagagem">Sem bagagem</option>
+                            <option value="1x23kg">1x23kg</option>
+                            <option value="2x23kg">2x23kg</option>
+                        </select>
+                    </div>
+                    {# Conexao #}
+                    <div class="col-12">
+                        <hr class="my-1">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="edit_cot_chk_conexao" onchange="toggleEditConexao()">
+                            <label class="form-check-label small" for="edit_cot_chk_conexao">Voo com conexao</label>
+                        </div>
+                    </div>
+                    <div id="edit_conexao_fields" class="collapse">
+                        <div class="row g-3 mt-0">
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold small">CIA Conexao</label>
+                                <input type="text" id="edit_cot_cia_cx" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold small">Voo Conexao</label>
+                                <input type="text" id="edit_cot_voo_cx" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold small">Saida Conexao</label>
+                                <input type="datetime-local" id="edit_cot_saida_cx" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold small">Chegada Conexao</label>
+                                <input type="datetime-local" id="edit_cot_chegada_cx" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">Origem Conexao</label>
+                                <input type="text" id="edit_cot_origem_cx" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">Destino Conexao</label>
+                                <input type="text" id="edit_cot_destino_cx" class="form-control form-control-sm">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="salvarEditCotacaoVoo()">
+                    <i class="bi bi-check-lg me-1"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── MODAL F: Editar Quadro Orcamentario ────────────────────────────────── #}
+<div class="modal fade" id="modalEditarQuadro" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success bg-opacity-10 py-2">
+                <h6 class="modal-title"><i class="bi bi-calculator me-1"></i> Editar Quadro Orcamentario</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {% set quadro = itinerario.quadro_orcamentario %}
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="edit_quadro_ug" class="form-label fw-semibold small">UG</label>
+                        <input type="text" id="edit_quadro_ug" class="form-control form-control-sm"
+                               value="{{ quadro.ug if quadro and quadro.ug else '' }}" placeholder="210101">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_quadro_funcao" class="form-label fw-semibold small">Funcao</label>
+                        <input type="text" id="edit_quadro_funcao" class="form-control form-control-sm"
+                               value="{{ quadro.funcao if quadro and quadro.funcao else '' }}" placeholder="04">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_quadro_subfuncao" class="form-label fw-semibold small">Subfuncao</label>
+                        <input type="text" id="edit_quadro_subfuncao" class="form-control form-control-sm"
+                               value="{{ quadro.subfuncao if quadro and quadro.subfuncao else '' }}" placeholder="122">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_quadro_programa" class="form-label fw-semibold small">Programa</label>
+                        <input type="text" id="edit_quadro_programa" class="form-control form-control-sm"
+                               value="{{ quadro.programa if quadro and quadro.programa else '' }}" placeholder="0109">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_quadro_plano_interno" class="form-label fw-semibold small">Plano Interno</label>
+                        <input type="text" id="edit_quadro_plano_interno" class="form-control form-control-sm"
+                               value="{{ quadro.plano_interno if quadro and quadro.plano_interno else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_quadro_fonte_recursos" class="form-label fw-semibold small">Fonte de Recursos</label>
+                        <input type="text" id="edit_quadro_fonte_recursos" class="form-control form-control-sm"
+                               value="{{ quadro.fonte_recursos if quadro and quadro.fonte_recursos else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="edit_quadro_natureza_despesa" class="form-label fw-semibold small">Natureza da Despesa</label>
+                        <input type="text" id="edit_quadro_natureza_despesa" class="form-control form-control-sm"
+                               value="{{ quadro.natureza_despesa if quadro and quadro.natureza_despesa else '' }}" placeholder="3.3.9.0.14">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_quadro_valor_inicial_nr" class="form-label fw-semibold small">Valor Inicial NR</label>
+                        <input type="number" id="edit_quadro_valor_inicial_nr" class="form-control form-control-sm" step="0.01"
+                               value="{{ quadro.valor_inicial_nr if quadro and quadro.valor_inicial_nr else '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_quadro_saldo_nr" class="form-label fw-semibold small">Saldo NR</label>
+                        <input type="number" id="edit_quadro_saldo_nr" class="form-control form-control-sm" step="0.01"
+                               value="{{ quadro.saldo_nr if quadro and quadro.saldo_nr else '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_quadro_valor_despesa" class="form-label fw-semibold small">Valor Despesa</label>
+                        <input type="number" id="edit_quadro_valor_despesa" class="form-control form-control-sm" step="0.01"
+                               value="{{ quadro.valor_despesa if quadro and quadro.valor_despesa else '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="edit_quadro_saldo_atual_nr" class="form-label fw-semibold small">Saldo Atual NR</label>
+                        <input type="number" id="edit_quadro_saldo_atual_nr" class="form-control form-control-sm" step="0.01"
+                               value="{{ quadro.saldo_atual_nr if quadro and quadro.saldo_atual_nr else '' }}">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm" onclick="salvarQuadroOrcamentario()">
+                    <i class="bi bi-check-lg me-1"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

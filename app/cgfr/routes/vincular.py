@@ -79,10 +79,33 @@ def api_consultar_sei():
         ).first() if len(protocolo_limpo) >= 8 else None
 
     if existente:
+        # Processo já é visível (SEAD ou já adotado)?
+        ja_visivel = (
+            existente.processo_formatado.startswith(CgfrProcessoEnviado.PREFIXO_SEAD)
+            or existente.vinculado_manualmente
+        )
+        if ja_visivel:
+            return jsonify({
+                'sucesso': False,
+                'erro': f'Este processo já está vinculado: {existente.processo_formatado}',
+                'duplicata': True
+            })
+
+        # Processo existe no banco mas está oculto pelo filtro → permitir adoção
+        preview = {
+            'processo_formatado': existente.processo_formatado,
+            'link_acesso': existente.link_acesso or '',
+            'especificacao': existente.especificacao or '',
+            'tipo_processo': existente.tipo_processo or '',
+            'data_hora_processo': existente.data_hora_processo.strftime('%d/%m/%Y %H:%M:%S') if existente.data_hora_processo else '',
+            'geracao_sigla': existente.geracao_sigla or '',
+            'ultimo_andamento_sigla': existente.ultimo_andamento_sigla or '',
+            'ultimo_andamento_data': existente.ultimo_andamento_data.strftime('%d/%m/%Y %H:%M:%S') if existente.ultimo_andamento_data else '',
+        }
         return jsonify({
-            'sucesso': False,
-            'erro': f'Este processo já está vinculado: {existente.processo_formatado}',
-            'duplicata': True
+            'sucesso': True,
+            'adotavel': True,
+            'preview': preview,
         })
 
     # Autentica no SEI
@@ -143,6 +166,44 @@ def vincular_processo_post():
     if not protocolo:
         flash('Protocolo não informado.', 'danger')
         return redirect(url_for('cgfr.vincular_processo'))
+
+    acao_vincular = request.form.get('acao_vincular', 'novo')
+
+    # === Fluxo de ADOÇÃO: processo já existe no banco, apenas marcar como visível ===
+    if acao_vincular == 'adotar':
+        existente = CgfrProcessoEnviado.query.get(protocolo)
+        if not existente:
+            flash('Processo não encontrado para adoção.', 'danger')
+            return redirect(url_for('cgfr.vincular_processo'))
+
+        if existente.vinculado_manualmente or existente.processo_formatado.startswith(CgfrProcessoEnviado.PREFIXO_SEAD):
+            flash(f'Este processo já está vinculado: {protocolo}', 'warning')
+            return redirect(url_for('cgfr.vincular_processo'))
+
+        try:
+            existente.vinculado_manualmente = True
+            db.session.commit()
+
+            # Sincroniza documentos SEI
+            token = gerar_token_sei_admin()
+            if token:
+                app_obj = current_app._get_current_object()
+                success, msg = _fetch_and_save_docs(protocolo, token, app_obj)
+                if success:
+                    logger.info(f'[CGFR] Documentos sincronizados para processo adotado {protocolo}: {msg}')
+                else:
+                    logger.warning(f'[CGFR] Falha ao sincronizar documentos de {protocolo}: {msg}')
+
+            flash(f'Processo {protocolo} adotado com sucesso! Agora aparece nas listagens.', 'success')
+            return redirect(url_for('cgfr.dashboard'))
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f'[CGFR] Erro ao adotar processo: {e}', exc_info=True)
+            flash('Erro ao adotar processo. Tente novamente.', 'danger')
+            return redirect(url_for('cgfr.vincular_processo'))
+
+    # === Fluxo NOVO: criar registro a partir do SEI ===
 
     # Verifica duplicata
     if CgfrProcessoEnviado.query.get(protocolo):
@@ -225,6 +286,7 @@ def vincular_processo_post():
             valor_reserva=request.form.get('valor_reserva', '').strip() or None,
             nivel_prioridade=request.form.get('nivel_prioridade', '').strip() or None,
             data_inclusao=datetime.now(),
+            vinculado_manualmente=not data.get('ProcedimentoFormatado', protocolo).startswith(CgfrProcessoEnviado.PREFIXO_SEAD),
         )
         db.session.add(processo)
         db.session.commit()
@@ -234,9 +296,9 @@ def vincular_processo_post():
         app_obj = current_app._get_current_object()
         success, msg = _fetch_and_save_docs(protocolo_fmt, token, app_obj)
         if success:
-            logger.info(f'Documentos sincronizados para {protocolo_fmt}: {msg}')
+            logger.info(f'[CGFR] Documentos sincronizados para {protocolo_fmt}: {msg}')
         else:
-            logger.warning(f'Falha ao sincronizar documentos de {protocolo_fmt}: {msg}')
+            logger.warning(f'[CGFR] Falha ao sincronizar documentos de {protocolo_fmt}: {msg}')
 
         flash(
             f'Processo {protocolo_fmt} vinculado com sucesso! '
@@ -247,6 +309,6 @@ def vincular_processo_post():
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f'Erro ao vincular processo CGFR: {e}', exc_info=True)
+        logger.error(f'[CGFR] Erro ao vincular processo: {e}', exc_info=True)
         flash('Erro ao vincular processo. Tente novamente.', 'danger')
         return redirect(url_for('cgfr.vincular_processo'))

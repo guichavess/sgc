@@ -2,6 +2,20 @@
 {% block title %}SGC - Administração de Diárias{% endblock %}
 
 {% block content %}
+<style>
+    /* Linha clicável com <a> real para "Abrir em nova guia" */
+    .tr-link { position: relative; cursor: pointer; }
+    .tr-link td { position: relative; }
+    .tr-link-anchor {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+    }
+    /* Links e botões internos ficam acima do <a> da linha */
+    .tr-link a:not(.tr-link-anchor),
+    .tr-link button,
+    .tr-link .btn { position: relative; z-index: 2; }
+</style>
 <div class="mb-4">
     <h2 class="fw-bold">
         <i class="bi bi-kanban me-2"></i>Administração
@@ -124,14 +138,13 @@
                         <th>Período</th>
                         <th class="text-end">Valor</th>
                         <th class="text-center">Etapa</th>
-                        <th class="text-center">NR</th>
-                        <th class="text-center" style="width: 80px;">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for it in itinerarios %}
-                    <tr style="cursor: pointer;" onclick="window.location='{{ url_for('diarias.administracao_detalhe', id=it.id) }}'">
+                    <tr class="tr-link" data-href="{{ url_for('diarias.administracao_detalhe', id=it.id) }}">
                         <td class="ps-4">
+                            <a href="{{ url_for('diarias.administracao_detalhe', id=it.id) }}" class="tr-link-anchor"></a>
                             <span class="fw-semibold">{{ it.usuario_gerador.split('@')[0].replace('.', ' ').title() }}</span>
                             <br><small class="text-muted">{{ it.data_solicitacao.strftime('%d/%m/%Y') if it.data_solicitacao else '' }}</small>
                         </td>
@@ -146,7 +159,7 @@
                         </td>
                         <td>
                             {% if it.sei_protocolo %}
-                            <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ it.sei_id_procedimento }}" target="_blank" class="fw-bold text-decoration-none" onclick="event.stopPropagation()">
+                            <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ it.sei_id_procedimento }}" target="_blank" class="fw-bold text-decoration-none">
                                 {{ it.sei_protocolo }} <i class="bi bi-box-arrow-up-right small"></i>
                             </a>
                             {% else %}
@@ -184,22 +197,10 @@
                             <span class="badge rounded-pill bg-secondary">-</span>
                             {% endif %}
                         </td>
-                        <td class="text-center">
-                            {% if it.nota_reserva %}
-                            <span class="badge rounded-pill bg-success" title="{{ it.nota_reserva }}"><i class="bi bi-check-circle me-1"></i>Sim</span>
-                            {% else %}
-                            <span class="badge rounded-pill bg-light text-dark border"><i class="bi bi-clock me-1"></i>Pendente</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-center">
-                            <a href="{{ url_for('diarias.administracao_detalhe', id=it.id) }}" class="btn btn-sm btn-outline-primary" title="Gerenciar" onclick="event.stopPropagation()">
-                                <i class="bi bi-pencil-square"></i>
-                            </a>
-                        </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="9" class="text-center py-5 text-muted">
+                        <td colspan="7" class="text-center py-5 text-muted">
                             <i class="bi bi-inbox fs-1 d-block mb-2"></i>
                             Nenhuma solicitação encontrada.
                         </td>

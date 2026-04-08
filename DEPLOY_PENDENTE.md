@@ -17,6 +17,17 @@
 
 ## Pendências
 
+### CGFR — Coluna vinculado_manualmente
+
+- [ ] **Adicionar coluna `vinculado_manualmente` na tabela `cgfr_processo_enviado`**
+  - Contexto: permite adotar processos não-SEAD (sem prefixo "00002.") para que apareçam nas listagens CGFR
+  - SQL:
+  ```sql
+  ALTER TABLE cgfr_processo_enviado ADD COLUMN vinculado_manualmente TINYINT(1) NOT NULL DEFAULT 0;
+  ```
+
+---
+
 ### Pós-deploy de 2026-04-07 (opcional / quando tiver fonte dos dados)
 
 - [ ] **Popular `diarias_servidores.idpessoa` e promover a NOT NULL + UNIQUE**

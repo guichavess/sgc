@@ -42,7 +42,7 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
             Query SQLAlchemy filtrada.
         """
         query = cls.model.query.filter(
-            cls.model.processo_formatado.like(f'{cls.model.PREFIXO_SEAD}%')
+            cls.model.filtro_visiveis()
         ).options(
             joinedload(cls.model.natureza_rel),
             joinedload(cls.model.fonte_rel),
@@ -188,7 +188,7 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
     def contar_por_status(cls) -> dict:
         """Conta processos por status de classificação."""
         base = cls.model.query.filter(
-            cls.model.processo_formatado.like(f'{cls.model.PREFIXO_SEAD}%')
+            cls.model.filtro_visiveis()
         )
         total = base.count()
 

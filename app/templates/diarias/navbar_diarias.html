@@ -26,7 +26,13 @@
                     <li class="nav-item">
                         <a class="nav-link px-3 d-inline-flex align-items-center {{ 'active' if request.endpoint in ('diarias.administracao', 'diarias.administracao_detalhe', 'diarias.agencias', 'diarias.cargos') }}"
                            href="{{ url_for('diarias.administracao') }}">
-                            <i class="bi bi-kanban me-1"></i> Administração
+                            <i class="bi bi-kanban me-1"></i> Administracao
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link px-3 d-inline-flex align-items-center {{ 'active' if request.endpoint == 'diarias.auditoria' }}"
+                           href="{{ url_for('diarias.auditoria') }}">
+                            <i class="bi bi-clipboard-check me-1"></i> Auditoria
                         </a>
                     </li>
                     {% endif %}
