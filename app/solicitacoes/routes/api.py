@@ -306,12 +306,15 @@ def api_obter_saldo():
 # FUNÇÕES AUXILIARES DE SINCRONIZAÇÃO
 # =============================================================================
 
-def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
+def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url, inline=False):
     """
     Baixa documentos da API SEI para um protocolo e popula a tabela seimovimentacao.
     Executa em thread separada com contexto Flask próprio.
     Possui retry automático para erros transientes de SSL/rede.
-    Thread-safe: limpa a sessão ao sair.
+    Thread-safe: limpa a sessão ao sair (exceto quando inline=True).
+
+    Args:
+        inline: Se True, não faz db.session.remove() ao final (para uso no request principal).
     """
     with app_obj.app_context():
       try:
@@ -424,14 +427,19 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url):
             return (False, f"Erro {protocolo}: {str(e)}")
       finally:
         # Limpa a sessão da thread para evitar vazamento entre threads no pool
-        db.session.remove()
+        # Quando inline=True (chamada no request principal), não remove a sessão
+        if not inline:
+            db.session.remove()
 
 
-def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem):
+def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem, inline=False):
     """
     Lê a tabela seimovimentacao e aplica as regras de negócio
     para avançar etapas na timeline de cada solicitação.
     Thread-safe: limpa a sessão ao sair para evitar vazamento entre threads.
+
+    Args:
+        inline: Se True, não faz db.session.remove() ao final (para uso no request principal).
     """
     with app_obj.app_context():
       try:
@@ -738,7 +746,9 @@ def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem):
             return None
       finally:
         # Limpa a sessão da thread para evitar vazamento entre threads no pool
-        db.session.remove()
+        # Quando inline=True (chamada no request principal), não remove a sessão
+        if not inline:
+            db.session.remove()
 
 
 # =============================================================================
@@ -1044,9 +1054,28 @@ def api_atualizar_individual(id_solicitacao):
 
     msgs = []
 
-    # 1. Atualizar etapas via SEI
+    # 0. Fase 1: Baixar documentos atualizados da API SEI para este protocolo
+    if sol.protocolo_gerado_sei:
+        try:
+            if not token_sei:
+                token_sei = gerar_token_sei_admin()
+            if token_sei:
+                base_url = "https://api.sei.pi.gov.br/v1/unidades/110006213/procedimentos/documentos"
+                sucesso_download, msg_download = baixar_documentos_thread(
+                    app_real, sol.protocolo_gerado_sei, token_sei, base_url, inline=True
+                )
+                if sucesso_download:
+                    msgs.append('Documentos SEI atualizados.')
+                else:
+                    msgs.append(f'Download SEI: {msg_download}')
+            else:
+                msgs.append('Token SEI indisponível — etapas processadas com dados existentes.')
+        except Exception as e:
+            msgs.append(f'Erro ao baixar documentos SEI: {str(e)}')
+
+    # 1. Atualizar etapas via SEI (Fase 2)
     try:
-        resultado = processar_item_sei(app_real, sol.id, token_sei, usuario_id, mapa_ordem)
+        resultado = processar_item_sei(app_real, sol.id, token_sei, usuario_id, mapa_ordem, inline=True)
         if resultado:
             msgs.append(f'Etapa atualizada: {resultado}')
         else:
