@@ -1,0 +1,19 @@
+codtipoentidade,nome,nivel,nome2,idtipocargo,idcodigocargo,idtipofuncao
+1,"Coordenadoria (Nivel 0)",0,Coordenadoria,NULL,2,NULL
+2,"Autarquia Pública(Nivel 0)",0,"Agência ",NULL,2,NULL
+3,"Empresa Pública (Nivel 0)",0,"Empresa ",NULL,2,NULL
+4,"Fundação Pública (Nivel 0)",0,"Fundação ",NULL,2,NULL
+6,"Secretaria de Estado (Nivel 0)",0,"Secretaria ",NULL,1,NULL
+8,"Superintendência (Nivel 2)",2,"Superintendência ",8,3,17
+9,"Diretoria (Nivel 3)",3,"Diretoria ",4,4,3
+10,"Gerência (Nivel 4)",4,"Gerência ",3,5,59
+11,"Coordenação (Nivel 5)",5,"Coordenação ",1,6,13
+14,"Gabinete (Nivel 1)",1,"Gabinete ",NULL,NULL,NULL
+18,Governadoria,-1,Governadoria,NULL,NULL,NULL
+19,"Vice Governadoria (Nivel 0)",0,"Vice Governadoria",NULL,1,NULL
+20,"Gabinete Militar",0,"Gabinete Militar",NULL,NULL,NULL
+21,"Procuradoria (Nível 0)",0,Procuradoria,NULL,NULL,NULL
+22,"Núcleo Especializado(Nivel 2)",3,"Núcleo Especializado",NULL,4,NULL
+23,"Chefia de Gabinete (Nivel 2)",2,"Chefia de Gabinete ",NULL,NULL,NULL
+24,"Assessoria (Nivel 2) ",2,Assessoria,NULL,NULL,NULL
+25,"Unidade (Nivel 4)",4,Unidade,NULL,NULL,NULL

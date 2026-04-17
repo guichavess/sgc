@@ -1,0 +1,143 @@
+identidade,nome,sigla,idsuperintendencia,codentidadepai,codtipoentidade
+96,Gabinete,GAB,NULL,132,14
+110,"Superintendência de Gestão Administrativa",SGA,110,132,8
+117,"Núcleo Estratégico de Tecnologia e Governo Digital",NTGD,117,132,8
+118,"Superintendência de Licitação e Contratos",SLC,118,132,8
+119,"Superintendência de Parcerias e Concessões",SUPARC,119,132,8
+120,"Superintendência de Gestão de Pessoas",SGP,120,132,8
+121,"Escola de Governo",EGEPI,121,132,8
+122,"Diretoria de Inovação em Serviços Públicos",DISP,110,110,9
+124,"Diretoria de Planejamento e Finanças",DFIN,110,110,9
+126,"Diretoria de Obras e Serviços de Engenharia e Arquitetura",DINFRA,110,110,9
+127,"Diretoria de Logística e Abastecimento ",DLOG,110,110,9
+132,"Secretaria de Administração",SEADM,NULL,NULL,6
+202,"Diretoria de Planejamento de Compras Públicas",DIP,118,118,9
+205,"Diretoria de Licitações",DL,118,118,9
+208,"Diretoria de Contratos",DCON,118,118,9
+221,"Diretoria de Desenvolvimento de Pessoas",DDP,120,120,9
+222,"Diretoria de Pagamento de Pessoal",DFPG,120,120,9
+223,"Diretoria de Atenção ao Servidor Público do Estado do Piauí",CIASPI,120,120,9
+225,"Gerência de Gestão de Pessoas",GGP,120,221,10
+226,"Gerência de Provimentos e Desenvolvimento de Pessoas",GPDRH,120,221,10
+227,"Comissão Especial de Avaliação, Promoção, Progressão e Enquadramento",CEE,120,221,10
+228,"Gerência de Estruturação da Folha de Pagamento",GFPG,120,222,10
+229,"Gerência de Integração Contábil, Fiscal, Tributária e Proventos",GICTP,120,222,10
+230,"Gerência de Gestão de Cuidados e Atenção à Saúde do Servidor",GGCAS,120,223,10
+231,"Gerência de Assistência e Avaliação Especializada",GAAE,120,223,10
+232,"Coordenação de Planos de Cargos e Salários",COOPLACARS,120,224,11
+233,"Coordenação de Cadastros e Ocorrências Funcionais",CCOF,120,225,11
+234,"Coordenação de Direitos e Benefícios",CDB,120,225,11
+235,"Coordenação de Recrutamento de Pessoas",CRP,120,226,11
+236,"Coordenação de Gestão de Dados e Conformidades do eSocial",CGDCES,120,226,11
+237,"Coordenação dos Serviços de Consignações, Contribuições Sindicais e Associações",CSCCSA,120,228,11
+238,"Coordenação de Integração de Sistemas e Digitação de Folha de Pagamento",CISDF,120,228,11
+243,"Gerência de Planejamento e Orçamento",GPO,110,124,10
+247,"Gerência de Controle de Bens Móveis",CBM,110,127,10
+249,"Gerência Técnica de Projetos",GTEC,110,126,10
+251,"Gerência de Atendimento ao Cidadão",GAC,110,1944,10
+252,"Gerência do Centro Administrativo",GCA,110,2038,10
+253,"Gerência de Controle de Gastos Comuns",GCGC,110,127,10
+254,"Gerência de Acompanhamento da Execução de Contratos",GAEC,110,127,10
+263,"Coordenação de Manutenção, Conservação e Limpeza",CMCL,110,252,11
+264,"Coordenação de Frota",CF,110,252,11
+265,"Coordenação de Almoxarifado",GS,110,247,11
+268,"Coordenação de Abastecimento e Manutenção de Frota",CAMF,110,253,11
+269,"Coordenação de Telefonia",CT,110,253,11
+271,"Diretoria de Estruturação de Projetos de Concessões e Parcerias Público-Privadas",DEP,119,119,9
+272,"Diretoria de Monitoramento e Gestão de Contratos",CMOG,119,119,9
+276,"Gerência de Engenharia de Software",GES,117,117,10
+277,"Gerência de Infraestrutura Tecnológica",GIT,117,117,10
+278,"Gerência de Governo Digital",GIS,117,117,10
+279,"Coordenação de Suporte ao Ponto Eletrônico",SUPEL,117,278,11
+280,"Coordenação de Ciência de Dados",CCD,117,278,11
+281,"Coordenação de Infraestrutura",CINFRA,117,277,11
+282,"Coordenação de Suporte Tecnico",SUTEC,117,277,11
+345,"Coordenação de Monitoramento Mobiliário",CBM2,110,247,11
+351,"Gerência de Aperfeiçoamento da Alta Gestão",GAAG,121,1425,10
+490,"Assessoria de Pesquisa de Preços de Compras Públicas",APPCP,118,202,24
+502,"Assessoria de Comunicação Social",ASSCOM,NULL,96,9
+503,"Núcleo Setorial de Controle Interno",NCI,NULL,96,9
+504,"Secretaria Executiva",SE,NULL,96,9
+506,"Ouvidoria Setorial",OS,NULL,96,9
+508,"Coordenação da Colônia de Férias",CCF,110,247,10
+509,"Gerência de Execução Orçamentária",GEO,110,124,10
+510,"Coordenação de Contabilidade",CCONT,110,509,11
+511,"Coordenação de Apoio Técnico",CAT,110,254,11
+512,"Coordenação de Controle de Diárias e Passagens",CCDP,110,509,11
+513,"Gerência de Inovação na Gestão dos Serviços Públicos",GIN,110,122,10
+514,"Coordenação de Projetos",CP,110,249,11
+515,"Coordenação de Planejamento e Orçamento de Obras e Serviços de Engenharia",CPOOS,110,249,11
+516,"Coordenação de Supervisão e Fiscalização de Obras",CSFO,110,249,11
+525,"Gerência de Educação Executiva ",GEE,121,1425,10
+644,"Espaço da Cidadania - Unidade Auto Mall","SIAC - Unidade Auto Mall",110,1944,11
+645,"Espaço da Cidadania - Unidade Parnaíba","CIAC- Unidade Parnaíba",110,1944,11
+646,"Espaço da Cidadania - Teresina Shopping","Unidade Teresina Shopping",110,1944,11
+647,"Coordenação de Promoção à Saúde",CPS,120,230,11
+648,"Coordenação de Saúde Mental",CSM,120,230,11
+649,"Coordenação Médica Pericial",COOMEDPER,120,231,11
+650,"Coordenação de Acolhimento e Instruções Periciais",CAIP,120,231,11
+651,"Coordenação de Readaptação Funcional e Acompanhamento de Saúde",CRFAS,120,231,11
+652,"Espaço da Cidadania - Unidade Campo Maior","CIAC - Unidade Campo Maior",110,1944,11
+653,"Coordenação do Ponto Eletrônico",CPEL,120,225,11
+654,"Espaço da Cidadania - Unidade Água Branca","SIAC - Unidade Água Branca",110,1944,11
+655,"Espaço da Cidadania - Unidade Bom Jesus","CIAC- Unidade Bom Jesus",110,1944,11
+656,"Coordenação de Acúmulo de Cargos ",CAC,120,226,11
+657,"Coordenação de Revisão da Folha de Pagamento",CRFP,120,229,11
+659,"Espaço da Cidadania - Unidade Floriano","CIAC - Unidade Floriano",110,1944,11
+660,"Espaço da Cidadania - Unidade São Raimundo Nonato","CIAC - Unidade São Raimundo Nonato",110,1944,11
+661,"Espaço da Cidadania - Unidade Oeiras","CIAC - Unidade Oeiras",110,1944,11
+662,"Espaço da Cidadania - Unidade Anísio de Abreu","CIAC - Unidade Anísio de Abreu",110,1944,11
+663,"Espaço da Cidadania - Unidade Santa Filomena ","CIAC - Unidade Santa Filomena",110,1944,11
+664,"Espaço da Cidadania - Unidade Nazaré do Piauí  ","CIAC- Unidade Nazaré do Piauí",110,1944,11
+665,"Espaço da Cidadania - Unidade Picos ","CIAC- Unidade Picos",110,1944,11
+666,"Espaço da Cidadania - Unidade Ilha Grande ","CIAC- Unidade Ilha Grande",110,1944,11
+667,"Espaço da Cidadania - Unidade Paes Landim ","CIAC- Unidade Paes Landim",110,1944,11
+668,"Espaço da Cidadania - Unidade São Félix ","CIAC- Unidade São Félix",110,1944,11
+669,"Espaço da Cidadania - Unidade Elesbão Veloso ","CIAC- Unidade Elesbão Veloso",110,1944,11
+670,"Espaço da Cidadania - Unidade Beneditinos ","SIAC - Unidade Beneditinos",110,1944,11
+671,"Espaço da Cidadania - Unidade Ribeira do Piauí ","CIAC - Unidade Ribeira do Piauí",110,1944,11
+672,"Espaço da Cidadania - Unidade Monte Alegre ","CIAC- Unidade Monte Alegre",110,1944,11
+673,"Espaço da Cidadania - Unidade Nossa Senhora de Nazaré ","CIAC- Unidade Nossa Senhora de Nazaré",110,1944,11
+674,"Espaço da Cidadania - Unidade Fronteiras ","CIAC- Unidade Fronteiras",110,1944,11
+675,"Espaço da Cidadania - Unidade Uruçuí ","CIAC- Unidade Uruçuí",110,1944,11
+676,"Espaço da Cidadania - Unidade Corrente ","CIAC- Unidade Corrente",110,1944,11
+677,"Espaço da Cidadania - Unidade Pio IX","CIAC- Unidade Pio IX",110,1944,11
+678,"Espaço da Cidadania - Unidade São Julião","CIAC- Unidade São Julião",110,1944,11
+679,"Espaço da Cidadania - Unidade Caridade do Piauí ","CIAC - Unidade Caridade do Piauí",110,1944,11
+680,"Espaço da Cidadania - Unidade Queimada Nova ","CIAC- Unidade Queimada Nova",110,1944,11
+681,"Espaço da Cidadania - Unidade Conceição do Canindé ","CIAC- Unidade Conceição do Canindé",110,1944,11
+682,"Espaço da Cidadania - Unidade Assunção do Piauí ","CIAC- Unidade Assunção do Piauí",110,1944,11
+683,"Espaço da Cidadania - Unidade Colônia do Gurguéia ","CIAC - Unidade Colônia do Gurguéia",110,1944,11
+684,"Espaço da Cidadania - Unidade São Miguel do Tapuio ","CIAC- Unidade São Miguel do Tapuio",110,1944,11
+685,"Espaço da Cidadania - Unidade Barras ","CIAC- Unidade Barras",110,1944,11
+686,"Espaço da Cidadania - Unidade Simões ","CIAC- Unidade Simões",110,1944,11
+688,"Espaço da Cidadania - Unidade Pedro II","CIAC- Unidade Pedro II",110,1944,11
+1406,"Coordenação de Saúde Ocupacional ",CSO,120,231,11
+1413,"Superintendência de Patrimônio Imobiliário",SPI,1413,132,8
+1414,"Diretoria de Gestão do Patrimônio ",DGPAT,1413,1413,9
+1415,"Gerência de Controle de Bens Imóveis",GCBI,1413,1414,10
+1416,"Diretoria de Regularização Imobiliária",DRI,1413,1413,9
+1417,"Gerência de Regularização Fundiária e Cadastramento ",GRFC,1413,1416,10
+1418,"Núcleo de Informações Geoespaciais ",NIG,1413,1413,9
+1423,"Diretoria de Formação Profissional dos Servidores do Estado do Piauí 'Antonino Freire'",DFPSE,121,121,9
+1425,"Diretoria da Escola de Gestores",DEG,121,121,9
+1426,"Gerência de Educação à Distância ",GEREDUDIS,121,1425,10
+1427,"Coordenação de Bens Inservíveis",CBI,110,247,11
+1461,"Gerência de Inventário de Bens Imóveis",GIBI,1413,1414,10
+1462,"Gerência de Operações Técnicas ",GOP,1413,1416,10
+1463,"Gerência de Vistoria de Imóveis",GVI,1413,1416,10
+1466,"Gerência Administrativa e de Planejamento",GAP,121,1423,10
+1467,"Gerência Pedagógica e de Projetos",GPP,121,1423,10
+1468,"Gerência de Monitoramento e Avaliação ",GMA,121,1423,10
+1469,"Coordenação Geral dos Espaços e Salas da Cidadania",CGESC,110,1944,11
+1470,"Coordenação de Desenvolvimento de Sistemas",CDS,117,276,11
+1622,"Espaço da Cidadania - Unidade Jatobá",ECJAT,110,1944,11
+1623,"Espaço da Cidadania - Unidade Paulistana",ECP,110,1944,11
+1624,"Espaço da Cidadania - Piauí Center",ECPC,110,1944,11
+1625,"Espaço da Cidadania - Unidade Grand Dirceu Shopping",ECGPD,110,1944,11
+1751,"Espaço da Cidadania - Unidade Alto Longá","CIAC- Unidade Alto Longá",110,1944,11
+1944,"Diretoria de Atendimento ao Cidadão",DAC,110,110,9
+2017,"Coordenação de Projetos de Tecnologia Da Informação",CPTI,NULL,278,11
+2038,"Diretoria de Gestão Administrativa",DGA,110,110,9
+2053,"Espaço da Cidadania Digital","Ciac - Unidade Espaço da Cidadania Digital",NULL,1944,11
+2054,"Espaço da Cidadania - Unidade SEAD","Siac - Unidade SEAD",NULL,1944,11
