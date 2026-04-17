@@ -186,7 +186,7 @@
                             {{ item.etapa.nome }}
                         </span>
 
-                        {# Botao verificar autorizacao — Etapa 1 (Solicitacao Inicial) #}
+                        {# Botão verificar autorização — Etapa 1 (Solicitação Inicial) #}
                         {% if item.etapa.id == 1 and not item.concluida and itinerario.sei_protocolo %}
                         <button type="button"
                                 class="btn btn-outline-primary btn-verificar-autorizacao"
@@ -265,7 +265,7 @@ function verificarAutorizacao(itinerarioId) {
     var resultado = document.getElementById('resultado-autorizacao');
 
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verificando...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verificando…';
     resultado.innerHTML = '';
 
     fetch('/diarias/api/verificar-autorizacao/' + itinerarioId)
@@ -302,14 +302,14 @@ function verificarAutorizacao(itinerarioId) {
                     }
                     setTimeout(function() { location.reload(); }, 2000);
                 } else {
-                    html += '<br><span class="badge bg-success mt-1">Ja autorizada</span>';
+                    html += '<br><span class="badge bg-success mt-1">Já autorizada</span>';
                 }
             } else {
                 html += '<i class="fas fa-clock text-warning"></i> ';
                 if (data.erro) {
                     html += '<span class="text-warning">' + data.erro + '</span>';
                 } else {
-                    html += '<span class="text-warning">Documento de autorizacao ainda nao encontrado</span>';
+                    html += '<span class="text-warning">Documento de autorização ainda não encontrado</span>';
                 }
                 if (data.documento && data.documento.documento_formatado) {
                     html += '<br><small class="text-muted">Doc: ' + data.documento.documento_formatado + '</small>';

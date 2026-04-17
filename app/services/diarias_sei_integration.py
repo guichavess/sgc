@@ -29,7 +29,7 @@ ID_SERIE_DESPACHO = "754"              # "SEAD_DESPACHO"
 ID_SERIE_ESCOLHA_PASSAGENS = "2977"    # "SEAD_ESCOLHA_PASSAGENS"
 ID_SERIE_REQUISICAO_INTERNA = "543"    # "SEAD_REQUISIÇÃO_INTERNA" (alternativa para escolha passagens)
 ID_SERIE_NOTA_EMPENHO = "419"         # "NE - Nota de Empenho"
-ID_SERIE_AUTORIZACAO_SCDP = "264"     # Doc externo para Autorização SCDP
+ID_SERIE_AUTORIZACAO_SCDP = "269"     # "Autorização" — Autorização SOLICITAÇÃO APROVADA SCDP
 ID_SERIE_DESPACHO_SGA = "2987"        # "SEAD_DESPACHO_SGA" (Despacho do Superintendente)
 ID_SERIE_ANALISE_PAGAMENTO = "461"    # "SINCIN Análise de Pagamento" (Parecer NCI)
 ID_SERIE_DESPACHO_NCI = "5"           # "Despacho" (Despacho NCI)
@@ -46,12 +46,15 @@ ID_SERIE_PRESTACAO_SCDP = "264"       # "Documento" (Externo - Prestação SCDP)
 ID_SERIES_RELATORIO_VIAGEM = {
     "1908",  # SEAD_RELATÓRIO DE VIAGEM (DIÁRIA) — padrão do fluxo SGC
     "261",   # Relatório de Viagem a Serviço — variante encontrada em processos
+    "1014",  # GOV_RELATÓRIO_DE_VIAGEM — variante encontrada em processos importados
+    "539",   # SEAD_RELATORIO_DE_VIAGEM — variante encontrada em processos importados
+    "1135",  # Relatório_de_Viagem_em_Equipe — variante encontrada em processos importados
 }
 ID_SERIES_ANALISE_HABILITACAO = {
     "7",     # Análise — variante encontrada em processos
 }
 ID_SERIES_AUTORIZACAO_SCDP = {
-    "35",    # Comprovante — variante encontrada em processos
+    "269",   # Autorização — Autorização SOLICITAÇÃO APROVADA SCDP
 }
 ID_SERIES_PRESTACAO_SCDP = {
     "264",   # Documento (Externo) — detectado por keyword no campo Numero/Descricao
@@ -93,7 +96,6 @@ SERIE_TIPO_DOCUMENTO_MAP = {
     ID_SERIE_ANEXO: 'doc_externo',
     ID_SERIE_DOCUMENTO_EXTERNO: 'doc_externo',
     ID_SERIE_AUTORIZACAO_SECRETARIO: 'autorizacao',
-    ID_SERIE_AUTORIZACAO_GENERICA: 'autorizacao',
     ID_SERIE_QUADRO_ORCAMENTARIO: 'quadro_orcamentario',
     ID_SERIE_NOTA_RESERVA: 'nota_reserva',
     ID_SERIE_NOTA_EMPENHO: 'nota_empenho',
@@ -110,6 +112,8 @@ SERIE_TIPO_DOCUMENTO_MAP = {
     **{sid: 'analise_habilitacao' for sid in ID_SERIES_ANALISE_HABILITACAO},
     **{sid: 'autorizacao_scdp' for sid in ID_SERIES_AUTORIZACAO_SCDP},
     ID_SERIE_NP: 'np',
+    ID_SERIE_COMPROVANTE_VIAGEM: 'comprovante_viagem',
+    ID_SERIE_DESPACHO: 'despacho',
 }
 
 # Unidade destino pós-autorização (Diretoria de Planejamento e Finanças)
@@ -119,6 +123,97 @@ UNIDADE_NCI = "110006211"         # "SEAD-PI/GAB/NCI"
 UNIDADE_CCDP = "110008607"        # "SEAD-PI/SGACG/DFIN/GEO/CCDP"
 UNIDADE_GEO = "110006439"        # "SEAD-PI/GAB/SGACG/DFIN/GEO"
 UNIDADE_DFIN = "110006438"       # "SEAD-PI/GAB/SGACG/DFIN"
+UNIDADE_GPO = "110006440"        # "SEAD-PI/GAB/SGACG/DFIN/GPO"
+
+def _resolver_interessados(interessados=None, itinerario=None):
+    """Resolve a lista de nomes de interessados para uso nos documentos SEI."""
+    if interessados:
+        return ', '.join(interessados)
+    if itinerario:
+        try:
+            from app.models.diaria import DiariasItemItinerario
+            itens = DiariasItemItinerario.query.filter_by(
+                id_itinerario=itinerario.id
+            ).all()
+            nomes = [item.nome_pessoa for item in itens if item.nome_pessoa]
+            if nomes:
+                return ', '.join(nomes)
+        except Exception:
+            pass
+    return ''
+
+
+def _escape_html(texto):
+    """Escapa caracteres HTML para prevenir injeção em documentos SEI (HIGH-02)."""
+    if not texto:
+        return ''
+    return (str(texto)
+            .replace('&', '&amp;')
+            .replace('<', '&lt;')
+            .replace('>', '&gt;')
+            .replace('"', '&quot;')
+            .replace("'", '&#39;'))
+
+
+def _bloco_assinatura(nome_assinante=None, cargo_assinante=None):
+    """Gera bloco HTML de assinatura visual para documentos SEI.
+
+    Se nome/cargo não fornecidos, tenta resolver via current_user.
+    Retorna string HTML pronta para incluir no conteudo_html do documento.
+    """
+    _nome = nome_assinante
+    _cargo = cargo_assinante or ''
+    if not _nome:
+        try:
+            from flask_login import current_user
+            _nome = current_user.nome.upper() if current_user and current_user.nome else ''
+            if not _cargo:
+                _cargo = getattr(current_user, 'cargo', '') or ''
+        except Exception:
+            _nome = ''
+    return f"""
+        <br>
+        <p style="text-align: center;">
+            <i>(assinado eletronicamente)</i><br>
+            <b>{_escape_html(_nome)}</b><br>
+            {_escape_html(_cargo)}
+        </p>"""
+
+
+def _montar_despacho_html(corpo_paragrafo_html, nome_assinante, cargo_assinante,
+                          titulo=None, para_linha=None):
+    """Monta o HTML padrão de um SEAD_DESPACHO (série 754).
+
+    IMPORTANTE — o que NÃO incluir aqui (o SEI renderiza automaticamente):
+      - Cabeçalho (Processo nº / Interessados / Assunto): renderizado a partir
+        dos metadados Procedimento + Descricao do payload.
+      - Título "DESPACHO": renderizado pelo template da série 754. Se passar
+        em `titulo`, será adicionado mas FICARÁ DUPLICADO. Mantenha None.
+
+    Args:
+        corpo_paragrafo_html: HTML interno do parágrafo principal
+            (ex: "Encaminho os autos à <b>CCDP</b> para ...").
+        nome_assinante: nome da pessoa/titular que assinará (maiúsculo).
+        cargo_assinante: cargo/função.
+        titulo: título extra. Por padrão None — o SEI já adiciona "DESPACHO".
+            Use apenas para títulos diferentes (raro).
+        para_linha: texto opcional em "PARA:" antes do corpo
+            (ex: 'PARA: NÚCLEO DE CONTROLE INTERNO - NCI').
+    """
+    bloco_titulo = (
+        f'<p style="text-align: center;"><b>{_escape_html(titulo)}</b></p><br>'
+        if titulo else ''
+    )
+    linha_para = f'<p>{_escape_html(para_linha)}</p><br>' if para_linha else ''
+    return f"""
+    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        {bloco_titulo}
+        {linha_para}
+        <p style="text-indent: 2em; text-align: justify;">{corpo_paragrafo_html}</p>
+        {_bloco_assinatura(nome_assinante, cargo_assinante)}
+    </div>
+    """
+
 
 # Meses por extenso para formatação de datas
 MESES_EXTENSO = {
@@ -139,7 +234,7 @@ def _formatar_data_extenso(dt):
     return f"{dt.day} de {MESES_EXTENSO[dt.month]} de {dt.year}"
 
 
-def criar_procedimento_diarias(token, dados_servidor, tipo_itinerario_nome):
+def criar_procedimento_diarias(token, dados_servidor, tipo_itinerario_nome, unidade_sei_id=None):
     """
     Etapa 1: Cria o processo de diárias no SEI.
 
@@ -147,6 +242,7 @@ def criar_procedimento_diarias(token, dados_servidor, tipo_itinerario_nome):
         token: Token de autenticação SEI
         dados_servidor: dict com {cargo, matricula} do servidor principal
         tipo_itinerario_nome: 'Nacional' ou 'Estadual'
+        unidade_sei_id: ID da unidade SEI onde criar o processo (default: UNIDADE_SEAD)
 
     Returns:
         dict com resposta do SEI (contém IdProcedimento, ProcedimentoFormatado, etc.)
@@ -155,7 +251,8 @@ def criar_procedimento_diarias(token, dados_servidor, tipo_itinerario_nome):
         current_app.logger.error("SEI Diárias: Token não fornecido.")
         return None
 
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/procedimentos"
+    unidade = unidade_sei_id or UNIDADE_SEAD
+    url = f"{BASE_URL}/v1/unidades/{unidade}/procedimentos"
 
     cargo = dados_servidor.get('cargo', 'Servidor')
     matricula = dados_servidor.get('matricula', '')
@@ -199,7 +296,7 @@ def criar_procedimento_diarias(token, dados_servidor, tipo_itinerario_nome):
         current_app.logger.info(
             f"SEI Diárias: Criando procedimento para {matricula} ({tipo_itinerario_nome})..."
         )
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
 
         if response.status_code not in [200, 201]:
             current_app.logger.error(
@@ -221,7 +318,8 @@ def criar_procedimento_diarias(token, dados_servidor, tipo_itinerario_nome):
 
 
 def gerar_memorando_diarias(token, id_procedimento, dados_memorando,
-                            doc_req_diarias=None, doc_req_passagens=None):
+                            doc_req_diarias=None, doc_req_passagens=None,
+                            unidade_sei_id=None):
     """
     Gera o documento SEAD_MEMORANDO_SGA vinculado ao processo.
 
@@ -247,7 +345,8 @@ def gerar_memorando_diarias(token, id_procedimento, dados_memorando,
         current_app.logger.error("SEI Diárias: Token não fornecido para memorando.")
         return None
 
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+    unidade = unidade_sei_id or UNIDADE_SEAD
+    url = f"{BASE_URL}/v1/unidades/{unidade}/documentos"
 
     justificativa = dados_memorando.get('justificativa', '')
     data_viagem = dados_memorando.get('data_viagem')
@@ -258,34 +357,40 @@ def gerar_memorando_diarias(token, id_procedimento, dados_memorando,
     data_viagem_extenso = _formatar_data_extenso(data_viagem) if data_viagem else ''
     data_retorno_extenso = _formatar_data_extenso(data_retorno) if data_retorno else ''
 
-    # Monta referências dos documentos criados anteriormente (com links clicáveis)
+    # Monta referências dos documentos criados anteriormente
+    # Usa link SEI interno: protocolo_doc como âncora clicável no SEI
     SEI_LINK_BASE = "https://sei.pi.gov.br/sei/controlador.php"
 
     ref_diarias = ''
     if doc_req_diarias:
         doc_fmt = doc_req_diarias.get('DocumentoFormatado', '')
         id_doc = doc_req_diarias.get('IdDocumento', '')
-        if doc_fmt and id_doc:
+        # Usa o DocumentoFormatado como texto de exibição; fallback para IdDocumento
+        texto_ref = doc_fmt or id_doc or ''
+        if texto_ref and id_doc:
             link = (
-                f"{SEI_LINK_BASE}?acao=procedimento_trabalhar"
-                f"&id_procedimento={id_procedimento}&id_documento={id_doc}"
+                f"{SEI_LINK_BASE}?acao=protocolo_visualizar"
+                f"&id_protocolo={id_doc}"
+                f"&infra_sistema=100000100&infra_unidade_atual={UNIDADE_SEAD}"
             )
-            ref_diarias = f'(<a href="{link}">{doc_fmt}</a>)'
-        elif doc_fmt:
-            ref_diarias = f'<i>({doc_fmt})</i>'
+            ref_diarias = f'(<a href="{link}" target="_blank">{_escape_html(texto_ref)}</a>)'
+        elif texto_ref:
+            ref_diarias = f'(<i>{_escape_html(texto_ref)}</i>)'
 
     ref_passagens = ''
     if doc_req_passagens:
         doc_fmt = doc_req_passagens.get('DocumentoFormatado', '')
         id_doc = doc_req_passagens.get('IdDocumento', '')
-        if doc_fmt and id_doc:
+        texto_ref = doc_fmt or id_doc or ''
+        if texto_ref and id_doc:
             link = (
-                f"{SEI_LINK_BASE}?acao=procedimento_trabalhar"
-                f"&id_procedimento={id_procedimento}&id_documento={id_doc}"
+                f"{SEI_LINK_BASE}?acao=protocolo_visualizar"
+                f"&id_protocolo={id_doc}"
+                f"&infra_sistema=100000100&infra_unidade_atual={UNIDADE_SEAD}"
             )
-            ref_passagens = f'(<a href="{link}">{doc_fmt}</a>)'
-        elif doc_fmt:
-            ref_passagens = f'<i>({doc_fmt})</i>'
+            ref_passagens = f'(<a href="{link}" target="_blank">{_escape_html(texto_ref)}</a>)'
+        elif texto_ref:
+            ref_passagens = f'(<i>{_escape_html(texto_ref)}</i>)'
 
     # Monta o texto de solicitação conforme os documentos disponíveis
     if ref_diarias and ref_passagens:
@@ -315,7 +420,7 @@ def gerar_memorando_diarias(token, id_procedimento, dados_memorando,
 
     payload = {
         "Procedimento": str(id_procedimento),
-        "IdSerie": ID_SERIE_MEMORANDO_SGA,
+        "IdSerie": dados_memorando.get('id_serie_memorando') or ID_SERIE_MEMORANDO_SGA,
         "Conteudo": conteudo_html,
         "NivelAcesso": "Restrito",
         "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
@@ -334,7 +439,7 @@ def gerar_memorando_diarias(token, id_procedimento, dados_memorando,
         current_app.logger.info(
             f"SEI Diárias: Gerando memorando para procedimento {id_procedimento}..."
         )
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
 
         if response.status_code not in [200, 201]:
             current_app.logger.error(
@@ -382,7 +487,19 @@ def _formatar_valor_brl(valor):
     return f"R$ {inteiro_fmt},{decimal:02d}"
 
 
-def gerar_requisicao_diarias(token, id_procedimento, dados_requisicao):
+def _resolver_titular_por_cargo(cargo_gestao):
+    """Busca nome e cargo do titular (superintendente/secretario) no banco."""
+    try:
+        from app.models.usuario import Usuario
+        u = Usuario.query.filter_by(cargo_gestao=cargo_gestao, ativo=True).first()
+        if u:
+            return u.nome.upper() if u.nome else '', u.cargo or ''
+    except Exception:
+        pass
+    return '', ''
+
+
+def gerar_requisicao_diarias(token, id_procedimento, dados_requisicao, unidade_sei_id=None):
     """
     Etapa 3: Gera o documento SEAD_REQUISIÇÃO DE DIÁRIAS vinculado ao processo.
 
@@ -410,7 +527,14 @@ def gerar_requisicao_diarias(token, id_procedimento, dados_requisicao):
         current_app.logger.error("SEI Diárias: Token não fornecido para requisição.")
         return None
 
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+    unidade = unidade_sei_id or UNIDADE_SEAD
+    url = f"{BASE_URL}/v1/unidades/{unidade}/documentos"
+
+    # Resolve nomes dinâmicos dos titulares para blocos de assinatura
+    _nome_sup, _cargo_sup = _resolver_titular_por_cargo('superintendente')
+    _cargo_sup = _cargo_sup or 'Superintendente de Gestão Administrativa - SEAD'
+    _nome_sec, _cargo_sec = _resolver_titular_por_cargo('secretario')
+    _cargo_sec = _cargo_sec or 'Secretário da Administração do Estado'
 
     objetivo = dados_requisicao.get('objetivo', '')
     data_viagem = dados_requisicao.get('data_viagem')
@@ -505,8 +629,8 @@ def gerar_requisicao_diarias(token, id_procedimento, dados_requisicao):
 
         <p style="text-align: center; font-size: 10pt;">
             (assinado eletronicamente)<br>
-            <b>PEDRO ALEXANDRE CABRAL DE OLIVEIRA</b><br>
-            Superintendente de Gestão Administrativa - SEAD
+            <b>{_escape_html(_nome_sup)}</b><br>
+            {_escape_html(_cargo_sup)}
         </p>
 
         <br>
@@ -526,8 +650,8 @@ def gerar_requisicao_diarias(token, id_procedimento, dados_requisicao):
                     <br>
                     <p style="text-align: center; font-size: 10pt;">
                         (assinado eletronicamente)<br>
-                        <b>SAMUEL PONTES DO NASCIMENTO</b><br>
-                        Secretário da Administração do Estado
+                        <b>{_escape_html(_nome_sec)}</b><br>
+                        {_escape_html(_cargo_sec)}
                     </p>
                 </td>
             </tr>
@@ -556,14 +680,10 @@ def gerar_requisicao_diarias(token, id_procedimento, dados_requisicao):
         current_app.logger.info(
             f"SEI Diárias: Gerando requisição de diárias para procedimento {id_procedimento}..."
         )
-        print(f"[DEBUG SEI] Requisição - Procedimento: {id_procedimento}, Série: {ID_SERIE_REQUISICAO_DIARIAS}")
-        print(f"[DEBUG SEI] Requisição - Servidores: {len(servidores)}, Trecho: {trecho}")
 
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
 
-        print(f"[DEBUG SEI] Requisição - Status: {response.status_code}")
         if response.status_code not in [200, 201]:
-            print(f"[DEBUG SEI] Requisição - ERRO: {response.text[:500]}")
             current_app.logger.error(
                 f"SEI Diárias: Erro ao gerar requisição ({response.status_code}): {response.text}"
             )
@@ -571,19 +691,17 @@ def gerar_requisicao_diarias(token, id_procedimento, dados_requisicao):
         response.raise_for_status()
 
         retorno = response.json()
-        print(f"[DEBUG SEI] Requisição - SUCESSO: {retorno.get('DocumentoFormatado')}")
         current_app.logger.info(
             f"SEI Diárias: Requisição gerada com sucesso - {retorno.get('DocumentoFormatado', retorno)}"
         )
         return retorno
 
     except Exception as e:
-        print(f"[DEBUG SEI] Requisição - EXCEÇÃO: {type(e).__name__}: {e}")
         current_app.logger.error(f"SEI Diárias: Erro crítico ao gerar requisição: {e}")
         return None
 
 
-def gerar_requisicao_passagens(token, id_procedimento, dados_requisicao):
+def gerar_requisicao_passagens(token, id_procedimento, dados_requisicao, unidade_sei_id=None):
     """
     Gera o documento SEAD_REQUISIÇÃO_DE_PASSAGENS_AÉREAS vinculado ao processo.
 
@@ -608,7 +726,8 @@ def gerar_requisicao_passagens(token, id_procedimento, dados_requisicao):
         current_app.logger.error("SEI Diárias: Token não fornecido para requisição de passagens.")
         return None
 
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+    unidade = unidade_sei_id or UNIDADE_SEAD
+    url = f"{BASE_URL}/v1/unidades/{unidade}/documentos"
 
     objetivo = dados_requisicao.get('objetivo', '')
     data_viagem = dados_requisicao.get('data_viagem')
@@ -640,8 +759,6 @@ def gerar_requisicao_passagens(token, id_procedimento, dados_requisicao):
 
     conteudo_html = f"""
     <div style="font-family: Arial, sans-serif; font-size: 10pt;">
-        <h3 style="text-align:center; margin-bottom:20px;">REQUISIÇÃO DE PASSAGENS AÉREAS</h3>
-
         <table style="width:100%; border-collapse:collapse; border:2px solid #000;">
             <thead>
                 <tr style="background-color:#d9e2f3;">
@@ -695,14 +812,10 @@ def gerar_requisicao_passagens(token, id_procedimento, dados_requisicao):
         current_app.logger.info(
             f"SEI Diárias: Gerando requisição de passagens para procedimento {id_procedimento}..."
         )
-        print(f"[DEBUG SEI] Req. Passagens - Procedimento: {id_procedimento}, Série: {ID_SERIE_REQUISICAO_PASSAGENS}")
-        print(f"[DEBUG SEI] Req. Passagens - Servidores: {len(servidores)}, Trecho: {trecho}")
 
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
 
-        print(f"[DEBUG SEI] Req. Passagens - Status: {response.status_code}")
         if response.status_code not in [200, 201]:
-            print(f"[DEBUG SEI] Req. Passagens - ERRO: {response.text[:500]}")
             current_app.logger.error(
                 f"SEI Diárias: Erro ao gerar req. passagens ({response.status_code}): {response.text}"
             )
@@ -710,20 +823,19 @@ def gerar_requisicao_passagens(token, id_procedimento, dados_requisicao):
         response.raise_for_status()
 
         retorno = response.json()
-        print(f"[DEBUG SEI] Req. Passagens - SUCESSO: {retorno.get('DocumentoFormatado')}")
         current_app.logger.info(
             f"SEI Diárias: Requisição de passagens gerada - {retorno.get('DocumentoFormatado', retorno)}"
         )
         return retorno
 
     except Exception as e:
-        print(f"[DEBUG SEI] Req. Passagens - EXCEÇÃO: {type(e).__name__}: {e}")
         current_app.logger.error(f"SEI Diárias: Erro crítico ao gerar req. passagens: {e}")
         return None
 
 
 def adicionar_documento_externo(token, protocolo_formatado, arquivo_bytes, nome_arquivo,
-                                descricao='Documento anexo', id_serie=None, numero=None):
+                                descricao='Documento anexo', id_serie=None, numero=None,
+                                unidade_id=None):
     """
     Etapa 4: Adiciona um documento externo (PDF, DOCX, imagem) ao processo SEI.
 
@@ -746,7 +858,8 @@ def adicionar_documento_externo(token, protocolo_formatado, arquivo_bytes, nome_
         current_app.logger.error("SEI Diárias: Token não fornecido para documento externo.")
         return None
 
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos/externo"
+    unidade = unidade_id or UNIDADE_SEAD
+    url = f"{BASE_URL}/v1/unidades/{unidade}/documentos/externo"
 
     # Codifica o arquivo em base64
     conteudo_base64 = base64.b64encode(arquivo_bytes).decode('utf-8')
@@ -779,14 +892,10 @@ def adicionar_documento_externo(token, protocolo_formatado, arquivo_bytes, nome_
             f"SEI Diárias: Adicionando documento externo '{nome_arquivo}' "
             f"ao procedimento {protocolo_formatado}..."
         )
-        print(f"[DEBUG SEI] Doc Externo - Procedimento: {protocolo_formatado}, "
-              f"Arquivo: {nome_arquivo}, Tamanho base64: {len(conteudo_base64)}")
 
-        response = requests.post(url, json=payload, headers=headers, timeout=60)
+        response = requests.post(url, json=payload, headers=headers, timeout=60, verify=False)
 
-        print(f"[DEBUG SEI] Doc Externo - Status: {response.status_code}")
         if response.status_code not in [200, 201]:
-            print(f"[DEBUG SEI] Doc Externo - ERRO: {response.text[:500]}")
             current_app.logger.error(
                 f"SEI Diárias: Erro ao adicionar doc externo ({response.status_code}): {response.text}"
             )
@@ -794,21 +903,19 @@ def adicionar_documento_externo(token, protocolo_formatado, arquivo_bytes, nome_
         response.raise_for_status()
 
         retorno = response.json()
-        print(f"[DEBUG SEI] Doc Externo - SUCESSO: {retorno.get('DocumentoFormatado')}")
         current_app.logger.info(
             f"SEI Diárias: Documento externo adicionado - {retorno.get('DocumentoFormatado', retorno)}"
         )
         return retorno
 
     except Exception as e:
-        print(f"[DEBUG SEI] Doc Externo - EXCEÇÃO: {type(e).__name__}: {e}")
         current_app.logger.error(f"SEI Diárias: Erro crítico ao adicionar doc externo: {e}")
         return None
 
 
 def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificativa_texto,
                                     dados_requisicao=None, arquivo_externo=None,
-                                    tipo_solicitacao_id=None):
+                                    tipo_solicitacao_id=None, unidade_sei_id=None):
     """
     Fluxo completo: autentica, cria procedimento, gera memorando, requisições e documento externo.
 
@@ -863,6 +970,15 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
         'erro': None,
     }
 
+    # CRIT-01: Prevenção de duplicatas — verifica se já existe processo SEI
+    if dados_itinerario.get('sei_protocolo'):
+        resultado['erro'] = (
+            f"Itinerário já possui processo SEI: {dados_itinerario['sei_protocolo']}. "
+            f"Criação duplicada bloqueada."
+        )
+        current_app.logger.warning(f"SEI Diárias: {resultado['erro']}")
+        return resultado
+
     try:
         # 1. Autenticação
         token = gerar_token_sei_admin()
@@ -873,7 +989,8 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
 
         # 2. Criar procedimento
         tipo_itinerario_nome = dados_itinerario.get('tipo_itinerario_nome', 'Nacional')
-        proc = criar_procedimento_diarias(token, dados_servidor, tipo_itinerario_nome)
+        proc = criar_procedimento_diarias(token, dados_servidor, tipo_itinerario_nome,
+                                                 unidade_sei_id=unidade_sei_id)
         if not proc:
             resultado['erro'] = 'Falha ao criar procedimento no SEI.'
             return resultado
@@ -889,9 +1006,9 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
         if dados_requisicao and gerar_req_diarias:
             dados_requisicao['data_viagem'] = dados_itinerario.get('data_viagem')
             dados_requisicao['data_retorno'] = dados_itinerario.get('data_retorno')
-            print(f"[DEBUG SEI] Chamando gerar_requisicao_diarias com id_proc={id_procedimento}")
 
-            req = gerar_requisicao_diarias(token, id_procedimento, dados_requisicao)
+            req = gerar_requisicao_diarias(token, id_procedimento, dados_requisicao,
+                                                  unidade_sei_id=unidade_sei_id)
             if not req:
                 current_app.logger.warning("SEI Diárias: Requisição de diárias falhou.")
             else:
@@ -904,9 +1021,9 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
         if dados_requisicao and gerar_req_passagens:
             dados_requisicao['data_viagem'] = dados_itinerario.get('data_viagem')
             dados_requisicao['data_retorno'] = dados_itinerario.get('data_retorno')
-            print(f"[DEBUG SEI] Chamando gerar_requisicao_passagens com id_proc={id_procedimento}")
 
-            req_pass = gerar_requisicao_passagens(token, id_procedimento, dados_requisicao)
+            req_pass = gerar_requisicao_passagens(token, id_procedimento, dados_requisicao,
+                                                       unidade_sei_id=unidade_sei_id)
             if not req_pass:
                 current_app.logger.warning("SEI Diárias: Requisição de passagens falhou.")
             else:
@@ -915,17 +1032,22 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
 
         # 5. Gerar memorando (POR ÚLTIMO dos 3 documentos internos)
         #    Agora pode referenciar os IDs das requisições criadas acima.
+        # Tipo 1 (Apenas Diárias) usa SEAD_MEMORANDO (534); tipos 2,3 usam SEAD_MEMORANDO_SGA (2986)
+        serie_memorando = ID_SERIE_MEMORANDO_SEAD if tipo_solicitacao_id == TIPO_SOL_APENAS_DIARIAS else None
+
         dados_memorando = {
             'justificativa': justificativa_texto or '',
             'data_viagem': dados_itinerario.get('data_viagem'),
             'data_retorno': dados_itinerario.get('data_retorno'),
             'tipo_solicitacao_nome': dados_itinerario.get('tipo_solicitacao_nome', 'Diárias + Passagens Aéreas'),
+            'id_serie_memorando': serie_memorando,
         }
 
         memo = gerar_memorando_diarias(
             token, id_procedimento, dados_memorando,
             doc_req_diarias=doc_req_diarias,
             doc_req_passagens=doc_req_passagens,
+            unidade_sei_id=unidade_sei_id,
         )
         if not memo:
             resultado['erro'] = 'Procedimento criado, mas falha ao gerar memorando no SEI.'
@@ -935,15 +1057,13 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
 
         # 6. Adicionar documento externo (se houver arquivo)
         if arquivo_externo and arquivo_externo.get('bytes'):
-            print(f"[DEBUG SEI] arquivo_externo recebido: {arquivo_externo.get('nome_arquivo')}, "
-                  f"tamanho: {len(arquivo_externo['bytes'])} bytes")
-
             doc_ext = adicionar_documento_externo(
                 token,
                 protocolo_formatado,
                 arquivo_externo['bytes'],
                 arquivo_externo['nome_arquivo'],
                 arquivo_externo.get('descricao', 'Documento anexo - Solicitacao de Diarias'),
+                unidade_id=unidade_sei_id,
             )
             if not doc_ext:
                 current_app.logger.warning(
@@ -1003,12 +1123,7 @@ def enviar_procedimento(token, protocolo_procedimento, unidades_destino,
     }
 
     try:
-        print(f"[DEBUG SEI] Enviando procedimento {protocolo_procedimento} "
-              f"para unidades: {unidades_destino}")
-
         response = requests.patch(url, json=payload, headers=headers, timeout=30, verify=False)
-
-        print(f"[DEBUG SEI] Enviar procedimento - Status: {response.status_code}")
 
         if response.status_code in [200, 204]:
             resultado['sucesso'] = True
@@ -1018,16 +1133,16 @@ def enviar_procedimento(token, protocolo_procedimento, unidades_destino,
             )
         else:
             resultado['erro'] = f'Erro HTTP {response.status_code}: {response.text[:300]}'
-            print(f"[DEBUG SEI] Enviar procedimento - ERRO: {response.text[:500]}")
             current_app.logger.error(
                 f"SEI Diarias: Erro ao enviar procedimento: {resultado['erro']}"
             )
+            # MED-03: raise para consistência com demais funções SEI
+            response.raise_for_status()
 
         return resultado
 
     except Exception as e:
         resultado['erro'] = f'Erro ao enviar procedimento: {str(e)}'
-        print(f"[DEBUG SEI] Enviar procedimento - EXCEÇÃO: {type(e).__name__}: {e}")
         current_app.logger.error(f"SEI Diarias: {resultado['erro']}")
         return resultado
 
@@ -1065,7 +1180,7 @@ def consultar_documentos_procedimento(protocolo_procedimento):
         url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/procedimentos/documentos"
         params = {
             'protocolo_procedimento': protocolo_procedimento,
-            'quantidade': 100,  # Busca ate 100 documentos
+            'quantidade': 500,  # MED-13: ampliado de 100 para 500 para processos grandes
         }
         headers = {
             'token': token,
@@ -1073,9 +1188,7 @@ def consultar_documentos_procedimento(protocolo_procedimento):
             'Accept': 'application/json',
         }
 
-        print(f"[DEBUG SEI] Listando documentos: {url}?protocolo_procedimento={protocolo_procedimento}")
         response = requests.get(url, params=params, headers=headers, timeout=60, verify=False)
-        print(f"[DEBUG SEI] Listar documentos - Status: {response.status_code}")
 
         if response.status_code != 200:
             resultado['erro'] = f'Erro HTTP {response.status_code}: {response.text[:200]}'
@@ -1110,54 +1223,10 @@ def consultar_documentos_procedimento(protocolo_procedimento):
         return resultado
 
 
-def _verificar_dupla_assinatura(doc):
-    """
-    Verifica se um documento SEI possui as duas assinaturas necessarias:
-    Superintendente + Secretario de Estado.
-
-    A API do SEI retorna Assinaturas como lista de dicts com campos como
-    Nome, CargoFuncao, etc. Identificamos pelo cargo/nome.
-
-    Returns:
-        dict com {
-            completa: bool (True se ambas as assinaturas estao presentes),
-            tem_superintendente: bool,
-            tem_secretario: bool,
-            assinaturas: list (assinaturas originais do documento),
-            nomes: list[str] (nomes dos assinantes),
-        }
-    """
-    assinaturas = doc.get('Assinaturas', [])
-    tem_superintendente = False
-    tem_secretario = False
-    nomes = []
-
-    for a in assinaturas:
-        nome = a.get('Nome', '')
-        cargo = a.get('CargoFuncao', '') or a.get('Cargo', '') or ''
-        nomes.append(nome)
-
-        texto = (cargo + ' ' + nome).lower()
-        if 'superintendente' in texto:
-            tem_superintendente = True
-        if 'secret' in texto and 'estado' in texto:
-            tem_secretario = True
-
-    # Fallback: se CargoFuncao nao esta disponivel, tenta identificar pelo
-    # numero de assinaturas (minimo 2) — compatibilidade com APIs que nao
-    # retornam cargo nas assinaturas
-    if not tem_superintendente and not tem_secretario and len(assinaturas) >= 2:
-        # Assume que 2+ assinaturas = Superintendente + Secretario (ordem historica)
-        tem_superintendente = True
-        tem_secretario = True
-
-    return {
-        'completa': tem_superintendente and tem_secretario,
-        'tem_superintendente': tem_superintendente,
-        'tem_secretario': tem_secretario,
-        'assinaturas': assinaturas,
-        'nomes': nomes,
-    }
+# Função antiga _verificar_dupla_assinatura foi substituída por
+# app/services/diarias_assinaturas.py → verificar_assinaturas_requeridas(doc, itinerario).
+# A nova função verifica 3 requisitos (super da área, super da SGA, secretário)
+# com matching preciso via banco de dados (sigla_login) + fallback textual.
 
 
 def verificar_autorizacao_diaria(itinerario):
@@ -1212,17 +1281,19 @@ def verificar_autorizacao_diaria(itinerario):
     tipo_sol = getattr(itinerario, 'tipo_solicitacao_id', None)
     apenas_diarias = (tipo_sol == 1)
 
+    from app.services.diarias_assinaturas import verificar_assinaturas_requeridas
+
     doc_encontrado = None
     info_assinaturas = None
 
     if apenas_diarias:
         # Tipo 1 (Apenas Diarias):
-        # 1) Busca Requisicao de Diarias com dupla assinatura
-        # 2) Fallback: Autorizacao do Secretario com dupla assinatura
+        # 1) Busca Requisicao de Diarias com assinaturas requeridas
+        # 2) Fallback: Autorizacao do Secretario com assinaturas requeridas
         for doc in resp_docs['documentos']:
             serie = doc.get('Serie', {})
             if str(serie.get('IdSerie', '')) == ID_SERIE_REQUISICAO_DIARIAS:
-                info_assinaturas = _verificar_dupla_assinatura(doc)
+                info_assinaturas = verificar_assinaturas_requeridas(doc, itinerario)
                 if info_assinaturas['completa']:
                     doc_encontrado = doc
                 break
@@ -1232,7 +1303,7 @@ def verificar_autorizacao_diaria(itinerario):
             for doc in resp_docs['documentos']:
                 serie = doc.get('Serie', {})
                 if str(serie.get('IdSerie', '')) == ID_SERIE_AUTORIZACAO_SECRETARIO:
-                    info_ass = _verificar_dupla_assinatura(doc)
+                    info_ass = verificar_assinaturas_requeridas(doc, itinerario)
                     if info_ass['completa']:
                         doc_encontrado = doc
                         info_assinaturas = info_ass
@@ -1241,13 +1312,13 @@ def verificar_autorizacao_diaria(itinerario):
                     break
     else:
         # Tipos 2 e 3: busca Requisicao de Diarias ou Autorizacao do Secretario
-        # Verifica todos os documentos-chave por dupla assinatura
+        # Verifica todos os documentos-chave por assinaturas requeridas
         for id_serie in [ID_SERIE_REQUISICAO_DIARIAS, ID_SERIE_REQUISICAO_PASSAGENS,
                          ID_SERIE_AUTORIZACAO_SECRETARIO]:
             for doc in resp_docs['documentos']:
                 serie = doc.get('Serie', {})
                 if str(serie.get('IdSerie', '')) == id_serie:
-                    info_ass = _verificar_dupla_assinatura(doc)
+                    info_ass = verificar_assinaturas_requeridas(doc, itinerario)
                     if info_ass['completa']:
                         doc_encontrado = doc
                         info_assinaturas = info_ass
@@ -1255,13 +1326,13 @@ def verificar_autorizacao_diaria(itinerario):
             if doc_encontrado:
                 break
 
-        # Se nenhum doc-chave tem dupla assinatura, guarda info parcial do primeiro encontrado
+        # Se nenhum doc-chave tem assinaturas completas, guarda info parcial do primeiro encontrado
         if not doc_encontrado and not info_assinaturas:
             for doc in resp_docs['documentos']:
                 serie = doc.get('Serie', {})
                 if str(serie.get('IdSerie', '')) in (ID_SERIE_REQUISICAO_DIARIAS,
                                                       ID_SERIE_AUTORIZACAO_SECRETARIO):
-                    info_assinaturas = _verificar_dupla_assinatura(doc)
+                    info_assinaturas = verificar_assinaturas_requeridas(doc, itinerario)
                     break
 
     if doc_encontrado and info_assinaturas and info_assinaturas['completa']:
@@ -1275,6 +1346,9 @@ def verificar_autorizacao_diaria(itinerario):
         }
 
         # Avanca etapa se ainda estiver na etapa 1 (Solicitação Inicial)
+        # CRIT-05: Lock otimista — re-lê do banco para evitar race condition
+        from app.extensions import db as _db
+        _db.session.refresh(itinerario)
         if itinerario.etapa_atual_id == DiariasEtapaID.SOLICITACAO_INICIAL:
             doc_fmt = doc_encontrado.get('DocumentoFormatado', '?')
             nomes = info_assinaturas['nomes']
@@ -1284,11 +1358,8 @@ def verificar_autorizacao_diaria(itinerario):
                 f"{', '.join(nomes)}"
             )
 
-            # Próxima etapa: Escolha do Voo (se passagens) ou Análise da Solicitação
-            from app.constants import TIPOS_COM_PASSAGENS
-            proxima_etapa = (DiariasEtapaID.ESCOLHA_VOO
-                             if itinerario.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
-                             else DiariasEtapaID.ANALISE_SOLICITACAO)
+            # Sempre avança para Análise (etapa 3) — NR + Quadro primeiro, cotações depois
+            proxima_etapa = DiariasEtapaID.ANALISE_SOLICITACAO
 
             DiariaService.registrar_movimentacao(
                 itinerario.id,
@@ -1364,13 +1435,16 @@ def verificar_autorizacao_diaria(itinerario):
                     "SEI Diarias: Nao foi possivel obter token para encaminhar procedimento."
                 )
     elif info_assinaturas:
-        # Documento encontrado mas sem as duas assinaturas necessarias
+        # Documento encontrado mas sem as assinaturas requeridas (3 requisitos)
         # Monta mensagem informativa sobre o que falta
         faltam = []
-        if not info_assinaturas['tem_superintendente']:
-            faltam.append('Superintendente')
+        if not info_assinaturas.get('tem_super_area'):
+            area = info_assinaturas.get('super_area_esperada')
+            faltam.append(f'Superintendente da área ({area})' if area else 'Superintendente da área do solicitante')
+        if not info_assinaturas.get('tem_super_sga'):
+            faltam.append('Superintendente de Gestão Administrativa (SGA)')
         if not info_assinaturas['tem_secretario']:
-            faltam.append('Secretario')
+            faltam.append('Secretário de Estado')
 
         if not info_assinaturas['assinaturas']:
             resultado['erro'] = 'Documento encontrado, mas ainda nao possui nenhuma assinatura.'
@@ -1401,7 +1475,8 @@ def verificar_autorizacao_diaria(itinerario):
 # ── Despacho DFIN ────────────────────────────────────────────────────────────
 
 
-def gerar_despacho_dfin(token, id_procedimento, sei_protocolo, interessados):
+def gerar_despacho_dfin(token, id_procedimento, sei_protocolo, interessados,
+                       nome_assinante=None, cargo_assinante=None):
     """
     Gera o documento SEAD_DESPACHO (série 754) vinculado ao processo SEI.
 
@@ -1423,31 +1498,26 @@ def gerar_despacho_dfin(token, id_procedimento, sei_protocolo, interessados):
 
     url = f"{BASE_URL}/v1/unidades/{UNIDADE_DFIN_APOIO}/documentos"
 
-    interessados_texto = ', '.join(interessados) if interessados else '@interessados_virgula_espaco@'
+    # Titular DFIN — IGNORA args do chamador. Despacho sempre assinado pelo
+    # Diretor de Planejamento e Finanças (titular cadastrado em sis_usuarios
+    # com cargo_gestao='diretor_dfin'). Caso não cadastrado, fallback textual.
+    nome_dfin, cargo_dfin = _resolver_titular_por_cargo('diretor_dfin')
+    nome_final = nome_dfin or 'DIRETORIA DE PLANEJAMENTO E FINANÇAS - SEAD-PI'
+    cargo_final = cargo_dfin or 'Diretor de Planejamento e Finanças - SEAD-PI'
 
-    conteudo_html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <p>Processo nº <b>{sei_protocolo}</b></p>
-        <p>Interessados: {interessados_texto}</p>
-        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
-        <br>
-        <p style="text-align: center;"><b>DESPACHO</b></p>
-        <br>
-        <p style="text-indent: 2em; text-align: justify;">
-            Encaminho o processo à <b>Gerência de Execução Orçamentária</b> para
-            conhecimento e envio para a <b>Coordenação de Controle de Diárias e Passagens</b> para
-            verificação do quantitativo de diárias recebidas, assim como a emissão de relatório de análise
-            quanto a aprovação/reprovação da prestação de contas anterior e à <b>Gerência de
-            Planejamento e Orçamento</b> para análise da disponibilidade orçamentária, emissão de nota de
-            reserva e quadro de informação orçamentária, devendo ser observados os procedimentos
-            legais.
-        </p>
-        <br>
-        <p style="text-indent: 2em; text-align: justify;">
-            Após, remetam-se os autos à <b>SGA</b> para deliberação.
-        </p>
-    </div>
-    """
+    corpo = (
+        'Encaminho o processo à <b>Gerência de Execução Orçamentária</b> para '
+        'conhecimento e envio para a <b>Coordenação de Controle de Diárias e Passagens</b> '
+        'para verificação do quantitativo de diárias recebidas, assim como a emissão de '
+        'relatório de análise quanto a aprovação/reprovação da prestação de contas anterior '
+        'e à <b>Gerência de Planejamento e Orçamento</b> para análise da disponibilidade '
+        'orçamentária, emissão de nota de reserva e quadro de informação orçamentária, '
+        'devendo ser observados os procedimentos legais.</p>'
+        '<br>'
+        '<p style="text-indent: 2em; text-align: justify;">'
+        'Após, remetam-se os autos à <b>SGA</b> para deliberação.'
+    )
+    conteudo_html = _montar_despacho_html(corpo, nome_final, cargo_final)
 
     payload = {
         "Procedimento": str(id_procedimento),
@@ -1470,7 +1540,7 @@ def gerar_despacho_dfin(token, id_procedimento, sei_protocolo, interessados):
         current_app.logger.info(
             f"SEI Diárias: Gerando despacho DFIN para procedimento {id_procedimento}..."
         )
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
 
         if response.status_code not in [200, 201]:
             current_app.logger.error(
@@ -1516,7 +1586,7 @@ def gerar_quadro_orcamentario(token, id_procedimento, dados_quadro, sei_protocol
         current_app.logger.error("SEI Diárias: Token não fornecido para quadro orçamentário.")
         return None
 
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_GPO}/documentos"
 
     hoje = date.today()
     data_formatada = f"{hoje.day} de {MESES_EXTENSO[hoje.month]} de {hoje.year}"
@@ -1618,7 +1688,7 @@ def gerar_quadro_orcamentario(token, id_procedimento, dados_quadro, sei_protocol
         current_app.logger.info(
             f"SEI Diárias: Gerando quadro orçamentário para procedimento {id_procedimento}..."
         )
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
 
         if response.status_code not in [200, 201]:
             current_app.logger.error(
@@ -1733,10 +1803,9 @@ def gerar_escolha_passagens(token, id_procedimento, dados_escolha, sei_protocolo
     # Declaração
     x_decl = 'X' if declaracao else ' '
 
+    # Nota: o título "JUSTIFICATIVA DE ESCOLHA DE PASSAGENS" já vem do template SEI da série 2977
     conteudo_html = f"""
     <div style="font-family: Arial, sans-serif; font-size: 11pt;">
-        <p style="text-align: center;"><b>JUSTIFICATIVA DE ESCOLHA DE PASSAGENS</b></p>
-        <br>
         <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse;">
             <tr>
                 <td style="width: 30%; vertical-align: top;"><b>VOO ESCOLHIDO:</b></td>
@@ -1787,7 +1856,7 @@ def gerar_escolha_passagens(token, id_procedimento, dados_escolha, sei_protocolo
         current_app.logger.info(
             f"SEI Diárias: Gerando escolha de passagens para procedimento {id_procedimento}..."
         )
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
 
         if response.status_code not in [200, 201]:
             current_app.logger.error(
@@ -1920,7 +1989,7 @@ def gerar_memorando_cotacoes(token, id_procedimento, sei_protocolo,
         current_app.logger.info(
             f"SEI Diárias: Gerando memorando de cotações para procedimento {id_procedimento}..."
         )
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
 
         if response.status_code not in [200, 201]:
             current_app.logger.error(
@@ -2032,6 +2101,57 @@ def gerar_documento_cotacoes(token, id_procedimento, sei_protocolo, cotacoes_voo
     </div>
     """
 
+    # Série 272 (Cotação) é de Aplicabilidade Externa — enviar como doc externo
+    # Converte HTML para PDF em memória e envia via adicionar_documento_externo
+    try:
+        html_completo = f"""<html><head><meta charset="utf-8"><style>
+            body {{ font-family: Arial, sans-serif; font-size: 11pt; margin: 20px; }}
+            table {{ border-collapse: collapse; width: 100%; }}
+            td, th {{ padding: 4px 6px; border: 1px solid #999; }}
+        </style></head><body>{conteudo_html}</body></html>"""
+
+        # Tenta converter para PDF via weasyprint ou pdfkit (se disponível)
+        pdf_bytes = None
+        try:
+            from weasyprint import HTML as WeasyprintHTML
+            pdf_bytes = WeasyprintHTML(string=html_completo).write_pdf()
+        except ImportError:
+            pass
+
+        if not pdf_bytes:
+            try:
+                import pdfkit
+                pdf_bytes = pdfkit.from_string(html_completo, False)
+            except (ImportError, Exception):
+                pass
+
+        if pdf_bytes:
+            retorno = adicionar_documento_externo(
+                token=token,
+                protocolo_formatado=sei_protocolo,
+                arquivo_bytes=pdf_bytes,
+                nome_arquivo='cotacoes_passagens.pdf',
+                descricao=f'Cotações de Passagens - {sei_protocolo}',
+                id_serie=ID_SERIE_COTACAO,
+            )
+            return retorno
+        else:
+            # Fallback: envia o HTML como arquivo .html
+            html_bytes = html_completo.encode('utf-8')
+            retorno = adicionar_documento_externo(
+                token=token,
+                protocolo_formatado=sei_protocolo,
+                arquivo_bytes=html_bytes,
+                nome_arquivo='cotacoes_passagens.html',
+                descricao=f'Cotações de Passagens - {sei_protocolo}',
+                id_serie=ID_SERIE_COTACAO,
+            )
+            return retorno
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao preparar cotações como doc externo: {e}")
+        return None
+
+    # Código legado (mantido como referência — série 272 não aceita doc interno)
     payload = {
         "Procedimento": str(id_procedimento),
         "IdSerie": ID_SERIE_COTACAO,
@@ -2053,7 +2173,7 @@ def gerar_documento_cotacoes(token, id_procedimento, sei_protocolo, cotacoes_voo
         current_app.logger.info(
             f"SEI Diárias: Gerando documento de cotações para procedimento {id_procedimento}..."
         )
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
 
         if response.status_code not in [200, 201]:
             current_app.logger.error(
@@ -2076,7 +2196,8 @@ def gerar_documento_cotacoes(token, id_procedimento, sei_protocolo, cotacoes_voo
 # ── Autorização do Secretário ─────────────────────────────────────────────
 
 
-def gerar_autorizacao_secretario(token, id_procedimento, tipo_solicitacao_id, sei_protocolo):
+def gerar_autorizacao_secretario(token, id_procedimento, tipo_solicitacao_id, sei_protocolo,
+                                 nome_assinante=None, cargo_assinante=None):
     """
     Cria documento SEAD_AUTORIZACAO_DO_SECRETARIO (IdSerie 574) no processo SEI.
 
@@ -2090,6 +2211,8 @@ def gerar_autorizacao_secretario(token, id_procedimento, tipo_solicitacao_id, se
         id_procedimento: ID do procedimento SEI
         tipo_solicitacao_id: 1, 2 ou 3
         sei_protocolo: Protocolo formatado do processo
+        nome_assinante: Nome do assinante (dinâmico via current_user)
+        cargo_assinante: Cargo do assinante (dinâmico via auth SEI)
 
     Returns:
         dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
@@ -2099,6 +2222,16 @@ def gerar_autorizacao_secretario(token, id_procedimento, tipo_solicitacao_id, se
         return None
 
     url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+
+    # Resolve nome e cargo do assinante dinamicamente
+    _nome = nome_assinante
+    _cargo = cargo_assinante or 'Secretário de Administração do Estado do Piauí'
+    if not _nome:
+        try:
+            from flask_login import current_user
+            _nome = current_user.nome.upper() if current_user and current_user.nome else ''
+        except Exception:
+            _nome = ''
 
     # Determina texto conforme tipo de solicitação
     tipo_id = int(tipo_solicitacao_id) if tipo_solicitacao_id else 2
@@ -2110,12 +2243,23 @@ def gerar_autorizacao_secretario(token, id_procedimento, tipo_solicitacao_id, se
         # Tipo 2 (padrão) — Diárias + Passagens
         texto_autorizo = "Autorizo a compra das passagens e o pagamento de diárias"
 
+    # O conteúdo deve incluir texto + bloco de assinatura visual.
+    # Usamos Tipo="D" (documento em branco) para evitar que o template
+    # da série 574 insira o bloco "AUTORIZO NA FORMA DA LEI" duplicado.
     conteudo_html = f"""
     <div style="font-family: Arial, sans-serif; font-size: 12pt;">
+        <br><br>
         <p style="text-indent: 2em; text-align: justify;">
-            <b>{texto_autorizo}</b> e encaminho os autos à Superintendência
-            de Gestão Administrativa - SGA, para conhecimento e providências
-            necessárias, devendo ser observados os procedimentos legais.
+            <b>{_escape_html(texto_autorizo)}</b> e encaminho os
+            autos a Superintendência de Gestão Administrativa - SGA,
+            <u>para conhecimento e providências
+            necessárias, devendo ser observados os procedimentos legais.</u>
+        </p>
+        <br><br>
+        <p style="text-align: center;">
+            <i>(assinado eletronicamente)</i><br>
+            <b>{_escape_html(_nome)}</b><br>
+            {_escape_html(_cargo)}
         </p>
     </div>
     """
@@ -2123,6 +2267,7 @@ def gerar_autorizacao_secretario(token, id_procedimento, tipo_solicitacao_id, se
     payload = {
         "Procedimento": str(id_procedimento),
         "IdSerie": ID_SERIE_AUTORIZACAO_SECRETARIO,
+        "Tipo": "D",
         "Conteudo": conteudo_html,
         "NivelAcesso": "Restrito",
         "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
@@ -2326,7 +2471,7 @@ def gerar_analise_diarias(token, id_procedimento, sei_protocolo, servidores_anal
         current_app.logger.error("SEI Diárias: Token não fornecido para análise.")
         return None
 
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
 
     ano_atual = date.today().year
 
@@ -2453,16 +2598,16 @@ def gerar_analise_diarias(token, id_procedimento, sei_protocolo, servidores_anal
 
 def gerar_nota_empenho(token, id_procedimento, sei_protocolo, codigo_ne, dados_empenho=None):
     """
-    Gera documento Nota de Empenho (idSerie 419) no processo SEI.
+    Gera documento Nota de Empenho (idSerie 419) como documento EXTERNO no SEI.
+
+    No processo modelo, a NE é registrada como documento externo na unidade CCDP.
 
     Args:
         token: Token de autenticação SEI
         id_procedimento: ID interno do procedimento SEI
         sei_protocolo: Número formatado do processo
         codigo_ne: Código da NE (ex: '2026NE00456')
-        dados_empenho: dict opcional com dados adicionais {
-            'valor', 'natureza_despesa', 'fonte_recursos', 'favorecido', 'objeto'
-        }
+        dados_empenho: dict opcional (não usado para doc externo)
 
     Returns:
         dict com resposta do SEI (IdDocumento, DocumentoFormatado, etc.)
@@ -2471,99 +2616,36 @@ def gerar_nota_empenho(token, id_procedimento, sei_protocolo, codigo_ne, dados_e
         current_app.logger.error("SEI Diárias: Token não fornecido para NE.")
         return None
 
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos"
+    current_app.logger.info(
+        f"SEI Diarias: Gerando NE {codigo_ne} no procedimento {id_procedimento}..."
+    )
 
-    # Monta HTML do conteúdo da NE
-    dados = dados_empenho or {}
-    hoje = datetime.now()
-    data_formatada = f"{hoje.day} de {MESES_EXTENSO[hoje.month]} de {hoje.year}"
+    # NE é documento EXTERNO (série 419) — cria na unidade CCDP
+    # Gera um HTML simples como conteúdo do documento
+    html = f"""<html><body style="font-family:Arial;font-size:12pt;">
+    <h3 style="text-align:center;">NOTA DE EMPENHO</h3>
+    <p><b>NE:</b> {_escape_html(codigo_ne)}</p>
+    <p><b>Processo:</b> {_escape_html(sei_protocolo)}</p>
+    </body></html>"""
 
-    linhas_extra = ""
-    if dados.get('valor'):
-        linhas_extra += f"""
-            <tr>
-                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Valor</td>
-                <td style="padding:6px 10px; border:1px solid #ccc;">R$ {dados['valor']}</td>
-            </tr>"""
-    if dados.get('natureza_despesa'):
-        linhas_extra += f"""
-            <tr>
-                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Natureza da Despesa</td>
-                <td style="padding:6px 10px; border:1px solid #ccc;">{dados['natureza_despesa']}</td>
-            </tr>"""
-    if dados.get('fonte_recursos'):
-        linhas_extra += f"""
-            <tr>
-                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Fonte de Recursos</td>
-                <td style="padding:6px 10px; border:1px solid #ccc;">{dados['fonte_recursos']}</td>
-            </tr>"""
-    if dados.get('favorecido'):
-        linhas_extra += f"""
-            <tr>
-                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Favorecido</td>
-                <td style="padding:6px 10px; border:1px solid #ccc;">{dados['favorecido']}</td>
-            </tr>"""
-    if dados.get('objeto'):
-        linhas_extra += f"""
-            <tr>
-                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Objeto</td>
-                <td style="padding:6px 10px; border:1px solid #ccc;">{dados['objeto']}</td>
-            </tr>"""
-
-    html_conteudo = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <h3 style="text-align: center; margin-bottom: 20px;">NOTA DE EMPENHO</h3>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
-            <tr>
-                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold; width:35%;">Nota de Empenho</td>
-                <td style="padding:6px 10px; border:1px solid #ccc;">{codigo_ne}</td>
-            </tr>
-            <tr>
-                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Processo</td>
-                <td style="padding:6px 10px; border:1px solid #ccc;">{sei_protocolo}</td>
-            </tr>
-            <tr>
-                <td style="padding:6px 10px; border:1px solid #ccc; font-weight:bold;">Data</td>
-                <td style="padding:6px 10px; border:1px solid #ccc;">{data_formatada}</td>
-            </tr>{linhas_extra}
-        </table>
-    </div>
-    """
-
-    payload = {
-        "Procedimento": str(id_procedimento),
-        "IdSerie": ID_SERIE_NOTA_EMPENHO,
-        "Numero": codigo_ne,
-        "Descricao": f"Nota de Empenho {codigo_ne}",
-        "Conteudo": html_conteudo,
-        "NivelAcesso": "Restrito",
-        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
-        "SinBloqueado": "N",
-    }
-
-    headers = {
-        'token': token,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
+    html_bytes = html.encode('utf-8')
 
     try:
-        current_app.logger.info(
-            f"SEI Diarias: Gerando NE {codigo_ne} no procedimento {id_procedimento}..."
+        retorno = adicionar_documento_externo(
+            token=token,
+            protocolo_formatado=sei_protocolo,
+            arquivo_bytes=html_bytes,
+            nome_arquivo=f'NE_{codigo_ne}.html',
+            descricao=f'Nota de Empenho {codigo_ne}',
+            id_serie=ID_SERIE_NOTA_EMPENHO,
+            numero=codigo_ne,
+            unidade_id=UNIDADE_CCDP,
         )
-        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
 
-        if response.status_code not in [200, 201]:
-            current_app.logger.error(
-                f"SEI Diarias: Erro ao gerar NE ({response.status_code}): {response.text}"
+        if retorno:
+            current_app.logger.info(
+                f"SEI Diarias: NE gerada - {retorno.get('DocumentoFormatado', retorno)}"
             )
-
-        response.raise_for_status()
-
-        retorno = response.json()
-        current_app.logger.info(
-            f"SEI Diarias: NE gerada - {retorno.get('DocumentoFormatado', retorno)}"
-        )
         return retorno
 
     except Exception as e:
@@ -2574,7 +2656,8 @@ def gerar_nota_empenho(token, id_procedimento, sei_protocolo, codigo_ne, dados_e
 # ── Despacho CCDP → SGA (idSerie 754, pós Nota de Empenho) ────────────────
 
 
-def gerar_despacho_ccdp(token, id_procedimento, sei_protocolo):
+def gerar_despacho_ccdp(token, id_procedimento, sei_protocolo, interessados=None, itinerario=None,
+                       nome_assinante=None, cargo_assinante=None):
     """
     Gera o Despacho CCDP (série 754) após emissão da Nota de Empenho.
 
@@ -2585,6 +2668,8 @@ def gerar_despacho_ccdp(token, id_procedimento, sei_protocolo):
         token: Token de autenticação SEI
         id_procedimento: ID do procedimento SEI
         sei_protocolo: Protocolo formatado do processo
+        interessados: lista de nomes dos interessados (opcional)
+        itinerario: objeto DiariasItinerario para resolver interessados (opcional)
 
     Returns:
         dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
@@ -2595,21 +2680,18 @@ def gerar_despacho_ccdp(token, id_procedimento, sei_protocolo):
 
     url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
 
-    conteudo_html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <p>Processo nº <b>{sei_protocolo}</b></p>
-        <p>Interessados: @interessados_virgula_espaco@</p>
-        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
-        <br>
-        <p style="text-align: center;"><b>DESPACHO</b></p>
-        <br>
-        <p style="text-indent: 2em; text-align: justify;">
-            Após a realização de análise técnica e emissão da nota de empenho, retorno os
-            autos à <b>Superintendência de Gestão Administrativa</b>, para conhecimento e
-            providências referente à concessão de diárias.
-        </p>
-    </div>
-    """
+    # Titular CCDP — IGNORA args do chamador. Despacho sempre assinado pelo
+    # Coordenador da CCDP (cargo_gestao='coordenador_ccdp').
+    nome_ccdp, cargo_ccdp = _resolver_titular_por_cargo('coordenador_ccdp')
+    nome_final = nome_ccdp or 'COORDENAÇÃO DE CONTROLE DE DIÁRIAS E PASSAGENS'
+    cargo_final = cargo_ccdp or 'Coordenação de Controle de Diárias e Passagens - SEAD-PI'
+
+    corpo = (
+        'Após a realização de análise técnica e emissão da nota de empenho, retorno os '
+        'autos à <b>Superintendência de Gestão Administrativa</b>, para conhecimento e '
+        'providências referente à concessão de diárias.'
+    )
+    conteudo_html = _montar_despacho_html(corpo, nome_final, cargo_final)
 
     payload = {
         "Procedimento": str(id_procedimento),
@@ -2656,7 +2738,8 @@ def gerar_despacho_ccdp(token, id_procedimento, sei_protocolo):
 
 
 def gerar_despacho_sga(token, id_procedimento, sei_protocolo, ref_despacho_ccdp_id,
-                       ref_despacho_ccdp_formatado, nome_assinante=None, cargo_assinante=None):
+                       ref_despacho_ccdp_formatado, nome_assinante=None, cargo_assinante=None,
+                       interessados=None, itinerario=None):
     """
     Gera o Despacho SGA (série 2987) assinado pelo Superintendente.
 
@@ -2680,44 +2763,39 @@ def gerar_despacho_sga(token, id_procedimento, sei_protocolo, ref_despacho_ccdp_
 
     url = f"{BASE_URL}/v1/unidades/{UNIDADE_APOIOSGA}/documentos"
 
+    # Texto do link = apenas o número formatado (legível). Fallback p/ sei_id.
     ref_texto = ref_despacho_ccdp_formatado or ref_despacho_ccdp_id or ''
 
-    # Resolve nome e cargo do assinante
-    _nome = nome_assinante
-    _cargo = cargo_assinante or 'Superintendente de Gestão Administrativa – SEAD'
-    if not _nome:
-        try:
-            from flask_login import current_user
-            _nome = current_user.nome.upper() if current_user and current_user.nome else 'SUPERINTENDENTE'
-        except Exception:
-            _nome = 'SUPERINTENDENTE'
+    # Titular SGA — IGNORA args do chamador. Despacho SGA sempre assinado pelo
+    # Superintendente de Gestão Administrativa (cargo_gestao='superintendente').
+    nome_sga, cargo_sga = _resolver_titular_por_cargo('superintendente')
+    nome_final = nome_sga or 'SUPERINTENDÊNCIA DE GESTÃO ADMINISTRATIVA'
+    cargo_final = cargo_sga or 'Superintendente de Gestão Administrativa – SEAD'
 
-    # Evita referência duplicada quando formatado é igual ao id
-    ref_complemento = f' ({ref_despacho_ccdp_id})' if ref_despacho_ccdp_formatado and ref_despacho_ccdp_formatado != ref_despacho_ccdp_id else ''
+    # Monta a referência ao despacho CCDP no formato "despacho (<link>)".
+    # O link aponta para o documento individual no SEI via protocolo_visualizar.
+    if ref_despacho_ccdp_id and ref_texto:
+        link_ref = (
+            'https://sei.pi.gov.br/sei/controlador.php'
+            '?acao=protocolo_visualizar'
+            f'&id_protocolo={ref_despacho_ccdp_id}'
+            f'&infra_sistema=100000100&infra_unidade_atual={UNIDADE_SEAD}'
+        )
+        ref_html = f'despacho (<a href="{link_ref}" target="_blank">{_escape_html(ref_texto)}</a>)'
+    elif ref_texto:
+        ref_html = f'despacho ({_escape_html(ref_texto)})'
+    else:
+        ref_html = 'despacho'
 
-    conteudo_html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <p>Processo nº <b>{sei_protocolo}</b></p>
-        <p>Interessados: @interessados_virgula_espaco@</p>
-        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
-        <br>
-        <p style="text-align: center;"><b>DESPACHO</b></p>
-        <br>
-        <p>PARA: NÚCLEO DE CONTROLE INTERNO - NCI</p>
-        <br>
-        <p style="text-indent: 2em; text-align: justify;">
-            Em atenção ao {ref_texto}{ref_complemento}, da COORDENAÇÃO DE
-            CONTROLE DE DIÁRIAS E PASSAGENS, encaminhamos os autos para análise e demais
-            providências necessárias.
-        </p>
-        <br>
-        <p style="text-align: center;">
-            <i>(assinado eletronicamente)</i><br>
-            <b>{_nome}</b><br>
-            {_cargo}
-        </p>
-    </div>
-    """
+    corpo = (
+        f'Em atenção ao {ref_html}, '
+        'da COORDENAÇÃO DE CONTROLE DE DIÁRIAS E PASSAGENS, encaminhamos os autos '
+        'para análise e demais providências necessárias.'
+    )
+    conteudo_html = _montar_despacho_html(
+        corpo, nome_final, cargo_final,
+        para_linha='PARA: NÚCLEO DE CONTROLE INTERNO - NCI',
+    )
 
     payload = {
         "Procedimento": str(id_procedimento),
@@ -2962,7 +3040,8 @@ def gerar_analise_pagamento(token, id_procedimento, sei_protocolo, respostas,
 
 
 def gerar_despacho_nci(token, id_procedimento, sei_protocolo,
-                       ref_analise_formatado=None):
+                       ref_analise_formatado=None,
+                       nome_assinante=None, cargo_assinante=None):
     """
     Gera o Despacho do NCI (série 5) encaminhando para pagamento.
 
@@ -3006,6 +3085,7 @@ def gerar_despacho_nci(token, id_procedimento, sei_protocolo,
         <p style="text-indent: 2em;">Sem mais,</p>
         <p style="text-indent: 2em;">Encaminha-se para pagamento.</p>
         <p style="text-indent: 2em;">Atenciosamente,</p>
+            {_bloco_assinatura(nome_assinante, cargo_assinante)}
     </div>
     """
 
@@ -3052,7 +3132,9 @@ def gerar_despacho_nci(token, id_procedimento, sei_protocolo,
 
 # ── Despacho APOIO/DFIN (idSerie 754) ───────────────────────────────────────
 
-def gerar_despacho_apoio(token, id_procedimento, sei_protocolo, ref_analise_nci_id):
+def gerar_despacho_apoio(token, id_procedimento, sei_protocolo, ref_analise_nci_id,
+                         interessados=None, itinerario=None,
+                       nome_assinante=None, cargo_assinante=None):
     """
     Gera Despacho APOIO/DFIN (série 754) assinado pelo Superintendente.
 
@@ -3070,22 +3152,20 @@ def gerar_despacho_apoio(token, id_procedimento, sei_protocolo, ref_analise_nci_
 
     url = f"{BASE_URL}/v1/unidades/{UNIDADE_DFIN_APOIO}/documentos"
 
-    conteudo_html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <p>Processo nº <b>{sei_protocolo}</b></p>
-        <p>Interessados: @interessados_virgula_espaco@</p>
-        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
-        <br>
-        <p style="text-align: center;"><b>DESPACHO</b></p>
-        <br>
-        <p style="text-indent: 2em; text-align: justify;">
-            Considerando a ausência de irregularidades na análise do Núcleo de Controle
-            Interno - NCI ({ref_analise_nci_id}) e a inexistência de óbices para o pagamento, encaminho o
-            processo à <b>Diretoria de Planejamento e Finanças-DFIN</b> para pagamento e demais
-            providências pertinentes, <i>devendo ser observados os procedimentos legais.</i>
-        </p>
-    </div>
-    """
+    # Titular APOIOSGA — IGNORA args do chamador. Despacho de apoio assinado
+    # pelo Superintendente de Gestão Administrativa.
+    nome_sup, cargo_sup = _resolver_titular_por_cargo('superintendente')
+    nome_final = nome_sup or 'SUPERINTENDÊNCIA DE GESTÃO ADMINISTRATIVA - SEAD-PI'
+    cargo_final = cargo_sup or 'Superintendente de Gestão Administrativa - SEAD-PI'
+
+    corpo = (
+        f'Considerando a ausência de irregularidades na análise do Núcleo de Controle '
+        f'Interno - NCI ({_escape_html(str(ref_analise_nci_id or ""))}) e a inexistência de '
+        'óbices para o pagamento, encaminho o processo à <b>Diretoria de Planejamento e '
+        'Finanças-DFIN</b> para pagamento e demais providências pertinentes, '
+        '<i>devendo ser observados os procedimentos legais.</i>'
+    )
+    conteudo_html = _montar_despacho_html(corpo, nome_final, cargo_final)
 
     payload = {
         "Procedimento": str(id_procedimento),
@@ -3129,7 +3209,9 @@ def gerar_despacho_apoio(token, id_procedimento, sei_protocolo, ref_analise_nci_
 
 # ── Despacho Diretor DFIN (idSerie 754) ─────────────────────────────────────
 
-def gerar_despacho_diretor(token, id_procedimento, sei_protocolo, ref_despacho_apoio_id):
+def gerar_despacho_diretor(token, id_procedimento, sei_protocolo, ref_despacho_apoio_id,
+                           interessados=None, itinerario=None,
+                       nome_assinante=None, cargo_assinante=None):
     """
     Gera Despacho do Diretor de Planejamento e Finanças (série 754).
 
@@ -3145,21 +3227,18 @@ def gerar_despacho_diretor(token, id_procedimento, sei_protocolo, ref_despacho_a
 
     url = f"{BASE_URL}/v1/unidades/{UNIDADE_DFIN_APOIO}/documentos"
 
-    conteudo_html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <p>Processo nº <b>{sei_protocolo}</b></p>
-        <p>Interessados: @interessados_virgula_espaco@</p>
-        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
-        <br>
-        <p style="text-align: center;"><b>DESPACHO</b></p>
-        <br>
-        <p style="text-indent: 2em; text-align: justify;">
-            Considerando o despacho da <b>SGACG</b> ({ref_despacho_apoio_id}), encaminho o processo à
-            <b>GERÊNCIA DE EXECUÇÃO ORÇAMENTÁRIA</b> para liquidação, pagamento e demais
-            providências pertinentes, devendo ser observados os procedimentos legais.
-        </p>
-    </div>
-    """
+    # Titular DFIN — IGNORA args do chamador. Sempre o Diretor de Planejamento e Finanças.
+    nome_dfin, cargo_dfin = _resolver_titular_por_cargo('diretor_dfin')
+    nome_final = nome_dfin or 'DIRETORIA DE PLANEJAMENTO E FINANÇAS - SEAD-PI'
+    cargo_final = cargo_dfin or 'Diretor de Planejamento e Finanças - SEAD-PI'
+
+    corpo = (
+        f'Considerando o despacho da <b>SGACG</b> ({_escape_html(str(ref_despacho_apoio_id or ""))}), '
+        'encaminho o processo à <b>GERÊNCIA DE EXECUÇÃO ORÇAMENTÁRIA</b> para '
+        'liquidação, pagamento e demais providências pertinentes, devendo ser '
+        'observados os procedimentos legais.'
+    )
+    conteudo_html = _montar_despacho_html(corpo, nome_final, cargo_final)
 
     payload = {
         "Procedimento": str(id_procedimento),
@@ -3203,14 +3282,22 @@ def gerar_despacho_diretor(token, id_procedimento, sei_protocolo, ref_despacho_a
 
 # ── Despacho GEO (idSerie 754) ──────────────────────────────────────────────
 
-def gerar_despacho_geo(token, id_procedimento, sei_protocolo):
+def gerar_despacho_geo(token, id_procedimento, sei_protocolo,
+                       interessados=None, itinerario=None,
+                       nome_assinante=None, cargo_assinante=None):
     """
     Gera Despacho GEO (série 754) assinado pelo Gerente de Execução Orçamentária.
 
     Conteúdo: "Encaminho os autos à Coordenação de Controle de Diárias e Passagens -
-    CCDP para liquidação, pagamento e demais trâmites inerentes ao setor."
+    CCDP para verificação do quantitativo de diárias recebidas, assim como a emissão
+    de relatório de análise quanto a aprovação/reprovação da prestação de contas anterior."
 
     Criado na unidade UNIDADE_GEO.
+
+    Nota: o assinante é SEMPRE o titular de `cargo_gestao='gerente_geo'`.
+    Argumentos `nome_assinante`/`cargo_assinante` são ignorados para evitar
+    que o cargo do usuário logado (ex: Superintendente operando o fluxo de teste)
+    vaze para o PDF final.
     """
     if not token:
         current_app.logger.error("SEI Diárias: Token não fornecido para despacho GEO.")
@@ -3218,20 +3305,17 @@ def gerar_despacho_geo(token, id_procedimento, sei_protocolo):
 
     url = f"{BASE_URL}/v1/unidades/{UNIDADE_GEO}/documentos"
 
-    conteudo_html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <p>Processo nº <b>{sei_protocolo}</b></p>
-        <p>Interessados: @interessados_virgula_espaco@</p>
-        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
-        <br>
-        <p style="text-align: center;"><b>DESPACHO</b></p>
-        <br>
-        <p style="text-indent: 2em; text-align: justify;">
-            Encaminho os autos à <b>Coordenação de Controle de Diárias e Passagens -
-            CCDP</b> para liquidação, pagamento e demais trâmites inerentes ao setor.
-        </p>
-    </div>
-    """
+    # Ignora args externos — assinatura SEMPRE é do titular da GEO
+    nome_geo, cargo_geo = _resolver_titular_por_cargo('gerente_geo')
+    nome_final = nome_geo or 'GERÊNCIA DE EXECUÇÃO ORÇAMENTÁRIA - SEAD-PI'
+    cargo_final = cargo_geo or 'Gerência de Execução Orçamentária - SEAD-PI'
+
+    corpo = (
+        'Encaminho os autos à <b>Coordenação de Controle de Diárias e Passagens - CCDP</b> '
+        'para verificação do quantitativo de diárias recebidas, assim como a emissão '
+        'de relatório de análise quanto a aprovação/reprovação da prestação de contas anterior.'
+    )
+    conteudo_html = _montar_despacho_html(corpo, nome_final, cargo_final)
 
     payload = {
         "Procedimento": str(id_procedimento),
@@ -3276,157 +3360,54 @@ def gerar_despacho_geo(token, id_procedimento, sei_protocolo):
 # ── NL - Nota de Liquidação (idSerie 420) ───────────────────────────────────
 
 def gerar_nl(token, id_procedimento, sei_protocolo, codigo_nl):
-    """Gera documento NL - Nota de Liquidação (série 420) no processo SEI."""
+    """Gera documento NL - Nota de Liquidação (série 420) como doc externo no SEI."""
     if not token:
         current_app.logger.error("SEI Diárias: Token não fornecido para NL.")
         return None
-
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
-
-    conteudo_html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <p style="text-align: center;"><b>NOTA DE LIQUIDAÇÃO</b></p>
-        <br>
-        <p>Processo nº <b>{sei_protocolo}</b></p>
-        <p>Código NL: <b>{codigo_nl}</b></p>
-    </div>
-    """
-
-    payload = {
-        "Procedimento": str(id_procedimento),
-        "IdSerie": ID_SERIE_NL,
-        "Conteudo": conteudo_html,
-        "NivelAcesso": "Restrito",
-        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
-        "SinBloqueado": "N",
-        "Numero": codigo_nl,
-        "Descricao": f"NL {codigo_nl} - Processo {sei_protocolo}",
-        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
-    }
-
-    headers = {
-        'token': token,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
-
+    current_app.logger.info(f"SEI Diárias: Gerando NL {codigo_nl}...")
+    html = f'<html><body><p>Nota de Liquidação: {_escape_html(codigo_nl)}</p><p>Processo: {_escape_html(sei_protocolo)}</p></body></html>'
     try:
-        current_app.logger.info(f"SEI Diárias: Gerando NL {codigo_nl}...")
-        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
-        if response.status_code not in [200, 201]:
-            current_app.logger.error(
-                f"SEI Diárias: Erro ao gerar NL ({response.status_code}): {response.text}"
-            )
-        response.raise_for_status()
-        retorno = response.json()
-        current_app.logger.info(f"SEI Diárias: NL gerada - {retorno.get('DocumentoFormatado', retorno)}")
-        return retorno
+        return adicionar_documento_externo(
+            token=token, protocolo_formatado=sei_protocolo,
+            arquivo_bytes=html.encode('utf-8'), nome_arquivo=f'NL_{codigo_nl}.html',
+            descricao=f'NL {codigo_nl}', id_serie=ID_SERIE_NL, numero=codigo_nl,
+            unidade_id=UNIDADE_CCDP)
     except Exception as e:
         current_app.logger.error(f"SEI Diárias: Erro ao gerar NL: {e}")
         return None
 
 
-# ── PD - Programação de Desembolso (idSerie 421) ────────────────────────────
-
 def gerar_pd(token, id_procedimento, sei_protocolo, codigo_pd):
-    """Gera documento PD - Programação de Desembolso (série 421) no processo SEI."""
+    """Gera documento PD - Programação de Desembolso (série 421) como doc externo no SEI."""
     if not token:
         current_app.logger.error("SEI Diárias: Token não fornecido para PD.")
         return None
-
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
-
-    conteudo_html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <p style="text-align: center;"><b>PROGRAMAÇÃO DE DESEMBOLSO</b></p>
-        <br>
-        <p>Processo nº <b>{sei_protocolo}</b></p>
-        <p>Código PD: <b>{codigo_pd}</b></p>
-    </div>
-    """
-
-    payload = {
-        "Procedimento": str(id_procedimento),
-        "IdSerie": ID_SERIE_PD,
-        "Conteudo": conteudo_html,
-        "NivelAcesso": "Restrito",
-        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
-        "SinBloqueado": "N",
-        "Numero": codigo_pd,
-        "Descricao": f"PD {codigo_pd} - Processo {sei_protocolo}",
-        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
-    }
-
-    headers = {
-        'token': token,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
-
+    current_app.logger.info(f"SEI Diárias: Gerando PD {codigo_pd}...")
+    html = f'<html><body><p>Programação de Desembolso: {_escape_html(codigo_pd)}</p><p>Processo: {_escape_html(sei_protocolo)}</p></body></html>'
     try:
-        current_app.logger.info(f"SEI Diárias: Gerando PD {codigo_pd}...")
-        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
-        if response.status_code not in [200, 201]:
-            current_app.logger.error(
-                f"SEI Diárias: Erro ao gerar PD ({response.status_code}): {response.text}"
-            )
-        response.raise_for_status()
-        retorno = response.json()
-        current_app.logger.info(f"SEI Diárias: PD gerada - {retorno.get('DocumentoFormatado', retorno)}")
-        return retorno
+        return adicionar_documento_externo(
+            token=token, protocolo_formatado=sei_protocolo,
+            arquivo_bytes=html.encode('utf-8'), nome_arquivo=f'PD_{codigo_pd}.html',
+            descricao=f'PD {codigo_pd}', id_serie=ID_SERIE_PD, numero=codigo_pd,
+            unidade_id=UNIDADE_CCDP)
     except Exception as e:
         current_app.logger.error(f"SEI Diárias: Erro ao gerar PD: {e}")
         return None
 
 
-# ── OB - Ordem Bancária (idSerie 422) ───────────────────────────────────────
-
 def gerar_ob(token, id_procedimento, sei_protocolo, codigo_ob):
-    """Gera documento OB - Ordem Bancária (série 422) no processo SEI."""
+    """Gera documento OB - Ordem Bancária (série 422) como doc externo no SEI."""
     if not token:
         current_app.logger.error("SEI Diárias: Token não fornecido para OB.")
         return None
-
-    url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
-
-    conteudo_html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <p style="text-align: center;"><b>ORDEM BANCÁRIA</b></p>
-        <br>
-        <p>Processo nº <b>{sei_protocolo}</b></p>
-        <p>Código OB: <b>{codigo_ob}</b></p>
-    </div>
-    """
-
-    payload = {
-        "Procedimento": str(id_procedimento),
-        "IdSerie": ID_SERIE_OB,
-        "Conteudo": conteudo_html,
-        "NivelAcesso": "Restrito",
-        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
-        "SinBloqueado": "N",
-        "Numero": codigo_ob,
-        "Descricao": f"OB {codigo_ob} - Processo {sei_protocolo}",
-        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
-    }
-
-    headers = {
-        'token': token,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
-
+    current_app.logger.info(f"SEI Diárias: Gerando OB {codigo_ob}...")
+    html = f'<html><body><p>Ordem Bancária: {_escape_html(codigo_ob)}</p><p>Processo: {_escape_html(sei_protocolo)}</p></body></html>'
     try:
-        current_app.logger.info(f"SEI Diárias: Gerando OB {codigo_ob}...")
-        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
-        if response.status_code not in [200, 201]:
-            current_app.logger.error(
-                f"SEI Diárias: Erro ao gerar OB ({response.status_code}): {response.text}"
-            )
-        response.raise_for_status()
-        retorno = response.json()
-        current_app.logger.info(f"SEI Diárias: OB gerada - {retorno.get('DocumentoFormatado', retorno)}")
-        return retorno
+        return adicionar_documento_externo(
+            token=token, protocolo_formatado=sei_protocolo,
+            arquivo_bytes=html.encode('utf-8'), nome_arquivo=f'OB_{codigo_ob}.html',
+            descricao=f'OB {codigo_ob}', id_serie=ID_SERIE_OB, numero=codigo_ob,
+            unidade_id=UNIDADE_CCDP)
     except Exception as e:
         current_app.logger.error(f"SEI Diárias: Erro ao gerar OB: {e}")
         return None
@@ -3624,7 +3605,9 @@ def gerar_np(token, id_procedimento, sei_protocolo, codigo_np):
 
 # ── Despacho Final CCDP (idSerie 754) ────────────────────────────────────
 
-def gerar_despacho_final_ccdp(token, id_procedimento, sei_protocolo):
+def gerar_despacho_final_ccdp(token, id_procedimento, sei_protocolo,
+                              interessados=None, itinerario=None,
+                       nome_assinante=None, cargo_assinante=None):
     """
     Gera Despacho Final CCDP (série 754) - "Processo pago e concluído nesta unidade."
 
@@ -3636,19 +3619,14 @@ def gerar_despacho_final_ccdp(token, id_procedimento, sei_protocolo):
 
     url = f"{BASE_URL}/v1/unidades/{UNIDADE_CCDP}/documentos"
 
-    conteudo_html = f"""
-    <div style="font-family: Arial, sans-serif; font-size: 12pt;">
-        <p>Processo nº <b>{sei_protocolo}</b></p>
-        <p>Interessados: @interessados_virgula_espaco@</p>
-        <p>Assunto: Documento Oficial: Ofício, Memorando, Portaria, Edital, Instrução Normativa e outros</p>
-        <br>
-        <p style="text-align: center;"><b>DESPACHO</b></p>
-        <br>
-        <p style="text-indent: 2em; text-align: justify;">
-            Processo pago e concluído nesta unidade.
-        </p>
-    </div>
-    """
+    # Titular CCDP — IGNORA args do chamador. Despacho final assinado pelo
+    # Coordenador da CCDP (cargo_gestao='coordenador_ccdp').
+    nome_ccdp, cargo_ccdp = _resolver_titular_por_cargo('coordenador_ccdp')
+    nome_final = nome_ccdp or 'COORDENAÇÃO DE CONTROLE DE DIÁRIAS E PASSAGENS'
+    cargo_final = cargo_ccdp or 'Coordenação de Controle de Diárias e Passagens - SEAD-PI'
+
+    corpo = 'Processo pago e concluído nesta unidade.'
+    conteudo_html = _montar_despacho_html(corpo, nome_final, cargo_final)
 
     payload = {
         "Procedimento": str(id_procedimento),
@@ -3903,16 +3881,14 @@ def sincronizar_documentos_diaria(itinerario, force_cotacoes=False):
         etapa_nova = DiariasEtapaID.PRESTACAO_CONTAS
     elif has('ob') or has('pd') or has('nl'):
         etapa_nova = DiariasEtapaID.CONCESSAO_DIARIAS
-    elif has('nota_reserva') or has('analise_pagamento') or has('despacho_nci'):
-        etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO
+    elif has('analise_pagamento') or has('despacho_nci') or has('autorizacao_scdp') or has('nota_empenho'):
+        etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO_2
     elif tem_passagens and (has('memorando_cotacoes') or has('escolha_passagens')):
         etapa_nova = DiariasEtapaID.ESCOLHA_VOO
+    elif has('nota_reserva') or has('quadro_orcamentario'):
+        etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO
     elif has('autorizacao'):
-        # Autorização encontrada — avança para Escolha do Voo ou Análise
-        if tem_passagens:
-            etapa_nova = DiariasEtapaID.ESCOLHA_VOO
-        else:
-            etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO
+        etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO
 
     resultado['etapa_nova'] = int(etapa_nova)
 

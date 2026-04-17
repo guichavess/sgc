@@ -113,42 +113,78 @@
 <div class="card shadow-sm mb-4">
     <div class="card-body p-0">
 
-        {# --- CABECALHO ESTILO PAGAMENTOS --- #}
+        {# --- Cabeçalho compacto (padrão Financeiro) --- #}
         <div class="bg-light p-3 border-bottom">
-            <h4 class="fw-bold text-dark mb-1">
-                Processo:
-                {% if itinerario.sei_id_procedimento %}
-                <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}"
-                   target="_blank" class="text-decoration-none">
-                    {{ itinerario.sei_protocolo or itinerario.n_processo }}
-                    <i class="bi bi-box-arrow-up-right" style="font-size: 0.85rem;"></i>
-                </a>
-                {% else %}
-                {{ itinerario.n_processo or 'Sem processo' }}
-                {% endif %}
-            </h4>
-            <h5 class="text-muted mb-2">
-                {{ itinerario.tipo.nome if itinerario.tipo else '-' }} |
-                {{ itinerario.qtd_diarias_solicitadas }} diária(s)
-            </h5>
-            <p class="text-secondary mb-1" style="font-size: 0.95rem;">
-                <strong>Solicitante:</strong> {{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() }} |
-                Período: {{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}
-                a {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}
-                {% if itinerario.etapa_atual %}
-                | <span class="badge" style="background-color: {{ itinerario.etapa_atual.cor_hex or '#6c757d' }};">
-                    <i class="{{ itinerario.etapa_atual.icone }} me-1"></i>{{ itinerario.etapa_atual.nome }}
-                </span>
-                {% if current_user.tem_permissao('diarias', 'aprovar') %}
-                <button class="btn btn-outline-secondary btn-sm ms-1 py-0 px-1" data-bs-toggle="modal" data-bs-target="#modalAlterarEtapa" title="Alterar etapa manualmente">
-                    <i class="bi bi-pencil" style="font-size: 0.7rem;"></i>
-                </button>
-                {% endif %}
-                {% endif %}
-            </p>
-            <p class="text-secondary mb-0" style="font-size: 0.95rem;">
-                <strong>Data da Solicitação:</strong> {{ itinerario.data_solicitacao.strftime('%d/%m/%Y') if itinerario.data_solicitacao else '-' }}
-            </p>
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                    <h5 class="fw-bold text-dark mb-1">
+                        {% if itinerario.sei_id_procedimento %}
+                        <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}"
+                           target="_blank" class="text-decoration-none">
+                            {{ itinerario.sei_protocolo or itinerario.n_processo }}
+                            <i class="bi bi-box-arrow-up-right" style="font-size: 0.75rem;"></i>
+                        </a>
+                        {% else %}
+                        {{ itinerario.n_processo or 'Sem processo' }}
+                        <button class="btn btn-outline-primary btn-sm ms-2" id="btn-criar-sei"
+                                onclick="criarProcessoSEI({{ itinerario.id }})" title="Criar processo SEI">
+                            <i class="bi bi-link-45deg me-1"></i>Criar no SEI
+                        </button>
+                        {% endif %}
+                    </h5>
+                    <div class="d-flex flex-wrap gap-1 align-items-center" style="font-size: 0.82rem;">
+                        <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else ('bg-danger' if itinerario.tipo_itinerario == 3 else 'bg-warning text-dark') }}">
+                            {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
+                        </span>
+                        {% if itinerario.tipo_solicitacao %}
+                        <span class="badge bg-primary">{{ itinerario.tipo_solicitacao.nome }}</span>
+                        {% endif %}
+                        <span class="text-muted">|</span>
+                        <span><strong>{{ itinerario.qtd_diarias_solicitadas }}</strong> diária(s)</span>
+                        <span class="text-muted">|</span>
+                        <span>{{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}
+                        a {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}</span>
+                        <span class="text-muted">|</span>
+                        <strong class="text-success">
+                            {% if itinerario.valor_total %}
+                                R$ {{ "{:,.2f}".format(itinerario.valor_total|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                            {% else %}-{% endif %}
+                        </strong>
+                    </div>
+                    <p class="text-secondary mb-0 mt-1" style="font-size: 0.8rem;">
+                        <i class="bi bi-person me-1"></i>
+                        <strong>{{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() }}</strong>
+                        <span class="text-muted mx-1">|</span>
+                        {% if itinerario.tipo_itinerario == 1 %}
+                            {{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}
+                            <i class="bi bi-arrow-right mx-1" style="font-size: 0.6rem;"></i>
+                            {% set ultima_par = itinerario.paradas.all()[-1] if itinerario.paradas.count() > 0 else None %}
+                            {{ ultima_par.municipio.nome if ultima_par and ultima_par.municipio else '-' }}
+                        {% else %}
+                            {{ itinerario.estado_origem_obj.nome if itinerario.estado_origem_obj else '-' }}
+                            <i class="bi bi-arrow-right mx-1" style="font-size: 0.6rem;"></i>
+                            {{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="text-end d-flex flex-column align-items-end gap-2">
+                    {% if itinerario.etapa_atual %}
+                    <span>
+                        <span class="badge" style="background-color: {{ itinerario.etapa_atual.cor_hex or '#6c757d' }};">
+                            <i class="{{ itinerario.etapa_atual.icone }} me-1"></i>{{ itinerario.etapa_atual.nome }}
+                        </span>
+                        {# Botão de alterar etapa removido — etapa avança apenas pelo fluxo #}
+                    </span>
+                    {% endif %}
+                    {# Botão "Assinar" destacado para Superintendente na etapa 1 #}
+                    {% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_superintendente and not itinerario.superintendente_assinou %}
+                    <button type="button" class="btn btn-primary btn-sm shadow-sm"
+                            data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
+                        <i class="bi bi-pen me-1"></i>Assinar Requisições
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
         </div>
 
         <div class="p-3">
@@ -204,9 +240,16 @@
                     <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #343990 !important;">
                         <span class="info-card-label d-block mb-1">Origem / Destino</span>
                         <span class="info-card-value" style="font-size: 0.85rem;">
-                            {{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}
-                            <i class="bi bi-arrow-right" style="font-size: 0.7rem; color: #6c757d;"></i>
-                            {{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}
+                            {% if itinerario.tipo_itinerario == 1 %}
+                                {{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}
+                                <i class="bi bi-arrow-right" style="font-size: 0.7rem; color: #6c757d;"></i>
+                                {% set ult_par = itinerario.paradas.all()[-1] if itinerario.paradas.count() > 0 else None %}
+                                {{ ult_par.municipio.nome if ult_par and ult_par.municipio else '-' }}
+                            {% else %}
+                                {{ itinerario.estado_origem_obj.nome if itinerario.estado_origem_obj else '-' }}
+                                <i class="bi bi-arrow-right" style="font-size: 0.7rem; color: #6c757d;"></i>
+                                {{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}
+                            {% endif %}
                         </span>
                     </div>
                 </div>
@@ -230,35 +273,10 @@
                         <i class="bi bi-info-circle me-1"></i> Resumo
                     </a>
                 </li>
-                {% if itinerario.tipo_itinerario in [2, 3] %}
                 <li class="nav-item" role="presentation">
-                    <a class="nav-link {{ 'active' if aba == 'passagens' }}"
-                       href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='passagens') }}">
-                        <i class="bi bi-airplane me-1"></i> Passagens
-                        {% if itinerario.escolha_voo_ida_id %}
-                        <i class="bi bi-check-circle-fill text-success ms-1"></i>
-                        {% elif cotacoes_voos|length > 0 %}
-                        <i class="bi bi-exclamation-circle text-warning ms-1"></i>
-                        {% endif %}
-                        <span class="badge bg-secondary ms-1">{{ cotacoes_voos|length }}</span>
-                    </a>
-                </li>
-                {% endif %}
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link {{ 'active' if aba == 'financeiro' }}"
-                       href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='financeiro') }}">
-                        <i class="bi bi-cash-stack me-1"></i> Financeiro
-                        {% set has_nr = itinerario.get_doc('nota_reserva') %}
-                        {% if has_nr and has_nr.codigo %}
-                        <i class="bi bi-check-circle-fill text-success ms-1"></i>
-                        {% endif %}
-                    </a>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link {{ 'active' if aba == 'pessoas' }}"
-                       href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='pessoas') }}">
-                        <i class="bi bi-people me-1"></i> Pessoas
-                        <span class="badge bg-secondary ms-1">{{ itens|length }}</span>
+                    <a class="nav-link {{ 'active' if aba == 'fluxo' or aba == 'passagens' or aba == 'financeiro' }}"
+                       href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='fluxo') }}">
+                        <i class="bi bi-signpost-split me-1"></i> Fluxo
                     </a>
                 </li>
             </ul>
@@ -268,6 +286,19 @@
 
             {# ===================== ABA RESUMO ===================== #}
             {% if aba == 'resumo' %}
+
+            {# --- PESSOAS (movido da aba antiga) --- #}
+            {% include 'diarias/partials/pessoas_resumo.html' %}
+
+            {% endif %}{# /aba resumo #}
+
+            {# ===================== ABA FLUXO ===================== #}
+            {% if aba == 'fluxo' or aba == 'financeiro' %}
+            {% include 'diarias/partials/fluxo_stepper.html' %}
+            {% endif %}{# /aba fluxo #}
+
+            {# ===================== ABA RESUMO (LEGADO - conteudo movido para fluxo) ===================== #}
+            {% if false and aba == 'resumo_legado' %}
 
             {# --- ASSINATURA DUPLA: SUPERINTENDENTE + SECRETÁRIO --- #}
             {% set doc_autorizacao = itinerario.get_doc('autorizacao') %}
@@ -446,8 +477,14 @@
 
             {% endif %}{# /aba resumo #}
 
-            {# ===================== ABA PASSAGENS ===================== #}
+            {# ===================== ABA PASSAGENS (acessada pelo link do stepper) ===================== #}
             {% if aba == 'passagens' and itinerario.tipo_itinerario in [2, 3] %}
+
+            {# --- Botão voltar ao fluxo --- #}
+            <a href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='fluxo') }}"
+               class="btn btn-outline-secondary btn-sm mb-3">
+                <i class="bi bi-arrow-left me-1"></i>Voltar ao Fluxo
+            </a>
 
             {# --- Variaveis de controle --- #}
             {% set count_manual = cotacoes_voos|selectattr('fonte', 'equalto', 'manual')|list|length %}
@@ -580,8 +617,7 @@
             {% endif %}
 
             {# --- COTACOES DE VOOS --- #}
-            {% if voos_ida|length > 0 or voos_volta|length > 0 %}
-            <section class="mb-4">
+            <section class="mb-4" id="secao-cotacoes-voos">
                 <div class="card border-0 shadow-sm overflow-hidden">
                     <div class="card-header bg-white border-bottom py-2">
                         <div class="d-flex justify-content-between align-items-center">
@@ -643,13 +679,8 @@
                                     </select>
                                 </div>
                                 <div class="col-md-3">
-                                    <label class="form-label">Bagagem</label>
-                                    <select id="cotacao_bagagem" class="form-select form-select-sm">
-                                        <option value="">Selecione</option>
-                                        <option value="1 mala despachada">1 mala despachada</option>
-                                        <option value="Apenas mão">Apenas mão</option>
-                                        <option value="2 malas despachadas">2 malas despachadas</option>
-                                    </select>
+                                    <label class="form-label">Bagagem (malas)</label>
+                                    <input type="number" id="cotacao_bagagem" class="form-control form-control-sm" min="0" max="10" step="1" value="0" placeholder="0">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Valor Total (R$) <span class="text-danger">*</span></label>
@@ -685,7 +716,7 @@
                             </div>
 
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="chk-conexao" onchange="toggleConexão()">
+                                <input class="form-check-input" type="checkbox" id="chk-conexao" onchange="toggleConexao()">
                                 <label class="form-check-label small" for="chk-conexao">Tem conexão (2º trecho)</label>
                             </div>
 
@@ -728,6 +759,7 @@
                         {% endif %}{# /etapa == 2 form #}
 
                         {# --- TABELAS DE COTACOES REGISTRADAS --- #}
+                        {% if voos_ida|length > 0 or voos_volta|length > 0 %}
                         <div id="cotacoes-voos-container">
                             {# IDA #}
                             <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;">
@@ -871,10 +903,10 @@
                                 </table>
                             </div>
                         </div>
+                        {% endif %}{# /tem cotacoes para mostrar tabelas #}
                     </div>
                 </div>
             </section>
-            {% endif %}
 
             </div>{# /tab-pane fase1 #}
 
@@ -1214,13 +1246,13 @@
 
             {% endif %}{# /aba passagens #}
 
-            {# ===================== ABA FINANCEIRO ===================== #}
-            {% if aba == 'financeiro' %}
+            {# ===================== ABA FINANCEIRO (LEGADO - movido para fluxo) ===================== #}
+            {% if false and aba == 'financeiro_legado' %}
 
             {% if pode_editar %}
             <div class="d-flex justify-content-end mb-2">
                 <button class="btn btn-outline-success btn-sm py-0 px-2" data-bs-toggle="modal" data-bs-target="#modalEditarQuadro" title="Editar quadro orcamentario">
-                    <i class="bi bi-calculator me-1" style="font-size: 0.75rem;"></i><span style="font-size: 0.75rem;">Editar Quadro Orcamentario</span>
+                    <i class="bi bi-calculator me-1" style="font-size: 0.75rem;"></i><span style="font-size: 0.75rem;">Editar Quadro Orçamentário</span>
                 </button>
             </div>
             {% endif %}
@@ -1571,8 +1603,8 @@
 
             {% endif %}{# /aba financeiro #}
 
-            {# ===================== ABA PESSOAS ===================== #}
-            {% if aba == 'pessoas' %}
+            {# ===================== ABA PESSOAS (LEGADO - movido para resumo) ===================== #}
+            {% if false and aba == 'pessoas_legado' %}
 
             {# --- PESSOAS --- #}
             <section class="mb-4">
@@ -1599,7 +1631,7 @@
                                         <th>CPF / Mat.</th>
                                         <th>Cargo (Folha)</th>
                                         <th>Setor / Orgao</th>
-                                        <th>Cargo Diaria</th>
+                                        <th>Cargo Diária</th>
                                         <th>Assessorando</th>
                                         <th class="text-end">Valor Diaria</th>
                                         {% if pode_editar %}
@@ -1730,11 +1762,11 @@
 
                 <p class="text-muted small mb-3">
                     Informe suas credenciais do SEI para assinar os documentos de requisição
-                    (Requisicao de Diarias{% if itinerario.has_doc('requisicao_passagens') %} e Requisicao de Passagens{% endif %}).
+                    (Requisição de Diárias{% if itinerario.has_doc('requisicao_passagens') %} e Requisição de Passagens{% endif %}).
                 </p>
 
                 <div class="mb-3">
-                    <label for="super_usuario" class="form-label fw-semibold">Usuario SEI</label>
+                    <label for="super_usuario" class="form-label fw-semibold">Usuário SEI</label>
                     <input type="text" class="form-control" id="super_usuario"
                            placeholder="Seu login no SEI" autocomplete="off">
                 </div>
@@ -1779,7 +1811,7 @@
                 </p>
 
                 <div class="mb-3">
-                    <label for="autorizar_usuario" class="form-label fw-semibold">Usuario SEI</label>
+                    <label for="autorizar_usuario" class="form-label fw-semibold">Usuário SEI</label>
                     <input type="text" class="form-control" id="autorizar_usuario"
                            placeholder="Seu login no SEI" autocomplete="off">
                 </div>
@@ -1813,7 +1845,7 @@
 {% block diarias_js %}
 {% if itinerario.tipo_itinerario in [2, 3] %}
 <script>
-function toggleConexão() {
+function toggleConexao() {
     var chk = document.getElementById('chk-conexao');
     var fields = document.getElementById('conexao-fields');
     if (chk.checked) {
@@ -2017,7 +2049,7 @@ async function assinarSuperintendente() {
     var senha = document.getElementById('super_senha').value.trim();
 
     if (!usuario || !senha) {
-        erroDiv.textContent = 'Informe usuario e senha do SEI.';
+        erroDiv.textContent = 'Informe usuário e senha do SEI.';
         erroDiv.classList.remove('d-none');
         return;
     }
@@ -2083,7 +2115,7 @@ async function autorizarSolicitacao() {
     var senha = document.getElementById('autorizar_senha').value.trim();
 
     if (!usuario || !senha) {
-        erroDiv.textContent = 'Informe usuario e senha do SEI.';
+        erroDiv.textContent = 'Informe usuário e senha do SEI.';
         erroDiv.classList.remove('d-none');
         return;
     }
@@ -2109,13 +2141,18 @@ async function autorizarSolicitacao() {
         }
 
         if (resp.ok && data.sucesso) {
-            sucessoDiv.innerHTML = '<i class="bi bi-check-circle me-1"></i> Autorização realizada com sucesso! Documento: <b>' +
-                (data.documento_formatado || '') + '</b>. Recarregando...';
+            var msg = '<i class="bi bi-check-circle me-1"></i> Autorização realizada com sucesso! Documento: <b>' +
+                (data.documento_formatado || '') + '</b>';
+            if (data.envio_mensagem) {
+                msg += '<br><i class="bi bi-send me-1"></i> ' + data.envio_mensagem;
+            }
+            sucessoDiv.innerHTML = msg;
             sucessoDiv.classList.remove('d-none');
 
             setTimeout(function() {
                 var modal = bootstrap.Modal.getInstance(document.getElementById('modalAutorizar'));
                 if (modal) modal.hide();
+                alert('Solicitação autorizada e processo encaminhado para DFIN/APOIO!');
                 window.location.reload();
             }, 1500);
         } else {
@@ -2424,19 +2461,6 @@ async function _postJSON(url, payload) {
     return data;
 }
 
-// ── Modal E: Alterar Etapa ──
-async function salvarAlteracaoEtapa() {
-    if (!confirm('Deseja alterar a etapa manualmente?')) return;
-    try {
-        await _postJSON('{{ url_for("diarias.api_admin_alterar_etapa") }}', {
-            itinerario_id: ITINERARIO_ID,
-            etapa_id: document.getElementById('edit_etapa_id').value,
-            comentario: document.getElementById('edit_etapa_comentario').value
-        });
-        location.reload();
-    } catch (e) { alert('Erro: ' + e.message); }
-}
-
 // ── Modal A: Editar Dados Basicos ──
 async function salvarDadosBasicos() {
     if (!confirm('Deseja salvar as alteracoes nos dados basicos?')) return;
@@ -2508,7 +2532,7 @@ async function buscarPessoaCPF() {
             document.getElementById('edit_pessoa_setor').value = data.setor || '';
             document.getElementById('edit_pessoa_orgao').value = data.orgao || '';
         } else {
-            alert('Servidor nao encontrado para este CPF.');
+            alert('Servidor não encontrado para este CPF.');
         }
     } catch (e) { alert('Erro na busca: ' + e.message); }
 }
@@ -2676,6 +2700,36 @@ async function salvarQuadroOrcamentario() {
         });
         location.reload();
     } catch (e) { alert('Erro: ' + e.message); }
+}
+</script>
+{% endif %}
+
+{% if not itinerario.sei_id_procedimento %}
+<script>
+async function criarProcessoSEI(id) {
+    const btn = document.getElementById('btn-criar-sei');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Criando...';
+    try {
+        const resp = await fetch('/diarias/api/admin/criar-processo-sei/' + id, {
+            method: 'POST',
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+        });
+        const data = await resp.json();
+        if (data.sucesso) {
+            btn.className = 'btn btn-success btn-sm ms-2';
+            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>' + data.protocolo;
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert('Erro: ' + (data.erro || 'Falha desconhecida'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-link-45deg me-1"></i>Criar no SEI';
+        }
+    } catch (e) {
+        alert('Erro de conexão: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-link-45deg me-1"></i>Criar no SEI';
+    }
 }
 </script>
 {% endif %}

@@ -86,15 +86,57 @@ ETAPA_ALIASES = {
 
 
 # =============================================================================
-# ETAPAS DO PROCESSO DE DIÁRIAS (5 etapas conforme Lista de Verificação)
+# DIÁRIAS — FLAG DE BYPASS DE ASSINATURAS (TEMPORÁRIO PARA TESTES)
+# =============================================================================
+# Quando True, as chamadas de assinatura SEI são simuladas (retornam sucesso
+# sem chamar a API). Os documentos são criados normalmente, apenas a
+# assinatura eletrônica é pulada.
+# IMPORTANTE: Desativar (False) antes de usar em produção com processos reais.
+DIARIAS_BYPASS_ASSINATURAS = False
+
+# Lista de protocolos SEI (formato "00002.003853/2026-21") em que o sistema
+# simula as assinaturas sem chamar o SEI. Usado para processos de teste onde
+# não temos credenciais de assinantes reais (Secretário, Diretor DFIN, etc.).
+# PROCESSOS REAIS NÃO DEVEM SER INCLUÍDOS AQUI.
+DIARIAS_PROTOCOLOS_BYPASS_ASSINATURAS = {
+    '00002.003853/2026-21',  # Processo teste — Somente Diárias
+}
+
+
+def protocolo_tem_bypass_assinatura(protocolo):
+    """Retorna True se o protocolo (ex: '00002.003853/2026-21') deve ter
+    as assinaturas simuladas. Verifica tanto a flag global quanto a lista
+    de protocolos específicos.
+    """
+    if DIARIAS_BYPASS_ASSINATURAS:
+        return True
+    if not protocolo:
+        return False
+    return str(protocolo).strip() in DIARIAS_PROTOCOLOS_BYPASS_ASSINATURAS
+
+
+# =============================================================================
+# ETAPAS DO PROCESSO DE DIÁRIAS (6 etapas)
+# Nota: os IDs refletem a tabela diarias_etapas. A ordem visual é controlada
+# pelo campo `ordem` da tabela, não pelo valor do ID.
 # =============================================================================
 class DiariasEtapaID(IntEnum):
-    """IDs das 5 etapas principais no fluxo de diárias e passagens."""
-    SOLICITACAO_INICIAL = 1      # Memorando, Requisições, Folder, Autorização Secretário
-    ESCOLHA_VOO = 2              # Cotações aéreas + Justificativa (somente tipos 2,3)
-    ANALISE_SOLICITACAO = 3      # Nota de Reserva, Habilitação, SCDP, Análise NCI
-    CONCESSAO_DIARIAS = 4        # NL, PD, OB
-    PRESTACAO_CONTAS = 5         # Relatório de viagem, NP, Prestação SCDP
+    """IDs das 6 etapas no fluxo de diárias e passagens.
+
+    Ordem do fluxo (campo `ordem` no banco):
+    1. Solicitação Inicial (ID=1)
+    2. Análise 1ª Parte (ID=3) — NR, Quadro, Habilitação
+    3. Escolha do Voo (ID=2) — condicional: só tipos 2,3
+    4. Análise 2ª Parte (ID=6) — SCDP, NE, SGA, NCI
+    5. Concessão (ID=4) — NL, PD, OB
+    6. Prestação de Contas (ID=5)
+    """
+    SOLICITACAO_INICIAL = 1
+    ESCOLHA_VOO = 2
+    ANALISE_SOLICITACAO = 3      # 1ª Parte: NR, Quadro, Habilitação
+    CONCESSAO_DIARIAS = 4
+    PRESTACAO_CONTAS = 5
+    ANALISE_SOLICITACAO_2 = 6    # 2ª Parte: SCDP, NE, SGA, NCI
 
 
 # Configuração dos sub-itens de cada etapa (checklist da Lista de Verificação).
@@ -105,18 +147,27 @@ DIARIAS_SUBITENS = {
         {'id': 'memorando',              'nome': 'Memorando de solicitação',     'doc_tipo': 'memorando'},
         {'id': 'requisicao',             'nome': 'Requisição de Diárias',        'doc_tipo': 'requisicao'},
         {'id': 'requisicao_passagens',   'nome': 'Requisição de Passagens',      'doc_tipo': 'requisicao_passagens', 'condicional': 'passagens'},
-        {'id': 'doc_evento',             'nome': 'Folder ou doc. do evento',     'doc_tipo': 'doc_externo'},
-        {'id': 'autorizacao',            'nome': 'Autorização do Secretário',    'doc_tipo': 'autorizacao'},
+        {'id': 'doc_evento',             'nome': 'Folder ou doc. do evento',     'doc_tipo': 'doc_externo', 'opcional': True},
+        # Só aparece para tipos 2 e 3 (com passagens). Para tipo 1 (Apenas Diárias),
+        # a autorização do Secretário ocorre via assinatura direta na Requisição de
+        # Diárias (532) — não há documento separado de Autorização.
+        {'id': 'autorizacao',            'nome': 'Autorização do Secretário',    'doc_tipo': 'autorizacao', 'condicional': 'passagens'},
+    ],
+    DiariasEtapaID.ANALISE_SOLICITACAO: [
+        {'id': 'nota_reserva',           'nome': 'Nota de reserva',              'doc_tipo': 'nota_reserva'},
+        {'id': 'quadro_orcamentario',    'nome': 'Quadro orçamentário',          'doc_tipo': 'quadro_orcamentario'},
+        {'id': 'habilitacao',            'nome': 'Análise de habilitação para receber diárias', 'doc_tipo': 'analise_habilitacao'},
     ],
     DiariasEtapaID.ESCOLHA_VOO: [
         {'id': 'cotacoes',               'nome': 'Cotações aéreas',              'doc_tipo': 'memorando_cotacoes'},
         {'id': 'escolha_passagens',      'nome': 'Justificativa de escolha da passagem', 'doc_tipo': 'escolha_passagens'},
     ],
-    DiariasEtapaID.ANALISE_SOLICITACAO: [
-        {'id': 'nota_reserva',           'nome': 'Nota de reserva',              'doc_tipo': 'nota_reserva'},
-        {'id': 'habilitacao',            'nome': 'Análise de habilitação para receber diárias', 'doc_tipo': 'analise_habilitacao'},
+    DiariasEtapaID.ANALISE_SOLICITACAO_2: [
         {'id': 'scdp',                   'nome': 'Comprovante de lançamento do SCDP', 'doc_tipo': 'autorizacao_scdp'},
+        {'id': 'nota_empenho',           'nome': 'Nota de empenho',              'doc_tipo': 'nota_empenho'},
+        {'id': 'despacho_sga',           'nome': 'Despacho SGA',                 'doc_tipo': 'despacho_sga'},
         {'id': 'nci',                    'nome': 'Análise do NCI',               'doc_tipo': 'analise_pagamento'},
+        {'id': 'despacho_nci',           'nome': 'Despacho NCI',                 'doc_tipo': 'despacho_nci'},
     ],
     DiariasEtapaID.CONCESSAO_DIARIAS: [
         {'id': 'nl',                     'nome': 'Nota de liquidação',           'doc_tipo': 'nl'},
@@ -125,6 +176,7 @@ DIARIAS_SUBITENS = {
     ],
     DiariasEtapaID.PRESTACAO_CONTAS: [
         {'id': 'relatorio',              'nome': 'Relatório de viagem',          'doc_tipo': 'relatorio_viagem'},
+        {'id': 'comprovante_viagem',     'nome': 'Comprovante de viagem',        'doc_tipo': 'comprovante_viagem', 'opcional': True},
         {'id': 'np',                     'nome': 'Nota patrimonial',             'doc_tipo': 'np'},
         {'id': 'prestacao_scdp',         'nome': 'Comprovante de prestação de contas no SCDP', 'doc_tipo': 'prestacao_scdp'},
     ],

@@ -192,6 +192,87 @@
                         </div>
                     </div>
 
+                    {# Cargo de Gestão e Setor #}
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-person-badge me-1"></i> Cargo de Gestao e Setor
+                    </h6>
+                    <p class="text-muted small mb-3">
+                        Defina o cargo de gestao para fluxos de assinatura (Diarias, etc.) e o setor vinculado.
+                    </p>
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small" for="cargo_gestao">Cargo de Gestao</label>
+                            <select name="cargo_gestao" id="cargo_gestao" class="form-select form-select-sm">
+                                <option value="">-- Nenhum --</option>
+                                <option value="secretario" {{ 'selected' if usuario.cargo_gestao == 'secretario' }}>Secretario</option>
+                                <option value="superintendente" {{ 'selected' if usuario.cargo_gestao == 'superintendente' }}>Superintendente</option>
+                            </select>
+                            <div class="form-text">Define permissoes de assinatura em fluxos de diarias.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small" for="superintendencia_select">Superintendência</label>
+                            <select id="superintendencia_select" class="form-select form-select-sm">
+                                <option value="">-- Selecione --</option>
+                                {% for s in superintendencias %}
+                                <option value="{{ s.id }}" {{ 'selected' if superintendencia_atual_id == s.id }}>
+                                    {{ s.nome_exibicao }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Superintendência / Gabinete.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small" for="setor_id">Setor</label>
+                            <select name="setor_id" id="setor_id" class="form-select form-select-sm" {{ 'disabled' if not superintendencia_atual_id }}>
+                                <option value="">-- Selecione a superintendência primeiro --</option>
+                                {% for s in setores_atuais %}
+                                <option value="{{ s.id }}" {{ 'selected' if usuario.setor_id == s.id }}
+                                        data-tipo="{{ s.tipo_entidade.nome if s.tipo_entidade else '' }}">
+                                    {{ s.nome_exibicao }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Setor/Diretoria/Gerência/Coordenação específico.</div>
+                        </div>
+                    </div>
+
+                    {# Campo hidden mantém compatibilidade com setor_vinculado (texto livre) #}
+                    <input type="hidden" name="setor_vinculado" value="{{ usuario.setor_vinculado or '' }}">
+
+                    <script>
+                    (function() {
+                        const selSuperintendencia = document.getElementById('superintendencia_select');
+                        const selSetor = document.getElementById('setor_id');
+
+                        selSuperintendencia.addEventListener('change', async function() {
+                            const supId = this.value;
+                            selSetor.innerHTML = '<option value="">Carregando...</option>';
+                            selSetor.disabled = true;
+
+                            if (!supId) {
+                                selSetor.innerHTML = '<option value="">-- Selecione a superintendência primeiro --</option>';
+                                return;
+                            }
+
+                            try {
+                                const resp = await fetch('/usuarios/api/setores/' + supId);
+                                const setores = await resp.json();
+
+                                let html = '<option value="">-- Selecione o setor --</option>';
+                                for (const s of setores) {
+                                    const tipo = s.tipo ? ' [' + s.tipo.trim() + ']' : '';
+                                    html += `<option value="${s.id}">${s.nome_exibicao}${tipo}</option>`;
+                                }
+                                selSetor.innerHTML = html;
+                                selSetor.disabled = false;
+                            } catch (e) {
+                                selSetor.innerHTML = '<option value="">Erro ao carregar setores</option>';
+                                console.error(e);
+                            }
+                        });
+                    })();
+                    </script>
+
                     {# Matriz de Permissões - Acesso aos módulos #}
                     {% if not usuario.is_admin %}
                     <h6 class="fw-bold mb-3">

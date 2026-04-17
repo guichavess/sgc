@@ -1,0 +1,426 @@
+{# Partial: Stepper do solicitante — mostra progresso e ações disponíveis.
+   Espera: itinerario, itens, cotacoes_voos, timeline_data.
+
+   SINCRONIZAÇÃO: o estado "concluído" de cada step vem do `timeline_data`
+   (fonte única verdade). Cada item de timeline_data já tem a flag
+   `concluida` que leva em conta todos os subitens da etapa. Isso evita
+   drift entre timeline principal e acompanhamento do solicitante. #}
+
+{% set tem_passagens = itinerario.tipo_solicitacao_id in [2, 3] %}
+{% set escolha_feita = itinerario.escolha_voo_ida_id or itinerario.escolha_sei_opcoes %}
+{% set doc_nr = itinerario.get_doc('nota_reserva') %}
+{% set nr_ok = doc_nr and doc_nr.codigo %}
+{% set doc_ob = itinerario.get_doc('ob') %}
+{% set doc_relatorio = itinerario.get_doc('relatorio_viagem') %}
+{% set doc_comprovante = itinerario.get_doc('comprovante_viagem') %}
+
+{# Mapa etapa_id -> concluida via timeline_data (fonte unica) #}
+{% set etapas_ok = {} %}
+{% if timeline_data %}
+  {% for item in timeline_data %}
+    {% set _ = etapas_ok.update({item.etapa.id: item.concluida}) %}
+  {% endfor %}
+{% endif %}
+
+{# IDs das etapas (vindos de DiariasEtapaID):
+   1=SOLICITACAO_INICIAL, 2=ESCOLHA_VOO, 3=ANALISE_SOLICITACAO,
+   4=CONCESSAO_DIARIAS, 5=PRESTACAO_CONTAS, 6=ANALISE_SOLICITACAO_2 #}
+
+{% set steps = [] %}
+{% set steps = steps + [{'key': 'solicitacao', 'icon': 'bi-send-check', 'label': 'Solicitação', 'done': etapas_ok.get(1, True)}] %}
+{% set steps = steps + [{'key': 'analise1',    'icon': 'bi-receipt',    'label': 'Análise 1ª Parte', 'done': etapas_ok.get(3, False)}] %}
+{% if tem_passagens %}
+{% set steps = steps + [{'key': 'escolha',     'icon': 'bi-airplane',    'label': 'Escolha de Voo',   'done': etapas_ok.get(2, escolha_feita|default(False))}] %}
+{% endif %}
+{% set steps = steps + [{'key': 'analise2',    'icon': 'bi-clipboard-check', 'label': 'Análise 2ª Parte', 'done': etapas_ok.get(6, False)}] %}
+{% set steps = steps + [{'key': 'concessao',   'icon': 'bi-cash-stack',  'label': 'Pagamento',        'done': etapas_ok.get(4, False)}] %}
+{% set steps = steps + [{'key': 'relatorio',   'icon': 'bi-file-earmark-text', 'label': 'Relatório',    'done': doc_relatorio and (doc_relatorio.sei_id or doc_relatorio.codigo)}] %}
+{% set steps = steps + [{'key': 'comprovante', 'icon': 'bi-file-earmark-pdf',  'label': 'Comprovante',  'done': doc_comprovante and (doc_comprovante.sei_id or doc_comprovante.codigo)}] %}
+
+{# analise2_ok precisa ser refletido de forma que combine com os paineis abaixo #}
+{% set analise2_ok = etapas_ok.get(6, false) %}
+
+{# Calcular passo ativo #}
+{% set ns = namespace(passo_ativo=0, passos_done=0) %}
+{% for s in steps %}
+    {% if s.done %}{% set ns.passos_done = ns.passos_done + 1 %}{% endif %}
+    {% if not s.done and ns.passo_ativo == 0 %}{% set ns.passo_ativo = loop.index %}{% endif %}
+{% endfor %}
+{% if ns.passo_ativo == 0 %}{% set ns.passo_ativo = steps|length %}{% endif %}
+{% set total_passos = steps|length %}
+{% set pct_done = ((ns.passos_done / total_passos) * 100)|int if total_passos > 0 else 0 %}
+
+<style>
+    .sol-stepper .sol-step {
+        display: flex; flex-direction: column; align-items: center;
+        flex: 1 1 0; min-width: 80px; cursor: pointer; padding: 0 4px;
+        transition: opacity 0.15s;
+    }
+    .sol-stepper .sol-step.locked { opacity: 0.4; cursor: default; }
+    .sol-stepper .sol-step:hover:not(.locked) { opacity: 0.85; }
+    .sol-circle {
+        width: 36px; height: 36px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.75rem; font-weight: 700;
+        border: 2.5px solid #dee2e6; background: #fff; color: #adb5bd;
+        position: relative; z-index: 3; transition: all 0.25s; flex-shrink: 0;
+    }
+    .sol-step.done .sol-circle { background: #198754; border-color: #198754; color: #fff; box-shadow: 0 2px 8px rgba(25,135,84,0.3); }
+    .sol-step.active .sol-circle { background: #343990; border-color: #343990; color: #fff; box-shadow: 0 0 0 4px rgba(52,57,144,0.18); transform: scale(1.1); }
+    .sol-step:not(:first-child)::before {
+        content: ''; position: absolute; top: 18px;
+        left: calc(-50% + 18px); width: calc(100% - 36px);
+        height: 2.5px; background: #dee2e6; z-index: 1;
+    }
+    .sol-step.done:not(:first-child)::before,
+    .sol-step.active:not(:first-child)::before { background: #198754; }
+    .sol-label { margin-top: 6px; font-size: 0.65rem; font-weight: 600; color: #6c757d; text-align: center; line-height: 1.2; }
+    .sol-step.done .sol-label { color: #198754; }
+    .sol-step.active .sol-label { color: #343990; font-weight: 700; }
+    .sol-panel { display: none; padding: 16px; animation: solFadeIn 0.3s; }
+    .sol-panel.active { display: block; }
+    @keyframes solFadeIn { from { opacity:0; } to { opacity:1; } }
+</style>
+
+<div class="card shadow-sm mb-0">
+    <div class="card-header bg-white py-2 px-3 border-bottom">
+        <div class="d-flex justify-content-between align-items-center">
+            <span class="fw-bold" style="font-size: 0.82rem;">
+                <i class="bi bi-signpost-split me-1"></i>Acompanhamento
+            </span>
+            <span class="badge {{ 'bg-success' if pct_done == 100 else 'bg-primary' }}">{{ ns.passos_done }}/{{ total_passos }}</span>
+        </div>
+        <div class="progress mt-2" style="height: 5px;">
+            <div class="progress-bar {{ 'bg-success' if pct_done == 100 else '' }}" style="width: {{ pct_done }}%;"></div>
+        </div>
+    </div>
+
+    {# Barra de steps #}
+    <div class="d-flex align-items-flex-start overflow-auto px-3 pt-3 pb-1 sol-stepper" style="gap: 0;">
+        {% for s in steps %}
+        {% set is_done = s.done %}
+        {% set is_active = (ns.passo_ativo == loop.index) %}
+        {% set is_locked = (not is_done and not is_active and loop.index > ns.passo_ativo) %}
+        <div class="sol-step {{ 'done' if is_done else ('active' if is_active else ('locked' if is_locked else '')) }}"
+             style="position: relative;" data-step="{{ loop.index }}" onclick="goToSolStep({{ loop.index }})">
+            <div class="sol-circle">
+                {% if is_done %}<i class="bi bi-check-lg"></i>{% else %}<i class="bi {{ s.icon }}"></i>{% endif %}
+            </div>
+            <span class="sol-label">{{ s.label }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# Painéis #}
+    <div>
+        {% set panel_idx = namespace(n=0) %}
+
+        {# ── PASSO: SOLICITAÇÃO ENVIADA ── #}
+        {% set panel_idx.n = panel_idx.n + 1 %}
+        <div class="sol-panel {{ 'active' if ns.passo_ativo == panel_idx.n }}" data-step="{{ panel_idx.n }}">
+            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-check-circle-fill fs-4 text-success me-3"></i>
+                    <div>
+                        <strong>Solicitação enviada com sucesso!</strong>
+                        <span class="d-block text-muted small">
+                            Processo: {{ itinerario.sei_protocolo or itinerario.n_processo or 'Pendente' }}
+                            | Etapa atual: {{ itinerario.etapa_atual.nome if itinerario.etapa_atual else itinerario.etapa_atual_id }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ── PASSO: ANÁLISE FINANCEIRA (NR + Quadro) ── #}
+        {% set panel_idx.n = panel_idx.n + 1 %}
+        <div class="sol-panel {{ 'active' if ns.passo_ativo == panel_idx.n }}" data-step="{{ panel_idx.n }}">
+            {% if nr_ok %}
+            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-check-circle-fill fs-4 text-success me-3"></i>
+                    <div>
+                        <strong>Nota de Reserva inserida!</strong>
+                        <span class="d-block text-muted small">NR: {{ doc_nr.codigo }}</span>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-secondary mb-0">
+                <i class="bi bi-hourglass-split me-1"></i>
+                Aguardando análise financeira (Nota de Reserva e Quadro Orçamentário). Esta etapa é realizada pela equipe financeira.
+            </div>
+            {% endif %}
+        </div>
+
+        {# ── PASSO: ESCOLHA DE VOO (condicional — só após NR) ── #}
+        {% if tem_passagens %}
+        {% set panel_idx.n = panel_idx.n + 1 %}
+        {% set voos_ida_sorted = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'ida')|sort(attribute='valor')|list %}
+        {% set voos_volta_sorted = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'volta')|sort(attribute='valor')|list %}
+        <div class="sol-panel {{ 'active' if ns.passo_ativo == panel_idx.n }}" data-step="{{ panel_idx.n }}">
+
+            {% if escolha_feita %}
+            {# Já escolheu #}
+            <div class="alert alert-success d-flex align-items-center mb-3">
+                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                <strong>Passagens escolhidas!</strong>
+            </div>
+            <div class="row g-3">
+                {% if itinerario.escolha_voo_ida %}
+                {% set vi = itinerario.escolha_voo_ida %}
+                <div class="col-md-6">
+                    <div class="border rounded p-3 bg-light">
+                        <h6 class="fw-bold text-primary mb-1" style="font-size: 0.8rem;"><i class="bi bi-arrow-right-circle me-1"></i>IDA</h6>
+                        <strong>{{ vi.cia }} {{ vi.voo }}</strong> | {{ vi.origem }} → {{ vi.destino }}<br>
+                        <small class="text-muted">{{ vi.saida.strftime('%d/%m %H:%M') }} → {{ vi.chegada.strftime('%d/%m %H:%M') }}</small>
+                        <span class="d-block fw-bold text-success">{{ vi.valor_formatado }}</span>
+                    </div>
+                </div>
+                {% endif %}
+                {% if itinerario.escolha_voo_volta %}
+                {% set vv = itinerario.escolha_voo_volta %}
+                <div class="col-md-6">
+                    <div class="border rounded p-3 bg-light">
+                        <h6 class="fw-bold text-info mb-1" style="font-size: 0.8rem;"><i class="bi bi-arrow-left-circle me-1"></i>VOLTA</h6>
+                        <strong>{{ vv.cia }} {{ vv.voo }}</strong> | {{ vv.origem }} → {{ vv.destino }}<br>
+                        <small class="text-muted">{{ vv.saida.strftime('%d/%m %H:%M') }} → {{ vv.chegada.strftime('%d/%m %H:%M') }}</small>
+                        <span class="d-block fw-bold text-success">{{ vv.valor_formatado }}</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            {% elif nr_ok and voos_ida_sorted|length > 0 and voos_volta_sorted|length > 0 %}
+            {# Formulário de escolha #}
+            <div class="alert alert-info mb-3">
+                <i class="bi bi-info-circle me-2"></i>
+                Selecione os voos. <strong>Por lei, o menor valor deve ser escolhido</strong>, salvo justificativa.
+            </div>
+            <form action="{{ url_for('diarias.escolha_passagens_solicitante', id=itinerario.id) }}" method="post">
+                <h6 class="fw-bold text-primary mb-2" style="font-size: 0.8rem;"><i class="bi bi-arrow-right-circle me-1"></i>VOO DE IDA</h6>
+                {% for c in voos_ida_sorted %}
+                <div class="form-check border rounded p-2 ps-4 mb-2 {{ 'bg-success bg-opacity-10 border-success' if loop.first }}">
+                    <input class="form-check-input mt-2" type="radio" name="escolha_voo_ida" id="ida_{{ c.id }}"
+                           value="{{ c.id }}" data-valor="{{ c.valor }}" onchange="checkCheapest()" required>
+                    <label class="form-check-label w-100" for="ida_{{ c.id }}">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <strong>Opção {{ loop.index }}</strong>
+                                {% if loop.first %}<span class="badge bg-success ms-1" style="font-size:0.65rem;">MENOR VALOR</span>{% endif %}
+                                <span class="ms-2 text-muted" style="font-size:0.8rem;">{{ c.cia }} {{ c.voo }} | {{ c.origem }} → {{ c.destino }}{% if c.tem_conexao %} (conexão){% endif %}</span>
+                            </div>
+                            <span class="fw-bold {{ 'text-success' if loop.first else '' }}">{{ c.valor_formatado }}</span>
+                        </div>
+                        <small class="text-muted">{{ c.saida.strftime('%d/%m/%Y %H:%M') }} → {{ c.chegada.strftime('%d/%m/%Y %H:%M') }}{% if c.bagagem %} | Bag: {{ c.bagagem }}{% endif %}</small>
+                    </label>
+                </div>
+                {% endfor %}
+
+                <h6 class="fw-bold text-info mb-2 mt-3" style="font-size: 0.8rem;"><i class="bi bi-arrow-left-circle me-1"></i>VOO DE VOLTA</h6>
+                {% for c in voos_volta_sorted %}
+                <div class="form-check border rounded p-2 ps-4 mb-2 {{ 'bg-info bg-opacity-10 border-info' if loop.first }}">
+                    <input class="form-check-input mt-2" type="radio" name="escolha_voo_volta" id="volta_{{ c.id }}"
+                           value="{{ c.id }}" data-valor="{{ c.valor }}" onchange="checkCheapest()" required>
+                    <label class="form-check-label w-100" for="volta_{{ c.id }}">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <strong>Opção {{ loop.index }}</strong>
+                                {% if loop.first %}<span class="badge bg-info" style="font-size:0.65rem;">MENOR VALOR</span>{% endif %}
+                                <span class="ms-2 text-muted" style="font-size:0.8rem;">{{ c.cia }} {{ c.voo }} | {{ c.origem }} → {{ c.destino }}{% if c.tem_conexao %} (conexão){% endif %}</span>
+                            </div>
+                            <span class="fw-bold {{ 'text-info' if loop.first else '' }}">{{ c.valor_formatado }}</span>
+                        </div>
+                        <small class="text-muted">{{ c.saida.strftime('%d/%m/%Y %H:%M') }} → {{ c.chegada.strftime('%d/%m/%Y %H:%M') }}{% if c.bagagem %} | Bag: {{ c.bagagem }}{% endif %}</small>
+                    </label>
+                </div>
+                {% endfor %}
+
+                <div id="justificativa-section" style="display: none;">
+                    <div class="alert alert-warning mt-3 mb-2">
+                        <i class="bi bi-exclamation-triangle me-1"></i><strong>Justificativa obrigatória</strong> — voo selecionado não é o menor valor.
+                    </div>
+                    <div class="mb-2" style="font-size: 0.85rem;">
+                        <div class="form-check"><input class="form-check-input" type="checkbox" name="justificativa_J1" id="j1"><label class="form-check-label" for="j1">J1 - Horário mais adequado</label></div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" name="justificativa_J2" id="j2"><label class="form-check-label" for="j2">J2 - Menor tempo (conexões)</label></div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" name="justificativa_J3" id="j3"><label class="form-check-label" for="j3">J3 - Bagagem inclusa</label></div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" name="justificativa_J4" id="j4"><label class="form-check-label" for="j4">J4 - Disponibilidade de assentos</label></div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" name="justificativa_J5" id="j5"><label class="form-check-label" for="j5">J5 - Outro</label></div>
+                    </div>
+                    <textarea name="justificativa_outros_texto" class="form-control form-control-sm mb-2" rows="2" placeholder="Descreva (opcional se marcou J1-J4)"></textarea>
+                </div>
+
+                <div class="form-check my-3 border rounded p-3 bg-light">
+                    <input class="form-check-input" type="checkbox" name="declaracao_responsabilidade" id="declaracao" required>
+                    <label class="form-check-label small" for="declaracao">
+                        Declaro que a escolha foi realizada de acordo com os critérios legais.
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i>Confirmar Escolha</button>
+            </form>
+
+            {% else %}
+            <div class="alert alert-secondary mb-0">
+                <i class="bi bi-hourglass-split me-1"></i>
+                {% if not nr_ok %}
+                Aguardando análise financeira (NR + Quadro Orçamentário) para liberar cotações.
+                {% else %}
+                Aguardando cadastro de cotações de voo pela administração.
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# ── PASSO: ANÁLISE 2ª PARTE ── #}
+        {% set panel_idx.n = panel_idx.n + 1 %}
+        <div class="sol-panel {{ 'active' if ns.passo_ativo == panel_idx.n }}" data-step="{{ panel_idx.n }}">
+            {% if analise2_ok %}
+            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                <strong>Análise 2ª Parte concluída!</strong>
+                <span class="d-block text-muted small mt-1">SCDP, Nota de Empenho, Despacho SGA e Análise NCI realizados.</span>
+            </div>
+            {% else %}
+            <div class="alert alert-secondary mb-0">
+                <i class="bi bi-hourglass-split me-1"></i>
+                Tramitação interna em andamento (SCDP, empenho, despachos, análise NCI).
+            </div>
+            {% endif %}
+        </div>
+
+        {# ── PASSO: PAGAMENTO (CONCESSÃO) ── #}
+        {% set panel_idx.n = panel_idx.n + 1 %}
+        {% set concessao_ok = etapas_ok.get(4, False) %}
+        <div class="sol-panel {{ 'active' if ns.passo_ativo == panel_idx.n }}" data-step="{{ panel_idx.n }}">
+            {% if concessao_ok %}
+            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                <strong>Pagamento efetuado!</strong>
+                <span class="d-block text-muted small mt-1">
+                    {% if doc_ob %}OB: {{ doc_ob.sei_formatado or doc_ob.codigo or '' }}{% endif %}
+                </span>
+            </div>
+            {% elif not analise2_ok %}
+            <div class="alert alert-secondary mb-0">
+                <i class="bi bi-lock me-1"></i>Aguardando conclusão da Análise 2ª Parte.
+            </div>
+            {% else %}
+            <div class="alert alert-secondary mb-0">
+                <i class="bi bi-hourglass-split me-1"></i>
+                NL, PD e OB em processamento. Você será notificado quando o pagamento for efetuado.
+            </div>
+            {% endif %}
+        </div>
+
+        {# ── PASSO: RELATÓRIO DE VIAGEM ── #}
+        {% set panel_idx.n = panel_idx.n + 1 %}
+        <div class="sol-panel {{ 'active' if ns.passo_ativo == panel_idx.n }}" data-step="{{ panel_idx.n }}">
+            {% if doc_relatorio and (doc_relatorio.sei_id or doc_relatorio.codigo) %}
+            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                <strong>Relatório gerado!</strong>
+                <span class="d-block text-muted small mt-1">Doc: {{ doc_relatorio.sei_formatado or doc_relatorio.codigo }}</span>
+            </div>
+            {% elif concessao_ok %}
+            {# Formulário de relatório #}
+            <div class="alert alert-info mb-3">
+                <i class="bi bi-info-circle me-1"></i>Preencha o relato da viagem para gerar o Relatório no SEI.
+            </div>
+            <form id="formRelatorioViagem" onsubmit="return false;">
+                <div class="mb-3">
+                    <label class="form-label fw-bold"><i class="bi bi-pencil-square me-1"></i>Relato da Viagem <span class="text-danger">*</span></label>
+                    <textarea id="relatoViagem" class="form-control" rows="5" placeholder="Descreva as atividades realizadas..." required></textarea>
+                </div>
+                <div class="row mb-3 g-2">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small">Usuário SEI <span class="text-danger">*</span></label>
+                        <input type="text" id="relatorioUsuarioSei" class="form-control form-control-sm" placeholder="Login SEI" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small">Senha SEI <span class="text-danger">*</span></label>
+                        <input type="password" id="relatorioSenhaSei" class="form-control form-control-sm" placeholder="Senha" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small">Cargo</label>
+                        <input type="text" id="relatorioCargoSei" class="form-control form-control-sm"
+                               value="{{ itens[0].cargo.nome if itens and itens[0].cargo else '' }}">
+                    </div>
+                </div>
+                <button type="button" id="btnGerarRelatorio" class="btn btn-primary" onclick="gerarRelatorioViagem()">
+                    <i class="bi bi-file-earmark-plus me-1"></i>Gerar Relatório
+                </button>
+            </form>
+            {% else %}
+            <div class="alert alert-secondary mb-0">
+                <i class="bi bi-lock me-1"></i>Disponível após o pagamento (OB).
+            </div>
+            {% endif %}
+        </div>
+
+        {# ── PASSO: COMPROVANTE ── #}
+        {% set panel_idx.n = panel_idx.n + 1 %}
+        <div class="sol-panel {{ 'active' if ns.passo_ativo == panel_idx.n }}" data-step="{{ panel_idx.n }}">
+            {% if doc_comprovante and (doc_comprovante.sei_id or doc_comprovante.codigo) %}
+            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                <strong>Comprovante enviado!</strong>
+                <span class="d-block text-muted small mt-1">Doc: {{ doc_comprovante.sei_formatado or doc_comprovante.codigo }}</span>
+            </div>
+            {% elif doc_relatorio and (doc_relatorio.sei_id or doc_relatorio.codigo) %}
+            <div class="alert alert-info mb-3">
+                <i class="bi bi-info-circle me-1"></i>Envie o comprovante de viagem (PDF).
+            </div>
+            <form method="POST" action="{{ url_for('diarias.upload_comprovante', id=itinerario.id) }}" enctype="multipart/form-data" id="formComprovante">
+                <div class="mb-3">
+                    <input type="file" class="form-control" name="arquivo_comprovante" accept=".pdf,.png,.jpg,.jpeg" required>
+                </div>
+                <button type="submit" class="btn btn-success" id="btnEnviarComprovante">
+                    <i class="bi bi-cloud-upload me-1"></i>Enviar Comprovante
+                </button>
+            </form>
+            {% else %}
+            <div class="alert alert-secondary mb-0">
+                <i class="bi bi-lock me-1"></i>Disponível após gerar o Relatório de Viagem.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Navegação #}
+    <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top bg-light" style="border-radius: 0 0 0.375rem 0.375rem;">
+        <button class="btn btn-outline-secondary btn-sm" id="btnSolPrev" onclick="prevSolStep()"><i class="bi bi-chevron-left me-1"></i>Anterior</button>
+        <span class="small fw-semibold text-muted" id="solCounter"></span>
+        <button class="btn btn-outline-secondary btn-sm" id="btnSolNext" onclick="nextSolStep()">Próximo<i class="bi bi-chevron-right ms-1"></i></button>
+    </div>
+</div>
+
+<script>
+(function() {
+    const panels = document.querySelectorAll('.sol-panel');
+    const steps = document.querySelectorAll('.sol-step');
+    const counter = document.getElementById('solCounter');
+    let idx = 0;
+    panels.forEach((p, i) => { if (p.classList.contains('active')) idx = i; });
+    function update() {
+        panels.forEach((p, i) => p.classList.toggle('active', i === idx));
+        if (counter) counter.textContent = (idx + 1) + ' de ' + panels.length;
+        document.getElementById('btnSolPrev').disabled = (idx === 0);
+        document.getElementById('btnSolNext').disabled = (idx === panels.length - 1);
+    }
+    window.goToSolStep = n => { const i = n - 1; if (i >= 0 && i < panels.length) { idx = i; update(); } };
+    window.prevSolStep = () => { if (idx > 0) { idx--; update(); } };
+    window.nextSolStep = () => { if (idx < panels.length - 1) { idx++; update(); } };
+    update();
+})();
+
+function checkCheapest() {
+    var s = document.getElementById('justificativa-section'); if (!s) return;
+    var ida = document.querySelector('input[name="escolha_voo_ida"]:checked');
+    var volta = document.querySelector('input[name="escolha_voo_volta"]:checked');
+    if (!ida || !volta) { s.style.display = 'none'; return; }
+    var mI = parseFloat(document.querySelector('input[name="escolha_voo_ida"]').dataset.valor);
+    var mV = parseFloat(document.querySelector('input[name="escolha_voo_volta"]').dataset.valor);
+    s.style.display = (parseFloat(ida.dataset.valor) <= mI && parseFloat(volta.dataset.valor) <= mV) ? 'none' : 'block';
+}
+</script>

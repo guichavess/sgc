@@ -67,6 +67,10 @@ def salvar_valor_cargo():
         flash('Todos os campos são obrigatórios.', 'danger')
         return redirect(url_for('diarias.cargos'))
 
+    if valor <= 0:
+        flash('O valor da diária deve ser maior que zero.', 'danger')
+        return redirect(url_for('diarias.cargos'))
+
     if vc_id:
         vc = DiariasValorCargo.query.get(int(vc_id))
         if vc:
@@ -98,6 +102,7 @@ def administracao():
     busca = request.args.get('q', '').strip()
     filtro_etapas = request.args.getlist('filtro_etapa', type=int)
     filtro_tipos = request.args.getlist('filtro_tipo', type=int)
+    filtro_solicitacao = request.args.getlist('filtro_solicitacao', type=int)
     page = request.args.get('page', 1, type=int)
 
     query = DiariasItinerario.query
@@ -116,6 +121,9 @@ def administracao():
 
     if filtro_tipos:
         query = query.filter(DiariasItinerario.tipo_itinerario.in_(filtro_tipos))
+
+    if filtro_solicitacao:
+        query = query.filter(DiariasItinerario.tipo_solicitacao_id.in_(filtro_solicitacao))
 
     pagination = query.order_by(
         DiariasItinerario.data_solicitacao.desc()
@@ -150,10 +158,12 @@ def administracao():
             )
         )
 
-    # Contagem de etapas: aplica filtro de tipo (para que mudem ao filtrar tipo)
+    # Contagem de etapas: aplica filtros de tipo + solicitação
     etapa_count_q = base_q
     if filtro_tipos:
         etapa_count_q = etapa_count_q.filter(DiariasItinerario.tipo_itinerario.in_(filtro_tipos))
+    if filtro_solicitacao:
+        etapa_count_q = etapa_count_q.filter(DiariasItinerario.tipo_solicitacao_id.in_(filtro_solicitacao))
     etapa_counts = {
         row[0]: row[1] for row in etapa_count_q.with_entities(
             DiariasItinerario.etapa_atual_id,
@@ -161,10 +171,12 @@ def administracao():
         ).group_by(DiariasItinerario.etapa_atual_id).all()
     }
 
-    # Contagem de tipos: aplica filtro de etapa (para que mudem ao filtrar etapa)
+    # Contagem de tipos itinerário: aplica filtros de etapa + solicitação
     tipo_count_q = base_q
     if filtro_etapas:
         tipo_count_q = tipo_count_q.filter(DiariasItinerario.etapa_atual_id.in_(filtro_etapas))
+    if filtro_solicitacao:
+        tipo_count_q = tipo_count_q.filter(DiariasItinerario.tipo_solicitacao_id.in_(filtro_solicitacao))
     tipo_counts = {
         row[0]: row[1] for row in tipo_count_q.with_entities(
             DiariasItinerario.tipo_itinerario,
@@ -172,11 +184,31 @@ def administracao():
         ).group_by(DiariasItinerario.tipo_itinerario).all()
     }
 
+    # Contagem de tipos solicitação: aplica filtros de etapa + tipo itinerário
+    sol_count_q = base_q
+    if filtro_etapas:
+        sol_count_q = sol_count_q.filter(DiariasItinerario.etapa_atual_id.in_(filtro_etapas))
+    if filtro_tipos:
+        sol_count_q = sol_count_q.filter(DiariasItinerario.tipo_itinerario.in_(filtro_tipos))
+    sol_counts = {
+        row[0]: row[1] for row in sol_count_q.with_entities(
+            DiariasItinerario.tipo_solicitacao_id,
+            db.func.count(DiariasItinerario.id)
+        ).group_by(DiariasItinerario.tipo_solicitacao_id).all()
+    }
+
     # Tipos de itinerário fixos (1=Estadual, 2=Nacional, 3=Internacional)
     tipos_itinerario = [
         {'id': 1, 'nome': 'Estadual', 'cor': '#0dcaf0', 'icone': 'bi-geo-alt'},
         {'id': 2, 'nome': 'Nacional', 'cor': '#ffc107', 'icone': 'bi-airplane'},
         {'id': 3, 'nome': 'Internacional', 'cor': '#dc3545', 'icone': 'bi-globe'},
+    ]
+
+    # Tipos de solicitação (1=Apenas Diárias, 2=Diárias+Passagens, 3=Apenas Passagens)
+    tipos_solicitacao = [
+        {'id': 1, 'nome': 'Apenas Diárias', 'cor': '#198754', 'icone': 'bi-cash-stack'},
+        {'id': 2, 'nome': 'Diárias + Passagens', 'cor': '#6f42c1', 'icone': 'bi-ticket-perforated'},
+        {'id': 3, 'nome': 'Apenas Passagens', 'cor': '#0d6efd', 'icone': 'bi-airplane-engines'},
     ]
 
     return render_template(
@@ -190,22 +222,209 @@ def administracao():
         tipos_itinerario=tipos_itinerario,
         tipo_counts=tipo_counts,
         filtro_tipos=filtro_tipos,
+        tipos_solicitacao=tipos_solicitacao,
+        sol_counts=sol_counts,
+        filtro_solicitacao=filtro_solicitacao,
+    )
+
+
+@diarias_bp.route('/aprovar')
+@login_required
+def aprovar_solicitacoes():
+    """
+    Lista solicitações na etapa 1 pendentes de assinatura do Superintendente.
+    Visível apenas para superintendentes. Filtra solicitações cujo solicitante
+    pertence à mesma superintendência, identificada via Sigla SEI
+    (current_user.superintendencia_sigla) preenchida no login.
+    """
+    eh_secretario = current_user.is_secretario
+    eh_super = current_user.is_superintendente
+
+    if not (eh_super or eh_secretario):
+        flash('Acesso restrito a Superintendentes e Secretário.', 'warning')
+        return redirect(url_for('diarias.dashboard'))
+
+    # Superintendente precisa ter superintendencia_sigla; Secretário vê tudo
+    minha_super = current_user.superintendencia_sigla
+    if eh_super and not minha_super:
+        flash(
+            'Sua unidade SEI ainda não foi identificada. '
+            'Faça logout e login novamente para atualizar seus dados.',
+            'warning',
+        )
+        return redirect(url_for('diarias.dashboard'))
+
+    # Super da SGA (SGACG) autoriza solicitações de TODAS as superintendências
+    from app.utils.unidade_sei import SUPER_SGA_SIGLA
+    eh_super_sga = eh_super and (minha_super == SUPER_SGA_SIGLA)
+
+    # Parâmetros de filtro (mesmos da rota administracao)
+    busca = request.args.get('q', '').strip()
+    filtro_tipos = request.args.getlist('filtro_tipo', type=int)
+    filtro_solicitacao = request.args.getlist('filtro_solicitacao', type=int)
+    page = request.args.get('page', 1, type=int)
+
+    # Filtra por papel
+    from app.models.usuario import Usuario
+
+    query = DiariasItinerario.query.filter(
+        DiariasItinerario.etapa_atual_id == DiariasEtapaID.SOLICITACAO_INICIAL,
+    )
+
+    if eh_secretario:
+        # Secretário: solicitações já assinadas pelo Super, aguardando autorização
+        query = query.filter(DiariasItinerario.superintendente_assinou == True)  # noqa: E712
+    else:
+        # Super: solicitações ainda NÃO assinadas
+        query = query.filter(DiariasItinerario.superintendente_assinou == False)  # noqa: E712
+        if not eh_super_sga:
+            # Super comum: filtra pela própria superintendência
+            query = (
+                query
+                .join(Usuario, Usuario.sigla_login == DiariasItinerario.usuario_gerador)
+                .filter(Usuario.superintendencia_sigla == minha_super)
+            )
+
+    if busca:
+        query = query.filter(
+            db.or_(
+                DiariasItinerario.sei_protocolo.ilike(f'%{busca}%'),
+                DiariasItinerario.n_processo.ilike(f'%{busca}%'),
+                DiariasItinerario.usuario_gerador.ilike(f'%{busca}%'),
+            )
+        )
+
+    if filtro_tipos:
+        query = query.filter(DiariasItinerario.tipo_itinerario.in_(filtro_tipos))
+
+    if filtro_solicitacao:
+        query = query.filter(DiariasItinerario.tipo_solicitacao_id.in_(filtro_solicitacao))
+
+    query = query.order_by(DiariasItinerario.data_solicitacao.desc(), DiariasItinerario.id.desc())
+
+    pagination = query.paginate(page=page, per_page=20, error_out=False)
+    itinerarios = pagination.items
+
+    # Pré-carrega contagem de pessoas (batch query, evita N+1)
+    pessoas_count = {}
+    if itinerarios:
+        ids = [it.id for it in itinerarios]
+        counts = db.session.query(
+            DiariasItemItinerario.id_itinerario,
+            db.func.count(DiariasItemItinerario.id)
+        ).filter(
+            DiariasItemItinerario.id_itinerario.in_(ids)
+        ).group_by(DiariasItemItinerario.id_itinerario).all()
+        pessoas_count = {row[0]: row[1] for row in counts}
+
+    # Contagens cruzadas (aplicam mesmos filtros da query principal por papel)
+    base_q = DiariasItinerario.query.filter(
+        DiariasItinerario.etapa_atual_id == DiariasEtapaID.SOLICITACAO_INICIAL,
+    )
+    if eh_secretario:
+        base_q = base_q.filter(DiariasItinerario.superintendente_assinou == True)  # noqa: E712
+    else:
+        base_q = base_q.filter(DiariasItinerario.superintendente_assinou == False)  # noqa: E712
+        if not eh_super_sga:
+            base_q = (
+                base_q
+                .join(Usuario, Usuario.sigla_login == DiariasItinerario.usuario_gerador)
+                .filter(Usuario.superintendencia_sigla == minha_super)
+            )
+
+    if busca:
+        base_q = base_q.filter(
+            db.or_(
+                DiariasItinerario.sei_protocolo.ilike(f'%{busca}%'),
+                DiariasItinerario.n_processo.ilike(f'%{busca}%'),
+                DiariasItinerario.usuario_gerador.ilike(f'%{busca}%'),
+            )
+        )
+
+    tipo_count_q = base_q
+    if filtro_solicitacao:
+        tipo_count_q = tipo_count_q.filter(DiariasItinerario.tipo_solicitacao_id.in_(filtro_solicitacao))
+    tipo_counts = {
+        row[0]: row[1] for row in tipo_count_q.with_entities(
+            DiariasItinerario.tipo_itinerario,
+            db.func.count(DiariasItinerario.id)
+        ).group_by(DiariasItinerario.tipo_itinerario).all()
+    }
+
+    sol_count_q = base_q
+    if filtro_tipos:
+        sol_count_q = sol_count_q.filter(DiariasItinerario.tipo_itinerario.in_(filtro_tipos))
+    sol_counts = {
+        row[0]: row[1] for row in sol_count_q.with_entities(
+            DiariasItinerario.tipo_solicitacao_id,
+            db.func.count(DiariasItinerario.id)
+        ).group_by(DiariasItinerario.tipo_solicitacao_id).all()
+    }
+
+    tipos_itinerario = [
+        {'id': 1, 'nome': 'Estadual', 'cor': '#0dcaf0', 'icone': 'bi-geo-alt'},
+        {'id': 2, 'nome': 'Nacional', 'cor': '#ffc107', 'icone': 'bi-airplane'},
+        {'id': 3, 'nome': 'Internacional', 'cor': '#dc3545', 'icone': 'bi-globe'},
+    ]
+    tipos_solicitacao = [
+        {'id': 1, 'nome': 'Apenas Diárias', 'cor': '#198754', 'icone': 'bi-cash-stack'},
+        {'id': 2, 'nome': 'Diárias + Passagens', 'cor': '#6f42c1', 'icone': 'bi-ticket-perforated'},
+        {'id': 3, 'nome': 'Apenas Passagens', 'cor': '#0d6efd', 'icone': 'bi-airplane-engines'},
+    ]
+
+    return render_template(
+        'diarias/aprovar_solicitacoes.html',
+        itinerarios=itinerarios,
+        pagination=pagination,
+        pessoas_count=pessoas_count,
+        tipos_itinerario=tipos_itinerario,
+        tipo_counts=tipo_counts,
+        filtro_tipos=filtro_tipos,
+        tipos_solicitacao=tipos_solicitacao,
+        sol_counts=sol_counts,
+        filtro_solicitacao=filtro_solicitacao,
+        eh_secretario=eh_secretario,
+        eh_super_sga=eh_super_sga,
     )
 
 
 @diarias_bp.route('/administracao/<int:id>')
 @login_required
-@requires_permission('diarias.aprovar')
 def administracao_detalhe(id):
     """
     Detalhe administrativo de uma solicitação: timeline completa, info geral,
     upload de cotação ao SEI e visualização da NR do financeiro.
+
+    Acesso:
+      - Usuários com permissão 'diarias.aprovar' (admin/financeiro)
+      - Superintendentes (quando a solicitação pertencer à sua superintendência)
     """
     dados = DiariaService.get_itinerario_completo(id)
     if not dados:
         abort(404)
 
     itinerario = dados['itinerario']
+
+    # Guard de acesso
+    pode_aprovar = current_user.tem_permissao('diarias', 'aprovar')
+    eh_super_do_setor = False
+    from app.utils.unidade_sei import SUPER_SGA_SIGLA
+    if current_user.is_superintendente and current_user.superintendencia_sigla:
+        # Super da SGA vê o detalhe de qualquer solicitação
+        if current_user.superintendencia_sigla == SUPER_SGA_SIGLA:
+            eh_super_do_setor = True
+        else:
+            from app.models.usuario import Usuario
+            solicitante = Usuario.query.filter_by(sigla_login=itinerario.usuario_gerador).first()
+            if solicitante and solicitante.superintendencia_sigla == current_user.superintendencia_sigla:
+                eh_super_do_setor = True
+
+    # Secretário tem acesso a qualquer solicitação
+    eh_secretario = current_user.is_secretario
+
+    if not (pode_aprovar or eh_super_do_setor or eh_secretario):
+        flash('Acesso restrito.', 'warning')
+        return redirect(url_for('diarias.dashboard'))
     timeline_data = DiariaService.obter_timeline(itinerario)
     aba = request.args.get('aba', 'resumo')
 
@@ -258,6 +477,13 @@ def upload_cotacao(id):
 
     if not arquivo or not arquivo.filename:
         flash('Selecione um arquivo para enviar.', 'danger')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    # Validação de extensão
+    EXTENSOES_PERMITIDAS = {'.pdf', '.png', '.jpg', '.jpeg', '.doc', '.docx', '.xls', '.xlsx'}
+    ext = '.' + arquivo.filename.rsplit('.', 1)[-1].lower() if '.' in arquivo.filename else ''
+    if ext not in EXTENSOES_PERMITIDAS:
+        flash(f'Extensão "{ext}" não permitida. Aceitas: {", ".join(sorted(EXTENSOES_PERMITIDAS))}', 'danger')
         return redirect(url_for('diarias.administracao_detalhe', id=id))
 
     try:
@@ -511,15 +737,15 @@ def escolha_passagens(id):
         except Exception as e:
             flash(f'Aviso: Escolha salva, mas erro na integração SEI: {e}', 'warning')
 
-    # Escolha completa → avança para Análise da Solicitação (etapa 3)
+    # Escolha de passagens concluída → avança para Análise 2ª Parte (etapa 6)
     if itinerario.etapa_atual_id == DiariasEtapaID.ESCOLHA_VOO:
         DiariaService.registrar_movimentacao(
             id_itinerario=id,
-            etapa_nova_id=DiariasEtapaID.ANALISE_SOLICITACAO,
+            etapa_nova_id=DiariasEtapaID.ANALISE_SOLICITACAO_2,
             usuario_id=current_user.id if current_user else None,
-            comentario='Escolha de passagens registrada. Avançando para Análise da Solicitação.',
+            comentario='Escolha de passagens registrada. Avançando para Análise 2ª Parte.',
+            auto_commit=False,
         )
-
     db.session.commit()
 
     if sei_ok:
@@ -534,7 +760,6 @@ def escolha_passagens(id):
 
 @diarias_bp.route('/administracao/<int:id>/assinar-superintendente', methods=['POST'])
 @login_required
-@requires_permission('diarias.aprovar')
 def assinar_superintendente(id):
     """
     Superintendente assina os documentos de Requisição de Diárias
@@ -586,8 +811,11 @@ def assinar_superintendente(id):
     if not sei_usuario or not sei_senha:
         return jsonify({'sucesso': False, 'erro': 'Usuário e senha do SEI são obrigatórios.'}), 400
 
+    # Protocolo do processo para suporte a bypass por protocolo específico
+    protocolo_proc = itinerario.sei_protocolo or itinerario.n_processo
+
     # 1. Autentica superintendente no SEI
-    auth_result = autenticar_usuario_sei(sei_usuario, sei_senha)
+    auth_result = autenticar_usuario_sei(sei_usuario, sei_senha, protocolo_bypass=protocolo_proc)
     if not auth_result:
         return jsonify({
             'sucesso': False,
@@ -619,13 +847,14 @@ def assinar_superintendente(id):
             token=token_super,
             unidade_id=unidade_assinatura,
             dados_assinatura={
-                'protocolo_doc': doc_memorando.sei_formatado,
+                'protocolo_doc': doc_memorando.sei_id,
                 'orgao': 'SEAD-PI',
                 'cargo': cargo,
                 'id_login': id_login,
                 'id_usuario': id_usuario,
                 'senha': sei_senha,
             },
+            protocolo_proc=protocolo_proc,
         )
         if ret_memo and ret_memo.get('sucesso'):
             documentos_assinados.append(doc_memorando.sei_formatado or 'Memorando SGA')
@@ -638,7 +867,7 @@ def assinar_superintendente(id):
     # 3. Assinar Requisição de Diárias
     doc_requisicao = itinerario.get_doc('requisicao')
     dados_assinatura = {
-        'protocolo_doc': doc_requisicao.sei_formatado if doc_requisicao else '',
+        'protocolo_doc': doc_requisicao.sei_id if doc_requisicao else '',
         'orgao': 'SEAD-PI',
         'cargo': cargo,
         'id_login': id_login,
@@ -650,6 +879,7 @@ def assinar_superintendente(id):
         token=token_super,
         unidade_id=unidade_assinatura,
         dados_assinatura=dados_assinatura,
+        protocolo_proc=protocolo_proc,
     )
 
     if not ret or not ret.get('sucesso'):
@@ -665,7 +895,7 @@ def assinar_superintendente(id):
     doc_req_passagens = itinerario.get_doc('requisicao_passagens')
     if doc_req_passagens and doc_req_passagens.sei_id:
         dados_assinatura_pass = {
-            'protocolo_doc': doc_req_passagens.sei_formatado,
+            'protocolo_doc': doc_req_passagens.sei_id,
             'orgao': 'SEAD-PI',
             'cargo': cargo,
             'id_login': id_login,
@@ -677,6 +907,7 @@ def assinar_superintendente(id):
             token=token_super,
             unidade_id=unidade_assinatura,
             dados_assinatura=dados_assinatura_pass,
+            protocolo_proc=protocolo_proc,
         )
 
         if ret_pass and ret_pass.get('sucesso'):
@@ -709,7 +940,6 @@ def assinar_superintendente(id):
 
 @diarias_bp.route('/administracao/<int:id>/autorizar', methods=['POST'])
 @login_required
-@requires_permission('diarias.aprovar')
 def autorizar_solicitacao(id):
     """
     Gera autorização do secretário no SEI e avança a etapa automaticamente.
@@ -773,8 +1003,11 @@ def autorizar_solicitacao(id):
     if not sei_usuario or not sei_senha:
         return jsonify({'sucesso': False, 'erro': 'Usuário e senha do SEI são obrigatórios.'}), 400
 
+    # Protocolo do processo para bypass por protocolo específico
+    protocolo_proc = itinerario.sei_protocolo or itinerario.n_processo
+
     # 1. Autentica secretário no SEI
-    auth_result = autenticar_usuario_sei(sei_usuario, sei_senha)
+    auth_result = autenticar_usuario_sei(sei_usuario, sei_senha, protocolo_bypass=protocolo_proc)
     if not auth_result:
         return jsonify({
             'sucesso': False,
@@ -787,8 +1020,9 @@ def autorizar_solicitacao(id):
     # Sempre usa o cargo real do SEI (UltimoCargoAssinatura); formulário é apenas último recurso
     cargo = auth_result.get('cargo') or cargo or 'Secretário de Administração do Estado do Piauí'
 
-    # Usa a unidade onde o documento foi criado (APOIOSGA) para assinatura.
-    unidade_assinatura_sec = UNIDADE_APOIOSGA
+    # Unidade de assinatura: preferir unidade do usuario (sessao), fallback APOIOSGA
+    from flask import session
+    unidade_assinatura_sec = session.get('unidade_atual_id') or current_user.unidade_padrao_id or UNIDADE_APOIOSGA
 
     current_app.logger.info(
         f"[DIARIAS] Assinatura secretario - usuario={sei_usuario} "
@@ -802,13 +1036,14 @@ def autorizar_solicitacao(id):
             token=token_secretario,
             unidade_id=unidade_assinatura_sec,
             dados_assinatura={
-                'protocolo_doc': doc_req_sec.sei_formatado,
+                'protocolo_doc': doc_req_sec.sei_id,
                 'orgao': 'SEAD-PI',
                 'cargo': cargo,
                 'id_login': id_login,
                 'id_usuario': id_usuario,
                 'senha': sei_senha,
             },
+            protocolo_proc=protocolo_proc,
         )
         if not ret_req or not ret_req.get('sucesso'):
             erro = ret_req.get('erro', 'Erro desconhecido') if ret_req else 'Sem resposta'
@@ -820,19 +1055,20 @@ def autorizar_solicitacao(id):
             token=token_secretario,
             unidade_id=unidade_assinatura_sec,
             dados_assinatura={
-                'protocolo_doc': doc_req_pass_sec.sei_formatado,
+                'protocolo_doc': doc_req_pass_sec.sei_id,
                 'orgao': 'SEAD-PI',
                 'cargo': cargo,
                 'id_login': id_login,
                 'id_usuario': id_usuario,
                 'senha': sei_senha,
             },
+            protocolo_proc=protocolo_proc,
         )
         if not ret_req_pass or not ret_req_pass.get('sucesso'):
             erro = ret_req_pass.get('erro', 'Erro desconhecido') if ret_req_pass else 'Sem resposta'
             current_app.logger.warning(f"SEI: Secretário falhou ao assinar Req. Passagens: {erro}")
 
-    # 2. Obtem token admin para criar documento
+    # 2. Obtem token admin para operações SEI
     token_admin = gerar_token_sei_admin()
     if not token_admin:
         return jsonify({
@@ -841,63 +1077,84 @@ def autorizar_solicitacao(id):
         }), 500
 
     sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+    apenas_diarias = (itinerario.tipo_solicitacao_id == 1)
 
-    # 3. Cria documento de autorização
-    retorno_doc = gerar_autorizacao_secretario(
-        token=token_admin,
-        id_procedimento=itinerario.sei_id_procedimento,
-        tipo_solicitacao_id=itinerario.tipo_solicitacao_id,
-        sei_protocolo=sei_protocolo,
-    )
+    if apenas_diarias:
+        # ── Tipo 1 (Apenas Diárias): autorização via dupla assinatura na Requisição ──
+        # Não gera doc 574 separado. A assinatura do Secretário na Requisição de
+        # Diárias (532) + assinatura prévia do Superintendente = autorização completa.
+        doc_req = itinerario.get_doc('requisicao')
+        if not doc_req or not doc_req.sei_id:
+            return jsonify({
+                'sucesso': False,
+                'erro': 'Requisição de Diárias não encontrada no processo SEI.'
+            }), 400
 
-    if not retorno_doc:
-        return jsonify({
-            'sucesso': False,
-            'erro': 'Falha ao criar documento de autorização no SEI.'
-        }), 500
+        doc_formatado = doc_req.sei_formatado or doc_req.sei_id
+        id_documento = doc_req.sei_id
 
-    doc_formatado = retorno_doc.get('DocumentoFormatado', '')
-    id_documento = str(retorno_doc.get('IdDocumento', ''))
+        comentario_etapa = f'Requisição de Diárias ({doc_formatado}) assinada pelo Secretário — autorização concedida'
+    else:
+        # ── Tipos 2,3 (com passagens): gera doc SEAD_AUTORIZAÇÃO_DO_SECRETÁRIO (574) ──
+        retorno_doc = gerar_autorizacao_secretario(
+            token=token_admin,
+            id_procedimento=itinerario.sei_id_procedimento,
+            tipo_solicitacao_id=itinerario.tipo_solicitacao_id,
+            sei_protocolo=sei_protocolo,
+            nome_assinante=current_user.nome.upper() if current_user.nome else None,
+            cargo_assinante=cargo,
+        )
 
-    # 4. Assina o documento com credenciais do secretário
-    dados_assinatura = {
-        'protocolo_doc': doc_formatado,
-        'orgao': 'SEAD-PI',
-        'cargo': cargo,
-        'id_login': id_login,
-        'id_usuario': id_usuario,
-        'senha': sei_senha,
-    }
+        if not retorno_doc:
+            return jsonify({
+                'sucesso': False,
+                'erro': 'Falha ao criar documento de autorização no SEI.'
+            }), 500
 
-    ret_assinatura = assinar_documento(
-        token=token_secretario,
-        unidade_id=unidade_assinatura_sec,
-        dados_assinatura=dados_assinatura,
-    )
+        doc_formatado = retorno_doc.get('DocumentoFormatado', '')
+        id_documento = str(retorno_doc.get('IdDocumento', ''))
 
-    if not ret_assinatura or not ret_assinatura.get('sucesso'):
-        erro_assinatura = ret_assinatura.get('erro', 'Erro desconhecido') if ret_assinatura else 'Sem resposta'
-        return jsonify({
-            'sucesso': False,
-            'erro': f'Documento criado, mas falha ao assinar: {erro_assinatura}'
-        }), 500
+        # Assina o documento de autorização com credenciais do secretário
+        dados_assinatura = {
+            'protocolo_doc': id_documento,
+            'orgao': 'SEAD-PI',
+            'cargo': cargo,
+            'id_login': id_login,
+            'id_usuario': id_usuario,
+            'senha': sei_senha,
+        }
 
-    # 5. Salva referência no banco
-    itinerario.set_doc('autorizacao',
-        sei_id=id_documento,
-        sei_formatado=doc_formatado)
+        ret_assinatura = assinar_documento(
+            token=token_secretario,
+            unidade_id=unidade_assinatura_sec,
+            dados_assinatura=dados_assinatura,
+            protocolo_proc=protocolo_proc,
+        )
 
-    # 6. Avança etapa: Escolha do Voo (se passagens) ou Análise da Solicitação
-    TIPOS_COM_PASSAGENS = {2, 3}
-    proxima_etapa = (DiariasEtapaID.ESCOLHA_VOO
-                     if itinerario.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
-                     else DiariasEtapaID.ANALISE_SOLICITACAO)
+        if not ret_assinatura or not ret_assinatura.get('sucesso'):
+            erro_assinatura = ret_assinatura.get('erro', 'Erro desconhecido') if ret_assinatura else 'Sem resposta'
+            return jsonify({
+                'sucesso': False,
+                'erro': f'Documento criado, mas falha ao assinar: {erro_assinatura}'
+            }), 500
+
+        # Salva referência do doc 574 no banco
+        itinerario.set_doc('autorizacao',
+            sei_id=id_documento,
+            sei_formatado=doc_formatado)
+
+        comentario_etapa = f'Autorização do Secretário ({doc_formatado}) gerada e assinada pelo sistema'
+
+    # Avança etapa: sempre vai para Análise da Solicitação (etapa 3)
     DiariaService.registrar_movimentacao(
         id_itinerario=id,
-        etapa_nova_id=proxima_etapa,
+        etapa_nova_id=DiariasEtapaID.ANALISE_SOLICITACAO,
         usuario_id=current_user.id if current_user else None,
-        comentario=f'Autorização do Secretário ({doc_formatado}) gerada e assinada pelo sistema',
+        comentario=comentario_etapa,
     )
+
+    # Commit critico: persiste doc + etapa ANTES de operações SEI subsequentes
+    db.session.commit()
 
     resultado = {
         'sucesso': True,
@@ -905,7 +1162,9 @@ def autorizar_solicitacao(id):
         'id_documento': id_documento,
     }
 
-    # 7. Encaminha processo para DFIN/APOIO
+    # 7. Encaminha processo para DFIN/APOIO (caixa do Diretor)
+    #    Após o Diretor despachar, o processo será enviado à GPO.
+    envio_ok = False
     try:
         envio = enviar_procedimento(
             token_admin,
@@ -914,41 +1173,45 @@ def autorizar_solicitacao(id):
             manter_aberto=True,
         )
         resultado['envio_procedimento'] = envio
+        envio_ok = envio.get('sucesso', False)
 
-        if envio.get('sucesso'):
-            # 8. Gera despacho DFIN
-            try:
-                itens = DiariasItemItinerario.query.filter_by(
-                    id_itinerario=itinerario.id
-                ).all()
-                nomes_interessados = [
-                    item.nome_pessoa for item in itens if item.nome_pessoa
-                ]
-
-                despacho_ret = gerar_despacho_dfin(
-                    token=token_admin,
-                    id_procedimento=itinerario.sei_id_procedimento,
-                    sei_protocolo=sei_protocolo,
-                    interessados=nomes_interessados,
-                )
-                if despacho_ret:
-                    itinerario.set_doc('despacho_dfin',
-                        sei_id=str(despacho_ret.get('IdDocumento', '')),
-                        sei_formatado=despacho_ret.get('DocumentoFormatado', ''))
-                    resultado['despacho_dfin'] = despacho_ret.get('DocumentoFormatado', '')
-            except Exception as e:
-                current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho DFIN: {e}")
+        if envio_ok:
+            current_app.logger.info(
+                f"SEI Diárias: Processo {sei_protocolo} encaminhado ao DFIN/APOIO ({UNIDADE_DFIN_APOIO})."
+            )
+            resultado['envio_mensagem'] = 'Processo encaminhado para DFIN/APOIO com sucesso!'
         else:
             current_app.logger.warning(
-                f"SEI Diárias: Falha ao encaminhar procedimento: {envio.get('erro')}"
+                f"SEI Diárias: Falha ao encaminhar procedimento para GPO: {envio.get('erro')}"
             )
+            resultado['envio_mensagem'] = f'Aviso: falha ao encaminhar para GPO: {envio.get("erro", "")}'
     except Exception as e:
         current_app.logger.error(f"SEI Diárias: Erro ao encaminhar procedimento: {e}")
+        resultado['envio_mensagem'] = f'Aviso: erro ao encaminhar para GPO: {str(e)}'
 
-    db.session.commit()
+    # 8. Notifica o Diretor DFIN que há nova solicitação de diária
+    try:
+        from app.services.diarias_sei_integration import _resolver_titular_por_cargo
+        from app.models.usuario import Usuario
+        diretor = Usuario.query.filter_by(cargo_gestao='diretor_dfin', ativo=True).first()
+        if diretor:
+            from app.services.notification_engine import NotificationEngine
+            processo = itinerario.sei_protocolo or itinerario.n_processo or f'Diaria #{itinerario.id}'
+            NotificationEngine.notificar(
+                tipo_codigo='diarias.autorizacao_secretario',
+                destinatarios=[diretor.id],
+                titulo='Nova Solicitação de Diária para Despacho',
+                mensagem=f'A solicitação {processo} foi autorizada pelo Secretário e encaminhada à GPO. Acesse a aba de Diárias para despachar.',
+                ref_modulo='diarias',
+                ref_id=str(itinerario.id),
+                ref_url='/financeiro/diarias',
+            )
+    except Exception as e:
+        current_app.logger.warning(f'[DIARIAS] Falha ao notificar Diretor DFIN: {e}')
 
     try:
-        DiariasNotifier.notificar_etapa(itinerario, 'nova_solicitacao', current_user.id)
+        # MED-08: Evento correto para autorização do secretário
+        DiariasNotifier.notificar_etapa(itinerario, 'autorizacao_secretario', current_user.id)
     except Exception as exc_notif:
         current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
 
@@ -998,9 +1261,11 @@ def ciencia_sga(id):
     if not sei_usuario or not sei_senha:
         return jsonify({'sucesso': False, 'erro': 'Credenciais SEI são obrigatórias.'}), 400
 
+    protocolo_proc = itinerario.sei_protocolo or itinerario.n_processo or ''
+
     try:
         # 1. Autenticar superintendente no SEI
-        auth = autenticar_usuario_sei(sei_usuario, sei_senha)
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha, protocolo_bypass=protocolo_proc)
         if not auth or not auth.get('token'):
             return jsonify({'sucesso': False, 'erro': 'Falha na autenticação SEI.'}), 401
 
@@ -1130,9 +1395,11 @@ def analise_nci(id):
     if not respostas:
         return jsonify({'sucesso': False, 'erro': 'As respostas da análise são obrigatórias.'}), 400
 
+    protocolo_proc = itinerario.sei_protocolo or itinerario.n_processo or ''
+
     try:
         # 1. Autenticar usuário NCI no SEI
-        auth = autenticar_usuario_sei(sei_usuario, sei_senha)
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha, protocolo_bypass=protocolo_proc)
         if not auth or not auth.get('token'):
             return jsonify({'sucesso': False, 'erro': 'Falha na autenticação SEI.'}), 401
 
@@ -1175,12 +1442,14 @@ def analise_nci(id):
         if not ret_assinatura_analise or not ret_assinatura_analise.get('sucesso'):
             aviso_assinatura = 'Análise gerada mas assinatura falhou.'
 
-        # 5. Gerar Despacho NCI (série 5)
+        # 5. Gerar Despacho NCI (série 5) — assinatura dinâmica
         retorno_despacho = gerar_despacho_nci(
             token=token_admin,
             id_procedimento=itinerario.sei_id_procedimento,
             sei_protocolo=sei_protocolo,
             ref_analise_formatado=analise_formatado,
+            nome_assinante=current_user.nome.upper() if current_user.nome else None,
+            cargo_assinante=cargo,
         )
 
         despacho_id = ''
@@ -1217,7 +1486,7 @@ def analise_nci(id):
             sei_id=despacho_id,
             sei_formatado=despacho_formatado)
 
-        # 8. Análise NCI é o último sub-item da etapa 3 → avança para Concessão das Diárias
+        # 8. Análise NCI é o último sub-item da Análise 2ª Parte → avança para Concessão das Diárias
         DiariaService.registrar_movimentacao(
             id_itinerario=id,
             etapa_nova_id=DiariasEtapaID.CONCESSAO_DIARIAS,
@@ -1305,15 +1574,32 @@ def auditoria():
     """
     from app.models.diaria import (
         DiariasEtapa, DiariasDocumentoSei, DiariasQuadroOrcamentario,
+        DiariasMovimentacao,
     )
     from app.constants import DIARIAS_SUBITENS, TIPOS_COM_PASSAGENS
+    from app.services.diarias_sei_integration import SERIE_TIPO_DOCUMENTO_MAP
 
-    # Carregar todos os itinerários com eager loading dos docs
-    itinerarios = (
+    # Filtros SQL — aplicados antes de carregar para reduzir volume
+    filtro_etapa = request.args.getlist('filtro_etapa')
+    filtro_tipo = request.args.getlist('filtro_tipo')
+    filtro_pendencia = request.args.get('filtro_pendencia', '')
+    filtro_faltando = request.args.getlist('filtro_faltando')
+
+    # PERF-02: Eager load documentos_sei para evitar N+1 no has_doc()
+    from sqlalchemy.orm import joinedload
+    query = (
         DiariasItinerario.query
-        .order_by(DiariasItinerario.data_solicitacao.desc())
-        .all()
+        .options(joinedload(DiariasItinerario.documentos_sei))
+        .order_by(DiariasItinerario.data_solicitacao.desc(), DiariasItinerario.id.desc())
     )
+    if filtro_etapa:
+        filtro_etapa_int = [int(e) for e in filtro_etapa]
+        query = query.filter(DiariasItinerario.etapa_atual_id.in_(filtro_etapa_int))
+    if filtro_tipo:
+        filtro_tipo_int = [int(t) for t in filtro_tipo]
+        query = query.filter(DiariasItinerario.tipo_itinerario.in_(filtro_tipo_int))
+
+    itinerarios = query.all()
 
     # Pré-carregar contagem de pessoas
     all_ids = [it.id for it in itinerarios]
@@ -1338,6 +1624,33 @@ def auditoria():
         ).all()
         quadros_existentes = {row[0] for row in q_ids}
 
+    # PERF-01: Filtrar movimentações apenas dos protocolos relevantes (não ALL)
+    mov_docs_por_protocolo = {}  # protocolo → set de doc_tipos
+    protocolos_relevantes = {it.n_processo or it.sei_protocolo for it in itinerarios
+                             if it.n_processo or it.sei_protocolo}
+    if protocolos_relevantes:
+        all_movs = DiariasMovimentacao.query.filter(
+            DiariasMovimentacao.protocolo_procedimento.in_(protocolos_relevantes)
+        ).all()
+    else:
+        all_movs = []
+    for mov in all_movs:
+        proto = mov.protocolo_procedimento or ''
+        id_serie_str = str(mov.id_serie) if mov.id_serie else ''
+        tipo_doc = SERIE_TIPO_DOCUMENTO_MAP.get(id_serie_str)
+
+        # Refinamento: IdSerie 264 com numero "PRESTAÇÃO SCDP" → prestacao_scdp
+        if id_serie_str == '264':
+            numero_upper = (mov.numero or '').upper()
+            tem_prestacao = 'PRESTAÇÃO' in numero_upper or 'PRESTACAO' in numero_upper
+            if tem_prestacao and 'SCDP' in numero_upper:
+                tipo_doc = 'prestacao_scdp'
+
+        if tipo_doc:
+            if proto not in mov_docs_por_protocolo:
+                mov_docs_por_protocolo[proto] = set()
+            mov_docs_por_protocolo[proto].add(tipo_doc)
+
     etapas = DiariasEtapa.query.order_by(DiariasEtapa.ordem).all()
 
     resultados = []
@@ -1347,6 +1660,10 @@ def auditoria():
         contadores['total'] += 1
         faltando = []
         tem_passagens = it.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
+
+        # Tipos de doc encontrados na movimentacao para este processo
+        protocolo_mov = it.n_processo or it.sei_protocolo or ''
+        tipos_mov = mov_docs_por_protocolo.get(protocolo_mov, set())
 
         # ── Dados básicos ──
         tem_protocolo = bool(it.sei_protocolo)
@@ -1369,6 +1686,7 @@ def auditoria():
 
         # ── Documentos por etapa (via DIARIAS_SUBITENS) ──
         docs_status = {}
+        tem_ob = it.has_doc('ob') or 'ob' in tipos_mov
         for etapa_id, subitens in DIARIAS_SUBITENS.items():
             for sub in subitens:
                 # Pular condicionais que não se aplicam
@@ -1379,11 +1697,23 @@ def auditoria():
                     continue
 
                 doc_tipo = sub['doc_tipo']
-                tem_doc = it.has_doc(doc_tipo)
+                # Verificar em AMBAS as fontes: DiariasDocumentoSei + diarias_movimentacao
+                tem_doc = it.has_doc(doc_tipo) or doc_tipo in tipos_mov
+
+                # Auto-preencher SCDP: se tem OB, SCDP já foi cumprido
+                if not tem_doc and tem_ob and doc_tipo in ('autorizacao_scdp', 'prestacao_scdp'):
+                    tem_doc = True
+
+                # Nota: para tipo 1 (Apenas Diárias), o sub-item 'autorizacao'
+                # nem é iterado (filtrado via condicional='passagens' no topo do loop).
+
                 docs_status[doc_tipo] = tem_doc
-                if not tem_doc:
+                if not tem_doc and not sub.get('opcional'):
                     faltando.append(sub['nome'])
 
+        # Quadro: considerar presente se tem dados estruturados OU doc SEI/movimentacao
+        if not tem_quadro:
+            tem_quadro = it.has_doc('quadro_orcamentario') or 'quadro_orcamentario' in tipos_mov
         if not tem_quadro:
             faltando.append('Quadro Orcamentario')
 
@@ -1404,25 +1734,21 @@ def auditoria():
             'qtd_faltando': len(faltando),
         })
 
-    # Filtros
-    filtro_etapa = request.args.getlist('filtro_etapa')
-    filtro_tipo = request.args.getlist('filtro_tipo')
-    filtro_pendencia = request.args.get('filtro_pendencia', '')
+    # Coletar todos os itens de pendencia distintos (para filtro)
+    todos_itens_faltando = sorted({item for r in resultados for item in r['faltando']})
 
-    if filtro_etapa:
-        filtro_etapa_int = [int(e) for e in filtro_etapa]
-        resultados = [r for r in resultados if r['itinerario'].etapa_atual_id in filtro_etapa_int]
-    if filtro_tipo:
-        filtro_tipo_int = [int(t) for t in filtro_tipo]
-        resultados = [r for r in resultados if r['itinerario'].tipo_itinerario in filtro_tipo_int]
+    # Filtros Python (pendência e faltando não são SQL-filtráveis)
     if filtro_pendencia == 'completos':
         resultados = [r for r in resultados if r['qtd_faltando'] == 0]
     elif filtro_pendencia == 'incompletos':
         resultados = [r for r in resultados if r['qtd_faltando'] > 0]
+    if filtro_faltando:
+        resultados = [r for r in resultados if any(f in r['faltando'] for f in filtro_faltando)]
 
     return render_template(
         'diarias/auditoria.html',
         resultados=resultados,
         contadores=contadores,
+        itens_faltando=todos_itens_faltando,
         etapas=etapas,
     )

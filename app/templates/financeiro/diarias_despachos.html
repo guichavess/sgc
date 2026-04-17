@@ -1,18 +1,18 @@
 {% extends "financeiro/base_financeiro.html" %}
-{% block title %}SGC - Diárias{% endblock %}
+{% block title %}SGC - Despachos e Autorizações{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h3 class="fw-bold text-dark mb-1"><i class="bi bi-airplane me-2"></i>Diárias</h3>
-        <p class="text-muted mb-0">Gerencie as solicitações de diárias despachadas para o financeiro.</p>
+        <h3 class="fw-bold text-dark mb-1"><i class="bi bi-send-check me-2"></i>Despachos e Autorizações</h3>
+        <p class="text-muted mb-0">Solicitações de diárias pendentes de despacho do Diretor DFIN.</p>
     </div>
 </div>
 
 {# Filtros — estilo administracao.html #}
 <div class="card mb-4 border-0 shadow-sm" style="overflow: visible; position: relative; z-index: 10;">
     <div class="card-body p-3" style="overflow: visible;">
-        <form method="get" action="{{ url_for('financeiro.diarias_lista') }}" id="filtro-form">
+        <form method="get" action="{{ url_for('financeiro.diarias_despachos') }}" id="filtro-form">
             <div class="row g-2 align-items-center">
                 <div class="col-auto">
                     <div class="input-group input-group-sm">
@@ -21,46 +21,6 @@
                                placeholder="Processo, solicitante..." value="{{ request.args.get('q', '') }}">
                     </div>
                 </div>
-
-                {# Dropdown Status NR #}
-                <div class="col-auto">
-                    <div class="dropdown">
-                        <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
-                                type="button" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
-                            <i class="bi bi-file-earmark-check me-1"></i>
-                            <span id="labelStatus">Status NR</span>
-                            <span class="badge bg-primary ms-1" id="badgeStatus" style="display: none;">0</span>
-                        </button>
-                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 240px; z-index: 1060;">
-                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
-                                <small class="text-muted fw-bold">Status da NR:</small>
-                                <a href="#" class="text-decoration-none small" onclick="limparSelecaoStatus(this); return false;">Limpar</a>
-                            </div>
-                            <div class="form-check item-filtro py-1">
-                                <input class="form-check-input filtro-check-status" type="checkbox" name="filtro_status"
-                                    value="pendente" id="status_pendente"
-                                    {% if 'pendente' in filtro_status %}checked{% endif %}
-                                    onchange="atualizarLabelStatus()">
-                                <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="status_pendente" style="cursor: pointer;">
-                                    <span><i class="bi bi-hourglass-split me-1 text-warning"></i> Pendente de NR</span>
-                                    <span class="badge bg-light text-muted border ms-2">{{ status_counts.get('pendente', 0) }}</span>
-                                </label>
-                            </div>
-                            <div class="form-check item-filtro py-1">
-                                <input class="form-check-input filtro-check-status" type="checkbox" name="filtro_status"
-                                    value="inserida" id="status_inserida"
-                                    {% if 'inserida' in filtro_status %}checked{% endif %}
-                                    onchange="atualizarLabelStatus()">
-                                <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="status_inserida" style="cursor: pointer;">
-                                    <span><i class="bi bi-check-circle me-1 text-success"></i> NR Inserida</span>
-                                    <span class="badge bg-light text-muted border ms-2">{{ status_counts.get('inserida', 0) }}</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {# Dropdown Tipo #}
                 <div class="col-auto">
                     <div class="dropdown">
                         <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
@@ -92,8 +52,6 @@
                         </div>
                     </div>
                 </div>
-
-                {# Dropdown Solicitação #}
                 <div class="col-auto">
                     <div class="dropdown">
                         <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
@@ -122,15 +80,14 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="col-auto">
                     <button type="submit" class="btn btn-primary btn-sm fw-bold" title="Filtrar">
                         <i class="bi bi-funnel me-1"></i>Filtrar
                     </button>
                 </div>
                 <div class="col-auto">
-                    {% if request.args.get('q') or filtro_status or filtro_tipos or filtro_solicitacao %}
-                    <a href="{{ url_for('financeiro.diarias_lista') }}" class="btn btn-outline-danger btn-sm" title="Limpar Filtros">
+                    {% if request.args.get('q') or filtro_tipos or filtro_solicitacao %}
+                    <a href="{{ url_for('financeiro.diarias_despachos') }}" class="btn btn-outline-danger btn-sm" title="Limpar Filtros">
                         <i class="bi bi-x-lg"></i>
                     </a>
                     {% endif %}
@@ -148,7 +105,7 @@
 <div class="card border-0 shadow-sm overflow-visible">
     <div class="card-header bg-white border-bottom py-3">
         <div class="d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 fw-bold">Solicitações</h5>
+            <h5 class="mb-0 fw-bold">Pendentes de Despacho</h5>
             <span class="badge bg-secondary">{{ pagination.total }} registro(s)</span>
         </div>
     </div>
@@ -164,17 +121,13 @@
                         <th>Pessoas</th>
                         <th>Viagem</th>
                         <th>Valor</th>
-                        <th>Status</th>
+                        <th class="text-center">Ação</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for it in itinerarios %}
-                    {% set tem_despacho = it.has_doc('despacho_dfin') %}
-                    {% set doc_nr = it.get_doc('nota_reserva') %}
-                    {% set nr_ok = doc_nr and doc_nr.codigo %}
                     <tr class="tr-clickable" onclick="window.location='{{ url_for('financeiro.diarias_detalhe', id=it['id']) }}'">
                         <td class="ps-4 fw-bold text-secondary">#{{ it['id'] }}</td>
-
                         <td>
                             {% if it.tipo_solicitacao %}
                                 {% if it.tipo_solicitacao.id == 1 %}
@@ -186,7 +139,6 @@
                                 {% endif %}
                             {% endif %}
                         </td>
-
                         <td>
                             {% if it.sei_protocolo %}
                                 <span class="fw-bold text-dark" style="font-size:0.85rem;">{{ it.sei_protocolo }}</span>
@@ -194,46 +146,31 @@
                                 <span class="text-muted">-</span>
                             {% endif %}
                         </td>
-
                         <td>
                             <small>{{ it.usuario_gerador.split('@')[0].replace('.', ' ').title() if it.usuario_gerador else '-' }}</small>
                         </td>
-
                         <td>
                             <span class="badge bg-light text-dark border" style="font-size:0.65rem;">
                                 {{ pessoas_count.get(it['id'], 0) }}
                             </span>
                         </td>
-
                         <td>
                             <small>{{ it.data_viagem.strftime('%d/%m/%Y') if it.data_viagem else '-' }}</small>
                         </td>
-
                         <td>
                             <span class="fw-bold" style="font-size:0.85rem;">{{ it.valor_total_formatado }}</span>
                         </td>
-
-                        <td>
-                            {% if nr_ok %}
-                                <span class="badge bg-success" style="font-size:0.65rem;">
-                                    <i class="bi bi-check-circle me-1"></i>NR {{ doc_nr.codigo }}
-                                </span>
-                            {% elif tem_despacho %}
-                                <span class="badge bg-info text-dark" style="font-size:0.65rem;">
-                                    <i class="bi bi-arrow-right-circle me-1"></i>Aguardando NR
-                                </span>
-                            {% else %}
-                                <span class="badge bg-warning text-dark" style="font-size:0.65rem;">
-                                    <i class="bi bi-hourglass-split me-1"></i>Aguardando Despacho
-                                </span>
-                            {% endif %}
+                        <td class="text-center" onclick="event.stopPropagation();">
+                            <button class="btn btn-sm btn-primary" onclick="despachar({{ it['id'] }}, this)">
+                                <i class="bi bi-send me-1"></i>Despachar
+                            </button>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
                         <td colspan="8" class="text-center py-5 text-muted">
-                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                            Nenhuma solicitação de diária encontrada.
+                            <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
+                            Nenhuma solicitação pendente de despacho.
                         </td>
                     </tr>
                     {% endfor %}
@@ -244,18 +181,37 @@
 </div>
 
 <script>
+async function despachar(id, btn) {
+    if (!confirm('Confirma o despacho desta solicitação para inserção de NR?')) return;
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    try {
+        const resp = await fetch(`/financeiro/diarias/${id}/despachar-dfin`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+        });
+        const data = await resp.json();
+        if (data.sucesso) {
+            // Remove a linha da tabela (não pertence mais à lista de pendentes)
+            const tr = btn.closest('tr');
+            tr.style.transition = 'opacity 0.3s';
+            tr.style.opacity = '0';
+            setTimeout(function() { tr.remove(); }, 300);
+            SGC.showToast('Despacho realizado: ' + (data.documento_formatado || ''), 'success');
+        } else {
+            alert(data.erro || 'Erro ao despachar.');
+            btn.disabled = false;
+            btn.innerHTML = orig;
+        }
+    } catch(e) {
+        alert('Erro de conexão.');
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+
 // ── Filtros dinâmicos ──
-function atualizarLabelStatus() {
-    var checks = document.querySelectorAll('.filtro-check-status:checked');
-    var label = document.getElementById('labelStatus');
-    var badge = document.getElementById('badgeStatus');
-    if (checks.length === 0) { label.textContent = 'Status NR'; badge.style.display = 'none'; }
-    else { label.textContent = checks.length === 1 ? '1 Selecionado' : checks.length + ' Selecionados'; badge.textContent = checks.length; badge.style.display = ''; }
-}
-function limparSelecaoStatus(link) {
-    document.querySelectorAll('.filtro-check-status').forEach(function(c) { c.checked = false; });
-    atualizarLabelStatus();
-}
 function atualizarLabelTipo() {
     var checks = document.querySelectorAll('.filtro-check-tipo:checked');
     var label = document.getElementById('labelTipos');
@@ -279,8 +235,8 @@ function limparSelecaoSolicitacao(link) {
     atualizarLabelSolicitacao();
 }
 
+// Inicializar labels ao carregar
 document.addEventListener('DOMContentLoaded', function() {
-    atualizarLabelStatus();
     atualizarLabelTipo();
     atualizarLabelSolicitacao();
 });
@@ -291,21 +247,21 @@ document.addEventListener('DOMContentLoaded', function() {
 <nav aria-label="Paginação" class="mt-4">
     <ul class="pagination justify-content-center">
         <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-            <a class="page-link" href="{{ url_for('financeiro.diarias_lista', page=pagination.prev_num, q=request.args.get('q', ''), filtro_status=filtro_status, filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) }}">
+            <a class="page-link" href="{{ url_for('financeiro.diarias_despachos', page=pagination.prev_num, q=request.args.get('q', ''), filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) }}">
                 <i class="bi bi-chevron-left"></i>
             </a>
         </li>
         {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
             {% if p %}
                 <li class="page-item {{ 'active' if p == pagination.page }}">
-                    <a class="page-link" href="{{ url_for('financeiro.diarias_lista', page=p, q=request.args.get('q', ''), filtro_status=filtro_status, filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) }}">{{ p }}</a>
+                    <a class="page-link" href="{{ url_for('financeiro.diarias_despachos', page=p, q=request.args.get('q', ''), filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) }}">{{ p }}</a>
                 </li>
             {% else %}
                 <li class="page-item disabled"><span class="page-link">...</span></li>
             {% endif %}
         {% endfor %}
         <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-            <a class="page-link" href="{{ url_for('financeiro.diarias_lista', page=pagination.next_num, q=request.args.get('q', ''), filtro_status=filtro_status, filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) }}">
+            <a class="page-link" href="{{ url_for('financeiro.diarias_despachos', page=pagination.next_num, q=request.args.get('q', ''), filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) }}">
                 <i class="bi bi-chevron-right"></i>
             </a>
         </li>

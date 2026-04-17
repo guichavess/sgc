@@ -117,6 +117,11 @@ class DiariasValorCargo(db.Model):
     tipo_itinerario_id = db.Column(db.Integer, db.ForeignKey('diarias_tipo_itinerario.id'), nullable=False)
     valor = db.Column(db.Numeric(10, 2), nullable=False)
 
+    # MED-06: Unique constraint para evitar valores duplicados por cargo+tipo
+    __table_args__ = (
+        db.UniqueConstraint('cargo_id', 'tipo_itinerario_id', name='uq_valor_cargo_tipo'),
+    )
+
     cargo = db.relationship('DiariasCargo', backref='valores', lazy='joined')
     tipo_itinerario = db.relationship('DiariasTipoItinerario', lazy='joined')
 
@@ -181,9 +186,9 @@ class DiariasItinerario(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     usuario_gerador = db.Column(db.String(100), nullable=False, index=True)
     tipo_solicitacao_id = db.Column(db.Integer, db.ForeignKey('diarias_tipo_solicitacao.id'), nullable=False)
-    qtd_diarias_solicitadas = db.Column(db.Float, nullable=False)
+    qtd_diarias_solicitadas = db.Column(db.Numeric(4, 1), nullable=False)  # MED-05: Numeric para precisão
     tipo_itinerario = db.Column(db.Integer, db.ForeignKey('diarias_tipo_itinerario.id'), nullable=False)
-    n_processo = db.Column(db.String(100))
+    n_processo = db.Column(db.String(100), index=True)  # MED-14: índice para buscas
     status_id = db.Column(db.Integer, db.ForeignKey('diarias_status_viagens.id'), nullable=False, default=1, index=True)
     data_solicitacao = db.Column(db.Date, nullable=False, default=date.today, index=True)
     data_viagem = db.Column(db.DateTime, nullable=False)
@@ -195,8 +200,9 @@ class DiariasItinerario(db.Model):
     valor_total = db.Column(db.Numeric(10, 2))
 
     # SEI Integration (identidade do processo - ficam aqui)
-    sei_protocolo = db.Column(db.String(50), nullable=True)         # Número formatado do processo SEI
+    sei_protocolo = db.Column(db.String(50), nullable=True, index=True)  # MED-14: índice para buscas/timeline
     sei_id_procedimento = db.Column(db.String(50), nullable=True)   # ID interno do procedimento SEI
+    unidade_geradora_id = db.Column(db.String(50), nullable=True)   # Unidade SEI onde o processo foi criado
 
     # Assinatura do Superintendente nas Requisições (antes do Secretário)
     superintendente_assinou = db.Column(db.Boolean, default=False, nullable=False)
@@ -306,26 +312,53 @@ class DiariasItinerario(db.Model):
         docs = self._load_docs()
         return docs.get(tipo)
 
-    def set_doc(self, tipo, sei_id=None, sei_formatado=None, codigo=None):
-        """Cria ou atualiza documento SEI."""
+    def set_doc(self, tipo, sei_id=None, sei_formatado=None, codigo=None, assinado=None):
+        """Cria ou atualiza documento SEI (idempotente).
+
+        Primeiro consulta o cache local; se não houver, consulta o banco
+        diretamente para evitar condição de corrida em duplo-clique
+        (cache per-instância não vê INSERT feito por outra requisição).
+        """
         doc = self.get_doc(tipo)
         if not doc:
-            doc = DiariasDocumentoSei(itinerario_id=self.id, tipo_documento=tipo)
-            db.session.add(doc)
-            self.documentos_sei.append(doc)
-            self._docs_cache[tipo] = doc
+            # Consulta defensiva ao DB — evita IntegrityError em concorrência
+            doc = DiariasDocumentoSei.query.filter_by(
+                itinerario_id=self.id, tipo_documento=tipo
+            ).first()
+            if doc:
+                # Já existe no banco; apenas atualiza o cache local
+                self._docs_cache[tipo] = doc
+            else:
+                doc = DiariasDocumentoSei(itinerario_id=self.id, tipo_documento=tipo)
+                db.session.add(doc)
+                self.documentos_sei.append(doc)
+                self._docs_cache[tipo] = doc
         if sei_id is not None:
             doc.sei_id = sei_id
         if sei_formatado is not None:
             doc.sei_formatado = sei_formatado
         if codigo is not None:
             doc.codigo = codigo
+        if assinado is not None:
+            doc.assinado = assinado
+        # Registra data de criação/atualização — usada pela timeline como
+        # fallback quando não há registro em DiariasMovimentacao (processos
+        # criados localmente ainda não sincronizados).
+        if doc.data_criacao is None:
+            doc.data_criacao = datetime.now()
         return doc
 
     def has_doc(self, tipo):
-        """Verifica se documento existe e tem sei_id preenchido."""
+        """Verifica se documento existe (por sei_id OU codigo).
+
+        Após o refactor de 1-doc-por-servidor (NR/NE/NL/PD/OB), o marcador
+        agregado em DiariasDocumentoSei pode ter apenas `codigo` preenchido
+        (sem `sei_id`), pois o sei_id real fica na tabela individual por
+        servidor. Aceitar `codigo` evita inconsistência entre timeline,
+        fluxo admin e fluxo financeiro.
+        """
         doc = self.get_doc(tipo)
-        return doc is not None and doc.sei_id is not None
+        return doc is not None and (doc.sei_id is not None or doc.codigo is not None)
 
     @property
     def valor_total_formatado(self):
@@ -349,6 +382,8 @@ class DiariasDocumentoSei(db.Model):
     sei_id = db.Column(db.String(50), nullable=True)
     sei_formatado = db.Column(db.String(50), nullable=True)
     codigo = db.Column(db.String(50), nullable=True)
+    assinado = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    data_criacao = db.Column(db.DateTime, nullable=True, default=datetime.now)
 
     def __repr__(self):
         return f'<DiariasDocumentoSei {self.tipo_documento} itinerario_id={self.itinerario_id}>'
@@ -375,6 +410,194 @@ class DiariasQuadroOrcamentario(db.Model):
 
     def __repr__(self):
         return f'<DiariasQuadroOrcamentario itinerario_id={self.itinerario_id}>'
+
+
+class DiariasNotaReserva(db.Model):
+    """Nota de Reserva vinculada a um servidor específico da solicitação.
+
+    Uma solicitação pode ter N servidores, e cada servidor precisa de sua
+    própria Nota de Reserva. Esta tabela substitui o uso de `DiariasDocumentoSei`
+    para NRs (que só permitia 1 por solicitação).
+    """
+    __tablename__ = 'diarias_notas_reserva'
+    __table_args__ = (
+        db.UniqueConstraint('itinerario_id', 'item_itinerario_id',
+                            name='uq_nr_itinerario_servidor'),
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    itinerario_id = db.Column(db.Integer,
+                              db.ForeignKey('diarias_itinerario.id', ondelete='CASCADE'),
+                              nullable=False, index=True)
+    item_itinerario_id = db.Column(db.Integer,
+                                   db.ForeignKey('diarias_itens_itinerario.id', ondelete='CASCADE'),
+                                   nullable=False, index=True)
+    codigo = db.Column(db.String(50), nullable=False)  # Ex: "2025NR00076"
+    sei_id = db.Column(db.String(50), nullable=True)
+    sei_formatado = db.Column(db.String(50), nullable=True)
+    valor = db.Column(db.Numeric(14, 2), nullable=True)
+    data_insercao = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+    # Relações
+    itinerario = db.relationship('DiariasItinerario', foreign_keys=[itinerario_id])
+    item_itinerario = db.relationship('DiariasItemItinerario', foreign_keys=[item_itinerario_id])
+
+    def __repr__(self):
+        return f'<DiariasNotaReserva {self.codigo} servidor={self.item_itinerario_id}>'
+
+
+class DiariasNotaEmpenho(db.Model):
+    """Nota de Empenho vinculada a um servidor específico da solicitação.
+
+    Mesmo padrão de DiariasNotaReserva: 1 NE por servidor. Substitui o uso
+    de DiariasDocumentoSei para NEs (que só permitia 1 por solicitação).
+    O marcador agregado em DiariasDocumentoSei continua sendo gravado para
+    compatibilidade com timeline/auditoria — mas só quando todos os
+    servidores já têm sua própria NE.
+    """
+    __tablename__ = 'diarias_notas_empenho'
+    __table_args__ = (
+        db.UniqueConstraint('itinerario_id', 'item_itinerario_id',
+                            name='uq_ne_itinerario_servidor'),
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    itinerario_id = db.Column(db.Integer,
+                              db.ForeignKey('diarias_itinerario.id', ondelete='CASCADE'),
+                              nullable=False, index=True)
+    item_itinerario_id = db.Column(db.Integer,
+                                   db.ForeignKey('diarias_itens_itinerario.id', ondelete='CASCADE'),
+                                   nullable=False, index=True)
+    codigo = db.Column(db.String(50), nullable=False)  # Ex: "210101-2026NE00456"
+    sei_id = db.Column(db.String(50), nullable=True)
+    sei_formatado = db.Column(db.String(50), nullable=True)
+    valor = db.Column(db.Numeric(14, 2), nullable=True)
+    data_insercao = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+    # Relações
+    itinerario = db.relationship('DiariasItinerario', foreign_keys=[itinerario_id])
+    item_itinerario = db.relationship('DiariasItemItinerario', foreign_keys=[item_itinerario_id])
+
+    def __repr__(self):
+        return f'<DiariasNotaEmpenho {self.codigo} servidor={self.item_itinerario_id}>'
+
+
+class DiariasNotaLiquidacao(db.Model):
+    """Nota de Liquidação vinculada a um servidor específico da solicitação.
+
+    Mesmo padrão de DiariasNotaReserva/DiariasNotaEmpenho: 1 NL por servidor.
+    """
+    __tablename__ = 'diarias_notas_liquidacao'
+    __table_args__ = (
+        db.UniqueConstraint('itinerario_id', 'item_itinerario_id',
+                            name='uq_nl_itinerario_servidor'),
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    itinerario_id = db.Column(db.Integer,
+                              db.ForeignKey('diarias_itinerario.id', ondelete='CASCADE'),
+                              nullable=False, index=True)
+    item_itinerario_id = db.Column(db.Integer,
+                                   db.ForeignKey('diarias_itens_itinerario.id', ondelete='CASCADE'),
+                                   nullable=False, index=True)
+    codigo = db.Column(db.String(50), nullable=False)  # Ex: "2026NL00123"
+    sei_id = db.Column(db.String(50), nullable=True)
+    sei_formatado = db.Column(db.String(50), nullable=True)
+    valor = db.Column(db.Numeric(14, 2), nullable=True)
+    data_insercao = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+    itinerario = db.relationship('DiariasItinerario', foreign_keys=[itinerario_id])
+    item_itinerario = db.relationship('DiariasItemItinerario', foreign_keys=[item_itinerario_id])
+
+    def __repr__(self):
+        return f'<DiariasNotaLiquidacao {self.codigo} servidor={self.item_itinerario_id}>'
+
+
+class DiariasProgramacaoDesembolso(db.Model):
+    """Programação de Desembolso (PD) vinculada a um servidor específico."""
+    __tablename__ = 'diarias_programacoes_desembolso'
+    __table_args__ = (
+        db.UniqueConstraint('itinerario_id', 'item_itinerario_id',
+                            name='uq_pd_itinerario_servidor'),
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    itinerario_id = db.Column(db.Integer,
+                              db.ForeignKey('diarias_itinerario.id', ondelete='CASCADE'),
+                              nullable=False, index=True)
+    item_itinerario_id = db.Column(db.Integer,
+                                   db.ForeignKey('diarias_itens_itinerario.id', ondelete='CASCADE'),
+                                   nullable=False, index=True)
+    codigo = db.Column(db.String(50), nullable=False)  # Ex: "2026PD00123"
+    sei_id = db.Column(db.String(50), nullable=True)
+    sei_formatado = db.Column(db.String(50), nullable=True)
+    valor = db.Column(db.Numeric(14, 2), nullable=True)
+    data_insercao = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+    itinerario = db.relationship('DiariasItinerario', foreign_keys=[itinerario_id])
+    item_itinerario = db.relationship('DiariasItemItinerario', foreign_keys=[item_itinerario_id])
+
+    def __repr__(self):
+        return f'<DiariasProgramacaoDesembolso {self.codigo} servidor={self.item_itinerario_id}>'
+
+
+class DiariasOrdemBancaria(db.Model):
+    """Ordem Bancária (OB) vinculada a um servidor específico."""
+    __tablename__ = 'diarias_ordens_bancarias'
+    __table_args__ = (
+        db.UniqueConstraint('itinerario_id', 'item_itinerario_id',
+                            name='uq_ob_itinerario_servidor'),
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    itinerario_id = db.Column(db.Integer,
+                              db.ForeignKey('diarias_itinerario.id', ondelete='CASCADE'),
+                              nullable=False, index=True)
+    item_itinerario_id = db.Column(db.Integer,
+                                   db.ForeignKey('diarias_itens_itinerario.id', ondelete='CASCADE'),
+                                   nullable=False, index=True)
+    codigo = db.Column(db.String(50), nullable=False)  # Ex: "2026OB00123"
+    sei_id = db.Column(db.String(50), nullable=True)
+    sei_formatado = db.Column(db.String(50), nullable=True)
+    valor = db.Column(db.Numeric(14, 2), nullable=True)
+    data_insercao = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+    itinerario = db.relationship('DiariasItinerario', foreign_keys=[itinerario_id])
+    item_itinerario = db.relationship('DiariasItemItinerario', foreign_keys=[item_itinerario_id])
+
+    def __repr__(self):
+        return f'<DiariasOrdemBancaria {self.codigo} servidor={self.item_itinerario_id}>'
+
+
+class DiariasNotaPatrimonial(db.Model):
+    """Nota Patrimonial (NP) vinculada a um servidor específico da solicitação.
+
+    Mesmo padrão 1-por-servidor de NR/NE/NL/PD/OB.
+    """
+    __tablename__ = 'diarias_notas_patrimoniais'
+    __table_args__ = (
+        db.UniqueConstraint('itinerario_id', 'item_itinerario_id',
+                            name='uq_np_itinerario_servidor'),
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    itinerario_id = db.Column(db.Integer,
+                              db.ForeignKey('diarias_itinerario.id', ondelete='CASCADE'),
+                              nullable=False, index=True)
+    item_itinerario_id = db.Column(db.Integer,
+                                   db.ForeignKey('diarias_itens_itinerario.id', ondelete='CASCADE'),
+                                   nullable=False, index=True)
+    codigo = db.Column(db.String(50), nullable=False)
+    sei_id = db.Column(db.String(50), nullable=True)
+    sei_formatado = db.Column(db.String(50), nullable=True)
+    valor = db.Column(db.Numeric(14, 2), nullable=True)
+    data_insercao = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+    itinerario = db.relationship('DiariasItinerario', foreign_keys=[itinerario_id])
+    item_itinerario = db.relationship('DiariasItemItinerario', foreign_keys=[item_itinerario_id])
+
+    def __repr__(self):
+        return f'<DiariasNotaPatrimonial {self.codigo} servidor={self.item_itinerario_id}>'
 
 
 class DiariasItemItinerario(db.Model):
@@ -476,7 +699,8 @@ class DiariasHistoricoMovimentacao(db.Model):
     # Relationships
     etapa_nova = db.relationship('DiariasEtapa', foreign_keys=[id_etapa_nova])
     itinerario_ref = db.relationship('DiariasItinerario', foreign_keys=[id_itinerario],
-                                     backref=db.backref('historico_movimentacoes', lazy='dynamic'))
+                                     backref=db.backref('historico_movimentacoes', lazy='dynamic',
+                                                        cascade='all, delete-orphan'))
 
     def __repr__(self):
         return f'<DiariasHistoricoMovimentacao {self.id} - Etapa {self.id_etapa_nova}>'

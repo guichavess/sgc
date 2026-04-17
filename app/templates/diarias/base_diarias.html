@@ -18,6 +18,14 @@
             <i class="bi bi-list-ul"></i> Minhas Solicitações
         </a>
     </li>
+    {% if current_user.is_superintendente or current_user.is_secretario %}
+    <li>
+        <a class="sidebar-link {{ 'active' if request.endpoint == 'diarias.aprovar_solicitacoes' }}"
+           href="{{ url_for('diarias.aprovar_solicitacoes') }}">
+            <i class="bi bi-check2-square"></i> Aprovar Solicitações
+        </a>
+    </li>
+    {% endif %}
     {% if current_user.is_admin or current_user.tem_permissao('diarias', 'aprovar') %}
     <li>
         <a class="sidebar-link {{ 'active' if request.endpoint in ('diarias.administracao', 'diarias.administracao_detalhe', 'diarias.agencias', 'diarias.cargos') }}"

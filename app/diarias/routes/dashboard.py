@@ -24,10 +24,15 @@ def _preload_estados_destino(itinerarios_items):
 @requires_permission('diarias.visualizar')
 def dashboard():
     """Lista as solicitações do usuário logado."""
+    # Filtros multi-select (mesma convencao da Administracao)
+    filtro_tipos = request.args.getlist('filtro_tipo', type=int)
+    filtro_status = request.args.getlist('filtro_status', type=int)
     filtros = {
-        'tipo_itinerario': request.args.get('tipo_itinerario', ''),
-        'status': request.args.get('status', ''),
-        'n_processo': request.args.get('n_processo', ''),
+        'tipo_itinerario': str(filtro_tipos[0]) if len(filtro_tipos) == 1 else '',
+        'tipos_itinerario': filtro_tipos,
+        'status': str(filtro_status[0]) if len(filtro_status) == 1 else '',
+        'status_list': filtro_status,
+        'n_processo': request.args.get('q', '') or request.args.get('n_processo', ''),
         'data_viagem': request.args.get('data_viagem', ''),
     }
     page = request.args.get('page', 1, type=int)
@@ -43,11 +48,23 @@ def dashboard():
     # Pré-carrega estados de destino em batch (§2.1 — evita N+1 via property)
     estados_destino = _preload_estados_destino(itinerarios.items)
 
+    # Pré-carrega paradas (viagens estaduais) para exibir roteiro empilhado
+    paradas_por_itin = {}
+    itin_ids = [it.id for it in itinerarios.items]
+    if itin_ids:
+        from app.models.diaria import DiariasParada
+        todas_paradas = DiariasParada.query.filter(
+            DiariasParada.itinerario_id.in_(itin_ids)
+        ).order_by(DiariasParada.id).all()
+        for p in todas_paradas:
+            paradas_por_itin.setdefault(p.itinerario_id, []).append(p)
+
     return render_template('diarias/dashboard.html',
         itinerarios=itinerarios,
         filtros=filtros,
         status_list=DiariaService.get_status_list(),
         estados_destino=estados_destino,
+        paradas_por_itin=paradas_por_itin,
     )
 
 

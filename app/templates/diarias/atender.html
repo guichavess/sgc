@@ -189,7 +189,7 @@
                                             {% else %}<span class="text-muted small">---</span>{% endif %}
                                         </td>
                                         <td class="text-end pe-3">
-                                            <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(item.valor_cargo).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+                                            <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(item.valor_cargo or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -332,7 +332,7 @@
 
                             {# Checkbox conexao #}
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="chk-conexao" onchange="toggleConexão()">
+                                <input class="form-check-input" type="checkbox" id="chk-conexao" onchange="toggleConexao()">
                                 <label class="form-check-label small" for="chk-conexao">Tem conexao (2o trecho)</label>
                             </div>
 
@@ -555,7 +555,7 @@
 
 {% block diarias_js %}
 <script>
-function toggleConexão() {
+function toggleConexao() {
     var chk = document.getElementById('chk-conexao');
     var fields = document.getElementById('conexao-fields');
     if (chk.checked) {

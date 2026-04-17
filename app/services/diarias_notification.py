@@ -22,11 +22,30 @@ class DiariasNotifier:
 
     @staticmethod
     def _resolver_solicitante_id(itinerario) -> Optional[int]:
-        """Retorna o ID do usuario solicitante (quem criou a diaria)."""
+        """Retorna o ID do usuario solicitante (quem criou a diaria).
+
+        NOT-01: Tenta sigla_login primeiro; se não encontrar, tenta busca parcial
+        (usuario_gerador pode conter email ou formato diferente de sigla_login).
+        """
         if not itinerario.usuario_gerador:
             return None
+        # Tentativa 1: match exato por sigla_login
         usuario = Usuario.query.filter_by(
             sigla_login=itinerario.usuario_gerador, ativo=True
+        ).first()
+        if usuario:
+            return usuario.id
+        # Tentativa 2: match por parte antes do '@' (caso usuario_gerador seja email)
+        login_part = itinerario.usuario_gerador.split('@')[0] if '@' in itinerario.usuario_gerador else None
+        if login_part:
+            usuario = Usuario.query.filter_by(
+                sigla_login=login_part, ativo=True
+            ).first()
+            if usuario:
+                return usuario.id
+        # Tentativa 3: match por email completo
+        usuario = Usuario.query.filter_by(
+            email=itinerario.usuario_gerador, ativo=True
         ).first()
         return usuario.id if usuario else None
 
@@ -44,7 +63,8 @@ class DiariasNotifier:
                 Usuario.ativo == True,
             ).all()
             return [u.id for u in usuarios]
-        except Exception:
+        except Exception as e:
+            current_app.logger.warning(f'[DIARIAS] Falha ao resolver usuarios financeiro: {e}')
             return []
 
     @staticmethod
@@ -61,7 +81,8 @@ class DiariasNotifier:
                 Usuario.ativo == True,
             ).all()
             return [u.id for u in usuarios]
-        except Exception:
+        except Exception as e:
+            current_app.logger.warning(f'[DIARIAS] Falha ao resolver usuarios diarias: {e}')
             return []
 
     @staticmethod
@@ -69,7 +90,8 @@ class DiariasNotifier:
         """Retorna IDs dos administradores."""
         try:
             return [u.id for u in Usuario.query.filter_by(is_admin=True, ativo=True).all()]
-        except Exception:
+        except Exception as e:
+            current_app.logger.warning(f'[DIARIAS] Falha ao resolver admins: {e}')
             return []
 
     @staticmethod
@@ -83,7 +105,8 @@ class DiariasNotifier:
                 )
             ).all()
             return [u.id for u in usuarios]
-        except Exception:
+        except Exception as e:
+            current_app.logger.warning(f'[DIARIAS] Falha ao resolver superintendente: {e}')
             return []
 
     @staticmethod
@@ -200,6 +223,31 @@ NOTIFICACAO_CONFIG = {
         'mensagem': 'O Superintendente assinou as requisicoes do processo {processo}. Aguardando autorizacao do Secretario.',
         'solicitante': False, 'financeiro': False, 'diarias': True, 'admins': True,
         'superintendente': False,
+        'url_fn': _url_financeiro,
+    },
+
+    # NOT-05: Autorização do Secretário — notifica solicitante e diárias
+    'autorizacao_secretario': {
+        'titulo': 'Solicitacao Autorizada pelo Secretario',
+        'mensagem': 'A solicitacao {processo} foi autorizada pelo Secretario e encaminhada ao DFIN.',
+        'solicitante': True, 'financeiro': True, 'diarias': True, 'admins': False,
+        'superintendente': False,
+        'url_fn': _url_cliente,
+    },
+
+    # NOT-05: Cotações cadastradas — notifica equipe diárias
+    'cotacoes_cadastradas': {
+        'titulo': 'Cotacoes de Voo Cadastradas',
+        'mensagem': 'As cotacoes de voo foram cadastradas para o processo {processo}. Aguardando escolha das passagens.',
+        'solicitante': False, 'financeiro': False, 'diarias': True, 'admins': False,
+        'url_fn': _url_financeiro,
+    },
+
+    # NOT-05: Escolha de passagem realizada — notifica solicitante e financeiro
+    'escolha_passagens': {
+        'titulo': 'Passagens Escolhidas',
+        'mensagem': 'As passagens foram escolhidas para o processo {processo}. Processo avancou para Analise.',
+        'solicitante': True, 'financeiro': True, 'diarias': False, 'admins': False,
         'url_fn': _url_financeiro,
     },
 

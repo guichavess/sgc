@@ -1,0 +1,139 @@
+{# Componente: Modal de coleta de setor (para usuários que já preencheram contato) #}
+{# Renderizado server-side: só aparece se precisa_preencher_setor = True #}
+
+{% if precisa_preencher_setor %}
+<div class="modal fade" id="modalSetor" data-bs-backdrop="static"
+     data-bs-keyboard="false" tabindex="-1" aria-labelledby="modalSetorLabel">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-primary text-white border-0">
+                <h5 class="modal-title" id="modalSetorLabel">
+                    <i class="bi bi-building me-2"></i>
+                    Vincular ao Setor
+                </h5>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-muted mb-4">
+                    Para prosseguir, informe a superintendência e o setor ao qual você está vinculado.
+                    Esta informação é necessária para os fluxos de aprovação e notificações.
+                </p>
+                <form id="formSetor" novalidate>
+                    {# Superintendência #}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="setor-superintendencia">
+                            Superintendência <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="setor-superintendencia" required>
+                            <option value="">-- Selecione --</option>
+                            {% for s in setor_superintendencias %}
+                            <option value="{{ s.id }}">{{ s.nome_exibicao }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">Selecione a superintendência.</div>
+                    </div>
+
+                    {# Setor específico #}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="setor-setor-id">
+                            Setor / Diretoria / Gerência <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="setor-setor-id" required disabled>
+                            <option value="">-- Selecione a superintendência primeiro --</option>
+                        </select>
+                        <div class="invalid-feedback">Selecione o setor.</div>
+                    </div>
+
+                    {# Mensagem de erro geral #}
+                    <div class="alert alert-danger d-none small" id="setor-erro-geral"></div>
+                </form>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-primary px-4" id="setor-salvar-btn"
+                        onclick="salvarSetor()">
+                    <i class="bi bi-check-lg me-1"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const selSup = document.getElementById('setor-superintendencia');
+    const selSetor = document.getElementById('setor-setor-id');
+
+    if (selSup && selSetor) {
+        selSup.addEventListener('change', async function() {
+            const supId = this.value;
+            selSetor.innerHTML = '<option value="">Carregando...</option>';
+            selSetor.disabled = true;
+
+            if (!supId) {
+                selSetor.innerHTML = '<option value="">-- Selecione a superintendência primeiro --</option>';
+                return;
+            }
+
+            try {
+                const resp = await fetch('/notificacoes/api/setores/' + supId);
+                const setores = await resp.json();
+                let html = '<option value="">-- Selecione o setor --</option>';
+                for (const s of setores) {
+                    const tipo = s.tipo ? ' [' + s.tipo.trim() + ']' : '';
+                    html += `<option value="${s.id}">${s.nome_exibicao}${tipo}</option>`;
+                }
+                selSetor.innerHTML = html;
+                selSetor.disabled = false;
+            } catch (e) {
+                selSetor.innerHTML = '<option value="">Erro ao carregar setores</option>';
+            }
+        });
+    }
+
+    const modalEl = document.getElementById('modalSetor');
+    if (modalEl) {
+        new bootstrap.Modal(modalEl).show();
+    }
+});
+
+async function salvarSetor() {
+    const selSup = document.getElementById('setor-superintendencia');
+    const selSetor = document.getElementById('setor-setor-id');
+    const erroGeral = document.getElementById('setor-erro-geral');
+
+    [selSup, selSetor].forEach(el => el.classList.remove('is-invalid'));
+    erroGeral.classList.add('d-none');
+
+    let valido = true;
+    if (!selSup.value) { selSup.classList.add('is-invalid'); valido = false; }
+    if (!selSetor.value) { selSetor.classList.add('is-invalid'); valido = false; }
+    if (!valido) return;
+
+    const btn = document.getElementById('setor-salvar-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Salvando...';
+
+    try {
+        const resp = await fetch('/notificacoes/api/salvar-setor', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({setor_id: parseInt(selSetor.value, 10)})
+        });
+        const data = await resp.json();
+
+        if (data.sucesso) {
+            bootstrap.Modal.getInstance(document.getElementById('modalSetor')).hide();
+            location.reload();
+        } else {
+            erroGeral.innerHTML = (data.erros || [data.msg || 'Erro ao salvar']).join('<br>');
+            erroGeral.classList.remove('d-none');
+        }
+    } catch (e) {
+        erroGeral.textContent = 'Erro de comunicação. Tente novamente.';
+        erroGeral.classList.remove('d-none');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Salvar';
+    }
+}
+</script>
+{% endif %}

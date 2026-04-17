@@ -100,7 +100,7 @@
     <div class="card-body">
         <form id="form-nova-diaria" action="{{ url_for('diarias.store') }}" method="post" enctype="multipart/form-data">
 
-            {# Tipo da Solicitação (primeiro campo, obrigatório) #}
+            {# Tipo da Solicitação e Unidade SEI #}
             <div class="row mb-3">
                 <div class="col-md-6">
                     <label for="tipo_solicitacao" class="form-label fw-semibold">Tipo da Solicitação <span class="text-danger">*</span></label>
@@ -109,6 +109,19 @@
                         {% for ts in tipos_solicitacao %}
                         <option value="{{ ts.id }}">{{ ts.nome }}</option>
                         {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="unidade_sei" class="form-label fw-semibold">Unidade SEI (criação do processo) <span class="text-danger">*</span></label>
+                    <select name="unidade_sei_id" id="unidade_sei" class="form-select" required>
+                        {% if unidades_sei|length == 1 %}
+                        <option value="{{ unidades_sei[0].unidade_sei_id }}" selected>{{ unidades_sei[0].sigla }}</option>
+                        {% else %}
+                        <option value="">Selecione a unidade</option>
+                        {% for u in unidades_sei %}
+                        <option value="{{ u.unidade_sei_id }}">{{ u.sigla }}</option>
+                        {% endfor %}
+                        {% endif %}
                     </select>
                 </div>
             </div>
@@ -1129,27 +1142,35 @@ document.addEventListener('DOMContentLoaded', function() {
     // ── Validação e Submit AJAX ──
     document.getElementById('form-nova-diaria').onsubmit = function(e) {
         e.preventDefault();
+        var form = document.getElementById('form-nova-diaria');
+        var submitBtn = form.querySelector('button[type="submit"]');
+
+        // Proteção contra duplo-clique
+        var release = SGC.guardSubmit(form, submitBtn);
+        if (!release) return false;
+
+        SGC.clearInvalid(form);
+        var valido = true;
 
         var pessoas = document.querySelectorAll('input[name="pessoas_cpf[]"]');
         if (pessoas.length === 0) {
-            alert('Adicione pelo menos uma pessoa à viagem.');
+            SGC.showToast('Adicione pelo menos uma pessoa à viagem.', 'danger');
+            release();
             return false;
         }
 
         var cargos = document.querySelectorAll('select[name="pessoas_cargo_id[]"]');
         for (var p = 0; p < cargos.length; p++) {
             if (!cargos[p].value) {
-                alert('Selecione o cargo para diária de todas as pessoas.');
-                cargos[p].focus();
-                return false;
+                SGC.markInvalid(cargos[p], 'Selecione o cargo para diária.');
+                valido = false;
             }
         }
 
         var tipo = tipoItinerarioHidden.value;
         if (!tipo) {
-            alert('Selecione o tipo de itinerário (Estadual, Nacional ou Internacional).');
-            tipoSelect.focus();
-            return false;
+            SGC.markInvalid(tipoSelect, 'Selecione o tipo de itinerário.');
+            valido = false;
         }
         if (tipo === '1') {
             var paradas = document.querySelectorAll('select[name="paradas[]"]');
@@ -1158,26 +1179,32 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (paradas[i].value) temParada = true;
             }
             if (!temParada) {
-                alert('Selecione pelo menos uma parada para viagem estadual.');
-                return false;
+                SGC.markInvalid(paradas[0], 'Selecione pelo menos uma parada.');
+                valido = false;
             }
         }
 
         if (tipo === '2' || tipo === '3') {
-            var estadoDestino = document.getElementById('estado_destino').value;
-            if (!estadoDestino) {
-                alert('Selecione o estado de destino para viagem ' + (tipo === '3' ? 'internacional.' : 'nacional.'));
-                return false;
+            var estadoDestinoEl = document.getElementById('estado_destino');
+            if (!estadoDestinoEl.value) {
+                SGC.markInvalid(estadoDestinoEl, 'Selecione o estado de destino.');
+                valido = false;
             }
+        }
+
+        if (!valido) {
+            // Scroll para o primeiro campo inválido
+            var primeiro = form.querySelector('.is-invalid');
+            if (primeiro) primeiro.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            release();
+            return false;
         }
 
         // ── Submit via AJAX com feedback visual ──
         showLoading();
 
-        var form = document.getElementById('form-nova-diaria');
         var formData = new FormData(form);
 
-        // Step 1: Salvando
         setTimeout(function() {
             loadingDetail.textContent = 'Registrando itinerario e pessoas...';
         }, 400);
@@ -1212,11 +1239,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             } else {
                 showError(data.error || 'Erro desconhecido.');
+                release();
             }
         })
         .catch(function(err) {
-            console.error('[Diárias] Erro no submit:', err);
             showError('Erro de conexão. Verifique sua internet e tente novamente.');
+            release();
         });
 
         return false;

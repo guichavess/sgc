@@ -86,6 +86,16 @@ def editar_usuario(usuario_id):
                 permissoes=permissoes
             )
 
+            # Cargo de gestão e setor vinculado
+            usuario.cargo_gestao = request.form.get('cargo_gestao') or None
+            usuario.setor_vinculado = request.form.get('setor_vinculado', '').strip() or None
+
+            # Vinculação estruturada ao setor
+            setor_id_raw = request.form.get('setor_id', '').strip()
+            usuario.setor_id = int(setor_id_raw) if setor_id_raw else None
+
+            db.session.commit()
+
             # Salva preferencias de notificacao
             _salvar_preferencias_notificacao(usuario_id, request.form, db)
 
@@ -101,6 +111,29 @@ def editar_usuario(usuario_id):
     # Carregar tipos de notificacao e preferencias do usuario
     notif_tipos = _carregar_preferencias_notificacao(usuario_id)
 
+    # Superintendências (nível 8) + Gabinete (id=96) como opção especial
+    from app.models.setor import Setor, TIPO_ENTIDADE_SUPERINTENDENCIA, ID_GABINETE
+    superintendencias = Setor.query.filter(
+        db.or_(
+            Setor.tipo_entidade_id == TIPO_ENTIDADE_SUPERINTENDENCIA,
+            Setor.id == ID_GABINETE,
+        ),
+        Setor.ativo == True,  # noqa: E712
+    ).order_by(Setor.nome).all()
+
+    # Setores do usuário atual (para pré-preencher dropdown se já tem setor)
+    setores_atuais = []
+    superintendencia_atual_id = None
+    if usuario.setor_id and usuario.setor:
+        superintendencia_atual_id = usuario.setor.superintendencia_id or usuario.setor.id
+        setores_atuais = Setor.query.filter(
+            db.or_(
+                Setor.id == superintendencia_atual_id,
+                Setor.superintendencia_id == superintendencia_atual_id,
+            ),
+            Setor.ativo == True,  # noqa: E712
+        ).order_by(Setor.tipo_entidade_id, Setor.nome).all()
+
     return render_template(
         'usuarios/editar_usuario.html',
         usuario=usuario,
@@ -108,6 +141,9 @@ def editar_usuario(usuario_id):
         acoes=acoes,
         permissoes_atuais=permissoes_atuais,
         notif_tipos=notif_tipos,
+        superintendencias=superintendencias,
+        setores_atuais=setores_atuais,
+        superintendencia_atual_id=superintendencia_atual_id,
     )
 
 

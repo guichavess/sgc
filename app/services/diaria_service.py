@@ -164,6 +164,7 @@ class DiariaService:
             estado_origem=estado_origem,
             estado_destino=estado_destino,
             objetivo=dados.get('objetivo'),
+            unidade_geradora_id=dados.get('unidade_sei_id'),
         )
         db.session.add(itinerario)
         db.session.flush()  # Para obter o ID
@@ -237,6 +238,13 @@ class DiariaService:
         if not itinerario:
             raise ValueError('Itinerário não encontrado.')
 
+        # MED-09: Verifica se já foi processado (impede re-aprovação/re-rejeição)
+        if itinerario.status_id != 1:  # 1 = Gerado (status inicial)
+            raise ValueError(
+                f'Itinerário já foi processado (status atual: {itinerario.status_id}). '
+                f'Não é possível alterar.'
+            )
+
         conclusao = int(conclusao)
 
         # Para rejeição/cancelamento, apenas atualiza status
@@ -271,17 +279,28 @@ class DiariaService:
 
     @staticmethod
     def listar_itinerarios(usuario_cpf=None, filtros=None, page=1, per_page=20):
-        """Lista itinerários com filtros e paginação."""
+        """Lista itinerários com filtros e paginação.
+
+        Suporta filtro simples (tipo_itinerario='1') E multi-select
+        (tipos_itinerario=[1,2]) vindos dos dropdowns com checkboxes.
+        """
         query = DiariasItinerario.query
 
         if usuario_cpf:
             query = query.filter_by(usuario_gerador=usuario_cpf)
 
         if filtros:
-            if filtros.get('tipo_itinerario'):
+            # Multi-select (lista) tem prioridade sobre select simples
+            if filtros.get('tipos_itinerario'):
+                query = query.filter(DiariasItinerario.tipo_itinerario.in_(filtros['tipos_itinerario']))
+            elif filtros.get('tipo_itinerario'):
                 query = query.filter_by(tipo_itinerario=int(filtros['tipo_itinerario']))
-            if filtros.get('status'):
+
+            if filtros.get('status_list'):
+                query = query.filter(DiariasItinerario.status_id.in_(filtros['status_list']))
+            elif filtros.get('status'):
                 query = query.filter_by(status_id=int(filtros['status']))
+
             if filtros.get('n_processo'):
                 query = query.filter(DiariasItinerario.n_processo.ilike(f"%{filtros['n_processo']}%"))
             if filtros.get('data_viagem'):
@@ -424,7 +443,12 @@ class DiariaService:
         """
         itinerario = DiariasItinerario.query.get(id_itinerario)
         if not itinerario:
-            return None
+            # MED-10: Log e raise ao invés de retorno silencioso
+            from flask import current_app
+            current_app.logger.error(
+                f'[DIARIAS] registrar_movimentacao: itinerário {id_itinerario} não encontrado.'
+            )
+            raise ValueError(f'Itinerário {id_itinerario} não encontrado.')
 
         etapa_anterior_id = itinerario.etapa_atual_id
 
@@ -486,18 +510,21 @@ class DiariaService:
         docs_por_tipo = {}  # doc_tipo → lista de {data, link_acesso, doc_formatado, serie_nome}
 
         if protocolo:
+            # PERF-05: order_by para resultados determinísticos
             movs = DiariasMovimentacao.query.filter_by(
                 protocolo_procedimento=protocolo
-            ).all()
+            ).order_by(DiariasMovimentacao.id_documento).all()
 
             for mov in movs:
                 id_serie_str = str(mov.id_serie) if mov.id_serie else ''
                 tipo_doc = SERIE_TIPO_DOCUMENTO_MAP.get(id_serie_str)
 
                 # Refinamento: IdSerie 264 (Documento Externo) pode ser prestação SCDP
+                # Regra: campo 'numero' contém "PRESTAÇÃO SCDP"
                 if id_serie_str == '264':
-                    texto_ref = ((mov.descricao or '') + ' ' + (mov.numero or '')).lower()
-                    if any(kw in texto_ref for kw in ('scdp', 'prestação', 'prestacao')):
+                    numero_upper = (mov.numero or '').upper()
+                    tem_prestacao = 'PRESTAÇÃO' in numero_upper or 'PRESTACAO' in numero_upper
+                    if tem_prestacao and 'SCDP' in numero_upper:
                         tipo_doc = 'prestacao_scdp'
 
                 if not tipo_doc:
@@ -530,6 +557,102 @@ class DiariaService:
                     key=lambda d: d['data'] or datetime.min
                 )
 
+        # 4b. Complementar docs_por_tipo com DiariasDocumentoSei
+        #     para cobrir documentos que não estão na diarias_movimentacao
+        #     (ex: docs adicionados ao SEI após a última sincronização ou
+        #     processos criados localmente que ainda não foram sincronizados
+        #     via scan do SEI). Usa `data_criacao` como data do sub-item.
+        #     Aceita também docs com apenas `codigo` preenchido (ex: 'nota_reserva'
+        #     agregado — sei_id real fica em DiariasNotaReserva, uma por servidor).
+        for doc_sei in itinerario.documentos_sei:
+            if (doc_sei.sei_id or doc_sei.codigo) and doc_sei.tipo_documento:
+                tipo_doc = doc_sei.tipo_documento
+                if tipo_doc not in docs_por_tipo:
+                    sei_id_proc = itinerario.sei_id_procedimento or ''
+                    link = (
+                        f'https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar'
+                        f'&id_procedimento={sei_id_proc}'
+                    ) if sei_id_proc else ''
+                    docs_por_tipo[tipo_doc] = [{
+                        'data': doc_sei.data_criacao,
+                        'data_str': doc_sei.data_criacao.strftime('%d/%m/%Y') if doc_sei.data_criacao else '',
+                        'link_acesso': link,
+                        'doc_formatado': doc_sei.sei_formatado or doc_sei.codigo or '',
+                        'serie_nome': tipo_doc,
+                    }]
+                elif doc_sei.data_criacao and not docs_por_tipo[tipo_doc][0].get('data'):
+                    # Documento já existe em docs_por_tipo (via mov) mas sem data —
+                    # preenche com data_criacao local.
+                    docs_por_tipo[tipo_doc][0]['data'] = doc_sei.data_criacao
+                    docs_por_tipo[tipo_doc][0]['data_str'] = doc_sei.data_criacao.strftime('%d/%m/%Y')
+
+        # 4c. Fallback específico para NR/NE: se o marcador agregado ainda não
+        #     está em docs_por_tipo mas há registros na tabela por-servidor
+        #     (DiariasNotaReserva / DiariasNotaEmpenho), popula. Isso cobre
+        #     o caso em que o código foi salvo apenas na tabela individual.
+        if 'nota_reserva' not in docs_por_tipo:
+            from app.models.diaria import DiariasNotaReserva
+            total_serv = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario.id).count()
+            nrs_list = DiariasNotaReserva.query.filter_by(itinerario_id=itinerario.id).all()
+            if total_serv > 0 and len(nrs_list) >= total_serv:
+                sei_id_proc = itinerario.sei_id_procedimento or ''
+                link = (
+                    f'https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar'
+                    f'&id_procedimento={sei_id_proc}'
+                ) if sei_id_proc else ''
+                primeira = nrs_list[0]
+                # Data mais antiga de inserção entre todas as NRs do processo
+                data_nr = min((n.data_insercao for n in nrs_list if n.data_insercao), default=None)
+                docs_por_tipo['nota_reserva'] = [{
+                    'data': data_nr,
+                    'data_str': data_nr.strftime('%d/%m/%Y') if data_nr else '',
+                    'link_acesso': link,
+                    'doc_formatado': primeira.sei_formatado or primeira.codigo or '',
+                    'serie_nome': 'nota_reserva',
+                }]
+
+        # Fallback NP (1 por servidor em DiariasNotaPatrimonial).
+        if 'np' not in docs_por_tipo:
+            from app.models.diaria import DiariasNotaPatrimonial
+            total_serv_np = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario.id).count()
+            nps_list = DiariasNotaPatrimonial.query.filter_by(itinerario_id=itinerario.id).all()
+            if total_serv_np > 0 and len(nps_list) >= total_serv_np:
+                sei_id_proc = itinerario.sei_id_procedimento or ''
+                link = (
+                    f'https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar'
+                    f'&id_procedimento={sei_id_proc}'
+                ) if sei_id_proc else ''
+                primeira_np = nps_list[0]
+                data_np = min((n.data_insercao for n in nps_list if n.data_insercao), default=None)
+                docs_por_tipo['np'] = [{
+                    'data': data_np,
+                    'data_str': data_np.strftime('%d/%m/%Y') if data_np else '',
+                    'link_acesso': link,
+                    'doc_formatado': primeira_np.sei_formatado or primeira_np.codigo or '',
+                    'serie_nome': 'np',
+                }]
+
+        # Mesmo padrão para NE (1 por servidor em DiariasNotaEmpenho).
+        if 'nota_empenho' not in docs_por_tipo:
+            from app.models.diaria import DiariasNotaEmpenho
+            total_serv = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario.id).count()
+            nes_list = DiariasNotaEmpenho.query.filter_by(itinerario_id=itinerario.id).all()
+            if total_serv > 0 and len(nes_list) >= total_serv:
+                sei_id_proc = itinerario.sei_id_procedimento or ''
+                link = (
+                    f'https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar'
+                    f'&id_procedimento={sei_id_proc}'
+                ) if sei_id_proc else ''
+                primeira_ne = nes_list[0]
+                data_ne = min((n.data_insercao for n in nes_list if n.data_insercao), default=None)
+                docs_por_tipo['nota_empenho'] = [{
+                    'data': data_ne,
+                    'data_str': data_ne.strftime('%d/%m/%Y') if data_ne else '',
+                    'link_acesso': link,
+                    'doc_formatado': primeira_ne.sei_formatado or primeira_ne.codigo or '',
+                    'serie_nome': 'nota_empenho',
+                }]
+
         # 5. Monta índice invertido: doc_tipo → etapa_id (para calcular datas por etapa)
         doc_tipo_para_etapa = {}
         for etapa_id, subs in DIARIAS_SUBITENS.items():
@@ -558,27 +681,37 @@ class DiariaService:
         timeline = []
         data_anterior = None
 
+        def _todos_subitens_cumpridos(etapa_id):
+            """Retorna True se todos os sub-itens OBRIGATÓRIOS da etapa
+            estão satisfeitos. Ignora sub-itens opcionais e condicionais
+            que não se aplicam (ex: 'passagens' quando tipo=1).
+            """
+            subitens_cfg = DIARIAS_SUBITENS.get(etapa_id, [])
+            if not subitens_cfg:
+                return True  # sem sub-itens configurados — considera completa
+            for s in subitens_cfg:
+                if s.get('opcional'):
+                    continue
+                cond = s.get('condicional')
+                if cond == 'passagens' and itinerario.tipo_solicitacao_id not in TIPOS_COM_PASSAGENS:
+                    continue
+                if not docs_por_tipo.get(s['doc_tipo']):
+                    return False
+            return True
+
         for etapa in todas_etapas:
             datas_etapa = etapa_datas.get(etapa.id)
             data_inicio = datas_etapa['inicio'] if datas_etapa else None
             data_fim = datas_etapa['fim'] if datas_etapa else None
 
-            concluida = etapa.ordem < etapa_atual_ordem
-
-            # Última etapa (Prestação de Contas): concluída se todos os subitens têm docs
-            if not concluida and etapa.id == itinerario.etapa_atual_id:
-                subitens_cfg = DIARIAS_SUBITENS.get(etapa.id, [])
-                if subitens_cfg:
-                    todos_concluidos = all(
-                        docs_por_tipo.get(s['doc_tipo'])
-                        for s in subitens_cfg
-                        if not s.get('condicional') or (
-                            s.get('condicional') == 'passagens'
-                            and itinerario.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
-                        )
-                    )
-                    if todos_concluidos:
-                        concluida = True
+            # DEFESA: etapa só é marcada concluída se TODOS os sub-itens obrigatórios
+            # estão satisfeitos. A ordem sozinha não basta — se por algum motivo
+            # (avanço indevido, intervenção manual, bug futuro) a etapa_atual_id pular
+            # uma etapa sem finalizar seus sub-itens, a timeline vai mostrar a etapa
+            # anterior como NÃO concluída (círculo vazio) em vez de mascarar.
+            etapa_ordem_anterior_ou_igual = etapa.ordem <= etapa_atual_ordem
+            subitens_ok = _todos_subitens_cumpridos(etapa.id)
+            concluida = etapa_ordem_anterior_ou_igual and subitens_ok
 
             # Tempo decorrido entre etapas
             tempo_decorrido = None
@@ -599,6 +732,7 @@ class DiariaService:
 
             # Sub-itens: só para etapas concluídas ou a atual
             subitens = []
+            tem_ob = itinerario.has_doc('ob')
             if concluida or atual:
                 config_subitens = DIARIAS_SUBITENS.get(etapa.id, [])
                 for sub_cfg in config_subitens:
@@ -606,9 +740,22 @@ class DiariaService:
                         continue
 
                     docs_lista = docs_por_tipo.get(sub_cfg['doc_tipo'], [])
-                    # Pega o primeiro documento encontrado para este tipo
                     doc_info = docs_lista[0] if docs_lista else None
                     sub_concluido = doc_info is not None
+
+                    # Auto-preencher autorizacao SCDP: se tem OB, a autorizacao
+                    # ja foi cumprida (e uma pre-condicao do pagamento).
+                    # NAO inclui 'prestacao_scdp' — esse e um documento pos-viagem
+                    # (comprovante de prestacao no SCDP) que o servidor envia depois.
+                    if not sub_concluido and tem_ob and sub_cfg['doc_tipo'] == 'autorizacao_scdp':
+                        sub_concluido = True
+
+                    # Nota: para tipo 1 (Apenas Diárias), o sub-item 'autorizacao'
+                    # nem aparece (filtrado via condicional='passagens' em DIARIAS_SUBITENS).
+
+                    # Opcional: não exibir na timeline se não tem documento
+                    if not sub_concluido and sub_cfg.get('opcional'):
+                        continue
 
                     subitens.append({
                         'id': sub_cfg['id'],
@@ -649,7 +796,15 @@ class DiariaService:
         return DiariasStatusViagem.query.order_by(DiariasStatusViagem.id).all()
 
     @staticmethod
-    def get_cargos():
+    def get_cargos(apenas_com_valor=False):
+        """Retorna cargos. Se apenas_com_valor=True, filtra apenas os que têm valor cadastrado."""
+        if apenas_com_valor:
+            return (DiariasCargo.query
+                    .filter(DiariasCargo.id.in_(
+                        db.session.query(DiariasValorCargo.cargo_id).distinct()
+                    ))
+                    .order_by(DiariasCargo.nome)
+                    .all())
         return DiariasCargo.query.order_by(DiariasCargo.nome).all()
 
     @staticmethod

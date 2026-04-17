@@ -72,13 +72,16 @@ CAIXA_CCDP = "110008607"         # SEAD-PI/SGACG/DFIN/GEO/CCDP
 CAIXA_DFIN_APOIO = "110009066"   # SEAD-PI/GAB/SGACG/DFIN/APOIO
 CAIXA_GEO = "110006439"          # SEAD-PI/GAB/SGACG/DFIN/GEO
 CAIXA_DFIN = "110006438"         # SEAD-PI/GAB/SGACG/DFIN
+CAIXA_GPO = "110006440"          # SEAD-PI/GAB/SGACG/DFIN/GPO
 
 
 def usuario_tem_caixa(caixa_id):
     """Verifica se o usuário logado tem acesso a uma caixa/unidade SEI específica.
 
-    Consulta session['unidades'] (populada no login) para verificar se o ID
-    da caixa está na lista de unidades do usuário.
+    Consulta primeiro a tabela usuario_unidades_sei (banco) e faz fallback
+    para session['unidades'] se o banco não tiver registros.
+
+    Admins sempre retornam True.
 
     Args:
         caixa_id: ID string da unidade SEI (ex: '110006213')
@@ -86,5 +89,19 @@ def usuario_tem_caixa(caixa_id):
     Returns:
         True se o usuário tem acesso à caixa, False caso contrário.
     """
+    from flask_login import current_user
+    if current_user.is_admin:
+        return True
+
+    # Consulta banco (fonte primária — sincronizado no login)
+    from app.models.usuario import UsuarioUnidadeSei
+    tem = UsuarioUnidadeSei.query.filter_by(
+        usuario_id=current_user.id,
+        unidade_sei_id=str(caixa_id),
+    ).first()
+    if tem:
+        return True
+
+    # Fallback: sessão (caso tabela ainda não tenha sido populada)
     unidades = session.get('unidades', [])
     return any(str(u.get('id', '')) == str(caixa_id) for u in unidades)

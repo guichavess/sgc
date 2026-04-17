@@ -114,3 +114,8 @@ def api_salvar_contato():
 def api_atualizar_contato():
     """Atualiza dados de contato (reutiliza mesma logica)."""
     return api_salvar_contato()
+
+
+# Endpoints de setor (api_setores_por_superintendencia, api_salvar_setor) foram
+# removidos: a superintendência do usuário agora é derivada automaticamente da
+# Sigla SEI no login. Ver app/utils/unidade_sei.py e app/auth/routes.py.

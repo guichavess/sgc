@@ -1,0 +1,540 @@
+{# Partial: Stepper/Carousel de acoes em cadeia do fluxo de diarias.
+   Estilo identico ao financeiro/diarias_detalhe.html.
+   Espera variaveis: itinerario, cotacoes_voos, agencias, cargos, naturezas, pode_editar, timeline_data #}
+
+{# ── Variaveis de estado ── #}
+{% set doc_nr = itinerario.get_doc('nota_reserva') %}
+{% set doc_autorizacao = itinerario.get_doc('autorizacao') %}
+{% set doc_desp_sga = itinerario.get_doc('despacho_sga') %}
+{% set doc_analise = itinerario.get_doc('analise_pagamento') %}
+{% set doc_relatorio = itinerario.get_doc('relatorio_viagem') %}
+{% set doc_np = itinerario.get_doc('np') %}
+{% set doc_prestacao_scdp = itinerario.get_doc('prestacao_scdp') %}
+{% set doc_desp_geo_quadro = itinerario.get_doc('despacho_geo_quadro') %}
+{% set quadro = itinerario.quadro_orcamentario %}
+{% set tem_passagens = itinerario.tipo_solicitacao_id in [2, 3] %}
+{% set escolha_feita = itinerario.escolha_voo_ida_id or itinerario.escolha_sei_opcoes %}
+
+{# ── Definir passos ── #}
+{# Autorização considerada concluída quando:
+   - Existe doc 574 (SEAD_AUTORIZAÇÃO_DO_SECRETÁRIO) assinado (tipos 2 e 3); OU
+   - Tipo 1 (Apenas Diárias) com Superintendente já assinado E etapa avançada
+     (a autorização ocorre via dupla assinatura na Requisição, sem doc 574). #}
+{% set apenas_diarias = itinerario.tipo_solicitacao_id == 1 %}
+{% set autorizacao_ok = (doc_autorizacao and doc_autorizacao.sei_id)
+    or (apenas_diarias and itinerario.superintendente_assinou and itinerario.etapa_atual_id != 1) %}
+{% set cotacoes_ok = escolha_feita %}
+{% set nr_ok = doc_nr and doc_nr.codigo and quadro and quadro.ug %}
+{% set sga_ok = doc_desp_sga and doc_desp_sga.sei_id %}
+{% set nci_ok = doc_analise and doc_analise.sei_id %}
+{% set prestacao_ok = doc_relatorio and doc_relatorio.sei_id %}
+
+{# Construir lista de passos — 6 etapas #}
+{% set analise1_ok = nr_ok and quadro and quadro.ug %}
+{% set analise2_ok = nci_ok %}
+{% set steps = [
+    {'num': 1, 'icon': 'bi-shield-check', 'label': 'Autorização', 'done': autorizacao_ok},
+    {'num': 2, 'icon': 'bi-receipt', 'label': 'Análise 1ª Parte', 'done': analise1_ok},
+] %}
+{% if tem_passagens %}
+{% set steps = steps + [{'num': 3, 'icon': 'bi-airplane', 'label': 'Cotações e Voo', 'done': cotacoes_ok}] %}
+{% endif %}
+{% set p_next = steps|length + 1 %}
+{% set steps = steps + [
+    {'num': p_next, 'icon': 'bi-clipboard-check', 'label': 'Análise 2ª Parte', 'done': analise2_ok},
+    {'num': p_next + 1, 'icon': 'bi-cash-stack', 'label': 'Concessão', 'done': itinerario.has_doc('ob')},
+    {'num': p_next + 2, 'icon': 'bi-journal-check', 'label': 'Prestação de Contas', 'done': prestacao_ok},
+] %}
+
+{# Calcular passo ativo e progresso #}
+{% set ns = namespace(passo_ativo=0, passos_done=0) %}
+{% for s in steps %}
+    {% if s.done %}{% set ns.passos_done = ns.passos_done + 1 %}{% endif %}
+    {% if not s.done and ns.passo_ativo == 0 %}{% set ns.passo_ativo = s.num %}{% endif %}
+{% endfor %}
+{% if ns.passo_ativo == 0 %}{% set ns.passo_ativo = steps[-1].num %}{% endif %}
+{% set total_passos = steps|length %}
+{% set pct_done = ((ns.passos_done / total_passos) * 100)|int if total_passos > 0 else 0 %}
+
+<style>
+    .fluxo-stepper { position: relative; }
+    .fluxo-steps-bar {
+        display: flex; align-items: flex-start; overflow-x: auto;
+        padding: 16px 8px 8px; gap: 0;
+        scrollbar-width: thin; scrollbar-color: #dee2e6 transparent;
+    }
+    .fluxo-steps-bar::-webkit-scrollbar { height: 4px; }
+    .fluxo-steps-bar::-webkit-scrollbar-thumb { background: #dee2e6; border-radius: 4px; }
+    .fluxo-step-item {
+        display: flex; flex-direction: column; align-items: center;
+        flex: 1 1 0; min-width: 90px; position: relative;
+        cursor: pointer; padding: 0 4px; transition: opacity 0.15s;
+    }
+    .fluxo-step-item.fs-locked { opacity: 0.45; cursor: default; }
+    .fluxo-step-item:hover:not(.fs-locked) { opacity: 0.85; }
+    .fs-circle {
+        width: 34px; height: 34px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.72rem; font-weight: 700;
+        border: 2.5px solid #dee2e6; background: #fff; color: #adb5bd;
+        position: relative; z-index: 3; transition: all 0.25s ease; flex-shrink: 0;
+    }
+    .fs-done .fs-circle { background: #198754; border-color: #198754; color: #fff; box-shadow: 0 2px 8px rgba(25,135,84,0.3); }
+    .fs-active .fs-circle { background: #0d6efd; border-color: #0d6efd; color: #fff; box-shadow: 0 0 0 4px rgba(13,110,253,0.18); transform: scale(1.1); }
+    .fluxo-step-item:not(:first-child)::before {
+        content: ''; position: absolute; top: 17px;
+        left: calc(-50% + 17px); width: calc(100% - 34px);
+        height: 2.5px; background: #dee2e6; z-index: 1;
+    }
+    .fluxo-step-item.fs-done:not(:first-child)::before,
+    .fluxo-step-item.fs-active:not(:first-child)::before { background: #198754; }
+    .fs-label {
+        margin-top: 6px; font-size: 0.65rem; font-weight: 600;
+        color: #6c757d; text-align: center; line-height: 1.2;
+        max-width: 90px; word-wrap: break-word;
+    }
+    .fs-done .fs-label { color: #198754; }
+    .fs-active .fs-label { color: #0d6efd; font-weight: 700; }
+    .fs-locked .fs-label { color: #adb5bd; }
+    .fluxo-panel { display: none; padding: 20px 16px; animation: fluxoFadeIn 0.3s ease; }
+    .fluxo-panel.active { display: block; }
+    @keyframes fluxoFadeIn { from { opacity:0; transform:translateX(12px); } to { opacity:1; transform:translateX(0); } }
+    .fluxo-panel-header {
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid #e9ecef;
+    }
+    .fluxo-panel-header .fp-icon {
+        width: 36px; height: 36px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.85rem; flex-shrink: 0;
+    }
+    .fluxo-panel-header .fp-icon.done { background: #d1e7dd; color: #0f5132; }
+    .fluxo-panel-header .fp-icon.active { background: #cfe2ff; color: #084298; }
+    .fluxo-panel-header .fp-icon.locked { background: #e9ecef; color: #adb5bd; }
+    .fluxo-panel-header .fp-title { font-weight: 700; font-size: 0.9rem; }
+    .fluxo-nav {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 12px 16px; border-top: 1px solid #e9ecef;
+        background: #f8f9fa; border-radius: 0 0 0.375rem 0.375rem;
+    }
+    .fluxo-nav .btn { font-size: 0.78rem; }
+    .fluxo-nav .fluxo-counter { font-size: 0.78rem; font-weight: 600; color: #6c757d; }
+</style>
+
+<div class="card shadow-sm mb-0">
+    {# ── Header com progresso ── #}
+    <div class="card-header bg-white py-2 px-3 border-bottom">
+        <div class="d-flex justify-content-between align-items-center">
+            <span class="fw-bold" style="font-size: 0.82rem;">
+                <i class="bi bi-signpost-split me-1"></i>Fluxo do Processo
+            </span>
+            <span class="badge {{ 'bg-success' if pct_done == 100 else 'bg-primary' }}">{{ ns.passos_done }}/{{ total_passos }}</span>
+        </div>
+        <div class="progress mt-2" style="height: 5px;">
+            <div class="progress-bar {{ 'bg-success' if pct_done == 100 else '' }}" role="progressbar"
+                 style="width: {{ pct_done }}%;" aria-valuenow="{{ pct_done }}" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+    </div>
+
+    {# ── Barra de indicadores ── #}
+    <div class="fluxo-steps-bar" id="fluxoStepsBar">
+        {% for s in steps %}
+        {% set is_done = s.done %}
+        {% set is_active = (ns.passo_ativo == s.num) %}
+        {% set is_locked = (not is_done and not is_active and s.num > ns.passo_ativo) %}
+        <div class="fluxo-step-item {{ 'fs-done' if is_done else ('fs-active' if is_active else ('fs-locked' if is_locked else '')) }}"
+             data-step="{{ s.num }}" onclick="goToFluxoStep({{ s.num }})">
+            <div class="fs-circle">
+                {% if is_done %}<i class="bi bi-check-lg"></i>{% else %}{{ loop.index }}{% endif %}
+            </div>
+            <span class="fs-label">{{ s.label }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# ── Paineis de conteudo ── #}
+    <div class="fluxo-stepper">
+
+        {# ══════════════════════════════════════════════════════ #}
+        {# PASSO: AUTORIZACAO                                     #}
+        {# ══════════════════════════════════════════════════════ #}
+        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == 1 }}" id="fluxo-panel-1" data-step="1">
+            <div class="fluxo-panel-header">
+                <div class="fp-icon {{ 'done' if autorizacao_ok else ('active' if ns.passo_ativo == 1 else 'locked') }}">
+                    <i class="bi bi-shield-check"></i>
+                </div>
+                <div>
+                    <span class="fp-title">Autorização do Secretário</span>
+                    {% if autorizacao_ok %}
+                    <span class="d-block" style="font-size: 0.75rem; color: #198754;">
+                        <i class="bi bi-check-circle-fill me-1"></i>Autorizada - {{ doc_autorizacao.sei_formatado }}
+                    </span>
+                    {% elif ns.passo_ativo == 1 %}
+                    <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if autorizacao_ok %}
+            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-check-circle-fill fs-4 text-success me-3"></i>
+                    <div>
+                        <strong>Solicitação autorizada!</strong>
+                        {% if doc_autorizacao and doc_autorizacao.sei_formatado %}
+                        <span class="d-block text-muted small">Documento SEI: {{ doc_autorizacao.sei_formatado }}</span>
+                        {% elif apenas_diarias %}
+                        <span class="d-block text-muted small">
+                            Autorização concedida pela assinatura do Secretário na Requisição de Diárias
+                            {% if doc_nr %}({{ itinerario.get_doc('requisicao').sei_formatado if itinerario.get_doc('requisicao') else '' }}){% endif %}.
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% elif itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento %}
+            {# Assinatura dupla: Superintendente + Secretário #}
+            <div class="d-flex align-items-center mb-3" style="gap: 0;">
+                <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
+                     style="width: 28px; height: 28px; {{ 'background: #198754; color: #fff;' if itinerario.superintendente_assinou else 'background: #343990; color: #fff;' }} font-size: 0.75rem; font-weight: 700;">
+                    {% if itinerario.superintendente_assinou %}<i class="bi bi-check"></i>{% else %}1{% endif %}
+                </div>
+                <div class="flex-grow-1 mx-2" style="height: 3px; {{ 'background: #198754;' if itinerario.superintendente_assinou else 'background: #dee2e6;' }}"></div>
+                <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
+                     style="width: 28px; height: 28px; {{ 'background: #343990; color: #fff;' if itinerario.superintendente_assinou else 'background: #dee2e6; color: #adb5bd;' }} font-size: 0.75rem; font-weight: 700;">
+                    2
+                </div>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="p-3 rounded-3 border h-100">
+                        <h6 class="fw-bold mb-2" style="font-size: 0.8rem;">
+                            <i class="bi bi-pen me-1"></i>Superintendente
+                        </h6>
+                        {% if itinerario.superintendente_assinou %}
+                        <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Assinado {{ itinerario.superintendente_assinou_data.strftime('%d/%m/%Y %H:%M') if itinerario.superintendente_assinou_data else '' }}</span>
+                        {% elif current_user.is_superintendente %}
+                        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
+                            <i class="bi bi-pen me-1"></i>Assinar Requisições
+                        </button>
+                        {% else %}
+                        <span class="text-muted small"><i class="bi bi-hourglass-split me-1"></i>Aguardando assinatura</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3 rounded-3 border h-100 {{ '' if itinerario.superintendente_assinou else 'opacity-50' }}">
+                        <h6 class="fw-bold mb-2" style="font-size: 0.8rem;">
+                            <i class="bi bi-shield-check me-1"></i>Secretário
+                        </h6>
+                        {% if not itinerario.superintendente_assinou %}
+                        <span class="text-muted small"><i class="bi bi-lock me-1"></i>Aguardando assinatura do Superintendente</span>
+                        {% elif current_user.is_secretario %}
+                        <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalAutorizar">
+                            <i class="bi bi-shield-check me-1"></i>Autorizar
+                        </button>
+                        {% else %}
+                        <span class="text-muted small"><i class="bi bi-hourglass-split me-1"></i>Aguardando autorização</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% elif not itinerario.sei_id_procedimento %}
+            <div class="alert alert-secondary py-2 mb-0">
+                <i class="bi bi-info-circle me-1"></i>Processo SEI ainda não vinculado.
+            </div>
+            {% else %}
+            <div class="alert alert-info py-2 mb-0">
+                <i class="bi bi-info-circle me-1"></i>Etapa de autorização já concluída — processo avançou para a próxima etapa.
+            </div>
+            {% endif %}
+        </div>
+
+        {# ══════════════════════════════════════════════════════ #}
+        {# PASSO 2: ANÁLISE 1ª PARTE (NR + Quadro + Habilitação) #}
+        {# ══════════════════════════════════════════════════════ #}
+        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == 2 }}" id="fluxo-panel-2" data-step="2">
+            <div class="fluxo-panel-header">
+                <div class="fp-icon {{ 'done' if analise1_ok else ('active' if ns.passo_ativo == 2 else 'locked') }}">
+                    <i class="bi bi-receipt"></i>
+                </div>
+                <div>
+                    <span class="fp-title">Análise 1ª Parte</span>
+                    {% if analise1_ok %}
+                    <span class="d-block" style="font-size: 0.75rem; color: #198754;">
+                        <i class="bi bi-check-circle-fill me-1"></i>NR: {{ doc_nr.codigo }} | Quadro preenchido
+                    </span>
+                    {% elif ns.passo_ativo == 2 %}
+                    <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if not autorizacao_ok %}
+            <div class="alert alert-secondary py-2 mb-0">
+                <i class="bi bi-lock me-1"></i>Complete a Autorização primeiro.
+            </div>
+            {% elif analise1_ok %}
+            <div class="rounded-3 p-3 mb-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                <strong>Análise 1ª Parte concluída!</strong>
+                <span class="d-block mt-1 small text-muted">
+                    NR: {{ doc_nr.codigo }} | UG: {{ quadro.ug }} | Natureza: {{ quadro.natureza_despesa }}
+                </span>
+            </div>
+            {% else %}
+            <div class="alert alert-info py-2">
+                <i class="bi bi-info-circle me-1"></i>
+                <strong>Subitens:</strong> Nota de Reserva, Quadro Orçamentário, Análise de Habilitação.
+                <br>Acesse a <a href="{{ url_for('financeiro.diarias_detalhe', id=itinerario.id) }}" class="fw-bold">aba Financeira</a>.
+            </div>
+            {% endif %}
+        </div>
+
+        {# ══════════════════════════════════════════════════════ #}
+        {# PASSO 3: COTAÇÕES E VOO (condicional, após Análise 1ª) #}
+        {# ══════════════════════════════════════════════════════ #}
+        {% if tem_passagens %}
+        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == 3 }}" id="fluxo-panel-3" data-step="3">
+            <div class="fluxo-panel-header">
+                <div class="fp-icon {{ 'done' if cotacoes_ok else ('active' if ns.passo_ativo == 3 else 'locked') }}">
+                    <i class="bi bi-airplane"></i>
+                </div>
+                <div>
+                    <span class="fp-title">Cotações e Escolha do Voo</span>
+                    {% if cotacoes_ok %}
+                    <span class="d-block" style="font-size: 0.75rem; color: #198754;">
+                        <i class="bi bi-check-circle-fill me-1"></i>Voo escolhido
+                    </span>
+                    {% elif ns.passo_ativo == 3 %}
+                    <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if not analise1_ok %}
+            <div class="alert alert-secondary py-2 mb-0">
+                <i class="bi bi-lock me-1"></i>Complete a Análise 1ª Parte primeiro (NR + Quadro).
+            </div>
+            {% elif cotacoes_ok %}
+            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-check-circle-fill fs-4 text-success me-3"></i>
+                    <div>
+                        <strong>Voo selecionado!</strong>
+                        <span class="d-block text-muted small">{{ cotacoes_voos|length }} cotação(ões).</span>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <a href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='passagens') }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-airplane me-1"></i>Gerenciar Cotações e Escolha de Voo
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# ══════════════════════════════════════════════════════ #}
+        {# PASSO: ANÁLISE 2ª PARTE (SCDP, NE, SGA, NCI)           #}
+        {# ══════════════════════════════════════════════════════ #}
+        {% set p_a2 = p_next %}
+        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == p_a2 }}" id="fluxo-panel-{{ p_a2 }}" data-step="{{ p_a2 }}">
+            <div class="fluxo-panel-header">
+                <div class="fp-icon {{ 'done' if analise2_ok else ('active' if ns.passo_ativo == p_a2 else 'locked') }}">
+                    <i class="bi bi-clipboard-check"></i>
+                </div>
+                <div>
+                    <span class="fp-title">Análise 2ª Parte</span>
+                    {% if analise2_ok %}
+                    <span class="d-block" style="font-size: 0.75rem; color: #198754;">
+                        <i class="bi bi-check-circle-fill me-1"></i>Concluída
+                    </span>
+                    {% elif ns.passo_ativo == p_a2 %}
+                    <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if analise2_ok %}
+            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                <strong>Análise 2ª Parte concluída!</strong>
+                {% if doc_analise %}<span class="d-block mt-1 small text-muted">Parecer NCI: {{ doc_analise.sei_formatado }}</span>{% endif %}
+            </div>
+            {% elif not analise1_ok %}
+            <div class="alert alert-secondary py-2 mb-0">
+                <i class="bi bi-lock me-1"></i>Complete a Análise 1ª Parte primeiro.
+            </div>
+            {% else %}
+            <div class="alert alert-info py-2">
+                <i class="bi bi-info-circle me-1"></i>
+                <strong>Subitens:</strong> SCDP, Nota de Empenho, Despacho SGA, Análise NCI, Despacho NCI.
+                <br>Acesse a <a href="{{ url_for('financeiro.diarias_detalhe', id=itinerario.id) }}" class="fw-bold">aba Financeira</a>.
+            </div>
+            {% endif %}
+        </div>
+
+        {# ══════════════════════════════════════════════════════ #}
+        {# PASSO: CONCESSÃO (NL, PD, OB)                           #}
+        {# ══════════════════════════════════════════════════════ #}
+        {% set p_concessao = p_next + 1 %}
+        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == p_concessao }}" id="fluxo-panel-{{ p_concessao }}" data-step="{{ p_concessao }}">
+            <div class="fluxo-panel-header">
+                <div class="fp-icon {{ 'done' if itinerario.has_doc('ob') else ('active' if ns.passo_ativo == p_concessao else 'locked') }}">
+                    <i class="bi bi-cash-stack"></i>
+                </div>
+                <div>
+                    <span class="fp-title">Concessão das Diárias</span>
+                    {% if itinerario.has_doc('ob') %}
+                    <span class="d-block" style="font-size: 0.75rem; color: #198754;">
+                        <i class="bi bi-check-circle-fill me-1"></i>Pago
+                    </span>
+                    {% elif ns.passo_ativo == p_concessao %}
+                    <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if itinerario.has_doc('ob') %}
+            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                <strong>Pagamento efetuado!</strong>
+            </div>
+            {% elif not analise2_ok %}
+            <div class="alert alert-secondary py-2 mb-0">
+                <i class="bi bi-lock me-1"></i>Complete a Análise 2ª Parte primeiro.
+            </div>
+            {% else %}
+            <div class="alert alert-warning py-3 mb-0">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-exclamation-triangle fs-4 me-3"></i>
+                    <div>
+                        <strong>Etapa exclusiva do Módulo Financeiro</strong>
+                        <p class="mb-0 mt-1 small">A inserção de NL, PD e OB é realizada pela equipe financeira na
+                        <a href="{{ url_for('financeiro.diarias_detalhe', id=itinerario.id) }}" class="fw-bold">aba de Diárias do Módulo Financeiro</a>.
+                        Aguarde a conclusão desta etapa.</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        {# ══════════════════════════════════════════════════════ #}
+        {# PASSO: PRESTAÇÃO DE CONTAS                              #}
+        {# ══════════════════════════════════════════════════════ #}
+        {% set p_prestacao = p_next + 2 %}
+        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == p_prestacao }}" id="fluxo-panel-{{ p_prestacao }}" data-step="{{ p_prestacao }}">
+            <div class="fluxo-panel-header">
+                <div class="fp-icon {{ 'done' if prestacao_ok else ('active' if ns.passo_ativo == p_prestacao else 'locked') }}">
+                    <i class="bi bi-journal-check"></i>
+                </div>
+                <div>
+                    <span class="fp-title">Prestação de Contas</span>
+                    {% if prestacao_ok %}
+                    <span class="d-block" style="font-size: 0.75rem; color: #198754;">
+                        <i class="bi bi-check-circle-fill me-1"></i>Relatório: {{ doc_relatorio.sei_formatado }}
+                    </span>
+                    {% elif ns.passo_ativo == p_prestacao %}
+                    <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if prestacao_ok %}
+            <div class="rounded-3 p-3 mb-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                <strong>Prestação de contas concluída!</strong>
+            </div>
+            <div class="row g-2">
+                {% if doc_relatorio %}
+                <div class="col-md-4">
+                    <div class="p-2 border rounded text-center">
+                        <i class="bi bi-file-text text-success"></i>
+                        <span class="small d-block">Relatório</span>
+                        <small class="text-muted">{{ doc_relatorio.sei_formatado }}</small>
+                    </div>
+                </div>
+                {% endif %}
+                {% if doc_np %}
+                <div class="col-md-4">
+                    <div class="p-2 border rounded text-center">
+                        <i class="bi bi-file-earmark text-success"></i>
+                        <span class="small d-block">NP</span>
+                        <small class="text-muted">{{ doc_np.sei_formatado }}</small>
+                    </div>
+                </div>
+                {% endif %}
+                {% if doc_prestacao_scdp %}
+                <div class="col-md-4">
+                    <div class="p-2 border rounded text-center">
+                        <i class="bi bi-file-earmark-pdf text-success"></i>
+                        <span class="small d-block">Prestação SCDP</span>
+                        <small class="text-muted">{{ doc_prestacao_scdp.sei_formatado }}</small>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% elif not nci_ok %}
+            <div class="alert alert-secondary py-2 mb-0">
+                <i class="bi bi-lock me-1"></i>Complete a Análise NCI primeiro.
+            </div>
+            {% else %}
+            <div class="alert alert-info py-2">
+                <i class="bi bi-hourglass-split me-1"></i>Aguardando documentos de prestacao de contas (Relatório de Viagem, NP, Prestação SCDP).
+            </div>
+            {% endif %}
+        </div>
+
+    </div>{# /fluxo-stepper #}
+
+    {# ── Navegacao ── #}
+    <div class="fluxo-nav">
+        <button class="btn btn-outline-secondary btn-sm" id="btnFluxoPrev" onclick="prevFluxoStep()">
+            <i class="bi bi-chevron-left me-1"></i>Anterior
+        </button>
+        <span class="fluxo-counter" id="fluxoCounter"></span>
+        <button class="btn btn-outline-secondary btn-sm" id="btnFluxoNext" onclick="nextFluxoStep()">
+            Proximo<i class="bi bi-chevron-right ms-1"></i>
+        </button>
+    </div>
+</div>
+
+<script>
+(function() {
+    const panels = document.querySelectorAll('.fluxo-panel');
+    const indicators = document.querySelectorAll('.fluxo-step-item');
+    const counter = document.getElementById('fluxoCounter');
+    const btnPrev = document.getElementById('btnFluxoPrev');
+    const btnNext = document.getElementById('btnFluxoNext');
+    const stepNumbers = Array.from(panels).map(p => parseInt(p.dataset.step));
+    let currentIdx = 0;
+
+    panels.forEach((p, i) => { if (p.classList.contains('active')) currentIdx = i; });
+    if (!document.querySelector('.fluxo-panel.active') && panels.length > 0) {
+        currentIdx = panels.length - 1;
+        panels[currentIdx].classList.add('active');
+    }
+
+    function updateUI() {
+        panels.forEach((p, i) => p.classList.toggle('active', i === currentIdx));
+        indicators.forEach(ind => {
+            ind.classList.remove('fs-selected');
+            if (parseInt(ind.dataset.step) === stepNumbers[currentIdx]) ind.classList.add('fs-selected');
+        });
+        const activeInd = document.querySelector('.fluxo-step-item[data-step="' + stepNumbers[currentIdx] + '"]');
+        if (activeInd) activeInd.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        if (counter) counter.textContent = (currentIdx + 1) + ' de ' + panels.length;
+        if (btnPrev) btnPrev.disabled = (currentIdx === 0);
+        if (btnNext) btnNext.disabled = (currentIdx === panels.length - 1);
+    }
+
+    window.goToFluxoStep = function(stepNum) {
+        const idx = stepNumbers.indexOf(stepNum);
+        if (idx >= 0) { currentIdx = idx; updateUI(); }
+    };
+    window.prevFluxoStep = function() { if (currentIdx > 0) { currentIdx--; updateUI(); } };
+    window.nextFluxoStep = function() { if (currentIdx < panels.length - 1) { currentIdx++; updateUI(); } };
+
+    updateUI();
+})();
+</script>

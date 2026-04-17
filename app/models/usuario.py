@@ -29,6 +29,37 @@ class Usuario(db.Model, UserMixin):
     perfil_id = db.Column(db.Integer, db.ForeignKey('perfis.id'), nullable=True)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Cargo de gestão (definido manualmente pelo admin)
+    cargo_gestao = db.Column(db.String(50), nullable=True)       # 'secretario', 'superintendente', ou NULL
+    setor_vinculado = db.Column(db.String(255), nullable=True)   # DEPRECATED: usar setor_id. Mantido para backfill/compatibilidade.
+
+    # Vinculação estruturada ao setor (FK para setores) — mantido como referência
+    setor_id = db.Column(db.Integer, db.ForeignKey('setores.id'), nullable=True, index=True)
+    setor = db.relationship('SetorSead', foreign_keys=[setor_id], lazy='joined')
+
+    # Unidade SEI atual e superintendência derivada (novo modelo — preenchido no login)
+    unidade_sei_id = db.Column(db.String(50), nullable=True, index=True)
+    unidade_sei_sigla = db.Column(db.String(255), nullable=True, index=True)
+    superintendencia_sigla = db.Column(db.String(50), nullable=True, index=True)
+
+    # Unidades SEI vinculadas (1:N — atualizado no login)
+    unidades_sei = db.relationship('UsuarioUnidadeSei', back_populates='usuario',
+                                   cascade='all, delete-orphan', lazy='select')
+
+    @property
+    def superintendencia(self):
+        """Retorna a Superintendência do setor do usuário (ou None).
+
+        Prioriza a superintendência derivada do SEI (campo superintendencia_sigla).
+        Fallback: usa a relação setor → SetorSead (legado).
+        """
+        if self.superintendencia_sigla:
+            return self.superintendencia_sigla
+        if not self.setor:
+            return None
+        setor_super = self.setor.superintendencia or (self.setor if self.setor.is_superintendencia else None)
+        return setor_super.sigla if setor_super else None
+
     @property
     def is_active(self):
         """Retorna se o usuário está ativo."""
@@ -36,7 +67,13 @@ class Usuario(db.Model, UserMixin):
 
     @property
     def is_secretario(self):
-        """Verifica se o usuário é o Secretário de Estado (cargo institucional)."""
+        """Verifica se o usuário é o Secretário de Estado.
+
+        Prioriza o campo cargo_gestao (definido pelo admin).
+        Fallback: text matching no campo cargo do SEI.
+        """
+        if self.cargo_gestao == 'secretario':
+            return True
         if not self.cargo:
             return False
         cargo_lower = self.cargo.lower()
@@ -44,11 +81,16 @@ class Usuario(db.Model, UserMixin):
 
     @property
     def is_superintendente(self):
-        """Verifica se o usuário é o Superintendente de Gestão Administrativa."""
+        """Verifica se o usuário é Superintendente.
+
+        Prioriza o campo cargo_gestao (definido pelo admin).
+        Fallback: text matching no campo cargo do SEI.
+        """
+        if self.cargo_gestao == 'superintendente':
+            return True
         if not self.cargo:
             return False
-        cargo_lower = self.cargo.lower()
-        return 'superintendente' in cargo_lower
+        return 'superintendente' in self.cargo.lower()
 
     def tem_permissao(self, modulo, acao=None):
         """Verifica se o usuário tem permissão para módulo/ação.
@@ -64,6 +106,27 @@ class Usuario(db.Model, UserMixin):
 
     def __repr__(self):
         return f'<Usuario {self.nome}>'
+
+
+class UsuarioUnidadeSei(db.Model):
+    """Unidades SEI vinculadas a um usuário (sincronizadas no login)."""
+
+    __tablename__ = 'usuario_unidades_sei'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    usuario_id = db.Column(db.BigInteger, db.ForeignKey('sis_usuarios.id', ondelete='CASCADE'), nullable=False, index=True)
+    unidade_sei_id = db.Column(db.String(50), nullable=False)
+    sigla = db.Column(db.String(255), nullable=False)
+    descricao = db.Column(db.String(500), nullable=True)
+
+    usuario = db.relationship('Usuario', back_populates='unidades_sei')
+
+    __table_args__ = (
+        db.UniqueConstraint('usuario_id', 'unidade_sei_id', name='uq_usuario_unidade_sei'),
+    )
+
+    def __repr__(self):
+        return f'<UsuarioUnidadeSei {self.usuario_id} - {self.sigla}>'
 
 
 @login_manager.user_loader

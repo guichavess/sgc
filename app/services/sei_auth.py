@@ -60,7 +60,7 @@ def gerar_token_sei_admin():
         return None
 
 
-def autenticar_usuario_sei(usuario, senha):
+def autenticar_usuario_sei(usuario, senha, protocolo_bypass=None):
     """
     Autentica um usuario especifico no SEI e retorna dados completos.
 
@@ -68,13 +68,37 @@ def autenticar_usuario_sei(usuario, senha):
     esta funcao retorna o dict completo com token, IdUsuario, IdLogin, etc.
     Usado para operacoes que precisam identificar o usuario (ex: assinatura).
 
+    Bypass:
+    - Se DIARIAS_BYPASS_ASSINATURAS=True (global), simula.
+    - Se `protocolo_bypass` está em DIARIAS_PROTOCOLOS_BYPASS_ASSINATURAS,
+      simula apenas para esse processo.
+
     Args:
         usuario: Login do usuario no SEI
         senha: Senha do usuario no SEI
+        protocolo_bypass: protocolo SEI do processo (ex: '00002.003853/2026-21').
+            Quando fornecido e na lista de bypass, retorna token fake
+            sem chamar a API real do SEI.
 
     Returns:
         dict com {token, id_usuario, id_login, dados_completos} ou None em caso de erro
     """
+    # ── Bypass para testes (global OU por protocolo específico) ──
+    from app.constants import protocolo_tem_bypass_assinatura
+    if protocolo_tem_bypass_assinatura(protocolo_bypass):
+        current_app.logger.info(
+            f"[BYPASS] Autenticação SEI simulada para usuario={usuario} "
+            f"(processo={protocolo_bypass!r})"
+        )
+        return {
+            'token': 'bypass-token',
+            'id_usuario': 'bypass-user',
+            'id_login': 'bypass-login',
+            'nome': usuario,
+            'cargo': '',
+            'unidades': [],
+            'dados_completos': {},
+        }
     url_auth = "https://api.sei.pi.gov.br/v1/orgaos/usuarios/login"
     orgao = os.getenv("SEI_ORGAO", "SEAD-PI")
 
@@ -117,6 +141,7 @@ def autenticar_usuario_sei(usuario, senha):
                 'id_login': str(login_data.get('IdLogin', '') or token),
                 'nome': login_data.get('Nome', ''),
                 'cargo': login_data.get('UltimoCargoAssinatura', ''),
+                'id_unidade_atual': str(login_data.get('IdUnidadeAtual', '')),
                 'unidades': dados.get('Unidades', []),
                 'dados_completos': dados,
             }

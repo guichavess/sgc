@@ -153,10 +153,10 @@ def gerar_documento_pagamento(token, unidade_id, id_procedimento, dados_ctx):
         return None
 
 
-def assinar_documento(token, unidade_id, dados_assinatura):
+def assinar_documento(token, unidade_id, dados_assinatura, protocolo_proc=None):
     """
     Etapa 3: Assina o documento gerado via API SEI.
-    
+
     dados_assinatura espera:
     - protocolo_doc: O número visual do documento (ex: 0001234)
     - orgao: Sigla do órgão (ex: SEAD-PI)
@@ -164,7 +164,28 @@ def assinar_documento(token, unidade_id, dados_assinatura):
     - id_login: ID da sessão de login do SEI
     - id_usuario: ID do usuário no SEI
     - senha: A senha digitada no popup
+
+    Args:
+        protocolo_proc: protocolo do processo SEI (ex: '00002.003853/2026-21').
+            Quando fornecido e está em DIARIAS_PROTOCOLOS_BYPASS_ASSINATURAS,
+            a assinatura é simulada sem chamar o SEI (útil para processos teste).
+
+    Bypass:
+    - Se DIARIAS_BYPASS_ASSINATURAS=True (global), sempre simula.
+    - Se protocolo_proc está em DIARIAS_PROTOCOLOS_BYPASS_ASSINATURAS, simula
+      apenas para esse processo específico.
     """
+    # ── Bypass de assinatura (global OU por protocolo específico) ──
+    from app.constants import protocolo_tem_bypass_assinatura
+    if protocolo_tem_bypass_assinatura(protocolo_proc):
+        from flask import current_app
+        current_app.logger.info(
+            f"[BYPASS] Assinatura simulada para documento "
+            f"{dados_assinatura.get('protocolo_doc', '?')} "
+            f"(processo={protocolo_proc!r})"
+        )
+        return {"sucesso": True, "aviso": "Assinatura bypassed (modo teste)"}
+
     if not token:
         return {"sucesso": False, "erro": "Token inválido"}
 
@@ -186,7 +207,8 @@ def assinar_documento(token, unidade_id, dados_assinatura):
     }
 
     try:
-        print(f"✍️ Tentando assinar documento {dados_assinatura['protocolo_doc']}...")
+        from flask import current_app
+        current_app.logger.info(f"SEI: Assinando documento {dados_assinatura['protocolo_doc']}...")
         response = requests.patch(url, json=payload, headers=headers, verify=False, timeout=30)
 
         if response.status_code == 204:
@@ -195,13 +217,16 @@ def assinar_documento(token, unidade_id, dados_assinatura):
             erro_msg = response.text
             # Documento já assinado fora da aplicação — trata como sucesso
             if "já foi assinado" in erro_msg:
-                print(f"⚠️ Documento {dados_assinatura['protocolo_doc']} já estava assinado (ignorado).")
+                current_app.logger.info(
+                    f"SEI: Documento {dados_assinatura['protocolo_doc']} já estava assinado (ignorado)."
+                )
                 return {"sucesso": True, "aviso": "Documento já estava assinado"}
-            print(f"❌ Erro assinatura SEI: {erro_msg}")
+            current_app.logger.error(f"SEI: Erro assinatura: {erro_msg}")
             return {"sucesso": False, "erro": f"SEI recusou: {erro_msg}"}
 
     except Exception as e:
-        print(f"Erro de conexão na assinatura: {e}")
+        from flask import current_app
+        current_app.logger.error(f"SEI: Erro de conexão na assinatura: {e}")
         return {"sucesso": False, "erro": str(e)}
 
 

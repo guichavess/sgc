@@ -16,6 +16,25 @@ from app.constants import DiariasEtapaID
 from app.services.diarias_notification import DiariasNotifier
 
 
+EXTENSOES_PERMITIDAS = {'.pdf', '.png', '.jpg', '.jpeg', '.doc', '.docx', '.xls', '.xlsx'}
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+def _validar_arquivo(arquivo, campo_nome='arquivo'):
+    """Valida extensão e tamanho de arquivo enviado. Retorna (bytes, erro)."""
+    if not arquivo or not arquivo.filename:
+        return None, None  # Arquivo opcional não enviado
+    ext = '.' + arquivo.filename.rsplit('.', 1)[-1].lower() if '.' in arquivo.filename else ''
+    if ext not in EXTENSOES_PERMITIDAS:
+        return None, f'{campo_nome}: extensão "{ext}" não permitida. Aceitas: {", ".join(sorted(EXTENSOES_PERMITIDAS))}'
+    conteudo = arquivo.read()
+    if not conteudo:
+        return None, f'{campo_nome}: arquivo vazio.'
+    if len(conteudo) > MAX_UPLOAD_SIZE:
+        return None, f'{campo_nome}: excede o tamanho máximo de 10MB.'
+    return conteudo, None
+
+
 # IDs dos tipos de solicitação (espelhados do seed)
 TIPO_SOL_APENAS_DIARIAS = 1
 TIPO_SOL_DIARIAS_PASSAGENS = 2
@@ -37,29 +56,54 @@ def nova():
         tipos_solicitacao=DiariaService.get_tipos_solicitacao(),
         estados=DiariaService.get_estados(),
         municipios_pi=DiariaService.get_municipios_por_estado(22),
-        cargos=DiariaService.get_cargos(),
+        cargos=DiariaService.get_cargos(apenas_com_valor=True),
         valores_cargo_json=json.dumps(valores_map),
+        unidades_sei=current_user.unidades_sei,
     )
 
 
 def _executar_sei_background(app, itinerario_id, pessoas, dados, tipo_solicitacao_id,
-                             justificativa_memorando, objetivo, arquivo_externo, usuario_id):
+                             justificativa_memorando, objetivo, arquivo_externo, usuario_id,
+                             unidade_sei_id=None):
     """Executa integração SEI + notificação em thread separada para não bloquear o request."""
+    from app.extensions import db
+
     with app.app_context():
+        sei_ok = False
+        itinerario = None
         try:
             itinerario = DiariasItinerario.query.get(itinerario_id)
             if not itinerario:
                 return
 
             _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
-                                  justificativa_memorando, objetivo, arquivo_externo)
+                                  justificativa_memorando, objetivo, arquivo_externo,
+                                  unidade_sei_id=unidade_sei_id)
+            # CRIT-03: Verifica se a integração de fato salvou o protocolo
+            db.session.refresh(itinerario)
+            sei_ok = bool(itinerario.sei_protocolo)
         except Exception as e:
             current_app.logger.error(f'[DIARIAS] Erro SEI background: {e}')
+        finally:
+            db.session.remove()
 
-        try:
-            DiariasNotifier.notificar_etapa(itinerario, 'nova_solicitacao', usuario_id)
-        except Exception as exc_notif:
-            current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
+        # CRIT-03: Só notifica se SEI teve sucesso ou se não precisava de SEI
+        with app.app_context():
+            try:
+                if not itinerario:
+                    itinerario = DiariasItinerario.query.get(itinerario_id)
+                if itinerario:
+                    DiariasNotifier.notificar_etapa(itinerario, 'nova_solicitacao', usuario_id)
+                    if not sei_ok:
+                        # Notifica admins sobre falha na integração SEI
+                        current_app.logger.warning(
+                            f'[DIARIAS] Integração SEI falhou para itinerário {itinerario_id}. '
+                            f'Notificação enviada mas processo SEI pode não existir.'
+                        )
+            except Exception as exc_notif:
+                current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
+            finally:
+                db.session.remove()
 
 
 @diarias_bp.route('/store', methods=['POST'])
@@ -96,8 +140,22 @@ def store():
             flash('Adicione pelo menos uma pessoa à viagem.', 'danger')
             return redirect(url_for('diarias.nova'))
 
+        # Validar consistência dos arrays — todos devem ter o mesmo tamanho que pessoas_cpf
+        n_pessoas = len(pessoas_cpf)
+        arrays_obrigatorios = [
+            (pessoas_nome, 'nomes'),
+            (pessoas_cargo_id, 'cargos'),
+        ]
+        for arr, label in arrays_obrigatorios:
+            if len(arr) != n_pessoas:
+                msg = f'Dados inconsistentes ({label}: {len(arr)}, pessoas: {n_pessoas}). Recarregue a página.'
+                if is_ajax:
+                    return jsonify({'success': False, 'error': msg}), 400
+                flash(msg, 'danger')
+                return redirect(url_for('diarias.nova'))
+
         pessoas = []
-        for i in range(len(pessoas_cpf)):
+        for i in range(n_pessoas):
             cargo_id_str = pessoas_cargo_id[i] if i < len(pessoas_cargo_id) else ''
             cargo_ass_str = pessoas_cargo_assessorado[i] if i < len(pessoas_cargo_assessorado) else ''
             pessoas.append({
@@ -121,18 +179,24 @@ def store():
         tipo_solicitacao_id = int(request.form.get('tipo_solicitacao') or 0)
 
         objetivo = request.form.get('objetivo', '').strip() or None
+        unidade_sei_id = request.form.get('unidade_sei_id', '').strip() or None
 
-        # Arquivo anexo (documento externo SEI)
+        # Arquivo anexo (documento externo SEI) — com validação de extensão/tamanho
         arquivo_anexo = request.files.get('arquivo_anexo')
         arquivo_externo = None
         if arquivo_anexo and arquivo_anexo.filename:
-            arquivo_externo = {
-                'bytes': arquivo_anexo.read(),
-                'nome_arquivo': arquivo_anexo.filename,
-                'descricao': f'Documento anexo - Solicitacao de Diarias',
-            }
-            current_app.logger.debug(f"SEI store(): Arquivo recebido: {arquivo_anexo.filename}, "
-                  f"tamanho: {len(arquivo_externo['bytes'])} bytes")
+            arq_bytes, arq_erro = _validar_arquivo(arquivo_anexo, 'Arquivo anexo')
+            if arq_erro:
+                if is_ajax:
+                    return jsonify({'success': False, 'error': arq_erro}), 400
+                flash(arq_erro, 'danger')
+                return redirect(url_for('diarias.nova'))
+            if arq_bytes:
+                arquivo_externo = {
+                    'bytes': arq_bytes,
+                    'nome_arquivo': arquivo_anexo.filename,
+                    'descricao': 'Documento anexo - Solicitacao de Diarias',
+                }
 
         dados = {
             'tipo_solicitacao_id': tipo_solicitacao_id,
@@ -143,6 +207,7 @@ def store():
             'estado_origem': request.form.get('estado_origem'),
             'estado_destino': request.form.get('estado_destino'),
             'objetivo': objetivo,
+            'unidade_sei_id': unidade_sei_id,
         }
 
         itinerario = DiariaService.criar_itinerario(dados, pessoas, paradas, justificativa)
@@ -156,14 +221,15 @@ def store():
         )
 
         # ── Integração SEI em background (não bloqueia o response) ──
-        precisa_sei = tipo in (2, 3) and tipo_solicitacao_id in (TIPO_SOL_DIARIAS_PASSAGENS, TIPO_SOL_APENAS_PASSAGENS)
+        precisa_sei = True  # Todos os tipos criam processo SEI
         if precisa_sei:
             app = current_app._get_current_object()
             usuario_id = current_user.id
             t = threading.Thread(
                 target=_executar_sei_background,
                 args=(app, itinerario.id, pessoas, dados, tipo_solicitacao_id,
-                      justificativa_memorando, objetivo, arquivo_externo, usuario_id),
+                      justificativa_memorando, objetivo, arquivo_externo, usuario_id,
+                      unidade_sei_id),
                 daemon=True,
             )
             t.start()
@@ -195,7 +261,8 @@ def store():
 
 
 def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
-                          justificativa_memorando, objetivo, arquivo_externo=None):
+                          justificativa_memorando, objetivo, arquivo_externo=None,
+                          unidade_sei_id=None):
     """
     Executa a integração SEI para viagens Nacionais com passagens.
     Cria procedimento + memorando SGA + requisição de diárias + documento externo no SEI.
@@ -284,6 +351,7 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
             'tipo_itinerario_nome': 'Internacional' if tipo_itinerario == 3 else 'Nacional',
             'data_viagem': dados.get('data_viagem'),
             'data_retorno': dados.get('data_retorno'),
+            'sei_protocolo': itinerario.sei_protocolo,  # CRIT-01: passa para verificação de duplicata
         }
 
         dados_requisicao = {
@@ -298,6 +366,7 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
             dados_requisicao=dados_requisicao,
             arquivo_externo=arquivo_externo,
             tipo_solicitacao_id=tipo_solicitacao_id,
+            unidade_sei_id=unidade_sei_id,
         )
 
         if resultado['sucesso']:
@@ -372,6 +441,7 @@ def detalhes(id):
         itens=dados['itens'],
         paradas=dados['paradas'],
         cotacoes=dados['cotacoes'],
+        cotacoes_voos=dados.get('cotacoes_voos', []),
         timeline_data=timeline_data,
     )
 
@@ -386,6 +456,8 @@ def atender(id):
         flash('Solicitação não encontrada.', 'warning')
         return redirect(url_for('diarias.todas'))
 
+    timeline_data = DiariaService.obter_timeline(dados['itinerario'])
+
     return render_template('diarias/atender.html',
         itinerario=dados['itinerario'],
         itens=dados['itens'],
@@ -393,6 +465,7 @@ def atender(id):
         cotacoes=dados['cotacoes'],
         cotacoes_voos=dados.get('cotacoes_voos', []),
         agencias=DiariaService.get_agencias(),
+        timeline_data=timeline_data,
     )
 
 
@@ -428,7 +501,7 @@ def update_atendimento(id):
 
 @diarias_bp.route('/<int:id>/gerar-relatorio', methods=['POST'])
 @login_required
-@requires_permission('diarias.visualizar')
+@requires_permission('diarias.criar')
 def gerar_relatorio(id):
     """Gera o Relatório de Viagem (IdSerie 1908) no processo SEI.
 
@@ -440,9 +513,17 @@ def gerar_relatorio(id):
 
     itinerario = DiariasItinerario.query.get_or_404(id)
 
-    # Valida: OB deve existir
-    if not itinerario.has_doc('ob'):
-        return jsonify({'success': False, 'error': 'A Ordem Bancária (OB) ainda não foi inserida no processo.'}), 400
+    # Valida: todas as OBs (1 por servidor) devem estar inseridas.
+    # Nao usa has_doc('ob') porque o marcador agregado carrega apenas `codigo`,
+    # sem `sei_id` (padrao pos-refactor 1-por-servidor). Consulta direta:
+    from app.models.diaria import DiariasOrdemBancaria, DiariasItemItinerario
+    total_serv_ob = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario.id).count()
+    total_obs = DiariasOrdemBancaria.query.filter_by(itinerario_id=itinerario.id).count()
+    if total_serv_ob == 0 or total_obs < total_serv_ob:
+        return jsonify({
+            'success': False,
+            'error': f'Todas as Ordens Bancárias precisam ter sido inseridas ({total_obs}/{total_serv_ob} servidores com OB).',
+        }), 400
 
     # Valida: relatório ainda não gerado
     if itinerario.has_doc('relatorio_viagem'):
@@ -459,14 +540,16 @@ def gerar_relatorio(id):
     if not usuario_sei or not senha_sei:
         return jsonify({'success': False, 'error': 'Credenciais SEI são obrigatórias para assinar o documento.'}), 400
 
-    # Monta dados do relatório a partir do itinerário
-    primeiro_item = itinerario.itens.first()
-    if not primeiro_item:
+    # HIGH-04: Monta dados do relatório com TODAS as pessoas (não apenas a primeira)
+    from app.models.diaria import DiariasItemItinerario
+    todos_itens = DiariasItemItinerario.query.filter_by(
+        id_itinerario=itinerario.id
+    ).order_by(DiariasItemItinerario.id).all()
+
+    if not todos_itens:
         return jsonify({'success': False, 'error': 'Nenhuma pessoa encontrada na solicitação.'}), 400
 
-    # Formata valor da diária individual
-    valor_cargo = primeiro_item.valor_cargo or 0
-    valor_diaria_fmt = f'R${valor_cargo:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+    primeiro_item = todos_itens[0]
 
     # Formata valor total
     valor_total = itinerario.valor_total or 0
@@ -488,18 +571,33 @@ def gerar_relatorio(id):
     periodo_inicio = itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else ''
     periodo_fim = itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else ''
 
-    # Lotação (setor/orgão do servidor)
+    # Monta nomes e dados de todos os servidores
+    nomes_todos = ', '.join(item.nome_pessoa for item in todos_itens if item.nome_pessoa)
+    cpfs_todos = ', '.join(item.cpf_pessoa for item in todos_itens if item.cpf_pessoa)
+    matriculas_todos = ', '.join(item.matricula_pessoa for item in todos_itens if item.matricula_pessoa)
+
+    # Lotação (setor/orgão do primeiro servidor como referência)
     lotacao = primeiro_item.setor or primeiro_item.orgao or ''
     if primeiro_item.orgao and primeiro_item.setor:
         lotacao = f'{primeiro_item.orgao} / {primeiro_item.setor}'
 
-    # Cargo/Função
+    # Cargo/Função (do primeiro — para assinatura)
     cargo_funcao = primeiro_item.cargo.nome if primeiro_item.cargo else (primeiro_item.cargo_folha or '')
 
+    # Valor diária por pessoa (mostra todas)
+    valores_diaria = []
+    for item in todos_itens:
+        vc = item.valor_cargo or 0
+        vc_fmt = f'R${vc:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        valores_diaria.append(f'{item.nome_pessoa}: {vc_fmt}')
+    valor_diaria_fmt = '; '.join(valores_diaria) if len(todos_itens) > 1 else (
+        f'R${(primeiro_item.valor_cargo or 0):,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+    )
+
     dados_relatorio = {
-        'nome': primeiro_item.nome_pessoa or '',
-        'matricula': primeiro_item.matricula_pessoa or '',
-        'cpf': primeiro_item.cpf_pessoa or '',
+        'nome': nomes_todos,
+        'matricula': matriculas_todos,
+        'cpf': cpfs_todos,
         'lotacao': lotacao,
         'cargo_funcao': cargo_funcao,
         'periodo_inicio': periodo_inicio,
@@ -513,9 +611,12 @@ def gerar_relatorio(id):
 
     cargo_sei = request.form.get('cargo_sei', '').strip() or cargo_funcao
 
+    # Protocolo do processo (usado para bypass por processo em auth e assinatura)
+    protocolo_proc = itinerario.sei_protocolo or itinerario.n_processo or ''
+
     try:
-        # 1. Autentica o usuario para assinar
-        auth = autenticar_usuario_sei(usuario_sei, senha_sei)
+        # 1. Autentica o usuario para assinar (aceita bypass por protocolo em testes)
+        auth = autenticar_usuario_sei(usuario_sei, senha_sei, protocolo_bypass=protocolo_proc)
         if not auth or not auth.get('token'):
             return jsonify({'success': False, 'error': 'Falha na autenticacao SEI. Verifique suas credenciais.'}), 401
 
@@ -524,7 +625,15 @@ def gerar_relatorio(id):
         if not token_admin:
             return jsonify({'success': False, 'error': 'Falha ao obter token administrativo SEI.'}), 500
 
-        # 3. Gera o documento
+        # 3. Envia o processo para UNIDADE_SEAD antes de criar o documento — o
+        #    SEI exige que o processo esteja visivel na unidade onde sera criado
+        #    o doc (caso contrario, assinatura falha com "Documento nao encontrado").
+        from app.services.diarias_sei_integration import UNIDADE_SEAD, enviar_procedimento
+        enviar_procedimento(
+            token_admin, protocolo_proc, [UNIDADE_SEAD], manter_aberto=True
+        )
+
+        # 4. Gera o documento em UNIDADE_SEAD
         retorno = gerar_relatorio_viagem(
             token_admin,
             itinerario.sei_id_procedimento,
@@ -538,8 +647,7 @@ def gerar_relatorio(id):
         id_documento = str(retorno.get('IdDocumento', ''))
         doc_formatado = retorno.get('DocumentoFormatado', '')
 
-        # 4. Assina o documento com credenciais do usuario
-        from app.services.diarias_sei_integration import UNIDADE_SEAD
+        # 5. Assina o documento com credenciais do usuario (bypass por protocolo)
         resultado_assinatura = assinar_documento(
             token=auth['token'],
             unidade_id=UNIDADE_SEAD,
@@ -550,7 +658,8 @@ def gerar_relatorio(id):
                 'id_login': auth['id_login'],
                 'id_usuario': auth['id_usuario'],
                 'senha': senha_sei,
-            }
+            },
+            protocolo_proc=protocolo_proc,
         )
 
         aviso = None
@@ -582,9 +691,162 @@ def gerar_relatorio(id):
         return jsonify({'success': False, 'error': f'Erro inesperado: {str(e)}'}), 500
 
 
+@diarias_bp.route('/<int:id>/escolha-passagens', methods=['POST'])
+@login_required
+@requires_permission('diarias.criar')
+def escolha_passagens_solicitante(id):
+    """Solicitante escolhe os voos (ida + volta). Mesma lógica do admin mas acessível ao criador."""
+    from app.models.diaria import DiariasCotacaoVoo
+    from app.services.diarias_sei_integration import (
+        gerar_token_sei_admin, gerar_escolha_passagens,
+        gerar_memorando_cotacoes, consultar_documentos_procedimento,
+        ID_SERIE_COTACAO,
+    )
+    from app.extensions import db
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if itinerario.tipo_itinerario not in [2, 3]:
+        flash('Escolha de passagens só se aplica a viagens nacionais/internacionais.', 'warning')
+        return redirect(url_for('diarias.detalhes', id=id))
+
+    if itinerario.escolha_voo_ida_id:
+        flash('A escolha de passagens já foi realizada.', 'warning')
+        return redirect(url_for('diarias.detalhes', id=id))
+
+    if itinerario.etapa_atual_id not in (DiariasEtapaID.ESCOLHA_VOO, DiariasEtapaID.ANALISE_SOLICITACAO):
+        flash('Esta solicitação não está na etapa de escolha de voo.', 'warning')
+        return redirect(url_for('diarias.detalhes', id=id))
+
+    voo_ida_id = request.form.get('escolha_voo_ida', type=int)
+    voo_volta_id = request.form.get('escolha_voo_volta', type=int)
+
+    if not voo_ida_id or not voo_volta_id:
+        flash('Selecione um voo de IDA e um voo de VOLTA.', 'danger')
+        return redirect(url_for('diarias.detalhes', id=id))
+
+    voo_ida = DiariasCotacaoVoo.query.get(voo_ida_id)
+    voo_volta = DiariasCotacaoVoo.query.get(voo_volta_id)
+
+    if not voo_ida or voo_ida.itinerario_id != id or voo_ida.tipo_trecho != 'ida':
+        flash('Voo de IDA inválido.', 'danger')
+        return redirect(url_for('diarias.detalhes', id=id))
+
+    if not voo_volta or voo_volta.itinerario_id != id or voo_volta.tipo_trecho != 'volta':
+        flash('Voo de VOLTA inválido.', 'danger')
+        return redirect(url_for('diarias.detalhes', id=id))
+
+    # Detecta menor valor
+    all_ida = DiariasCotacaoVoo.query.filter_by(
+        itinerario_id=id, tipo_trecho='ida'
+    ).order_by(DiariasCotacaoVoo.valor.asc()).all()
+    all_volta = DiariasCotacaoVoo.query.filter_by(
+        itinerario_id=id, tipo_trecho='volta'
+    ).order_by(DiariasCotacaoVoo.valor.asc()).all()
+
+    menor_ida = all_ida[0].valor if all_ida else None
+    menor_volta = all_volta[0].valor if all_volta else None
+    is_cheapest = (voo_ida.valor <= menor_ida and voo_volta.valor <= menor_volta)
+
+    # Justificativa (obrigatória se não for menor valor)
+    justificativa_codigos = []
+    justificativa_outros = None
+    if not is_cheapest:
+        for code in ['J1', 'J2', 'J3', 'J4', 'J5']:
+            if request.form.get(f'justificativa_{code}'):
+                justificativa_codigos.append(code)
+        justificativa_outros = request.form.get('justificativa_outros_texto', '').strip() or None
+        if not justificativa_codigos and not justificativa_outros:
+            flash('Justificativa obrigatória quando o voo escolhido não é o menor valor.', 'danger')
+            return redirect(url_for('diarias.detalhes', id=id))
+
+    declaracao = bool(request.form.get('declaracao_responsabilidade'))
+
+    # Salva escolha
+    itinerario.escolha_voo_ida_id = voo_ida_id
+    itinerario.escolha_voo_volta_id = voo_volta_id
+    itinerario.escolha_menor_valor = is_cheapest
+    itinerario.escolha_justificativa_codigos = ','.join(justificativa_codigos) if justificativa_codigos else None
+    itinerario.escolha_justificativa_outros = justificativa_outros
+    itinerario.escolha_declaracao_responsabilidade = declaracao
+
+    # Gera documentos SEI
+    if itinerario.sei_id_procedimento:
+        try:
+            token = gerar_token_sei_admin()
+            if token:
+                sei_protocolo = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+                retorno = gerar_escolha_passagens(
+                    token=token,
+                    id_procedimento=itinerario.sei_id_procedimento,
+                    dados_escolha={
+                        'voos_ida': all_ida, 'voos_volta': all_volta,
+                        'escolha_ida_id': voo_ida_id, 'escolha_volta_id': voo_volta_id,
+                        'menor_valor': is_cheapest,
+                        'justificativa_codigos': justificativa_codigos,
+                        'justificativa_outros_texto': justificativa_outros,
+                        'declaracao': declaracao,
+                    },
+                    sei_protocolo=sei_protocolo,
+                )
+                if retorno:
+                    itinerario.set_doc('escolha_passagens',
+                        sei_id=str(retorno.get('IdDocumento', '')),
+                        sei_formatado=retorno.get('DocumentoFormatado', ''))
+
+                    # 2º Memorando SGA
+                    ref_cotacoes = ''
+                    resp_docs = consultar_documentos_procedimento(sei_protocolo)
+                    if resp_docs.get('sucesso'):
+                        ids_cotacao = [
+                            d.get('DocumentoFormatado', '')
+                            for d in resp_docs['documentos']
+                            if str(d.get('Serie', {}).get('IdSerie', '')) == ID_SERIE_COTACAO
+                        ]
+                        ref_cotacoes = ', '.join(ids_cotacao) if ids_cotacao else ''
+
+                    doc_req_pass = itinerario.get_doc('requisicao_passagens')
+                    ref_req = (doc_req_pass.sei_formatado if doc_req_pass else '') or ''
+                    if ref_cotacoes and ref_req:
+                        ret_memo = gerar_memorando_cotacoes(
+                            token=token,
+                            id_procedimento=itinerario.sei_id_procedimento,
+                            sei_protocolo=sei_protocolo,
+                            ref_cotacoes_fmt=ref_cotacoes,
+                            ref_requisicao_passagens_fmt=ref_req,
+                        )
+                        if ret_memo:
+                            itinerario.set_doc('memorando_cotacoes',
+                                sei_id=str(ret_memo.get('IdDocumento', '')),
+                                sei_formatado=ret_memo.get('DocumentoFormatado', ''))
+        except Exception as e:
+            current_app.logger.error(f'[DIARIAS] Erro SEI escolha passagens: {e}')
+            flash(f'Escolha salva, mas erro na integração SEI: {e}', 'warning')
+
+    # Escolha de passagens concluída → avança para Análise 2ª Parte (etapa 6)
+    if itinerario.etapa_atual_id == DiariasEtapaID.ESCOLHA_VOO:
+        DiariaService.registrar_movimentacao(
+            id_itinerario=id,
+            etapa_nova_id=DiariasEtapaID.ANALISE_SOLICITACAO_2,
+            usuario_id=current_user.id,
+            comentario='Escolha de passagens registrada. Avançando para Análise 2ª Parte.',
+            auto_commit=False,
+        )
+    db.session.commit()
+
+    try:
+        DiariasNotifier.notificar_etapa(itinerario, 'escolha_passagens', current_user.id)
+    except Exception as e:
+        current_app.logger.warning(f'[DIARIAS] Falha ao notificar escolha_passagens: {e}')
+
+    flash('Escolha de passagens registrada com sucesso!', 'success')
+    return redirect(url_for('diarias.detalhes', id=id))
+
+
 @diarias_bp.route('/<int:id>/upload-comprovante', methods=['POST'])
 @login_required
-@requires_permission('diarias.visualizar')
+@requires_permission('diarias.criar')
 def upload_comprovante(id):
     """Upload do Comprovante de Viagem (IdSerie 35) ao processo SEI.
 
@@ -609,21 +871,15 @@ def upload_comprovante(id):
         return redirect(url_for('diarias.detalhes', id=id))
 
     arquivo = request.files.get('arquivo_comprovante')
-    if not arquivo or not arquivo.filename:
-        flash('Selecione um arquivo PDF para enviar.', 'danger')
+    arquivo_bytes, arq_erro = _validar_arquivo(arquivo, 'Comprovante')
+    if arq_erro:
+        flash(arq_erro, 'danger')
+        return redirect(url_for('diarias.detalhes', id=id))
+    if not arquivo_bytes:
+        flash('Selecione um arquivo para enviar.', 'danger')
         return redirect(url_for('diarias.detalhes', id=id))
 
-    MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
-
     try:
-        arquivo_bytes = arquivo.read()
-        if not arquivo_bytes:
-            flash('Arquivo vazio.', 'danger')
-            return redirect(url_for('diarias.detalhes', id=id))
-
-        if len(arquivo_bytes) > MAX_UPLOAD_SIZE:
-            flash('Arquivo excede o tamanho máximo de 10MB.', 'danger')
-            return redirect(url_for('diarias.detalhes', id=id))
 
         token = gerar_token_sei_admin()
         if not token:

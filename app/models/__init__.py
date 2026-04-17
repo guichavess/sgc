@@ -1,7 +1,7 @@
 """
 Módulo de Models - Exporta todos os modelos do banco de dados.
 """
-from app.models.usuario import Usuario, load_user
+from app.models.usuario import Usuario, UsuarioUnidadeSei, load_user
 from app.models.contrato import Contrato
 from app.models.etapa import Etapa, StatusEmpenho
 from app.models.empenho import Empenho
@@ -50,6 +50,9 @@ from app.models.tipo_pagamento import TipoPagamento
 # Models de Perfil e Permissões
 from app.models.perfil import Perfil, PerfilPermissao
 
+# Model de Setor/Superintendência (estrutura hierárquica SEAD)
+from app.models.setor import SetorSead, TipoEntidade
+
 # Models de Notificacoes
 from app.models.notificacao import (
     NotificacaoTipo, Notificacao,
@@ -62,7 +65,9 @@ from app.models.diaria import (
     DiariasStatusViagem, DiariasTipoItinerario, DiariasTipoSolicitacao,
     DiariasCargo, DiariasValorCargo, DiariasNatureza, DiariasServidor,
     DiariasAgencia, DiariasItinerario, DiariasItemItinerario, DiariasParada,
-    DiariasJustificativa, DiariasCotacao,
+    DiariasJustificativa, DiariasCotacao, DiariasNotaReserva, DiariasNotaEmpenho,
+    DiariasNotaLiquidacao, DiariasProgramacaoDesembolso, DiariasOrdemBancaria,
+    DiariasNotaPatrimonial,
 )
 
 # Planejamento Orçamentário
@@ -77,6 +82,7 @@ from app.extensions import db
 __all__ = [
     'db',
     'Usuario',
+    'UsuarioUnidadeSei',
     'load_user',
     'Contrato',
     'Etapa',
@@ -127,6 +133,9 @@ __all__ = [
     # Perfil e Permissões
     'Perfil',
     'PerfilPermissao',
+    # Setor/Superintendência (estrutura SEAD)
+    'SetorSead',
+    'TipoEntidade',
     # Diárias (Referência)
     'Estado',
     'Municipio',
@@ -151,6 +160,12 @@ __all__ = [
     'DiariasParada',
     'DiariasJustificativa',
     'DiariasCotacao',
+    'DiariasNotaReserva',
+    'DiariasNotaEmpenho',
+    'DiariasNotaLiquidacao',
+    'DiariasProgramacaoDesembolso',
+    'DiariasOrdemBancaria',
+    'DiariasNotaPatrimonial',
     # Planejamento Orçamentário
     'PlanejamentoOrcamentario',
     # Classificador de Fonte

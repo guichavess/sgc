@@ -100,6 +100,34 @@
                     </select>
                 </div>
 
+                {# O que falta #}
+                <div class="col-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+                                type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            <span>O que falta</span>
+                            {% if request.args.getlist('filtro_faltando') %}
+                            <span class="badge bg-danger ms-1">{{ request.args.getlist('filtro_faltando')|length }}</span>
+                            {% endif %}
+                        </button>
+                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 280px; max-height: 350px; overflow-y: auto; z-index: 1060;">
+                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                                <small class="text-muted fw-bold">Filtrar por pendencia:</small>
+                                <a href="#" class="text-decoration-none small" onclick="document.querySelectorAll('.chk-faltando').forEach(c=>c.checked=false); return false;">Limpar</a>
+                            </div>
+                            {% for item in itens_faltando %}
+                            <div class="form-check py-1">
+                                <input class="form-check-input chk-faltando" type="checkbox" name="filtro_faltando"
+                                       value="{{ item }}" id="aud_falt_{{ loop.index }}"
+                                       {% if item in request.args.getlist('filtro_faltando') %}checked{% endif %}>
+                                <label class="form-check-label small" for="aud_falt_{{ loop.index }}">{{ item }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
                 <div class="col-auto">
                     <button type="submit" class="btn btn-primary btn-sm">
                         <i class="bi bi-funnel me-1"></i> Filtrar
@@ -120,27 +148,31 @@
 {# === TABELA === #}
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" style="font-size: 0.82rem;">
-                <thead class="table-light">
+        <div class="table-responsive" style="border-radius: 12px;">
+            <table class="table table-custom table-hover align-middle mb-0" style="font-size: 0.82rem;">
+                <thead>
                     <tr>
-                        <th class="ps-3">Solicitante</th>
+                        <th class="ps-4">Solicitante</th>
                         <th>Tipo</th>
                         <th>Processo SEI</th>
-                        <th class="text-center">Pessoas</th>
+                        <th class="text-center" title="Pessoas cadastradas">Pes</th>
                         <th>Periodo</th>
                         <th class="text-end">Valor</th>
+                        <th class="text-center" title="Objetivo preenchido">Obj</th>
                         <th class="text-center">Etapa</th>
                         {# Documentos-chave #}
-                        <th class="text-center" title="Memorando">Mem</th>
-                        <th class="text-center" title="Requisicao de Diarias">Req</th>
+                        <th class="text-center" title="Memorando de solicitacao">Mem</th>
+                        <th class="text-center" title="Requisicao de Diarias/Passagens">Req</th>
                         <th class="text-center" title="Autorizacao do Secretario">Aut</th>
+                        <th class="text-center" title="Cotacoes aereas (Nacional)">Cot</th>
+                        <th class="text-center" title="Escolha de Passagens (Nacional)">Esc</th>
                         <th class="text-center" title="Nota de Reserva">NR</th>
+                        <th class="text-center" title="Quadro Orcamentario">QO</th>
                         <th class="text-center" title="Analise NCI">NCI</th>
                         <th class="text-center" title="Nota de Liquidacao">NL</th>
                         <th class="text-center" title="Programacao de Desembolso">PD</th>
                         <th class="text-center" title="Ordem Bancaria">OB</th>
-                        <th class="text-center" title="Quadro Orcamentario">Quadro</th>
+                        <th class="text-center" title="Relatorio de Viagem">Rel</th>
                         <th class="text-center">Pendencias</th>
                     </tr>
                 </thead>
@@ -148,7 +180,7 @@
                     {% for r in resultados %}
                     {% set it = r.itinerario %}
                     <tr style="cursor: pointer;" onclick="window.location='{{ url_for('diarias.administracao_detalhe', id=it.id) }}'">
-                        <td class="ps-3">
+                        <td class="ps-4">
                             <span class="fw-semibold">{{ it.usuario_gerador.split('@')[0].replace('.', ' ').title() if '@' in it.usuario_gerador else it.usuario_gerador }}</span>
                             <br><small class="text-muted">{{ it.data_solicitacao.strftime('%d/%m/%Y') if it.data_solicitacao else '' }}</small>
                         </td>
@@ -193,6 +225,13 @@
                             {% endif %}
                         </td>
                         <td class="text-center">
+                            {% if r.tem_objetivo %}
+                            <i class="bi bi-check-circle-fill text-success" style="font-size:0.8rem;"></i>
+                            {% else %}
+                            <i class="bi bi-x-circle text-danger" style="font-size:0.8rem;"></i>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
                             {% if it.etapa_atual %}
                             <span class="badge" style="background-color: {{ it.etapa_atual.cor_hex or '#6c757d' }}; font-size:0.65rem;">
                                 {{ it.etapa_atual.nome }}
@@ -202,7 +241,31 @@
                             {% endif %}
                         </td>
                         {# Documentos-chave com check/x #}
-                        {% for doc_tipo in ['memorando', 'requisicao', 'autorizacao', 'nota_reserva', 'analise_pagamento', 'nl', 'pd', 'ob'] %}
+                        {% for doc_tipo in ['memorando', 'requisicao', 'autorizacao'] %}
+                        <td class="text-center">
+                            {% if r.docs_status.get(doc_tipo) %}
+                            <i class="bi bi-check-circle-fill text-success" style="font-size:0.8rem;"></i>
+                            {% elif doc_tipo in r.docs_status %}
+                            <i class="bi bi-x-circle text-danger" style="font-size:0.8rem;"></i>
+                            {% else %}
+                            <span class="text-muted" style="font-size:0.65rem;">n/a</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                        {# Cotacoes e Escolha Passagens (so para Nacional/Passagens) #}
+                        {% for doc_tipo in ['memorando_cotacoes', 'escolha_passagens'] %}
+                        <td class="text-center">
+                            {% if r.docs_status.get(doc_tipo) %}
+                            <i class="bi bi-check-circle-fill text-success" style="font-size:0.8rem;"></i>
+                            {% elif doc_tipo in r.docs_status %}
+                            <i class="bi bi-x-circle text-danger" style="font-size:0.8rem;"></i>
+                            {% else %}
+                            <span class="text-muted" style="font-size:0.65rem;">n/a</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                        {# NR e Quadro Orcamentario #}
+                        {% for doc_tipo in ['nota_reserva'] %}
                         <td class="text-center">
                             {% if r.docs_status.get(doc_tipo) %}
                             <i class="bi bi-check-circle-fill text-success" style="font-size:0.8rem;"></i>
@@ -220,21 +283,35 @@
                             <i class="bi bi-x-circle text-danger" style="font-size:0.8rem;"></i>
                             {% endif %}
                         </td>
+                        {% for doc_tipo in ['analise_pagamento', 'nl', 'pd', 'ob', 'relatorio_viagem'] %}
+                        <td class="text-center">
+                            {% if r.docs_status.get(doc_tipo) %}
+                            <i class="bi bi-check-circle-fill text-success" style="font-size:0.8rem;"></i>
+                            {% elif doc_tipo in r.docs_status %}
+                            <i class="bi bi-x-circle text-danger" style="font-size:0.8rem;"></i>
+                            {% else %}
+                            <span class="text-muted" style="font-size:0.65rem;">n/a</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
                         <td class="text-center">
                             {% if r.qtd_faltando == 0 %}
                             <span class="badge bg-success"><i class="bi bi-check"></i> OK</span>
-                            {% elif r.qtd_faltando <= 3 %}
-                            <span class="badge bg-warning text-dark" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
-                            {% elif r.qtd_faltando <= 6 %}
-                            <span class="badge bg-orange text-white" style="background-color: #fd7e14;" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
                             {% else %}
-                            <span class="badge bg-danger" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
+                            <span class="badge {% if r.qtd_faltando <= 3 %}bg-warning text-dark{% elif r.qtd_faltando <= 6 %}text-white{% else %}bg-danger{% endif %}"
+                                  {% if r.qtd_faltando > 3 and r.qtd_faltando <= 6 %}style="background-color: #fd7e14;"{% endif %}
+                                  data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="left"
+                                  data-bs-html="true"
+                                  data-bs-content="<ul class='list-unstyled mb-0 small'>{% for item in r.faltando %}<li><i class='bi bi-x-circle text-danger me-1'></i>{{ item }}</li>{% endfor %}</ul>"
+                                  onclick="event.stopPropagation()">
+                                {{ r.qtd_faltando }}
+                            </span>
                             {% endif %}
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="17" class="text-center py-5 text-muted">
+                        <td colspan="20" class="text-center py-5 text-muted">
                             <i class="bi bi-search me-1"></i> Nenhum resultado encontrado.
                         </td>
                     </tr>
@@ -255,14 +332,28 @@
             <i class="bi bi-x-circle text-danger ms-2"></i> Ausente |
             <span class="text-muted ms-2">n/a</span> Nao se aplica |
             <span class="badge bg-success ms-2">OK</span> Sem pendencias |
-            <span class="badge bg-warning text-dark ms-2">N</span> N itens faltando
+            <span class="badge bg-warning text-dark ms-2">N</span> Passe o mouse para ver detalhes
         </small>
         <br>
         <small class="text-muted">
             <strong>Colunas:</strong>
-            Mem = Memorando | Req = Requisicao | Aut = Autorizacao | NR = Nota de Reserva |
-            NCI = Analise NCI | NL = Liquidacao | PD = Progr. Desembolso | OB = Ordem Bancaria | Quadro = Quadro Orcamentario
+            Pes = Pessoas | Obj = Objetivo |
+            Mem = Memorando | Req = Requisicao | Aut = Autorizacao |
+            Cot = Cotacoes aereas | Esc = Escolha de Passagens |
+            NR = Nota de Reserva | QO = Quadro Orcamentario | NCI = Analise NCI |
+            NL = Liquidacao | PD = Progr. Desembolso | OB = Ordem Bancaria | Rel = Relatorio de Viagem
         </small>
     </div>
 </div>
+{% endblock %}
+
+{% block diarias_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var popoverList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+    popoverList.forEach(function(el) {
+        new bootstrap.Popover(el, {sanitize: false});
+    });
+});
+</script>
 {% endblock %}

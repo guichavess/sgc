@@ -209,6 +209,19 @@ def create_app(config_class=None):
     from app.constants import normalizar_competencia
     app.jinja_env.filters['normalizar_comp'] = normalizar_competencia
 
+    # Hook para renovar token SEI automaticamente antes que expire
+    @app.before_request
+    def _refresh_sei_token():
+        from flask_login import current_user as cu
+        from flask import session as sess
+        if not cu.is_authenticated:
+            return
+        if not sess.get('_sei_user'):
+            return
+        from app.services.sei_token import token_precisa_renovar, renovar_token_sessao
+        if token_precisa_renovar():
+            renovar_token_sessao()
+
     # Context processor para notificacoes (disponivel em todos os templates)
     _register_context_processors(app)
 

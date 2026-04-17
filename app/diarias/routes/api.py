@@ -1,8 +1,8 @@
 """
 Endpoints AJAX (JSON) do módulo de Diárias.
 """
-from flask import request, jsonify
-from flask_login import login_required
+from flask import request, jsonify, current_app
+from flask_login import login_required, current_user
 
 from app.diarias.routes import diarias_bp
 from app.extensions import db
@@ -259,6 +259,16 @@ def api_criar_cotacao_voo():
             destino_conexao=data.get('destino_conexao', '').strip() or None,
             fonte='manual',
         )
+        # Notifica solicitante que cotações foram cadastradas
+        try:
+            from app.services.diarias_notification import DiariasNotifier
+            from app.models.diaria import DiariasItinerario
+            it = DiariasItinerario.query.get(int(data['itinerario_id']))
+            if it:
+                DiariasNotifier.notificar_etapa(it, 'cotacoes_cadastradas', current_user.id)
+        except Exception as e:
+            current_app.logger.warning(f"[DIARIAS] Falha ao notificar cotacoes_cadastradas: {e}")
+
         return jsonify({
             'id': cotacao.id,
             'tipo_trecho': cotacao.tipo_trecho,
@@ -328,58 +338,6 @@ def api_excluir_cotacao_voo(cotacao_id):
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-@diarias_bp.route('/api/admin/alterar-etapa', methods=['POST'])
-@login_required
-@requires_permission('diarias.aprovar')
-def api_admin_alterar_etapa():
-    """Altera manualmente a etapa do itinerário e registra no histórico."""
-    from flask_login import current_user
-    from app.models.diaria import (
-        DiariasItinerario, DiariasEtapa, DiariasHistoricoMovimentacao,
-    )
-    from flask import current_app
-
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'Dados inválidos.'}), 400
-
-    itinerario_id = data.get('itinerario_id')
-    etapa_id = data.get('etapa_id')
-    comentario = (data.get('comentario') or '').strip()
-
-    if not itinerario_id or not etapa_id:
-        return jsonify({'error': 'itinerario_id e etapa_id são obrigatórios.'}), 400
-
-    itinerario = DiariasItinerario.query.get_or_404(itinerario_id)
-    etapa = DiariasEtapa.query.get(etapa_id)
-    if not etapa:
-        return jsonify({'error': 'Etapa não encontrada.'}), 404
-
-    try:
-        etapa_anterior = itinerario.etapa_atual_id
-        itinerario.etapa_atual_id = etapa.id
-
-        historico = DiariasHistoricoMovimentacao(
-            id_itinerario=itinerario.id,
-            id_etapa_anterior=etapa_anterior,
-            id_etapa_nova=etapa.id,
-            id_usuario_responsavel=current_user.id,
-            comentario=comentario or 'Alteração manual de etapa (admin)',
-        )
-        db.session.add(historico)
-        db.session.commit()
-
-        current_app.logger.info(
-            f"[DIARIAS] Etapa alterada manualmente: itinerario={itinerario.id} "
-            f"{etapa_anterior} → {etapa.id} por user={current_user.id}"
-        )
-        return jsonify({'sucesso': True, 'etapa_nome': etapa.nome})
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"[DIARIAS] Erro ao alterar etapa: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
 @diarias_bp.route('/api/admin/editar-dados-basicos', methods=['POST'])
 @login_required
 @requires_permission('diarias.aprovar')
@@ -417,7 +375,11 @@ def api_admin_editar_dados_basicos():
         if 'objetivo' in data:
             itinerario.objetivo = (data['objetivo'] or '').strip() or None
         if 'valor_total' in data:
-            itinerario.valor_total = float(data['valor_total']) if data['valor_total'] else None
+            # MED-11: Validar que valor_total não pode ser negativo
+            vt = float(data['valor_total']) if data['valor_total'] else None
+            if vt is not None and vt < 0:
+                return jsonify({'error': 'Valor total não pode ser negativo.'}), 400
+            itinerario.valor_total = vt
         if 'qtd_diarias_solicitadas' in data:
             itinerario.qtd_diarias_solicitadas = float(data['qtd_diarias_solicitadas']) if data['qtd_diarias_solicitadas'] else 0
 
@@ -493,6 +455,14 @@ def api_admin_remover_pessoa(item_id):
     from flask import current_app
 
     item = DiariasItemItinerario.query.get_or_404(item_id)
+
+    # Guard: não permitir remover a última pessoa do itinerário
+    total_pessoas = DiariasItemItinerario.query.filter_by(
+        id_itinerario=item.id_itinerario
+    ).count()
+    if total_pessoas <= 1:
+        return jsonify({'error': 'Não é possível remover a última pessoa do itinerário.'}), 400
+
     try:
         db.session.delete(item)
         db.session.commit()
@@ -706,3 +676,152 @@ def api_verificar_autorizacao(itinerario_id):
         } if envio else None,
         'erro': resultado['erro'],
     })
+
+
+@diarias_bp.route('/api/admin/criar-processo-sei/<int:id>', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def api_criar_processo_sei(id):
+    """
+    Cria processo SEI para um itinerário que não possui processo vinculado.
+    Útil para itinerários criados antes da integração SEI ou após falha.
+    """
+    from app.models.diaria import (
+        DiariasItinerario, DiariasItemItinerario, DiariasTipoSolicitacao,
+        DiariasCargo,
+    )
+    from app.models.diaria import Estado
+    from app.services.diarias_sei_integration import criar_processo_diarias_completo
+    from app.constants import DiariasEtapaID
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if itinerario.sei_protocolo:
+        return jsonify({
+            'sucesso': False,
+            'erro': f'Itinerário já possui processo SEI: {itinerario.sei_protocolo}',
+        }), 400
+
+    try:
+        # Carrega pessoas do itinerário
+        itens = DiariasItemItinerario.query.filter_by(id_itinerario=id).all()
+        if not itens:
+            return jsonify({'sucesso': False, 'erro': 'Nenhuma pessoa vinculada ao itinerário.'}), 400
+
+        # Pré-carrega cargos
+        cargo_ids = {item.cargo_id for item in itens if item.cargo_id}
+        cargo_ids |= {item.cargo_assessorado_id for item in itens if item.cargo_assessorado_id}
+        cargos_map = {}
+        if cargo_ids:
+            cargos_map = {c.id: c for c in DiariasCargo.query.filter(DiariasCargo.id.in_(cargo_ids)).all()}
+
+        # Monta dados dos servidores
+        servidores_sei = []
+        primeira_matricula = ''
+        for item in itens:
+            mat = item.matricula_pessoa or ''
+            if not primeira_matricula:
+                primeira_matricula = mat
+
+            cargo_obj = cargos_map.get(item.cargo_id) if item.cargo_id else None
+            cargo_nome = cargo_obj.nome if cargo_obj else ''
+
+            cargo_para_calculo = item.cargo_assessorado_id or item.cargo_id
+            valor_unitario = float(DiariaService.get_valor_cargo(cargo_para_calculo, itinerario.tipo_itinerario)) if cargo_para_calculo else 0.0
+            valor_total_pessoa = valor_unitario * float(itinerario.qtd_diarias_solicitadas)
+
+            cargo_assessorado_obj = cargos_map.get(item.cargo_assessorado_id) if item.cargo_assessorado_id else None
+
+            servidores_sei.append({
+                'matricula': mat,
+                'cpf': item.cpf_pessoa or '',
+                'nome': item.nome_pessoa or '',
+                'cargo': cargo_nome,
+                'cargo_assessorado': cargo_assessorado_obj.nome if cargo_assessorado_obj else None,
+                'vinculo': '',
+                'banco': '', 'agencia': '', 'conta': '',
+                'valor_unitario': valor_unitario,
+                'valor_total_pessoa': valor_total_pessoa,
+            })
+
+        primeiro_cargo = cargos_map.get(itens[0].cargo_id) if itens[0].cargo_id else None
+        dados_servidor = {
+            'cargo': primeiro_cargo.nome if primeiro_cargo else 'Servidor',
+            'matricula': primeira_matricula,
+        }
+
+        tipo_sol = DiariasTipoSolicitacao.query.get(itinerario.tipo_solicitacao_id)
+        tipo_sol_nome = tipo_sol.nome if tipo_sol else 'Diárias'
+
+        estado_orig = Estado.query.get(int(itinerario.estado_origem or 22))
+        estado_dest = Estado.query.get(int(itinerario.estado_destino or 0)) if itinerario.estado_destino else None
+        trecho = ''
+        if estado_orig and estado_dest:
+            trecho = estado_orig.nome + ' - ' + estado_dest.nome
+
+        tipo_it = itinerario.tipo_itinerario or 2
+        dados_itinerario = {
+            'tipo_solicitacao_nome': tipo_sol_nome,
+            'tipo_itinerario_nome': 'Internacional' if tipo_it == 3 else ('Estadual' if tipo_it == 1 else 'Nacional'),
+            'data_viagem': itinerario.data_viagem,
+            'data_retorno': itinerario.data_retorno,
+            'sei_protocolo': itinerario.sei_protocolo,
+        }
+
+        dados_requisicao = {
+            'objetivo': itinerario.objetivo or '',
+            'servidores': servidores_sei,
+            'qtd_diarias': itinerario.qtd_diarias_solicitadas,
+            'trecho': trecho,
+        }
+
+        resultado = criar_processo_diarias_completo(
+            dados_itinerario, dados_servidor,
+            justificativa_texto=itinerario.objetivo or '',
+            dados_requisicao=dados_requisicao,
+            tipo_solicitacao_id=itinerario.tipo_solicitacao_id,
+        )
+
+        if resultado['sucesso']:
+            proc = resultado['procedimento']
+            memo = resultado.get('memorando')
+            req = resultado.get('requisicao')
+
+            itinerario.sei_protocolo = resultado.get('protocolo', '')
+            itinerario.sei_id_procedimento = str(proc.get('IdProcedimento', '')) if proc else None
+
+            if memo:
+                itinerario.set_doc('memorando',
+                                   sei_id=str(memo.get('IdDocumento', '')),
+                                   sei_formatado=str(memo.get('DocumentoFormatado', '')))
+            if req:
+                itinerario.set_doc('requisicao',
+                                   sei_id=str(req.get('IdDocumento', '')),
+                                   sei_formatado=str(req.get('DocumentoFormatado', '')))
+
+            req_pass = resultado.get('requisicao_passagens')
+            if req_pass:
+                itinerario.set_doc('requisicao_passagens',
+                                   sei_id=str(req_pass.get('IdDocumento', '')),
+                                   sei_formatado=str(req_pass.get('DocumentoFormatado', '')))
+
+            if not itinerario.n_processo and resultado.get('protocolo'):
+                itinerario.n_processo = resultado['protocolo']
+
+            db.session.commit()
+
+            return jsonify({
+                'sucesso': True,
+                'protocolo': resultado.get('protocolo', ''),
+                'mensagem': f'Processo SEI criado: {resultado.get("protocolo", "")}',
+            })
+        else:
+            return jsonify({
+                'sucesso': False,
+                'erro': resultado.get('erro', 'Falha ao criar processo SEI.'),
+            }), 500
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'[DIARIAS] Erro ao criar processo SEI para itinerário {id}: {e}')
+        return jsonify({'sucesso': False, 'erro': str(e)}), 500

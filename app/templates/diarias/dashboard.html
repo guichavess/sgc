@@ -18,46 +18,97 @@
     </div>
 </div>
 
-{# Filtros #}
+{# Filtros — layout alinhado com Administração (dropdowns multi-select + busca genérica) #}
+{% set filtro_tipos = request.args.getlist('filtro_tipo')|map('int')|list %}
+{% set filtro_status = request.args.getlist('filtro_status')|map('int')|list %}
 <div class="card mb-4 border-0 shadow-sm" style="overflow: visible; position: relative; z-index: 10;">
     <div class="card-body p-3" style="overflow: visible;">
         <form method="GET" action="{{ url_for('diarias.dashboard') }}">
             <div class="row g-2 align-items-center">
-                <div class="col-md-2">
-                    <select name="tipo_itinerario" class="form-select form-select-sm">
-                        <option value="">Tipo: Todos</option>
-                        <option value="1" {{ 'selected' if filtros.tipo_itinerario == '1' }}>Estadual</option>
-                        <option value="2" {{ 'selected' if filtros.tipo_itinerario == '2' }}>Nacional</option>
-                        <option value="3" {{ 'selected' if filtros.tipo_itinerario == '3' }}>Internacional</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <select name="status" class="form-select form-select-sm">
-                        <option value="">Status: Todos</option>
-                        {% for s in status_list %}
-                        <option value="{{ s.id }}" {{ 'selected' if filtros.status == s.id|string }}>{{ s.nome }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
+                {# Busca genérica #}
+                <div class="col">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                        <input type="text" name="n_processo" class="form-control border-start-0 ps-0"
-                               placeholder="Nº Processo..." value="{{ filtros.n_processo or '' }}">
+                        <input type="text" name="q" class="form-control border-start-0 ps-0"
+                               placeholder="Processo, destino..." value="{{ request.args.get('q', '') }}">
                     </div>
                 </div>
-                <div class="col-md-3">
+                {# Dropdown Tipo #}
+                <div class="col-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
+                                type="button" id="dropdownTiposDash" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                            <i class="bi bi-signpost-split me-1"></i>
+                            <span id="labelTiposDash">Tipo</span>
+                            <span class="badge bg-primary ms-1" id="badgeTiposDash" style="display: none;">0</span>
+                        </button>
+                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 240px; z-index: 1060;">
+                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                                <small class="text-muted fw-bold">Tipo de diária:</small>
+                                <a href="#" class="text-decoration-none small" onclick="limparFiltro('filtro-tipo-dash', 'TiposDash'); return false;">Limpar</a>
+                            </div>
+                            {% set tipos_diaria = [{'id': 1, 'nome': 'Estadual', 'icone': 'bi-geo-alt', 'cor': '#0dcaf0'},
+                                                   {'id': 2, 'nome': 'Nacional', 'icone': 'bi-flag', 'cor': '#ffc107'},
+                                                   {'id': 3, 'nome': 'Internacional', 'icone': 'bi-globe', 'cor': '#dc3545'}] %}
+                            {% for t in tipos_diaria %}
+                            <div class="form-check py-1">
+                                <input class="form-check-input filtro-tipo-dash" type="checkbox" name="filtro_tipo"
+                                    value="{{ t.id }}" id="dashTipo_{{ t.id }}"
+                                    {% if t.id in filtro_tipos %}checked{% endif %}
+                                    onchange="atualizarLabel('filtro-tipo-dash', 'labelTiposDash', 'badgeTiposDash', 'Tipo')">
+                                <label class="form-check-label small d-flex align-items-center w-100" for="dashTipo_{{ t.id }}" style="cursor: pointer;">
+                                    <i class="bi {{ t.icone }} me-1" style="color: {{ t.cor }};"></i>
+                                    {{ t.nome }}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {# Dropdown Status #}
+                <div class="col-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
+                                type="button" id="dropdownStatusDash" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                            <i class="bi bi-check-circle me-1"></i>
+                            <span id="labelStatusDash">Status</span>
+                            <span class="badge bg-primary ms-1" id="badgeStatusDash" style="display: none;">0</span>
+                        </button>
+                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
+                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                                <small class="text-muted fw-bold">Status:</small>
+                                <a href="#" class="text-decoration-none small" onclick="limparFiltro('filtro-status-dash', 'StatusDash'); return false;">Limpar</a>
+                            </div>
+                            {% for s in status_list %}
+                            <div class="form-check py-1">
+                                <input class="form-check-input filtro-status-dash" type="checkbox" name="filtro_status"
+                                    value="{{ s.id }}" id="dashStatus_{{ s.id }}"
+                                    {% if s.id in filtro_status %}checked{% endif %}
+                                    onchange="atualizarLabel('filtro-status-dash', 'labelStatusDash', 'badgeStatusDash', 'Status')">
+                                <label class="form-check-label small d-flex align-items-center w-100" for="dashStatus_{{ s.id }}" style="cursor: pointer;">
+                                    {{ s.nome }}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {# Data viagem #}
+                <div class="col-auto">
                     <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-white text-muted small px-2">Viagem</span>
+                        <span class="input-group-text bg-white text-muted small px-2"><i class="bi bi-calendar-event me-1"></i>Viagem</span>
                         <input type="date" name="data_viagem" class="form-control px-2"
-                               value="{{ filtros.data_viagem or '' }}">
+                               value="{{ request.args.get('data_viagem', '') }}">
                     </div>
                 </div>
-                <div class="col-md-2 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold" title="Filtrar">
-                        <i class="bi bi-funnel"></i>
+                {# Botões #}
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold" title="Filtrar">
+                        <i class="bi bi-funnel me-1"></i>Filtrar
                     </button>
-                    {% if filtros.tipo_itinerario or filtros.status or filtros.n_processo or filtros.data_viagem %}
+                </div>
+                <div class="col-auto">
+                    {% if request.args.get('q') or filtro_tipos or filtro_status or request.args.get('data_viagem') %}
                     <a href="{{ url_for('diarias.dashboard') }}" class="btn btn-outline-danger btn-sm" title="Limpar Filtros">
                         <i class="bi bi-x-lg"></i>
                     </a>
@@ -67,6 +118,40 @@
         </form>
     </div>
 </div>
+
+<script>
+// Helpers genéricos para filtros multi-select (mesma lógica da Administração)
+function atualizarLabel(checkClass, labelId, badgeId, defaultText) {
+    const checks = document.querySelectorAll('.' + checkClass + ':checked');
+    const label = document.getElementById(labelId);
+    const badge = document.getElementById(badgeId);
+    if (checks.length === 0) {
+        label.textContent = defaultText;
+        badge.style.display = 'none';
+    } else if (checks.length === 1) {
+        label.textContent = checks[0].closest('.form-check').querySelector('label').textContent.trim();
+        badge.style.display = 'none';
+    } else {
+        label.textContent = defaultText;
+        badge.textContent = checks.length;
+        badge.style.display = 'inline';
+    }
+}
+function limparFiltro(checkClass, suffix) {
+    document.querySelectorAll('.' + checkClass).forEach(c => c.checked = false);
+    atualizarLabel(checkClass, 'label' + suffix, 'badge' + suffix,
+                   suffix.replace('Dash', ''));
+}
+document.addEventListener('DOMContentLoaded', function() {
+    atualizarLabel('filtro-tipo-dash', 'labelTiposDash', 'badgeTiposDash', 'Tipo');
+    atualizarLabel('filtro-status-dash', 'labelStatusDash', 'badgeStatusDash', 'Status');
+});
+</script>
+
+<style>
+    .tr-link { cursor: pointer; }
+    .tr-link:hover { background-color: rgba(0,0,0,0.035); }
+</style>
 
 {# Tabela de resultados #}
 <div class="card border-0 shadow-sm overflow-hidden">
@@ -86,15 +171,14 @@
                         <th>Data Solicitação</th>
                         <th class="text-center">Diárias</th>
                         <th>Período</th>
-                        <th>Destino</th>
+                        <th>Destino / Roteiro</th>
                         <th class="text-end">Valor Total</th>
                         <th class="text-center">Status</th>
-                        <th class="text-center" style="width: 80px;">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for it in itinerarios.items %}
-                    <tr style="cursor: pointer;" onclick="window.location='{{ url_for('diarias.detalhes', id=it.id) }}'">
+                    <tr class="tr-link" data-href="{{ url_for('diarias.detalhes', id=it.id) }}">
                         <td class="ps-4">
                             {% if it.tipo_itinerario == 1 %}
                                 <span class="badge rounded-pill bg-info text-white">Estadual</span>
@@ -106,7 +190,7 @@
                         </td>
                         <td>
                             {% if it.n_processo and it.sei_id_procedimento %}
-                                <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ it.sei_id_procedimento }}" target="_blank" class="fw-bold text-decoration-none" onclick="event.stopPropagation();">{{ it.n_processo }} <i class="bi bi-box-arrow-up-right small"></i></a>
+                                <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ it.sei_id_procedimento }}" target="_blank" class="fw-bold text-decoration-none">{{ it.n_processo }} <i class="bi bi-box-arrow-up-right small"></i></a>
                             {% elif it.n_processo %}
                                 <span class="fw-bold text-dark">{{ it.n_processo }}</span>
                             {% else %}
@@ -130,7 +214,29 @@
                             </div>
                         </td>
                         <td>
-                            {{ estados_destino.get(it.estado_destino, '-') }}
+                            {# Estadual: mostra paradas empilhadas + destino final (ultima parada).
+                               Nacional: mostra estado de destino. #}
+                            {% if it.tipo_itinerario == 1 %}
+                                {% set paradas = paradas_por_itin.get(it.id, []) %}
+                                {% if paradas %}
+                                    {% for p in paradas %}
+                                    <div class="small{% if loop.last %} fw-semibold{% endif %}">
+                                        {% if not loop.last %}
+                                            <i class="bi bi-geo me-1 text-muted" style="font-size: 0.6rem;"></i>
+                                        {% else %}
+                                            <i class="bi bi-geo-alt-fill me-1 text-success" style="font-size: 0.7rem;"></i>
+                                        {% endif %}
+                                        {{ p.municipio.nome if p.municipio else p.municipio_id }}
+                                    </div>
+                                    {% endfor %}
+                                {% elif it.municipio_origem_obj %}
+                                    <span class="small text-muted">{{ it.municipio_origem_obj.nome }}</span>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            {% else %}
+                                {{ estados_destino.get(it.estado_destino, '-') }}
+                            {% endif %}
                         </td>
                         <td class="text-end">
                             {% if it.valor_total %}
@@ -154,17 +260,10 @@
                                 <span class="badge rounded-pill bg-secondary">{{ it.status.nome if it.status else '-' }}</span>
                             {% endif %}
                         </td>
-                        <td class="text-center">
-                            <a href="{{ url_for('diarias.detalhes', id=it.id) }}"
-                               class="btn btn-sm btn-outline-primary" title="Ver detalhes"
-                               onclick="event.stopPropagation()">
-                                <i class="bi bi-eye"></i>
-                            </a>
-                        </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="9" class="text-center py-5 text-muted">
+                        <td colspan="8" class="text-center py-5 text-muted">
                             <i class="bi bi-inbox fs-1 d-block mb-2"></i>
                             Nenhuma solicitação encontrada.
                         </td>
@@ -174,6 +273,16 @@
             </table>
         </div>
     </div>
+
+    {# JS: linhas clicáveis (mesmo padrão de administração/aprovar) #}
+    <script>
+    document.querySelectorAll('.tr-link[data-href]').forEach(tr => {
+        tr.addEventListener('click', function(e) {
+            if (e.target.closest('a, button, .btn')) return;
+            window.location = this.dataset.href;
+        });
+    });
+    </script>
 
     {# Paginação #}
     {% if itinerarios.pages > 1 %}

@@ -1,0 +1,182 @@
+{# Partial: Tabela de pessoas e paradas para a aba Resumo.
+   Espera variaveis: itens, paradas, pode_editar, cargos, naturezas #}
+
+{# --- DOCUMENTOS SEI VINCULADOS (collapsible, 2 colunas) --- #}
+{% set docs_validos = itinerario.documentos_sei|selectattr('sei_id')|rejectattr('sei_id', 'equalto', 'importado')|sort(attribute='tipo_documento')|list %}
+{% if docs_validos %}
+<section class="mb-4">
+    <div class="card border-0 shadow-sm overflow-hidden">
+        <div class="card-header bg-white border-bottom py-2" role="button"
+             data-bs-toggle="collapse" data-bs-target="#collapseDocsSei" aria-expanded="false">
+            <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 section-title">
+                    <i class="bi bi-file-earmark-text me-1"></i>Documentos SEI
+                    <i class="bi bi-chevron-down ms-1 collapse-chevron" style="font-size: 0.7rem; transition: transform 0.2s;"></i>
+                </h6>
+                <span class="badge bg-secondary">{{ docs_validos|length }}</span>
+            </div>
+        </div>
+        <div class="collapse" id="collapseDocsSei">
+            <div class="card-body py-2 px-3">
+                <div class="row g-1">
+                    {% for doc in docs_validos %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="d-flex align-items-center py-1 px-2 rounded {% if not loop.last %}border-bottom{% endif %}" style="font-size: 0.78rem;">
+                            <span class="badge bg-light text-dark border me-2 text-truncate" style="max-width: 120px; font-size: 0.7rem;" title="{{ doc.tipo_documento }}">{{ doc.tipo_documento|replace('_', ' ')|title }}</span>
+                            <span class="text-truncate">
+                                {% if itinerario.sei_id_procedimento %}
+                                <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}"
+                                   target="_blank" class="text-decoration-none" title="{{ doc.sei_formatado or doc.sei_id }}">
+                                    {{ doc.sei_formatado or doc.sei_id }}
+                                    <i class="bi bi-box-arrow-up-right" style="font-size: 0.55rem;"></i>
+                                </a>
+                                {% else %}
+                                {{ doc.sei_formatado or doc.sei_id }}
+                                {% endif %}
+                                {% if doc.codigo %}
+                                <span class="text-success fw-bold ms-1">{{ doc.codigo }}</span>
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<style>
+    [data-bs-toggle="collapse"][aria-expanded="true"] .collapse-chevron { transform: rotate(180deg); }
+</style>
+{% endif %}
+
+{# --- PESSOAS --- #}
+<section class="mb-4">
+    <div class="card border-0 shadow-sm overflow-hidden">
+        <div class="card-header bg-white border-bottom py-2">
+            <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 section-title"><i class="bi bi-people me-1"></i>Pessoas</h6>
+                <div>
+                    {% if pode_editar %}
+                    <button class="btn btn-success btn-sm py-0 px-2 me-1" onclick="abrirModalPessoa()" title="Adicionar pessoa">
+                        <i class="bi bi-person-plus me-1" style="font-size: 0.75rem;"></i><span style="font-size: 0.75rem;">Adicionar</span>
+                    </button>
+                    {% endif %}
+                    <span class="badge bg-secondary">{{ itens|length }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive table-rounded">
+                <table class="table table-custom table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Nome</th>
+                            <th>CPF / Mat.</th>
+                            <th>Cargo (Folha)</th>
+                            <th>Setor / Orgao</th>
+                            <th>Cargo Diaria</th>
+                            <th>Assessorando</th>
+                            <th class="text-end">Valor Diaria</th>
+                            {% if pode_editar %}
+                            <th class="text-center" style="width: 80px;">Acoes</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in itens %}
+                        <tr data-item-id="{{ item.id }}"
+                            data-cpf="{{ item.cpf_pessoa or '' }}"
+                            data-nome="{{ item.nome_pessoa or '' }}"
+                            data-matricula="{{ item.matricula_pessoa or '' }}"
+                            data-cargo-id="{{ item.cargo_id or '' }}"
+                            data-cargo-assessorado-id="{{ item.cargo_assessorado_id or '' }}"
+                            data-natureza-id="{{ item.natureza_id or '' }}"
+                            data-valor-cargo="{{ item.valor_cargo or '' }}"
+                            data-banco-agencia="{{ item.banco_agencia or '' }}"
+                            data-banco-conta="{{ item.banco_conta or '' }}"
+                            data-vinculo="{{ item.vinculo or '' }}"
+                            data-cargo-folha="{{ item.cargo_folha or '' }}"
+                            data-setor="{{ item.setor or '' }}"
+                            data-orgao="{{ item.orgao or '' }}">
+                            <td class="ps-3 fw-semibold">{{ item.nome_pessoa or item.cpf_pessoa }}</td>
+                            <td>
+                                <small>{{ item.cpf_pessoa }}</small>
+                                {% if item.matricula_pessoa %}<br><small class="text-muted">Mat: {{ item.matricula_pessoa }}</small>{% endif %}
+                            </td>
+                            <td><small>{{ item.cargo_folha or '-' }}</small></td>
+                            <td>
+                                {% if item.setor or item.orgao %}
+                                <small>{{ item.orgao or '' }}{% if item.setor and item.orgao %} / {% endif %}{{ item.setor or '' }}</small>
+                                {% else %}<span class="text-muted small">-</span>{% endif %}
+                            </td>
+                            <td>{{ item.cargo.nome if item.cargo else '-' }}</td>
+                            <td>
+                                {% if item.cargo_assessorado %}
+                                <span class="badge rounded-pill bg-success">{{ item.cargo_assessorado.nome }}</span>
+                                {% else %}<span class="text-muted small">---</span>{% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if item.valor_cargo %}
+                                <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(item.valor_cargo).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+                                {% else %}<span class="text-muted small">---</span>{% endif %}
+                            </td>
+                            {% if pode_editar %}
+                            <td class="text-center">
+                                <button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="abrirModalPessoa(this.closest('tr'))" title="Editar">
+                                    <i class="bi bi-pencil" style="font-size: 0.7rem;"></i>
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removerPessoa({{ item.id }}, this)" title="Remover">
+                                    <i class="bi bi-trash" style="font-size: 0.7rem;"></i>
+                                </button>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="{{ 8 if pode_editar else 7 }}" class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                Nenhuma pessoa adicionada.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# --- PARADAS (ESTADUAL) --- #}
+{% if paradas %}
+<section class="mb-4">
+    <div class="card border-0 shadow-sm overflow-hidden">
+        <div class="card-header bg-white border-bottom py-2">
+            <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 section-title"><i class="bi bi-geo-alt me-1"></i>Paradas</h6>
+                <span class="badge bg-secondary">{{ paradas|length }}</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive table-rounded">
+                <table class="table table-custom table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Municipio</th>
+                            <th>Codigo IBGE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in paradas %}
+                        <tr>
+                            <td class="ps-3 fw-semibold">{{ p.municipio.nome if p.municipio else '-' }}</td>
+                            <td>{{ p.municipio_id }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
