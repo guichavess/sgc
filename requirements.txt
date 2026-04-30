@@ -37,3 +37,4 @@ APScheduler==3.10.4
 trino[external-authentication]==0.329.0
 pandas
 openpyxl
+beautifulsoup4>=4.12.0

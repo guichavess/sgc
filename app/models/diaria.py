@@ -203,6 +203,8 @@ class DiariasItinerario(db.Model):
     sei_protocolo = db.Column(db.String(50), nullable=True, index=True)  # MED-14: índice para buscas/timeline
     sei_id_procedimento = db.Column(db.String(50), nullable=True)   # ID interno do procedimento SEI
     unidade_geradora_id = db.Column(db.String(50), nullable=True)   # Unidade SEI onde o processo foi criado
+    link_processo_sei = db.Column(db.Text, nullable=True)           # URL de acesso ao processo no SEI
+    especificacao_sei = db.Column(db.Text, nullable=True)           # Especificação/assunto do processo SEI
 
     # Assinatura do Superintendente nas Requisições (antes do Secretário)
     superintendente_assinou = db.Column(db.Boolean, default=False, nullable=False)

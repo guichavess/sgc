@@ -32,7 +32,7 @@ def api_setores_por_superintendencia(superintendencia_id):
 
     Inclui a própria Superintendência como opção (para usuários do topo da SI).
     """
-    from app.models.setor import Setor
+    from app.models.setor import SetorSead as Setor
 
     # A própria Superintendência + todos os setores cuja superintendencia_id == id
     setores = Setor.query.filter(

@@ -11,6 +11,7 @@
 {% set doc_np = itinerario.get_doc('np') %}
 {% set doc_prestacao_scdp = itinerario.get_doc('prestacao_scdp') %}
 {% set doc_desp_geo_quadro = itinerario.get_doc('despacho_geo_quadro') %}
+{% set doc_habilitacao = itinerario.get_doc('analise_habilitacao') %}
 {% set quadro = itinerario.quadro_orcamentario %}
 {% set tem_passagens = itinerario.tipo_solicitacao_id in [2, 3] %}
 {% set escolha_feita = itinerario.escolha_voo_ida_id or itinerario.escolha_sei_opcoes %}
@@ -274,20 +275,96 @@
             <div class="alert alert-secondary py-2 mb-0">
                 <i class="bi bi-lock me-1"></i>Complete a Autorização primeiro.
             </div>
-            {% elif analise1_ok %}
-            <div class="rounded-3 p-3 mb-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
-                <i class="bi bi-check-circle-fill text-success me-2"></i>
-                <strong>Análise 1ª Parte concluída!</strong>
-                <span class="d-block mt-1 small text-muted">
-                    NR: {{ doc_nr.codigo }} | UG: {{ quadro.ug }} | Natureza: {{ quadro.natureza_despesa }}
+            {% else %}
+
+            {# ── Despacho do Diretor — envio simultâneo para GPO e CCDP ── #}
+            <div class="text-center mb-2" style="font-size: 0.7rem; color: #6c757d;">
+                <span class="badge" style="background:#6c757d22; color:#495057; font-size:0.62rem; font-weight:600; letter-spacing:0.3px;">
+                    <i class="bi bi-arrow-down me-1"></i>Despacho do Diretor Financeiro
                 </span>
             </div>
-            {% else %}
-            <div class="alert alert-info py-2">
-                <i class="bi bi-info-circle me-1"></i>
-                <strong>Subitens:</strong> Nota de Reserva, Quadro Orçamentário, Análise de Habilitação.
-                <br>Acesse a <a href="{{ url_for('financeiro.diarias_detalhe', id=itinerario.id) }}" class="fw-bold">aba Financeira</a>.
+            <div class="text-center mb-2" style="font-size: 0.7rem; color: #6c757d; position: relative;">
+                <span style="display:inline-block; width:2px; height:14px; background:#dee2e6; vertical-align:middle;"></span>
+                <div style="display:flex; align-items:center; justify-content:center; gap:0; margin: 0 auto; max-width:260px;">
+                    <div style="flex:1; height:2px; background:#dee2e6;"></div>
+                    <i class="bi bi-diagram-2 mx-1" style="color:#adb5bd; font-size:0.8rem;"></i>
+                    <div style="flex:1; height:2px; background:#dee2e6;"></div>
+                </div>
+                <div class="d-flex justify-content-between" style="max-width:260px; margin: 0 auto; font-size: 0.6rem; color:#adb5bd; font-weight:600; letter-spacing:0.3px;">
+                    <span>GPO</span>
+                    <span>CCDP</span>
+                </div>
             </div>
+
+            {# ── Lanes paralelas ── #}
+            {% set gpo_nr_ok = doc_nr and doc_nr.codigo %}
+            {% set gpo_quadro_ok = quadro and quadro.ug %}
+            {% set gpo_ok = gpo_nr_ok and gpo_quadro_ok %}
+            {% set ccdp_ok = doc_habilitacao and doc_habilitacao.sei_id %}
+            <div class="d-flex gap-2 mb-3">
+
+                {# Lane GPO #}
+                <div class="flex-1 rounded-3 p-2" style="flex:1; background: {{ '#d1e7dd' if gpo_ok else '#f0f7ff' }}; border: 1.5px solid {{ '#198754' if gpo_ok else '#b6d4fe' }};">
+                    <div style="font-size:0.6rem; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:{{ '#0f5132' if gpo_ok else '#084298' }}; margin-bottom:5px;">
+                        <i class="bi bi-{{ 'check-circle-fill' if gpo_ok else 'building' }} me-1"></i>GPO
+                        <span style="font-weight:400; text-transform:none; font-size:0.58rem; opacity:0.8;">— Ger. Planejamento e Orçamento</span>
+                    </div>
+                    <div style="font-size:0.72rem;">
+                        <div class="mb-1">
+                            {% if gpo_nr_ok %}
+                            <i class="bi bi-check-circle-fill text-success me-1"></i>
+                            <span class="text-body">Nota de Reserva</span>
+                            <span class="text-muted" style="font-size:0.62rem; display:block; padding-left:1.1rem;">{{ doc_nr.codigo }}</span>
+                            {% else %}
+                            <i class="bi bi-circle text-muted me-1"></i>
+                            <span class="text-muted">Nota de Reserva</span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            {% if gpo_quadro_ok %}
+                            <i class="bi bi-check-circle-fill text-success me-1"></i>
+                            <span class="text-body">Quadro Orçamentário</span>
+                            <span class="text-muted" style="font-size:0.62rem; display:block; padding-left:1.1rem;">UG: {{ quadro.ug }} | {{ quadro.natureza_despesa }}</span>
+                            {% else %}
+                            <i class="bi bi-circle text-muted me-1"></i>
+                            <span class="text-muted">Quadro Orçamentário</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {# Lane CCDP #}
+                <div class="flex-1 rounded-3 p-2" style="flex:1; background: {{ '#d1e7dd' if ccdp_ok else '#f0fff7' }}; border: 1.5px solid {{ '#198754' if ccdp_ok else '#a3cfbb' }};">
+                    <div style="font-size:0.6rem; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; color:{{ '#0f5132' if ccdp_ok else '#146c43' }}; margin-bottom:5px;">
+                        <i class="bi bi-{{ 'check-circle-fill' if ccdp_ok else 'person-check' }} me-1"></i>CCDP
+                        <span style="font-weight:400; text-transform:none; font-size:0.58rem; opacity:0.8;">— Coord. Controle Diárias e Passagens</span>
+                    </div>
+                    <div style="font-size:0.72rem;">
+                        {% if ccdp_ok %}
+                        <i class="bi bi-check-circle-fill text-success me-1"></i>
+                        <span class="text-body">Análise de Habilitação</span>
+                        <span class="text-muted" style="font-size:0.62rem; display:block; padding-left:1.1rem;">{{ doc_habilitacao.sei_formatado }}</span>
+                        {% else %}
+                        <i class="bi bi-circle text-muted me-1"></i>
+                        <span class="text-muted">Análise de Habilitação</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if analise1_ok and ccdp_ok %}
+            <div class="rounded-3 p-2" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754; font-size: 0.78rem;">
+                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                <strong>Análise 1ª Parte concluída!</strong>
+                <span class="d-block mt-1 text-muted" style="font-size: 0.7rem;">GPO e CCDP finalizaram suas análises.</span>
+            </div>
+            {% else %}
+            <div class="text-center" style="font-size: 0.7rem; color: #6c757d;">
+                <a href="{{ url_for('financeiro.diarias_detalhe', id=itinerario.id) }}" class="fw-semibold text-decoration-none">
+                    <i class="bi bi-arrow-right-circle me-1"></i>Registrar documentos na aba Financeira
+                </a>
+            </div>
+            {% endif %}
             {% endif %}
         </div>
 

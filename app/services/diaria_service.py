@@ -52,7 +52,7 @@ class DiariaService:
         vc = DiariasValorCargo.query.filter_by(
             cargo_id=cargo_id,
             tipo_itinerario_id=tipo_itinerario_id,
-        ).first()
+        ).order_by(DiariasValorCargo.id.desc()).first()
         return vc.valor if vc else Decimal('0.00')
 
     @staticmethod

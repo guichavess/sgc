@@ -112,7 +112,7 @@ def editar_usuario(usuario_id):
     notif_tipos = _carregar_preferencias_notificacao(usuario_id)
 
     # Superintendências (nível 8) + Gabinete (id=96) como opção especial
-    from app.models.setor import Setor, TIPO_ENTIDADE_SUPERINTENDENCIA, ID_GABINETE
+    from app.models.setor import SetorSead as Setor, TIPO_ENTIDADE_SUPERINTENDENCIA, ID_GABINETE
     superintendencias = Setor.query.filter(
         db.or_(
             Setor.tipo_entidade_id == TIPO_ENTIDADE_SUPERINTENDENCIA,

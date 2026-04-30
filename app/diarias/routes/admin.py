@@ -20,6 +20,11 @@ from app.models.diaria import (
     DiariasValorCargo, DiariasCargo,
     DiariasItinerario, DiariasItemItinerario,
 )
+from app.services.vincular_processo_diaria import (
+    verificar_protocolo_sei,
+    vincular_processo_sei,
+    importar_processo_sei_como_novo,
+)
 from app.constants import DiariasEtapaID
 from app.extensions import db
 from app.services.diarias_notification import DiariasNotifier
@@ -91,6 +96,65 @@ def salvar_valor_cargo():
 
 # ── Administração / Acompanhamento ────────────────────────────────────────
 
+@diarias_bp.route('/administracao/vincular-processo', methods=['GET'])
+@login_required
+@requires_permission('diarias.aprovar')
+def vincular_processo_pagina():
+    """Página dedicada para vincular/importar um processo SEI como nova solicitação."""
+    from app.models.diaria import DiariasEtapa
+    etapas = DiariasEtapa.query.order_by(DiariasEtapa.ordem).all()
+    return render_template('diarias/vincular_processo.html', etapas=etapas)
+
+
+@diarias_bp.route('/administracao/importar-processo', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def importar_processo():
+    """
+    Importa um processo SEI já existente como nova solicitação no sistema.
+
+    Recebe protocolo_sei + etapa_id, consulta o SEI, parseia a Requisição de
+    Diárias, cria um novo DiariasItinerario com os dados encontrados e redireciona
+    para o detalhe do novo itinerário.
+    """
+    protocolo_sei = request.form.get('protocolo_sei', '').strip()
+    etapa_id_raw = request.form.get('etapa_id', '').strip()
+
+    if not protocolo_sei:
+        flash('Informe o número do processo SEI.', 'danger')
+        return redirect(url_for('diarias.vincular_processo_pagina'))
+
+    if not etapa_id_raw:
+        flash('Selecione a etapa atual do processo.', 'danger')
+        return redirect(url_for('diarias.vincular_processo_pagina'))
+
+    try:
+        etapa_id = int(etapa_id_raw)
+    except (ValueError, TypeError):
+        flash('Etapa inválida.', 'danger')
+        return redirect(url_for('diarias.vincular_processo_pagina'))
+
+    resultado = importar_processo_sei_como_novo(
+        protocolo_sei=protocolo_sei,
+        etapa_id=etapa_id,
+        usuario_id=current_user.id,
+        usuario_gerador=current_user.sigla_login or 'importacao',
+    )
+
+    if resultado['sucesso']:
+        db.session.commit()
+        novo_id = resultado['itinerario_id']
+        flash(f'Processo {protocolo_sei} importado com sucesso.', 'success')
+        return redirect(url_for('diarias.administracao_detalhe', id=novo_id))
+    else:
+        db.session.rollback()
+        flash(
+            f'Erro ao importar processo: {resultado.get("erro", "Erro desconhecido.")}',
+            'danger',
+        )
+        return redirect(url_for('diarias.vincular_processo_pagina'))
+
+
 @diarias_bp.route('/administracao')
 @login_required
 @requires_permission('diarias.aprovar')
@@ -103,7 +167,10 @@ def administracao():
     filtro_etapas = request.args.getlist('filtro_etapa', type=int)
     filtro_tipos = request.args.getlist('filtro_tipo', type=int)
     filtro_solicitacao = request.args.getlist('filtro_solicitacao', type=int)
-    page = request.args.get('page', 1, type=int)
+    try:
+        page = max(1, int(request.args.get('page', 1) or 1))
+    except (ValueError, TypeError):
+        page = 1
 
     query = DiariasItinerario.query
 
@@ -211,6 +278,35 @@ def administracao():
         {'id': 3, 'nome': 'Apenas Passagens', 'cor': '#0d6efd', 'icone': 'bi-airplane-engines'},
     ]
 
+    # ── KPIs globais (toda a query filtrada, não só a página atual) ───────────
+    from app.constants import DiariasEtapaID
+
+    kpi_row = query.with_entities(
+        db.func.count(DiariasItinerario.id),
+        db.func.coalesce(db.func.sum(DiariasItinerario.valor_total), 0),
+    ).one()
+
+    # Em andamento = não estão na etapa final (Prestação de Contas)
+    em_andamento_kpi = query.filter(
+        DiariasItinerario.etapa_atual_id != DiariasEtapaID.PRESTACAO_CONTAS.value
+    ).count()
+
+    total_pessoas_kpi = db.session.query(
+        db.func.count(DiariasItemItinerario.id)
+    ).join(
+        DiariasItinerario,
+        DiariasItemItinerario.id_itinerario == DiariasItinerario.id
+    ).filter(
+        DiariasItinerario.id.in_(query.with_entities(DiariasItinerario.id))
+    ).scalar() or 0
+
+    kpis = {
+        'total_solicitacoes': kpi_row[0],
+        'valor_total': kpi_row[1],
+        'em_andamento': em_andamento_kpi,
+        'total_pessoas': total_pessoas_kpi,
+    }
+
     return render_template(
         'diarias/administracao.html',
         itinerarios=itinerarios,
@@ -225,6 +321,7 @@ def administracao():
         tipos_solicitacao=tipos_solicitacao,
         sol_counts=sol_counts,
         filtro_solicitacao=filtro_solicitacao,
+        kpis=kpis,
     )
 
 
@@ -262,7 +359,10 @@ def aprovar_solicitacoes():
     busca = request.args.get('q', '').strip()
     filtro_tipos = request.args.getlist('filtro_tipo', type=int)
     filtro_solicitacao = request.args.getlist('filtro_solicitacao', type=int)
-    page = request.args.get('page', 1, type=int)
+    try:
+        page = max(1, int(request.args.get('page', 1) or 1))
+    except (ValueError, TypeError):
+        page = 1
 
     # Filtra por papel
     from app.models.usuario import Usuario
@@ -386,6 +486,72 @@ def aprovar_solicitacoes():
         eh_secretario=eh_secretario,
         eh_super_sga=eh_super_sga,
     )
+
+
+@diarias_bp.route('/api/verificar-processo-sei')
+@login_required
+def api_verificar_processo_sei():
+    """
+    AJAX — Verifica se um processo SEI existe.
+
+    Query param: protocolo (string)
+
+    Returns:
+        JSON {sucesso, protocolo_formatado, id_procedimento,
+              link_acesso, especificacao, erro}
+    """
+    protocolo = request.args.get('protocolo', '').strip()
+    resultado = verificar_protocolo_sei(protocolo)
+    return jsonify(resultado)
+
+
+@diarias_bp.route('/administracao/<int:id>/vincular-processo', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def vincular_processo(id):
+    """
+    POST — Vincula um processo SEI existente à solicitação de diárias.
+
+    Form params:
+        protocolo_sei (str) — número do processo SEI
+        etapa_id      (int) — etapa para a qual o itinerário avança
+
+    Redireciona para /diarias/administracao/<id> com flash de resultado.
+    """
+    protocolo_sei = request.form.get('protocolo_sei', '').strip()
+    etapa_id_raw = request.form.get('etapa_id', '').strip()
+
+    if not protocolo_sei:
+        flash('Informe o número do processo SEI.', 'danger')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    if not etapa_id_raw:
+        flash('Selecione a etapa para vinculação.', 'danger')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    try:
+        etapa_id = int(etapa_id_raw)
+    except (ValueError, TypeError):
+        flash('Etapa inválida.', 'danger')
+        return redirect(url_for('diarias.administracao_detalhe', id=id))
+
+    resultado = vincular_processo_sei(
+        itinerario_id=id,
+        protocolo_sei=protocolo_sei,
+        etapa_id=etapa_id,
+        usuario_id=current_user.id,
+    )
+
+    if resultado['sucesso']:
+        db.session.commit()
+        flash('Processo SEI vinculado com sucesso.', 'success')
+        for msg in resultado.get('msgs', []):
+            current_app.logger.info(f'[DIARIAS] Vincular processo {id}: {msg}')
+    else:
+        db.session.rollback()
+        flash(f'Erro ao vincular processo: {resultado.get("erro", "Erro desconhecido.")}', 'danger')
+
+    return redirect(url_for('diarias.administracao_detalhe', id=id))
 
 
 @diarias_bp.route('/administracao/<int:id>')

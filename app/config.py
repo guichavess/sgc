@@ -111,6 +111,10 @@ class TestingConfig(Config):
     """Configuração para testes."""
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    # SQLite in-memory não suporta pool_size/max_overflow (opções MySQL)
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': False,
+    }
 
 
 # Mapeamento de configurações por ambiente

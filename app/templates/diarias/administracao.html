@@ -7,11 +7,18 @@
     .tr-link { cursor: pointer; }
     .tr-link:hover { background-color: rgba(0,0,0,0.035); }
 </style>
-<div class="mb-4">
-    <h2 class="fw-bold">
-        <i class="bi bi-kanban me-2"></i>Administração
-    </h2>
-    <p class="text-muted mb-0">Acompanhe e gerencie todas as solicitações de diárias e passagens.</p>
+<div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+        <h2 class="fw-bold mb-0">
+            <i class="bi bi-kanban me-2"></i>Administração
+        </h2>
+        <p class="text-muted mb-0">Acompanhe e gerencie todas as solicitações de diárias e passagens.</p>
+    </div>
+    {% if current_user.tem_permissao('diarias', 'aprovar') %}
+    <a href="{{ url_for('diarias.vincular_processo_pagina') }}" class="btn btn-outline-primary">
+        <i class="bi bi-link-45deg me-1"></i>Vincular Processo
+    </a>
+    {% endif %}
 </div>
 
 {% include 'diarias/partials/subnav_administracao.html' %}
@@ -140,12 +147,79 @@
     </div>
 </div>
 
+{# ── KPI Cards ── #}
+{% set vt = kpis.valor_total | float %}
+{% set vt_fmt = "{:,.2f}".format(vt).replace(',', 'X').replace('.', ',').replace('X', '.') %}
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center"
+                     style="width:42px;height:42px;background:rgba(224,122,36,.15);flex-shrink:0;">
+                    <i class="bi bi-file-earmark-text" style="color:#E07A24;font-size:1.2rem;"></i>
+                </div>
+                <div>
+                    <div class="fw-bold fs-4 lh-1">{{ kpis.total_solicitacoes }}</div>
+                    <div class="text-muted small">Solicitações</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center"
+                     style="width:42px;height:42px;background:rgba(13,110,253,.12);flex-shrink:0;">
+                    <i class="bi bi-people" style="color:#0d6efd;font-size:1.2rem;"></i>
+                </div>
+                <div>
+                    <div class="fw-bold fs-4 lh-1">{{ kpis.total_pessoas }}</div>
+                    <div class="text-muted small">Pessoas</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center"
+                     style="width:42px;height:42px;background:rgba(25,135,84,.12);flex-shrink:0;">
+                    <i class="bi bi-currency-dollar" style="color:#198754;font-size:1.2rem;"></i>
+                </div>
+                <div>
+                    <div class="fw-bold fs-5 lh-1">R$ {{ vt_fmt }}</div>
+                    <div class="text-muted small">Valor Total</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center"
+                     style="width:42px;height:42px;background:rgba(220,53,69,.12);flex-shrink:0;">
+                    <i class="bi bi-hourglass-split" style="color:#dc3545;font-size:1.2rem;"></i>
+                </div>
+                <div>
+                    <div class="fw-bold fs-4 lh-1">{{ kpis.em_andamento }}</div>
+                    <div class="text-muted small">Em Andamento</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 {# Tabela #}
 <div class="card border-0 shadow-sm overflow-hidden">
     <div class="card-header bg-white border-bottom py-3">
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold">Solicitações</h5>
-            <span class="badge bg-secondary">{{ pagination.total }} registro(s)</span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-secondary">{{ pagination.total }} registro(s)</span>
+                <span class="badge bg-success" title="Soma do valor total (filtros aplicados)">
+                    R$ {{ vt_fmt }}
+                </span>
+            </div>
         </div>
     </div>
     <div class="card-body p-0">
@@ -349,4 +423,5 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+
 {% endblock %}

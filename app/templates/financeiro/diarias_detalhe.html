@@ -52,9 +52,7 @@
 
 {# Lista dinâmica de todos os passos — usada para stepper E painéis #}
 {% set all_steps = [
-    {'key': 'nr', 'icon': 'bi-receipt', 'label': 'Nota de Reserva', 'done': s1},
-    {'key': 'quadro', 'icon': 'bi-table', 'label': 'Quadro Orçam.', 'done': s2},
-    {'key': 'analise_hab', 'icon': 'bi-search', 'label': 'Análise Habilit.', 'done': s3},
+    {'key': 'analise_paralela', 'icon': 'bi-diagram-2', 'label': 'Análise Inicial', 'done': s3},
 ] %}
 {% if scdp_aplicavel %}
 {% set all_steps = all_steps + [{'key': 'scdp', 'icon': 'bi-file-earmark-pdf', 'label': 'Autoriz. SCDP', 'done': s4}] %}
@@ -251,6 +249,195 @@
     .carousel-step-item.cs-done.cs-selected .cs-circle {
         outline-color: rgba(25,135,84,0.35);
     }
+
+    /* ── Bloco de paralelismo GPO / CCDP ── */
+    .cs-paralelo-bloco {
+        padding: 12px 16px 10px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    .cs-paralelo-aviso {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 6px;
+        padding: 7px 12px;
+        font-size: 0.75rem;
+        color: #78350f;
+        margin-bottom: 10px;
+    }
+    .cs-paralelo-cards {
+        display: flex;
+        gap: 10px;
+    }
+    .cs-paralelo-card {
+        flex: 1;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1.5px solid transparent;
+    }
+    .cs-paralelo-card.gpo   { border-color: #93c5fd; }
+    .cs-paralelo-card.ccdp  { border-color: #6ee7b7; }
+    .cs-paralelo-card.concluido { border-color: #86efac; }
+    .cs-paralelo-card-header {
+        padding: 8px 12px;
+        color: #fff;
+    }
+    .gpo  .cs-paralelo-card-header  { background: #1d4ed8; }
+    .ccdp .cs-paralelo-card-header  { background: #065f46; }
+    .concluido .cs-paralelo-card-header { background: #16a34a; }
+    .cs-paralelo-card-header .org-sigla {
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 1px;
+        display: block;
+    }
+    .cs-paralelo-card-header .org-nome {
+        font-size: 0.6rem;
+        opacity: 0.82;
+    }
+    .cs-paralelo-card-body {
+        padding: 10px 12px;
+    }
+    .gpo  .cs-paralelo-card-body { background: #eff6ff; }
+    .ccdp .cs-paralelo-card-body { background: #f0fdf4; }
+    .concluido .cs-paralelo-card-body { background: #dcfce7; }
+    .cs-paralelo-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 3px 0;
+        font-size: 0.78rem;
+    }
+    .cs-paralelo-item + .cs-paralelo-item {
+        border-top: 1px solid rgba(0,0,0,0.05);
+        margin-top: 4px;
+        padding-top: 6px;
+    }
+    .cs-paralelo-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px; height: 20px;
+        border-radius: 50%;
+        font-size: 0.62rem;
+        font-weight: 700;
+        flex-shrink: 0;
+        color: #fff;
+    }
+    .gpo  .cs-paralelo-num { background: #1d4ed8; }
+    .ccdp .cs-paralelo-num { background: #065f46; }
+    .concluido .cs-paralelo-num { background: #16a34a; }
+    .cs-paralelo-nome { font-weight: 600; flex: 1; }
+    .cs-paralelo-status-ok   { color: #16a34a; font-size: 1rem; }
+    .cs-paralelo-status-pend {
+        font-size: 0.6rem;
+        font-weight: 700;
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+        border-radius: 10px;
+        padding: 1px 7px;
+        white-space: nowrap;
+    }
+    .cs-paralelo-rodape {
+        margin-top: 8px;
+        font-size: 0.68rem;
+        color: #6c757d;
+        text-align: center;
+    }
+    /* Separador entre sub-seções NR e Quadro dentro do card GPO */
+    .cs-paralelo-card .p-3 + .p-3 {
+        border-top: 1px solid rgba(0,0,0,0.07);
+    }
+
+    /* ── Tabela de servidores / NR ── */
+    .nr-progress-wrap { margin-bottom: 14px; }
+    .nr-progress-wrap .progress { height: 5px; border-radius: 3px; background: #dbeafe; }
+    .nr-progress-wrap .progress-bar { border-radius: 3px; }
+    .nr-server-list { display: flex; flex-direction: column; gap: 8px; }
+    .nr-server-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1.5px solid;
+        background: #fff;
+        transition: box-shadow 0.15s ease;
+    }
+    .nr-server-row:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .nr-server-row.nr-row-ok  { border-color: #bbf7d0; background: #f0fdf4; }
+    .nr-server-row.nr-row-pend { border-color: #fde68a; background: #fffbeb; }
+    .nr-avatar {
+        width: 36px; height: 36px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.78rem; font-weight: 800; flex-shrink: 0; letter-spacing: 0;
+    }
+    .nr-avatar.ok   { background: #dcfce7; color: #15803d; }
+    .nr-avatar.pend { background: #fef3c7; color: #92400e; }
+    .nr-server-info { flex: 1; min-width: 0; }
+    .nr-server-name { font-size: 0.82rem; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nr-server-cpf  { font-size: 0.68rem; color: #64748b; }
+    .nr-doc-block { min-width: 120px; }
+    .nr-codigo-link {
+        font-size: 0.8rem; font-weight: 700; color: #1d4ed8;
+        text-decoration: none; display: flex; align-items: center; gap: 4px;
+    }
+    .nr-codigo-link:hover { text-decoration: underline; }
+    .nr-codigo     { font-size: 0.8rem; font-weight: 700; color: #374151; }
+    .nr-sei        { font-size: 0.65rem; color: #6b7280; display: block; }
+    .nr-pend-label { font-size: 0.72rem; color: #b45309; font-style: italic; }
+    .nr-valor-block { min-width: 90px; text-align: right; }
+    .nr-valor-num  { font-size: 0.82rem; font-weight: 700; color: #166534; }
+    .nr-valor-label { font-size: 0.62rem; color: #6b7280; }
+    .nr-action-block { flex-shrink: 0; }
+
+    /* ── Quadro Orçamentário — visualização read-only ── */
+    .qo-sei-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: #eff6ff; border: 1px solid #bfdbfe;
+        border-radius: 20px; padding: 4px 12px;
+        font-size: 0.72rem; color: #1d4ed8; font-weight: 600;
+        text-decoration: none; margin-bottom: 14px;
+    }
+    .qo-sei-chip:hover { background: #dbeafe; }
+    .qo-section-label {
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 0.6px;
+        text-transform: uppercase; color: #94a3b8; margin-bottom: 8px;
+    }
+    .qo-class-grid {
+        display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
+    }
+    .qo-class-chip {
+        display: flex; flex-direction: column;
+        background: #f1f5f9; border: 1px solid #e2e8f0;
+        border-radius: 6px; padding: 5px 10px; min-width: 80px;
+    }
+    .qo-class-chip .qo-cl { font-size: 0.6rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+    .qo-class-chip .qo-cv { font-size: 0.8rem; font-weight: 700; color: #1e293b; }
+    .qo-values-grid {
+        display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+    }
+    @media (min-width: 992px) { .qo-values-grid { grid-template-columns: repeat(4, 1fr); } }
+    .qo-value-card {
+        border-radius: 8px; padding: 10px 12px; border: 1.5px solid transparent;
+    }
+    .qo-value-card .qo-vl { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+    .qo-value-card .qo-va { font-size: 0.92rem; font-weight: 800; }
+    .qo-card-inicial  { background: #eff6ff; border-color: #bfdbfe; }
+    .qo-card-inicial  .qo-vl { color: #3b82f6; }
+    .qo-card-inicial  .qo-va { color: #1d4ed8; }
+    .qo-card-saldo-nr { background: #f0fdf4; border-color: #bbf7d0; }
+    .qo-card-saldo-nr .qo-vl { color: #22c55e; }
+    .qo-card-saldo-nr .qo-va { color: #15803d; }
+    .qo-card-despesa  { background: #fff7ed; border-color: #fed7aa; }
+    .qo-card-despesa  .qo-vl { color: #f97316; }
+    .qo-card-despesa  .qo-va { color: #c2410c; }
+    .qo-card-saldo-atual { background: #ecfdf5; border-color: #6ee7b7; }
+    .qo-card-saldo-atual .qo-vl { color: #10b981; }
+    .qo-card-saldo-atual .qo-va { color: #065f46; }
 </style>
 
 {# ===== BOTÃO VOLTAR ===== #}
@@ -422,332 +609,447 @@
     <div class="carousel-stepper">
 
 {# ══════════════════════════════════════════════════════════════ #}
-{# PASSO 1: Nota de Reserva                                      #}
+{# PASSO 1 (FUNDIDO): Análise Inicial — GPO + CCDP em paralelo   #}
 {# ══════════════════════════════════════════════════════════════ #}
 {% set pn.n = pn.n + 1 %}
 <div class="carousel-panel {{ 'active' if passo_ativo == pn.n }}" id="panel-{{ pn.n }}" data-step="{{ pn.n }}">
+
     <div class="carousel-panel-header">
-        <div class="panel-icon {{ 'done' if nr_ok else ('active' if passo_ativo == pn.n else 'locked') }}">
-            <i class="bi bi-receipt"></i>
+        <div class="panel-icon {{ 'done' if s3 else ('active' if passo_ativo == pn.n else 'pending') }}">
+            <i class="bi bi-diagram-2"></i>
         </div>
         <div>
-            <span class="panel-title">Nota de Reserva</span>
-            {% if nr_ok %}
-            <span class="d-block" style="font-size: 0.75rem; color: #198754;"><i class="bi bi-check-circle-fill me-1"></i>{{ doc_nr.codigo }}</span>
+            <span class="panel-title">Análise Inicial</span>
+            {% if s3 %}
+            <span class="d-block" style="font-size: 0.75rem; color: #198754;"><i class="bi bi-check-circle-fill me-1"></i>Concluída — GPO e CCDP</span>
             {% elif passo_ativo == pn.n %}
-            <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
+            <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Em andamento</span>
             {% endif %}
         </div>
     </div>
 
-        {# === Notas de Reserva: 1 por servidor === #}
-        {% set pode_editar = current_user.tem_permissao('financeiro', 'criar') and itinerario.etapa_atual_id == 3 %}
+    {# ── Pills de status das 3 sub-etapas ── #}
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="badge rounded-pill {{ 'bg-success' if nr_ok else 'bg-warning text-dark' }}" style="font-size: 0.72rem; padding: 5px 12px;">
+            {% if nr_ok %}<i class="bi bi-check-circle-fill me-1"></i>{% else %}<i class="bi bi-hourglass me-1"></i>{% endif %}NR
+        </span>
+        <span class="badge rounded-pill {{ 'bg-success' if quadro_ok else 'bg-warning text-dark' }}" style="font-size: 0.72rem; padding: 5px 12px;">
+            {% if quadro_ok %}<i class="bi bi-check-circle-fill me-1"></i>{% else %}<i class="bi bi-hourglass me-1"></i>{% endif %}Quadro Orçamentário
+        </span>
+        <span class="badge rounded-pill {{ 'bg-success' if analise_hab_ok else 'bg-warning text-dark' }}" style="font-size: 0.72rem; padding: 5px 12px;">
+            {% if analise_hab_ok %}<i class="bi bi-check-circle-fill me-1"></i>{% else %}<i class="bi bi-hourglass me-1"></i>{% endif %}Habilitação
+        </span>
+    </div>
 
-        <div class="d-flex justify-content-between align-items-center mb-3">
+    {# ── Aviso de paralelismo ── #}
+    <div class="cs-paralelo-aviso">
+        <i class="bi bi-lightning-charge-fill"></i>
+        <strong>GPO</strong> e <strong>CCDP</strong> trabalham ao mesmo tempo — as etapas abaixo podem ser concluídas em qualquer ordem.
+    </div>
+
+    {# ════════════════════════════════════════════ #}
+    {# SEÇÃO GPO — Ger. Planejamento e Orçamento   #}
+    {# ════════════════════════════════════════════ #}
+    <div class="cs-paralelo-card gpo mt-3">
+        <div class="cs-paralelo-card-header d-flex align-items-center gap-2">
+            <span class="org-sigla">GPO</span>
             <div>
-                <span class="fw-bold">Progresso:</span>
-                <span class="badge {{ 'bg-success' if todas_nrs_ok else 'bg-warning text-dark' }} ms-2">
-                    {{ total_nrs }} / {{ total_servidores }} servidor(es) com NR
+                <span class="org-nome d-block">Ger. de Planejamento e Orçamento</span>
+                <span style="font-size: 0.58rem; opacity: 0.85;">
+                    {% if nr_ok and quadro_ok %}<i class="bi bi-check-circle-fill me-1"></i>NR e Quadro concluídos
+                    {% elif nr_ok %}<i class="bi bi-hourglass me-1"></i>NR inserida — Quadro pendente
+                    {% else %}<i class="bi bi-hourglass me-1"></i>Aguardando NR e Quadro{% endif %}
                 </span>
             </div>
-            {% if todas_nrs_ok %}
-            <span class="text-success small"><i class="bi bi-check-circle-fill me-1"></i>Todas as NRs inseridas</span>
-            {% endif %}
         </div>
+        <div class="cs-paralelo-card-body">
 
-        <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Servidor</th>
-                        <th>CPF</th>
-                        <th>Código da NR</th>
-                        <th class="text-end">Valor</th>
-                        <th class="text-center" style="min-width:160px;">Ação</th>
-                    </tr>
-                </thead>
-                <tbody>
+            {# ── Sub-seção 1: Nota de Reserva ── #}
+            <div class="p-3">
+                <h6 class="fw-bold mb-3" style="font-size: 0.85rem; color: #084298;">
+                    <i class="bi bi-receipt me-1"></i>1. Nota de Reserva
+                    {% if nr_ok %}
+                    <span class="ms-2 text-success" style="font-size: 0.75rem; font-weight: 400;"><i class="bi bi-check-circle-fill me-1"></i>{% if doc_nr %}{{ doc_nr.codigo }}{% endif %}</span>
+                    {% endif %}
+                </h6>
+
+                {% set pode_editar = current_user.tem_permissao('financeiro', 'criar') and itinerario.etapa_atual_id == 3 %}
+
+                {# ── Barra de progresso ── #}
+                {% set pct = ((total_nrs / total_servidores) * 100)|int if total_servidores > 0 else 0 %}
+                <div class="nr-progress-wrap">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span style="font-size: 0.72rem; color: #64748b; font-weight: 600;">Notas de Reserva inseridas</span>
+                        <span style="font-size: 0.72rem; font-weight: 800;" class="{{ 'text-success' if todas_nrs_ok else 'text-warning' }}">
+                            {{ total_nrs }} / {{ total_servidores }}
+                            {% if todas_nrs_ok %}<i class="bi bi-check-circle-fill ms-1"></i>{% endif %}
+                        </span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar {{ 'bg-success' if todas_nrs_ok else 'bg-warning' }}"
+                             role="progressbar" style="width: {{ pct }}%;" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+
+                {# ── Cards de servidor ── #}
+                <div class="nr-server-list">
                 {% for item in itens %}
                     {% set nr_item = nrs_por_item.get(item.id) %}
-                    <tr>
-                        <td class="fw-semibold">{{ item.nome_pessoa or '-' }}</td>
-                        <td><small class="text-muted">{{ item.cpf_pessoa or '-' }}</small></td>
-                        {% if nr_item %}
-                        <td>
-                            {% if nr_item.sei_id and itinerario.sei_id_procedimento %}
+                    {% set initials = (item.nome_pessoa or 'S').split()[0][0]|upper + ((item.nome_pessoa or 'S').split()[-1][0]|upper if (item.nome_pessoa or 'S').split()|length > 1 else '') %}
+                    <div class="nr-server-row {{ 'nr-row-ok' if nr_item else 'nr-row-pend' }}">
+
+                        {# Avatar com iniciais #}
+                        <div class="nr-avatar {{ 'ok' if nr_item else 'pend' }}">{{ initials }}</div>
+
+                        {# Nome e CPF #}
+                        <div class="nr-server-info">
+                            <div class="nr-server-name">{{ item.nome_pessoa or '—' }}</div>
+                            <div class="nr-server-cpf">{{ item.cpf_pessoa or '—' }}</div>
+                        </div>
+
+                        {# Código NR e doc SEI #}
+                        <div class="nr-doc-block">
+                            {% if nr_item %}
+                                {% if nr_item.sei_id and itinerario.sei_id_procedimento %}
                                 <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}&id_documento={{ nr_item.sei_id }}"
-                                   target="_blank" class="fw-bold text-decoration-none">
-                                    {{ nr_item.codigo }} <i class="bi bi-box-arrow-up-right small"></i>
+                                   target="_blank" class="nr-codigo-link">
+                                    {{ nr_item.codigo }} <i class="bi bi-box-arrow-up-right" style="font-size: 0.6rem;"></i>
                                 </a>
+                                {% else %}
+                                <span class="nr-codigo">{{ nr_item.codigo }}</span>
+                                {% endif %}
+                                {% if nr_item.sei_formatado %}
+                                <span class="nr-sei">SEI {{ nr_item.sei_formatado }}</span>
+                                {% endif %}
                             {% else %}
-                                <span class="fw-bold">{{ nr_item.codigo }}</span>
+                                <span class="nr-pend-label"><i class="bi bi-dash-circle me-1"></i>Não inserida</span>
                             {% endif %}
-                            {% if nr_item.sei_formatado %}
-                                <br><small class="text-muted">SEI: {{ nr_item.sei_formatado }}</small>
+                        </div>
+
+                        {# Valor #}
+                        <div class="nr-valor-block">
+                            {% if nr_item and nr_item.valor %}
+                            <div class="nr-valor-num">R$ {{ "{:,.2f}".format(nr_item.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</div>
+                            <div class="nr-valor-label">Valor NR</div>
+                            {% elif nr_item %}
+                            <div class="nr-valor-label" style="font-style: italic;">Sem valor</div>
                             {% endif %}
-                        </td>
-                        <td class="text-end">
-                            {% if nr_item.valor %}
-                                R$ {{ "{:,.2f}".format(nr_item.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}
-                            {% else %}-{% endif %}
-                        </td>
-                        <td class="text-center">
+                        </div>
+
+                        {# Ação #}
+                        <div class="nr-action-block">
                             {% if pode_editar %}
-                            <button type="button" class="btn btn-outline-secondary btn-sm"
-                                    onclick="abrirModalNR({{ item.id }}, '{{ (item.nome_pessoa or '')|e }}', '{{ nr_item.codigo|e }}', '{{ '{:.2f}'.format(nr_item.valor|float) if nr_item.valor else '' }}')">
-                                <i class="bi bi-pencil me-1"></i>Editar
-                            </button>
+                                {% if nr_item %}
+                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        onclick="abrirModalNR({{ item.id }}, '{{ (item.nome_pessoa or '')|e }}', '{{ nr_item.codigo|e }}', '{{ '{:.2f}'.format(nr_item.valor|float) if nr_item.valor else '' }}')">
+                                    <i class="bi bi-pencil-square me-1"></i>Editar
+                                </button>
+                                {% else %}
+                                <button type="button" class="btn btn-primary btn-sm"
+                                        onclick="abrirModalNR({{ item.id }}, '{{ (item.nome_pessoa or '')|e }}', '', '')">
+                                    <i class="bi bi-plus-circle me-1"></i>Inserir
+                                </button>
+                                {% endif %}
                             {% else %}
-                            <span class="badge bg-success"><i class="bi bi-check"></i></span>
+                                {% if nr_item %}
+                                <span class="badge rounded-pill bg-success px-3 py-2"><i class="bi bi-check-lg me-1"></i>OK</span>
+                                {% else %}
+                                <span class="badge rounded-pill bg-warning text-dark px-3 py-2"><i class="bi bi-hourglass-split me-1"></i>Pendente</span>
+                                {% endif %}
                             {% endif %}
-                        </td>
-                        {% else %}
-                        <td><span class="text-muted small">—</span></td>
-                        <td class="text-end"><span class="text-muted small">—</span></td>
-                        <td class="text-center">
-                            {% if pode_editar %}
-                            <button type="button" class="btn btn-primary btn-sm"
-                                    onclick="abrirModalNR({{ item.id }}, '{{ (item.nome_pessoa or '')|e }}', '', '')">
-                                <i class="bi bi-plus-circle me-1"></i>Inserir NR
-                            </button>
-                            {% else %}
-                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass"></i> Pendente</span>
-                            {% endif %}
-                        </td>
-                        {% endif %}
-                    </tr>
+                        </div>
+
+                    </div>
                 {% else %}
-                    <tr><td colspan="5" class="text-center text-muted py-3">Nenhum servidor na solicitação.</td></tr>
+                    <div class="text-center text-muted py-3 small">Nenhum servidor na solicitação.</div>
                 {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        {# Modal #modalInserirNR foi movido para o final do template
-           (fora de .carousel-panel) para evitar herança de transform/animation
-           que causava flicker ao focar inputs. Ver bloco no final do arquivo. #}
-
-        {% if not pode_editar and not todas_nrs_ok %}
-        <div class="alert alert-warning py-2 mt-3 mb-0 small">
-            <i class="bi bi-hourglass-split me-1"></i>
-            Aguardando inserção das Notas de Reserva. Etapa atual:
-            <strong>{{ itinerario.etapa_atual.nome if itinerario.etapa_atual else '-' }}</strong>
-        </div>
-        {% endif %}
-
-</div>{# /panel-1 #}
-
-{# ══════════════════════════════════════════════════════════════ #}
-{# PASSO 2: Quadro Orçamentário                                  #}
-{# ══════════════════════════════════════════════════════════════ #}
-{% set pn.n = pn.n + 1 %}
-<div class="carousel-panel {{ 'active' if passo_ativo == pn.n }}" id="panel-{{ pn.n }}" data-step="{{ pn.n }}">
-    <div class="carousel-panel-header">
-        <div class="panel-icon {{ 'done' if quadro_ok else ('active' if passo_ativo == pn.n else 'locked') }}">
-            <i class="bi bi-table"></i>
-        </div>
-        <div>
-            <span class="panel-title">Quadro Orçamentário / Financeiro</span>
-            {% if quadro_ok %}
-            <span class="d-block" style="font-size: 0.75rem; color: #198754;"><i class="bi bi-check-circle-fill me-1"></i>Preenchido</span>
-            {% elif passo_ativo == pn.n %}
-            <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
-            {% endif %}
-        </div>
-    </div>
-
-        {% if not nr_ok %}
-            <div class="alert alert-secondary py-2 mb-0"><i class="bi bi-lock me-1"></i>Insira a Nota de Reserva primeiro.</div>
-
-        {% elif quadro_ok %}
-            {% set doc_qo = itinerario.get_doc('quadro_orcamentario') %}
-            <div class="alert alert-success d-flex align-items-center mb-3" role="alert">
-                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
-                <div>
-                    <strong>Quadro Orçamentário inserido!</strong>
-                    {% if doc_qo and doc_qo.sei_formatado %}
-                        <br><small class="text-muted">Documento SEI: {{ doc_qo.sei_formatado }}</small>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-bordered table-sm mb-0" style="font-size: 0.82rem;">
-                    <tr><th class="bg-light" style="width:50%">UG</th><td class="text-end">{{ quadro.ug }}</td></tr>
-                    <tr><th class="bg-light">Função</th><td class="text-end">{{ quadro.funcao or '-' }}</td></tr>
-                    <tr><th class="bg-light">Subfunção</th><td class="text-end">{{ quadro.subfuncao or '-' }}</td></tr>
-                    <tr><th class="bg-light">Programa</th><td class="text-end">{{ quadro.programa or '-' }}</td></tr>
-                    <tr><th class="bg-light">Plano Interno</th><td class="text-end">{{ quadro.plano_interno or '-' }}</td></tr>
-                    <tr><th class="bg-light">Fonte de Recursos</th><td class="text-end">{{ quadro.fonte_recursos or '-' }}</td></tr>
-                    <tr><th class="bg-light">Natureza da Despesa</th><td class="text-end">{{ quadro.natureza_despesa }}</td></tr>
-                    <tr><th class="bg-light">Valor Inicial da NR</th><td class="text-end">{{ "R$ {:,.2f}".format(quadro.valor_inicial_nr).replace(',', 'X').replace('.', ',').replace('X', '.') if quadro.valor_inicial_nr else '-' }}</td></tr>
-                    <tr><th class="bg-light">Saldo da NR</th><td class="text-end">{{ "R$ {:,.2f}".format(quadro.saldo_nr).replace(',', 'X').replace('.', ',').replace('X', '.') if quadro.saldo_nr else '-' }}</td></tr>
-                    <tr><th class="bg-light">Valor da Despesa</th><td class="text-end fw-bold">{{ "R$ {:,.2f}".format(quadro.valor_despesa).replace(',', 'X').replace('.', ',').replace('X', '.') if quadro.valor_despesa else '-' }}</td></tr>
-                    <tr><th class="bg-light">Saldo Atual da NR</th><td class="text-end fw-bold">{{ "R$ {:,.2f}".format(quadro.saldo_atual_nr).replace(',', 'X').replace('.', ',').replace('X', '.') if quadro.saldo_atual_nr else '-' }}</td></tr>
-                </table>
-            </div>
-
-        {% elif current_user.tem_permissao('financeiro', 'criar') %}
-            <form method="POST" action="{{ url_for('financeiro.inserir_quadro_orcamentario', id=itinerario.id) }}" id="formQuadro">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label for="quadro_ug" class="form-label fw-bold">UG <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="quadro_ug" name="quadro_ug" placeholder="Ex: 210101" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="quadro_funcao" class="form-label fw-bold">Função</label>
-                        <input type="text" class="form-control" id="quadro_funcao" name="quadro_funcao" placeholder="Ex: 04">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="quadro_subfuncao" class="form-label fw-bold">Subfunção</label>
-                        <input type="text" class="form-control" id="quadro_subfuncao" name="quadro_subfuncao" placeholder="Ex: 122">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="quadro_programa" class="form-label fw-bold">Programa</label>
-                        <input type="text" class="form-control" id="quadro_programa" name="quadro_programa" placeholder="Ex: 0109">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="quadro_plano_interno" class="form-label fw-bold">Plano Interno</label>
-                        <input type="text" class="form-control" id="quadro_plano_interno" name="quadro_plano_interno" placeholder="Ex: 2000">
-                    </div>
-                    <div class="col-md-4">
-                        <label for="quadro_fonte_recursos" class="form-label fw-bold">Fonte de Recursos</label>
-                        <input type="text" class="form-control" id="quadro_fonte_recursos" name="quadro_fonte_recursos" placeholder="Ex: 5000000000">
-                    </div>
-                    <div class="col-md-6">
-                        <label for="quadro_natureza_despesa" class="form-label fw-bold">Natureza da Despesa <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="quadro_natureza_despesa" name="quadro_natureza_despesa" placeholder="Ex: 3.3.9.0.14" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label for="quadro_valor_despesa" class="form-label fw-bold">Valor da Despesa <span class="text-danger">*</span></label>
-                        <div class="input-group">
-                            <span class="input-group-text">R$</span>
-                            <input type="text" class="form-control" id="quadro_valor_despesa" name="quadro_valor_despesa"
-                                   placeholder="0,00" required
-                                   value="{{ '{:,.2f}'.format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') if itinerario.valor_total else '' }}">
-                        </div>
-                        <div class="form-text">Pré-preenchido com o valor total da diária.</div>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="quadro_valor_inicial_nr" class="form-label fw-bold">Valor Inicial da NR</label>
-                        <div class="input-group"><span class="input-group-text">R$</span>
-                            <input type="text" class="form-control" id="quadro_valor_inicial_nr" name="quadro_valor_inicial_nr" placeholder="0,00">
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="quadro_saldo_nr" class="form-label fw-bold">Saldo da NR</label>
-                        <div class="input-group"><span class="input-group-text">R$</span>
-                            <input type="text" class="form-control" id="quadro_saldo_nr" name="quadro_saldo_nr" placeholder="0,00">
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="quadro_saldo_atual_nr" class="form-label fw-bold">Saldo Atual da NR</label>
-                        <div class="input-group"><span class="input-group-text">R$</span>
-                            <input type="text" class="form-control" id="quadro_saldo_atual_nr" name="quadro_saldo_atual_nr" placeholder="0,00">
-                        </div>
-                        <div class="form-text">Saldo da NR menos o Valor da Despesa.</div>
-                    </div>
                 </div>
 
-                {% if itinerario.sei_id_procedimento %}
-                <div class="alert alert-info mt-3 py-2 small">
-                    <i class="bi bi-info-circle me-1"></i>
-                    O documento SEAD_QUADRO_ORCAMENTARIO será gerado automaticamente no processo SEI.
+                {# Modal #modalInserirNR foi movido para o final do template
+                   (fora de .carousel-panel) para evitar herança de transform/animation
+                   que causava flicker ao focar inputs. Ver bloco no final do arquivo. #}
+
+                {% if not pode_editar and not todas_nrs_ok %}
+                <div class="alert alert-warning py-2 mt-3 mb-0 small">
+                    <i class="bi bi-hourglass-split me-1"></i>
+                    Aguardando inserção das Notas de Reserva. Etapa atual:
+                    <strong>{{ itinerario.etapa_atual.nome if itinerario.etapa_atual else '-' }}</strong>
                 </div>
                 {% endif %}
+            </div>{# /p-3 NR #}
 
-                <div class="mt-4">
-                    <button type="submit" class="btn btn-success fw-bold px-4" id="btnInserirQuadro">
-                        <i class="bi bi-save me-1"></i> Inserir Quadro Orçamentário
-                    </button>
-                </div>
-            </form>
+            {# ── Sub-seção 2: Quadro Orçamentário (NR é pré-requisito dentro do GPO) ── #}
+            <div class="p-3">
+                <h6 class="fw-bold mb-3" style="font-size: 0.85rem; color: #084298;">
+                    <i class="bi bi-table me-1"></i>2. Quadro Orçamentário
+                    {% if quadro_ok %}
+                    <span class="ms-2 text-success" style="font-size: 0.75rem; font-weight: 400;"><i class="bi bi-check-circle-fill me-1"></i>Preenchido</span>
+                    {% endif %}
+                </h6>
 
-        {% else %}
-            <div class="alert alert-info d-flex align-items-center mb-0" role="alert">
-                <i class="bi bi-info-circle-fill fs-4 me-3"></i>
-                <strong>Aguardando inserção do Quadro Orçamentário.</strong>
+                {% if not nr_ok %}
+                    <div class="alert alert-secondary py-2 mb-0"><i class="bi bi-lock me-1"></i>Insira a Nota de Reserva primeiro.</div>
+
+                {% elif quadro_ok %}
+                    {% set doc_qo = itinerario.get_doc('quadro_orcamentario') %}
+
+                    {# Link do documento SEI #}
+                    {% if doc_qo and doc_qo.sei_formatado %}
+                    {% set sei_url = 'https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento=' ~ itinerario.sei_id_procedimento ~ '&id_documento=' ~ doc_qo.sei_id if (itinerario.sei_id_procedimento and doc_qo.sei_id) else None %}
+                    {% if sei_url %}
+                    <a href="{{ sei_url }}" target="_blank" class="qo-sei-chip">
+                        <i class="bi bi-file-earmark-text"></i> {{ doc_qo.sei_formatado }}
+                        <i class="bi bi-box-arrow-up-right" style="font-size: 0.6rem;"></i>
+                    </a>
+                    {% else %}
+                    <span class="qo-sei-chip"><i class="bi bi-file-earmark-text"></i> {{ doc_qo.sei_formatado }}</span>
+                    {% endif %}
+                    {% endif %}
+
+                    {# Classificação orçamentária #}
+                    <div class="qo-section-label"><i class="bi bi-tag me-1"></i>Classificação Orçamentária</div>
+                    <div class="qo-class-grid">
+                        {% if quadro.ug %}
+                        <div class="qo-class-chip">
+                            <span class="qo-cl">UG</span>
+                            <span class="qo-cv">{{ quadro.ug }}</span>
+                        </div>
+                        {% endif %}
+                        {% if quadro.funcao %}
+                        <div class="qo-class-chip">
+                            <span class="qo-cl">Função</span>
+                            <span class="qo-cv">{{ quadro.funcao }}</span>
+                        </div>
+                        {% endif %}
+                        {% if quadro.subfuncao %}
+                        <div class="qo-class-chip">
+                            <span class="qo-cl">Subfunção</span>
+                            <span class="qo-cv">{{ quadro.subfuncao }}</span>
+                        </div>
+                        {% endif %}
+                        {% if quadro.programa %}
+                        <div class="qo-class-chip">
+                            <span class="qo-cl">Programa</span>
+                            <span class="qo-cv">{{ quadro.programa }}</span>
+                        </div>
+                        {% endif %}
+                        {% if quadro.plano_interno %}
+                        <div class="qo-class-chip">
+                            <span class="qo-cl">Plano Interno</span>
+                            <span class="qo-cv">{{ quadro.plano_interno }}</span>
+                        </div>
+                        {% endif %}
+                        {% if quadro.fonte_recursos %}
+                        <div class="qo-class-chip">
+                            <span class="qo-cl">Fonte</span>
+                            <span class="qo-cv">{{ quadro.fonte_recursos }}</span>
+                        </div>
+                        {% endif %}
+                        {% if quadro.natureza_despesa %}
+                        <div class="qo-class-chip" style="min-width: 120px;">
+                            <span class="qo-cl">Natureza da Despesa</span>
+                            <span class="qo-cv">{{ quadro.natureza_despesa }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {# Métricas financeiras #}
+                    <div class="qo-section-label"><i class="bi bi-currency-dollar me-1"></i>Valores Financeiros</div>
+                    <div class="qo-values-grid">
+                        <div class="qo-value-card qo-card-inicial">
+                            <div class="qo-vl">Valor Inicial da NR</div>
+                            <div class="qo-va">{{ "R$ {:,.2f}".format(quadro.valor_inicial_nr).replace(',', 'X').replace('.', ',').replace('X', '.') if quadro.valor_inicial_nr else '—' }}</div>
+                        </div>
+                        <div class="qo-value-card qo-card-saldo-nr">
+                            <div class="qo-vl">Saldo da NR</div>
+                            <div class="qo-va">{{ "R$ {:,.2f}".format(quadro.saldo_nr).replace(',', 'X').replace('.', ',').replace('X', '.') if quadro.saldo_nr else '—' }}</div>
+                        </div>
+                        <div class="qo-value-card qo-card-despesa">
+                            <div class="qo-vl">Valor da Despesa</div>
+                            <div class="qo-va">{{ "R$ {:,.2f}".format(quadro.valor_despesa).replace(',', 'X').replace('.', ',').replace('X', '.') if quadro.valor_despesa else '—' }}</div>
+                        </div>
+                        <div class="qo-value-card qo-card-saldo-atual">
+                            <div class="qo-vl">Saldo Atual da NR</div>
+                            <div class="qo-va">{{ "R$ {:,.2f}".format(quadro.saldo_atual_nr).replace(',', 'X').replace('.', ',').replace('X', '.') if quadro.saldo_atual_nr else '—' }}</div>
+                        </div>
+                    </div>
+
+                {% elif current_user.tem_permissao('financeiro', 'criar') %}
+                    <form method="POST" action="{{ url_for('financeiro.inserir_quadro_orcamentario', id=itinerario.id) }}" id="formQuadro">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label for="quadro_ug" class="form-label fw-bold">UG <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="quadro_ug" name="quadro_ug" placeholder="Ex: 210101" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quadro_funcao" class="form-label fw-bold">Função</label>
+                                <input type="text" class="form-control" id="quadro_funcao" name="quadro_funcao" placeholder="Ex: 04">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quadro_subfuncao" class="form-label fw-bold">Subfunção</label>
+                                <input type="text" class="form-control" id="quadro_subfuncao" name="quadro_subfuncao" placeholder="Ex: 122">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quadro_programa" class="form-label fw-bold">Programa</label>
+                                <input type="text" class="form-control" id="quadro_programa" name="quadro_programa" placeholder="Ex: 0109">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quadro_plano_interno" class="form-label fw-bold">Plano Interno</label>
+                                <input type="text" class="form-control" id="quadro_plano_interno" name="quadro_plano_interno" placeholder="Ex: 2000">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quadro_fonte_recursos" class="form-label fw-bold">Fonte de Recursos</label>
+                                <input type="text" class="form-control" id="quadro_fonte_recursos" name="quadro_fonte_recursos" placeholder="Ex: 5000000000">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="quadro_natureza_despesa" class="form-label fw-bold">Natureza da Despesa <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="quadro_natureza_despesa" name="quadro_natureza_despesa" placeholder="Ex: 3.3.9.0.14" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="quadro_valor_despesa" class="form-label fw-bold">Valor da Despesa <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    <input type="text" class="form-control" id="quadro_valor_despesa" name="quadro_valor_despesa"
+                                           placeholder="0,00" required
+                                           value="{{ '{:,.2f}'.format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') if itinerario.valor_total else '' }}">
+                                </div>
+                                <div class="form-text">Pré-preenchido com o valor total da diária.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quadro_valor_inicial_nr" class="form-label fw-bold">Valor Inicial da NR</label>
+                                <div class="input-group"><span class="input-group-text">R$</span>
+                                    <input type="text" class="form-control" id="quadro_valor_inicial_nr" name="quadro_valor_inicial_nr" placeholder="0,00">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quadro_saldo_nr" class="form-label fw-bold">Saldo da NR</label>
+                                <div class="input-group"><span class="input-group-text">R$</span>
+                                    <input type="text" class="form-control" id="quadro_saldo_nr" name="quadro_saldo_nr" placeholder="0,00">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quadro_saldo_atual_nr" class="form-label fw-bold">Saldo Atual da NR</label>
+                                <div class="input-group"><span class="input-group-text">R$</span>
+                                    <input type="text" class="form-control" id="quadro_saldo_atual_nr" name="quadro_saldo_atual_nr" placeholder="0,00">
+                                </div>
+                                <div class="form-text">Saldo da NR menos o Valor da Despesa.</div>
+                            </div>
+                        </div>
+
+                        {% if itinerario.sei_id_procedimento %}
+                        <div class="alert alert-info mt-3 py-2 small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            O documento SEAD_QUADRO_ORCAMENTARIO será gerado automaticamente no processo SEI.
+                        </div>
+                        {% endif %}
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-success fw-bold px-4" id="btnInserirQuadro">
+                                <i class="bi bi-save me-1"></i> Inserir Quadro Orçamentário
+                            </button>
+                        </div>
+                    </form>
+
+                {% else %}
+                    <div class="alert alert-info d-flex align-items-center mb-0" role="alert">
+                        <i class="bi bi-info-circle-fill fs-4 me-3"></i>
+                        <strong>Aguardando inserção do Quadro Orçamentário.</strong>
+                    </div>
+                {% endif %}
+            </div>{# /p-3 Quadro #}
+
+        </div>{# /cs-paralelo-card-body GPO #}
+    </div>{# /cs-paralelo-card gpo #}
+
+    {# ════════════════════════════════════════════════════════════════ #}
+    {# SEÇÃO CCDP — Coord. Controle de Diárias e Passagens            #}
+    {# (SEM gate de quadro_ok — CCDP trabalha em paralelo com o GPO)  #}
+    {# ════════════════════════════════════════════════════════════════ #}
+    <div class="cs-paralelo-card ccdp mt-3">
+        <div class="cs-paralelo-card-header d-flex align-items-center gap-2">
+            <span class="org-sigla">CCDP</span>
+            <div>
+                <span class="org-nome d-block">Coord. Controle de Diárias e Passagens</span>
+                <span style="font-size: 0.58rem; opacity: 0.85;">
+                    {% if analise_hab_ok %}<i class="bi bi-check-circle-fill me-1"></i>Habilitação concluída
+                    {% else %}<i class="bi bi-hourglass me-1"></i>Análise de habilitação pendente{% endif %}
+                </span>
             </div>
-        {% endif %}
-
-</div>{# /panel-2 #}
-
-{# ══════════════════════════════════════════════════════════════ #}
-{# PASSO 3: Análise de Habilitação (Despacho GEO + Análise)      #}
-{# ══════════════════════════════════════════════════════════════ #}
-{% set pn.n = pn.n + 1 %}
-<div class="carousel-panel {{ 'active' if passo_ativo == pn.n }}" id="panel-{{ pn.n }}" data-step="{{ pn.n }}">
-    <div class="carousel-panel-header">
-        <div class="panel-icon {{ 'done' if analise_hab_ok else ('active' if passo_ativo == pn.n else 'locked') }}">
-            <i class="bi bi-search"></i>
         </div>
-        <div>
-            <span class="panel-title">Análise de Habilitação</span>
+        <div class="cs-paralelo-card-body p-3">
+            <h6 class="fw-bold mb-3" style="font-size: 0.85rem; color: #0f5132;">
+                <i class="bi bi-search me-1"></i>Análise de Habilitação
+                {% if analise_hab_ok %}
+                <span class="ms-2 text-success" style="font-size: 0.75rem; font-weight: 400;"><i class="bi bi-check-circle-fill me-1"></i>Concluída</span>
+                {% endif %}
+            </h6>
+
             {% if analise_hab_ok %}
-            <span class="d-block" style="font-size: 0.75rem; color: #198754;">
-                <i class="bi bi-check-circle-fill me-1"></i>Concluída
-            </span>
-            {% elif passo_ativo == pn.n %}
-            <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
+                <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill fs-4 text-success me-3"></i>
+                        <div>
+                            <strong>Análise de habilitação concluída!</strong>
+                            {% set doc_ah = itinerario.get_doc('analise_habilitacao') %}
+                            {% if doc_ah and doc_ah.sei_formatado %}
+                            <span class="d-block text-muted small">Doc: {{ doc_ah.sei_formatado }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="row g-3">
+                    {# Sub-passo 1: Despacho GEO #}
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100 {{ 'bg-light' if desp_geo_quadro_ok }}">
+                            <h6 class="fw-bold mb-2" style="font-size: 0.82rem;">
+                                <i class="bi bi-send me-1"></i>1. Despacho GEO
+                            </h6>
+                            {% if desp_geo_quadro_ok %}
+                            <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Gerado</span>
+                            {% set doc_dg = itinerario.get_doc('despacho_geo_quadro') %}
+                            {% if doc_dg %}<br><small class="text-muted">{{ doc_dg.sei_formatado }}</small>{% endif %}
+                            {% else %}
+                            <p class="text-muted small mb-2">Gera despacho e envia para a GEO.</p>
+                            <button type="button" class="btn btn-primary btn-sm" id="btnDespachoGeo" onclick="gerarDespachoGeoQuadro()">
+                                <i class="bi bi-send me-1"></i>Gerar Despacho
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {# Sub-passo 2: Gerar Análise (gateado pelo Despacho GEO, não pelo Quadro) #}
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100 {{ 'opacity-50' if not desp_geo_quadro_ok }}">
+                            <h6 class="fw-bold mb-2" style="font-size: 0.82rem;">
+                                <i class="bi bi-clipboard-data me-1"></i>2. Gerar Análise
+                            </h6>
+                            {% if not desp_geo_quadro_ok %}
+                            <span class="text-muted small"><i class="bi bi-lock me-1"></i>Gere o despacho primeiro</span>
+                            {% else %}
+                            <p class="text-muted small mb-2">Verifica elegibilidade dos servidores (Decreto 14.910/2012).</p>
+                            <button type="button" class="btn btn-success btn-sm" id="btnAnalise" onclick="gerarAnaliseHabilitacao()">
+                                <i class="bi bi-clipboard-check me-1"></i>Gerar Análise
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
             {% endif %}
-        </div>
+        </div>{# /cs-paralelo-card-body CCDP #}
+    </div>{# /cs-paralelo-card ccdp #}
+
+    {# ── Rodapé dinâmico ── #}
+    <div class="cs-paralelo-rodape mt-3">
+        {% if s3 %}
+        <i class="bi bi-check-circle-fill text-success me-1"></i>
+        <span class="text-success fw-semibold">Ambos os setores concluíram — próxima etapa: Autorização SCDP</span>
+        {% else %}
+        <i class="bi bi-hourglass-split text-warning me-1"></i>
+        <span>Avança para SCDP somente quando <strong>GPO</strong> e <strong>CCDP</strong> concluírem suas respectivas etapas.</span>
+        {% endif %}
     </div>
 
-    {% if not quadro_ok %}
-        <div class="alert alert-secondary py-2 mb-0">
-            <i class="bi bi-lock me-1"></i>Insira o Quadro Orçamentário primeiro.
-        </div>
-    {% elif analise_hab_ok %}
-        <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
-            <div class="d-flex align-items-center">
-                <i class="bi bi-check-circle-fill fs-4 text-success me-3"></i>
-                <div>
-                    <strong>Análise de habilitação concluída!</strong>
-                    {% set doc_ah = itinerario.get_doc('analise_habilitacao') %}
-                    {% if doc_ah and doc_ah.sei_formatado %}
-                    <span class="d-block text-muted small">Doc: {{ doc_ah.sei_formatado }}</span>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    {% else %}
-        <div class="row g-3">
-            {# Sub-passo 1: Despacho GEO #}
-            <div class="col-md-6">
-                <div class="border rounded p-3 h-100 {{ 'bg-light' if desp_geo_quadro_ok }}">
-                    <h6 class="fw-bold mb-2" style="font-size: 0.82rem;">
-                        <i class="bi bi-send me-1"></i>1. Despacho GEO
-                    </h6>
-                    {% if desp_geo_quadro_ok %}
-                    <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Gerado</span>
-                    {% set doc_dg = itinerario.get_doc('despacho_geo_quadro') %}
-                    {% if doc_dg %}<br><small class="text-muted">{{ doc_dg.sei_formatado }}</small>{% endif %}
-                    {% else %}
-                    <p class="text-muted small mb-2">Gera despacho e envia para a GEO.</p>
-                    <button type="button" class="btn btn-primary btn-sm" id="btnDespachoGeo" onclick="gerarDespachoGeoQuadro()">
-                        <i class="bi bi-send me-1"></i>Gerar Despacho
-                    </button>
-                    {% endif %}
-                </div>
-            </div>
-            {# Sub-passo 2: Análise #}
-            <div class="col-md-6">
-                <div class="border rounded p-3 h-100 {{ 'opacity-50' if not desp_geo_quadro_ok }}">
-                    <h6 class="fw-bold mb-2" style="font-size: 0.82rem;">
-                        <i class="bi bi-clipboard-data me-1"></i>2. Gerar Análise
-                    </h6>
-                    {% if not desp_geo_quadro_ok %}
-                    <span class="text-muted small"><i class="bi bi-lock me-1"></i>Gere o despacho primeiro</span>
-                    {% else %}
-                    <p class="text-muted small mb-2">Verifica elegibilidade dos servidores (Decreto 14.910/2012).</p>
-                    <button type="button" class="btn btn-success btn-sm" id="btnAnalise" onclick="gerarAnaliseHabilitacao()">
-                        <i class="bi bi-clipboard-check me-1"></i>Gerar Análise
-                    </button>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    {% endif %}
-</div>{# /panel-analise #}
+</div>{# /panel-analise-inicial #}
 
 {# ══════════════════════════════════════════════════════════════ #}
 {# PASSO 4: Autorização SCDP (todos os tipos)                    #}
