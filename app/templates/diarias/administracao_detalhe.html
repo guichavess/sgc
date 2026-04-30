@@ -486,6 +486,53 @@
                 <i class="bi bi-arrow-left me-1"></i>Voltar ao Fluxo
             </a>
 
+            {# ── Guard: pré-requisitos da Análise 1ª Parte (GPO + CCDP) ── #}
+            {% set _doc_hab = itinerario.get_doc('analise_habilitacao') %}
+            {% set _doc_nr  = itinerario.get_doc('nota_reserva') %}
+            {% set _gpo_ok  = _doc_nr and _doc_nr.codigo
+                              and itinerario.quadro_orcamentario
+                              and itinerario.quadro_orcamentario.ug %}
+            {% set _ccdp_ok = _doc_hab and _doc_hab.sei_id %}
+
+            {% if not (_gpo_ok and _ccdp_ok) %}
+            <div class="alert alert-warning border-0 shadow-sm rounded-3 d-flex gap-3 align-items-start mb-3">
+                <i class="bi bi-lock-fill fs-4 mt-1 text-warning"></i>
+                <div>
+                    <h6 class="fw-bold mb-1">Pré-requisitos não atendidos</h6>
+                    <p class="mb-2 small text-muted">A etapa de Cotações e Escolha do Voo só fica disponível após
+                       a conclusão da <strong>Análise 1ª Parte</strong> (GPO e CCDP).</p>
+                    <ul class="mb-2 small ps-3">
+                        {% if not _gpo_ok %}
+                        <li class="text-danger">
+                            <i class="bi bi-x-circle me-1"></i>
+                            <strong>GPO:</strong> Nota de Reserva e Quadro Orçamentário pendentes.
+                        </li>
+                        {% else %}
+                        <li class="text-success">
+                            <i class="bi bi-check-circle me-1"></i>
+                            <strong>GPO:</strong> Nota de Reserva e Quadro Orçamentário concluídos.
+                        </li>
+                        {% endif %}
+                        {% if not _ccdp_ok %}
+                        <li class="text-danger">
+                            <i class="bi bi-x-circle me-1"></i>
+                            <strong>CCDP:</strong> Análise de Habilitação para receber diárias pendente.
+                        </li>
+                        {% else %}
+                        <li class="text-success">
+                            <i class="bi bi-check-circle me-1"></i>
+                            <strong>CCDP:</strong> Análise de Habilitação concluída.
+                        </li>
+                        {% endif %}
+                    </ul>
+                    <a href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='fluxo') }}"
+                       class="btn btn-outline-warning btn-sm">
+                        <i class="bi bi-arrow-left me-1"></i>Voltar ao Fluxo
+                    </a>
+                </div>
+            </div>
+            {% else %}
+
             {# --- Variaveis de controle --- #}
             {% set count_manual = cotacoes_voos|selectattr('fonte', 'equalto', 'manual')|list|length %}
             {% set count_ocr = cotacoes_voos|selectattr('fonte', 'equalto', 'ocr_sei')|list|length %}
@@ -1243,6 +1290,8 @@
 
             </div>{# /tab-pane fase2 #}
             </div>{# /tab-content #}
+
+            {% endif %}{# /prereqs ok #}
 
             {% endif %}{# /aba passagens #}
 

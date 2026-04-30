@@ -26,6 +26,7 @@
     or (apenas_diarias and itinerario.superintendente_assinou and itinerario.etapa_atual_id != 1) %}
 {% set cotacoes_ok = escolha_feita %}
 {% set nr_ok = doc_nr and doc_nr.codigo and quadro and quadro.ug %}
+{% set ccdp_ok = doc_habilitacao and doc_habilitacao.sei_id %}
 {% set sga_ok = doc_desp_sga and doc_desp_sga.sei_id %}
 {% set nci_ok = doc_analise and doc_analise.sei_id %}
 {% set prestacao_ok = doc_relatorio and doc_relatorio.sei_id %}
@@ -35,7 +36,7 @@
 {% set analise2_ok = nci_ok %}
 {% set steps = [
     {'num': 1, 'icon': 'bi-shield-check', 'label': 'Autorização', 'done': autorizacao_ok},
-    {'num': 2, 'icon': 'bi-receipt', 'label': 'Análise 1ª Parte', 'done': analise1_ok},
+    {'num': 2, 'icon': 'bi-receipt', 'label': 'Análise 1ª Parte', 'done': analise1_ok and ccdp_ok},
 ] %}
 {% if tem_passagens %}
 {% set steps = steps + [{'num': 3, 'icon': 'bi-airplane', 'label': 'Cotações e Voo', 'done': cotacoes_ok}] %}
@@ -391,7 +392,11 @@
 
             {% if not analise1_ok %}
             <div class="alert alert-secondary py-2 mb-0">
-                <i class="bi bi-lock me-1"></i>Complete a Análise 1ª Parte primeiro (NR + Quadro).
+                <i class="bi bi-lock me-1"></i>Aguardando GPO: Nota de Reserva e Quadro Orçamentário.
+            </div>
+            {% elif not ccdp_ok %}
+            <div class="alert alert-secondary py-2 mb-0">
+                <i class="bi bi-lock me-1"></i>Aguardando CCDP: Análise de Habilitação para receber diárias ainda não concluída.
             </div>
             {% elif cotacoes_ok %}
             <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">

@@ -313,7 +313,8 @@ def _setup_logging(app):
     file_handler = RotatingFileHandler(
         os.path.join(log_dir, log_file),
         maxBytes=max_bytes,
-        backupCount=backup_count
+        backupCount=backup_count,
+        encoding='utf-8',
     )
     file_handler.setFormatter(logging.Formatter(
         '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'

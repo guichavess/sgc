@@ -17,6 +17,7 @@ class Config:
     # ==========================================================================
     SECRET_KEY = os.getenv('SECRET_KEY', 'chave-secreta-desenvolvimento')
     SESSION_TYPE = 'filesystem'
+    JSON_AS_ASCII = False  # permite acentos/ç/ã em respostas JSON sem escape \uXXXX
 
     # ==========================================================================
     # BANCO DE DADOS
