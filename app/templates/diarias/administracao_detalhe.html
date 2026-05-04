@@ -176,12 +176,21 @@
                         {# Botão de alterar etapa removido — etapa avança apenas pelo fluxo #}
                     </span>
                     {% endif %}
-                    {# Botão "Assinar" destacado para Superintendente na etapa 1 #}
-                    {% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_superintendente and not itinerario.superintendente_assinou %}
-                    <button type="button" class="btn btn-primary btn-sm shadow-sm"
-                            data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
-                        <i class="bi bi-pen me-1"></i>Assinar Requisições
-                    </button>
+                    {# Botões de assinatura do Superintendente na etapa 1 #}
+                    {% if itinerario.etapa_atual_id == 1 and not itinerario.superintendente_assinou and (current_user.is_superintendente or current_user.is_admin) %}
+                    <div class="d-flex gap-2">
+                        {% if itinerario.sei_id_procedimento %}
+                        <button type="button" class="btn btn-primary btn-sm shadow-sm"
+                                data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
+                            <i class="bi bi-pen me-1"></i>Assinar Requisições
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm shadow-sm"
+                                id="btnVerificarAssinaturas"
+                                title="Verifica se os documentos já foram assinados diretamente no SEI">
+                            <i class="bi bi-shield-check me-1"></i>Verificar Assinaturas
+                        </button>
+                        {% endif %}
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -339,15 +348,24 @@
                                 <small class="text-muted" style="font-size: 0.72rem;">
                                     {{ itinerario.superintendente_assinou_data.strftime('%d/%m/%Y às %H:%M') if itinerario.superintendente_assinou_data else '' }}
                                 </small>
-                                {% elif current_user.is_superintendente %}
+                                {% elif current_user.is_superintendente or current_user.is_admin %}
                                 <p class="text-muted mb-2" style="font-size: 0.78rem;">
                                     Assine as requisições de Diárias{% if itinerario.has_doc('requisicao_passagens') %} e Passagens{% endif %}
                                 </p>
-                                <button type="button" class="btn btn-sm px-4 text-white fw-semibold"
-                                        style="background: linear-gradient(135deg, #343990, #5b5fc7);"
-                                        data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
-                                    <i class="bi bi-vector-pen me-1"></i> Assinar Requisições
-                                </button>
+                                <div class="d-flex flex-column gap-2 align-items-center">
+                                    {% if itinerario.sei_id_procedimento %}
+                                    <button type="button" class="btn btn-sm px-4 text-white fw-semibold"
+                                            style="background: linear-gradient(135deg, #343990, #5b5fc7);"
+                                            data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
+                                        <i class="bi bi-vector-pen me-1"></i> Assinar Requisições
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary px-3"
+                                            id="btnVerificarAssinaturas2"
+                                            title="Verifica se os documentos já foram assinados diretamente no SEI">
+                                        <i class="bi bi-shield-check me-1"></i> Verificar Assinaturas
+                                    </button>
+                                    {% endif %}
+                                </div>
                                 {% else %}
                                 <i class="bi bi-hourglass-split d-block" style="font-size: 1.4rem; color: #adb5bd;"></i>
                                 <small class="text-muted" style="font-size: 0.75rem;">Aguardando assinatura</small>
@@ -1795,7 +1813,7 @@
 </div>
 
 {# --- MODAL ASSINATURA DO SUPERINTENDENTE --- #}
-{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_superintendente and not itinerario.superintendente_assinou %}
+{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and (current_user.is_superintendente or current_user.is_admin) and not itinerario.superintendente_assinou %}
 <div class="modal fade" id="modalAssinarSuperintendente" tabindex="-1" aria-labelledby="modalAssinarSuperLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -2146,6 +2164,41 @@ async function assinarSuperintendente() {
         btn.innerHTML = '<i class="bi bi-pen me-1"></i> Assinar Requisições';
     }
 }
+</script>
+
+<script>
+async function verificarAssinaturasSuperintendente(btn) {
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Verificando...';
+    try {
+        const resp = await fetch('{{ url_for("diarias.verificar_assinaturas_super", id=itinerario.id) }}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token() if csrf_token is defined else "" }}' }
+        });
+        const data = await resp.json();
+        if (data.sucesso) {
+            btn.innerHTML = '<i class="bi bi-check-circle-fill me-1 text-success"></i>Confirmado!';
+            setTimeout(() => window.location.reload(), 1200);
+        } else if (data.pendente) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            alert('Pendente: ' + data.mensagem);
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            alert(data.erro || 'Erro ao verificar assinaturas.');
+        }
+    } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        alert('Erro de conexão: ' + err.message);
+    }
+}
+
+document.querySelectorAll('#btnVerificarAssinaturas, #btnVerificarAssinaturas2').forEach(function(btn) {
+    if (btn) btn.addEventListener('click', function() { verificarAssinaturasSuperintendente(btn); });
+});
 </script>
 {% endif %}
 

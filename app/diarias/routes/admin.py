@@ -1006,31 +1006,7 @@ def assinar_superintendente(id):
 
     documentos_assinados = []
 
-    # 2. Assinar Memorando SGA (se existir)
-    doc_memorando = itinerario.get_doc('memorando')
-    if doc_memorando and doc_memorando.sei_id:
-        ret_memo = assinar_documento(
-            token=token_super,
-            unidade_id=unidade_assinatura,
-            dados_assinatura={
-                'protocolo_doc': doc_memorando.sei_id,
-                'orgao': 'SEAD-PI',
-                'cargo': cargo,
-                'id_login': id_login,
-                'id_usuario': id_usuario,
-                'senha': sei_senha,
-            },
-            protocolo_proc=protocolo_proc,
-        )
-        if ret_memo and ret_memo.get('sucesso'):
-            documentos_assinados.append(doc_memorando.sei_formatado or 'Memorando SGA')
-        else:
-            current_app.logger.warning(
-                f"SEI Diárias: Falha ao assinar Memorando SGA: "
-                f"{ret_memo.get('erro') if ret_memo else 'Sem resposta'}"
-            )
-
-    # 3. Assinar Requisição de Diárias
+    # 2. Assinar Requisição de Diárias
     doc_requisicao = itinerario.get_doc('requisicao')
     dados_assinatura = {
         'protocolo_doc': doc_requisicao.sei_id if doc_requisicao else '',
@@ -1099,6 +1075,70 @@ def assinar_superintendente(id):
         'sucesso': True,
         'documentos_assinados': documentos_assinados,
         'mensagem': f'Requisições assinadas com sucesso: {", ".join(documentos_assinados)}',
+    })
+
+
+# ── Verificação automática de assinaturas (sem credenciais) ──────────────
+
+@diarias_bp.route('/administracao/<int:id>/verificar-assinaturas-super', methods=['POST'])
+@login_required
+def verificar_assinaturas_super(id):
+    """
+    Verifica se Requisição de Diárias (e Passagens, se aplicável) já estão
+    assinadas no banco local. Se sim, marca superintendente_assinou = True
+    sem exigir credenciais SEI — útil quando as assinaturas foram feitas
+    diretamente no SEI fora do sistema.
+    """
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if not (current_user.is_superintendente or current_user.is_admin):
+        return jsonify({'sucesso': False, 'erro': 'Acesso restrito.'}), 403
+
+    if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_INICIAL:
+        return jsonify({'sucesso': False, 'erro': 'Solicitação não está na etapa de autorização.'}), 400
+
+    if itinerario.superintendente_assinou:
+        return jsonify({'sucesso': True, 'mensagem': 'Superintendente já havia assinado.', 'ja_assinado': True})
+
+    doc_req = itinerario.get_doc('requisicao')
+    doc_pass = itinerario.get_doc('requisicao_passagens')
+
+    req_assinada = doc_req and doc_req.assinado
+    # Passagens só são obrigatórias se o tipo exige (nacional/passagens)
+    tem_passagens = doc_pass and doc_pass.sei_id
+    pass_assinada = (not tem_passagens) or (doc_pass and doc_pass.assinado)
+
+    if not req_assinada:
+        return jsonify({
+            'sucesso': False,
+            'pendente': True,
+            'mensagem': 'Requisição de Diárias ainda não está marcada como assinada no sistema.',
+        })
+
+    if not pass_assinada:
+        return jsonify({
+            'sucesso': False,
+            'pendente': True,
+            'mensagem': 'Requisição de Passagens ainda não está marcada como assinada no sistema.',
+        })
+
+    itinerario.superintendente_assinou = True
+    itinerario.superintendente_assinou_data = datetime.now()
+    db.session.commit()
+
+    current_app.logger.info(
+        f'[DIARIAS] verificar_assinaturas_super: superintendente_assinou=True '
+        f'via verificacao automatica (itinerario={id})'
+    )
+
+    try:
+        DiariasNotifier.notificar_etapa(itinerario, 'assinatura_superintendente', current_user.id)
+    except Exception as exc_notif:
+        current_app.logger.warning(f'[DIARIAS] Falha ao enviar notificacao: {exc_notif}')
+
+    return jsonify({
+        'sucesso': True,
+        'mensagem': 'Documentos já estavam assinados. Etapa liberada para autorização do Secretário.',
     })
 
 
