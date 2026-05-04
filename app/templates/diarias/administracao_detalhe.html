@@ -176,22 +176,6 @@
                         {# Botão de alterar etapa removido — etapa avança apenas pelo fluxo #}
                     </span>
                     {% endif %}
-                    {# Botões de assinatura do Superintendente na etapa 1 #}
-                    {% if itinerario.etapa_atual_id == 1 and not itinerario.superintendente_assinou and (current_user.is_superintendente or current_user.is_admin) %}
-                    <div class="d-flex gap-2">
-                        {% if itinerario.sei_id_procedimento %}
-                        <button type="button" class="btn btn-primary btn-sm shadow-sm"
-                                data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
-                            <i class="bi bi-pen me-1"></i>Assinar Requisições
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm shadow-sm"
-                                id="btnVerificarAssinaturas"
-                                title="Verifica se os documentos já foram assinados diretamente no SEI">
-                            <i class="bi bi-shield-check me-1"></i>Verificar Assinaturas
-                        </button>
-                        {% endif %}
-                    </div>
-                    {% endif %}
                 </div>
             </div>
         </div>
@@ -2167,6 +2151,32 @@ async function assinarSuperintendente() {
 </script>
 
 <script>
+function mostrarFeedbackVerificar(tipo, titulo, mensagem, recarregar) {
+    var el = document.getElementById('modalVerificarFeedback');
+    if (!el) return;
+    var header = el.querySelector('.modal-header');
+    var icon   = el.querySelector('#verificar-fb-icon');
+    var tituloEl = el.querySelector('#verificar-fb-titulo');
+    var msgEl  = el.querySelector('#verificar-fb-msg');
+    var btnOk  = el.querySelector('#verificar-fb-ok');
+
+    header.className = 'modal-header ' + (tipo === 'sucesso' ? 'bg-success' : tipo === 'pendente' ? 'bg-warning' : 'bg-danger');
+    tituloEl.className = 'modal-title fw-semibold ' + (tipo === 'pendente' ? 'text-dark' : 'text-white');
+    el.querySelector('.btn-close').className = 'btn-close ' + (tipo === 'pendente' ? '' : 'btn-close-white');
+    icon.className = 'bi me-2 ' + (tipo === 'sucesso' ? 'bi-check-circle-fill' : tipo === 'pendente' ? 'bi-hourglass-split' : 'bi-exclamation-circle-fill');
+    tituloEl.childNodes[1].textContent = ' ' + titulo;
+    msgEl.textContent = mensagem;
+    btnOk.className = 'btn btn-sm ' + (tipo === 'sucesso' ? 'btn-success' : tipo === 'pendente' ? 'btn-warning' : 'btn-danger');
+
+    if (recarregar) {
+        btnOk.onclick = function() { window.location.reload(); };
+    } else {
+        btnOk.onclick = null;
+    }
+
+    bootstrap.Modal.getOrCreate(el).show();
+}
+
 async function verificarAssinaturasSuperintendente(btn) {
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
@@ -2179,27 +2189,47 @@ async function verificarAssinaturasSuperintendente(btn) {
         const data = await resp.json();
         if (data.sucesso) {
             btn.innerHTML = '<i class="bi bi-check-circle-fill me-1 text-success"></i>Confirmado!';
-            setTimeout(() => window.location.reload(), 1200);
+            mostrarFeedbackVerificar('sucesso', 'Assinaturas confirmadas', data.mensagem, true);
         } else if (data.pendente) {
             btn.disabled = false;
             btn.innerHTML = originalHtml;
-            alert('Pendente: ' + data.mensagem);
+            mostrarFeedbackVerificar('pendente', 'Assinatura pendente', data.mensagem, false);
         } else {
             btn.disabled = false;
             btn.innerHTML = originalHtml;
-            alert(data.erro || 'Erro ao verificar assinaturas.');
+            mostrarFeedbackVerificar('erro', 'Erro na verificação', data.erro || 'Erro ao verificar assinaturas.', false);
         }
     } catch (err) {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
-        alert('Erro de conexão: ' + err.message);
+        mostrarFeedbackVerificar('erro', 'Erro de conexão', err.message || 'Tente novamente.', false);
     }
 }
 
-document.querySelectorAll('#btnVerificarAssinaturas, #btnVerificarAssinaturas2').forEach(function(btn) {
+document.querySelectorAll('#btnVerificarAssinaturas2').forEach(function(btn) {
     if (btn) btn.addEventListener('click', function() { verificarAssinaturasSuperintendente(btn); });
 });
 </script>
+
+{# Modal feedback Verificar Assinaturas #}
+<div class="modal fade" id="modalVerificarFeedback" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-secondary">
+                <h6 class="modal-title fw-semibold text-white" id="verificar-fb-titulo">
+                    <i class="bi me-2" id="verificar-fb-icon"></i><span></span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0 small" id="verificar-fb-msg"></p>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" id="verificar-fb-ok">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endif %}
 
 {# --- JS Autorização do Secretário --- #}
