@@ -17,22 +17,6 @@
 
 ## Pendências
 
-### 2026-04-30 — Funcionalidade "Vincular Processo" + beautifulsoup4
-
-- [ ] **Instalar dependência `beautifulsoup4`** no servidor:
-  ```bash
-  pip install beautifulsoup4
-  ```
-
-- [ ] **Verificar colunas `link_processo_sei` e `especificacao_sei` em `diarias_itinerario`** — se não existirem:
-  ```sql
-  ALTER TABLE diarias_itinerario
-    ADD COLUMN link_processo_sei TEXT NULL,
-    ADD COLUMN especificacao_sei TEXT NULL;
-  ```
-
----
-
 ### Pós-deploy de 2026-04-07 (opcional / quando tiver fonte dos dados)
 
 - [ ] **Popular `diarias_servidores.idpessoa` e promover a NOT NULL + UNIQUE**
