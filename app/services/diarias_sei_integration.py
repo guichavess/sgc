@@ -1435,16 +1435,12 @@ def verificar_autorizacao_diaria(itinerario):
                     "SEI Diarias: Nao foi possivel obter token para encaminhar procedimento."
                 )
     elif info_assinaturas:
-        # Documento encontrado mas sem as assinaturas requeridas (3 requisitos)
-        # Monta mensagem informativa sobre o que falta
+        # Documento encontrado mas sem as 2 assinaturas requeridas (Super + Secretário)
         faltam = []
-        if not info_assinaturas.get('tem_super_area'):
-            area = info_assinaturas.get('super_area_esperada')
-            faltam.append(f'Superintendente da área ({area})' if area else 'Superintendente da área do solicitante')
-        if not info_assinaturas.get('tem_super_sga'):
-            faltam.append('Superintendente de Gestão Administrativa (SGA)')
+        if not info_assinaturas.get('tem_superintendente'):
+            faltam.append('Superintendente')
         if not info_assinaturas['tem_secretario']:
-            faltam.append('Secretário de Estado')
+            faltam.append('Secretário')
 
         if not info_assinaturas['assinaturas']:
             resultado['erro'] = 'Documento encontrado, mas ainda nao possui nenhuma assinatura.'

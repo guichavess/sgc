@@ -634,6 +634,121 @@ class TestVerificarAssinaturaSuperSei:
             assert res['assinada'] is True
 
 
+class TestVerificarAssinaturasRequeridas:
+    """
+    Testa a função usada por verificar_autorizacao_diaria (botão 'Verificar' da timeline).
+    Cenário-chave: documento Req. Diárias com Pedro (Superintendente) + Samuel (Secretário) →
+    deve ser considerado completo independente de superintendencia_sigla.
+    """
+
+    def _doc_com_assinaturas(self, assinaturas):
+        return {
+            'IdDocumento': '26468476',
+            'DocumentoFormatado': '0023874518',
+            'Serie': {'IdSerie': '532', 'Nome': 'SEAD_REQUISIÇÃO DE DIÁRIAS'},
+            'Assinaturas': assinaturas,
+        }
+
+    def test_completa_com_super_e_secretario_via_sigla(self, db_session, app):
+        """Cenário do usuário: Req. Diárias assinada por super + secretário cadastrados."""
+        with app.app_context():
+            from app.services.diarias_assinaturas import verificar_assinaturas_requeridas
+
+            super_u = _criar_usuario(db_session, 'va_super', 'PEDRO ALEXANDRE',
+                                     'superintendente', '99202743304')
+            super_u.sigla_login = 'pedro.alexandre@sead.pi.gov.br'
+            sec_u = _criar_usuario(db_session, 'va_sec', 'SAMUEL PONTES',
+                                   'secretario', '00281021341')
+            sec_u.sigla_login = 'samuel.nascimento@sead.pi.gov.br'
+            db_session.flush()
+
+            doc = self._doc_com_assinaturas([
+                {
+                    'Nome': 'SAMUEL PONTES DO NASCIMENTO - Mat.0209541-2',
+                    'CargoFuncao': 'Secretário de Estado',
+                    'Sigla': 'samuel.nascimento@sead.pi.gov.br',
+                    'IdOrigem': '00281021341',
+                },
+                {
+                    'Nome': 'PEDRO ALEXANDRE CABRAL DE OLIVEIRA - Matr.0391817-3',
+                    'CargoFuncao': 'Superintendente',
+                    'Sigla': 'pedro.alexandre@sead.pi.gov.br',
+                    'IdOrigem': '99202743304',
+                },
+            ])
+
+            info = verificar_assinaturas_requeridas(doc)
+
+            assert info['completa'] is True, (
+                f"FALHOU: doc com Super + Secretário cadastrados deveria ser completo. "
+                f"tem_super={info['tem_superintendente']}, tem_sec={info['tem_secretario']}"
+            )
+
+    def test_match_case_insensitive_na_sigla(self, db_session, app):
+        """Sigla SEI em case diferente do banco deve casar igual."""
+        with app.app_context():
+            from app.services.diarias_assinaturas import verificar_assinaturas_requeridas
+
+            super_u = _criar_usuario(db_session, 'va_ci_s', 'PEDRO', 'superintendente', '11122233344')
+            super_u.sigla_login = 'pedro.alexandre@sead.pi.gov.br'  # tudo lower
+            sec_u = _criar_usuario(db_session, 'va_ci_sec', 'SAMUEL', 'secretario', '55566677788')
+            sec_u.sigla_login = 'samuel.nascimento@sead.pi.gov.br'
+            db_session.flush()
+
+            doc = self._doc_com_assinaturas([
+                {'Nome': 'SAMUEL', 'Sigla': 'Samuel.Nascimento@SEAD.PI.GOV.BR',  # mixed case
+                 'IdOrigem': '55566677788'},
+                {'Nome': 'PEDRO', 'Sigla': 'PEDRO.ALEXANDRE@sead.pi.gov.br',  # upper
+                 'IdOrigem': '11122233344'},
+            ])
+
+            info = verificar_assinaturas_requeridas(doc)
+
+            assert info['completa'] is True
+            assert info['tem_superintendente'] is True
+            assert info['tem_secretario'] is True
+
+    def test_secretario_em_exercicio_satisfaz_requisito(self, db_session, app):
+        """Bruno (cargo_gestao='secretario_exercicio') também conta como secretário."""
+        with app.app_context():
+            from app.services.diarias_assinaturas import verificar_assinaturas_requeridas
+
+            super_u = _criar_usuario(db_session, 'va_se_s', 'PEDRO', 'superintendente', '99988877766')
+            super_u.sigla_login = 'pedro@sead.pi.gov.br'
+            sec_u = _criar_usuario(db_session, 'va_se_b', 'BRUNO', 'secretario_exercicio', '88877766655')
+            sec_u.sigla_login = 'bruno@sead.pi.gov.br'
+            db_session.flush()
+
+            doc = self._doc_com_assinaturas([
+                {'Nome': 'BRUNO', 'Sigla': 'bruno@sead.pi.gov.br', 'IdOrigem': '88877766655'},
+                {'Nome': 'PEDRO', 'Sigla': 'pedro@sead.pi.gov.br', 'IdOrigem': '99988877766'},
+            ])
+
+            info = verificar_assinaturas_requeridas(doc)
+
+            assert info['completa'] is True
+
+    def test_doc_sem_super_nao_e_completo(self, db_session, app):
+        """Documento só com secretário cadastrado → incompleto."""
+        with app.app_context():
+            from app.services.diarias_assinaturas import verificar_assinaturas_requeridas
+
+            sec_u = _criar_usuario(db_session, 'va_no_s', 'SAMUEL', 'secretario', '00011122233')
+            sec_u.sigla_login = 'samuel@sead.pi.gov.br'
+            _criar_usuario(db_session, 'va_no_p', 'PEDRO', 'superintendente', '99988877766')
+            db_session.flush()
+
+            doc = self._doc_com_assinaturas([
+                {'Nome': 'SAMUEL', 'Sigla': 'samuel@sead.pi.gov.br', 'IdOrigem': '00011122233'},
+            ])
+
+            info = verificar_assinaturas_requeridas(doc)
+
+            assert info['completa'] is False
+            assert info['tem_secretario'] is True
+            assert info['tem_superintendente'] is False
+
+
 class TestGetEstadoEtapa1:
     """Testa o helper otimizado que evita queries duplicadas."""
 
