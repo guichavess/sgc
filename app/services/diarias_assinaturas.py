@@ -92,15 +92,23 @@ def _resolver_assinante(assinatura, supers_idx=None, secs_idx=None):
 
 
 def _carregar_indices_autorizadores():
-    """Carrega supers e secretários cadastrados, retornando índices O(1)."""
+    """Carrega supers e secretários cadastrados, retornando índices O(1).
+
+    Tolerante a Usuario.ativo=NULL (registros antigos) — só exclui ativo=False.
+    """
     from app.models.usuario import Usuario
     from app.services.diarias_autorizacao import _so_digitos, _nome_chave
 
-    supers = Usuario.query.filter_by(cargo_gestao='superintendente', ativo=True).all()
+    supers = (
+        Usuario.query
+        .filter(Usuario.cargo_gestao == 'superintendente',
+                Usuario.ativo.isnot(False))
+        .all()
+    )
     secretarios = (
         Usuario.query
         .filter(Usuario.cargo_gestao.in_(('secretario', 'secretario_exercicio')),
-                Usuario.ativo == True)  # noqa: E712
+                Usuario.ativo.isnot(False))
         .all()
     )
 
@@ -156,6 +164,18 @@ def verificar_assinaturas_requeridas(doc, itinerario=None):
         )
 
     completa = tem_superintendente and tem_secretario
+
+    # Log diagnóstico (sempre): permite debug rápido em produção do que
+    # exatamente foi comparado, sem ter que mexer no código.
+    current_app.logger.info(
+        f"[DIARIAS][verificar_assinaturas] doc={doc.get('DocumentoFormatado', '?')!r} "
+        f"serie={doc.get('Serie', {}).get('IdSerie', '?')} "
+        f"qtd_assinaturas={len(assinaturas)} "
+        f"supers_cadastrados_idx_sigla={list(supers_idx.get('sigla', {}).keys())} "
+        f"secs_cadastrados_idx_sigla={list(secs_idx.get('sigla', {}).keys())} "
+        f"siglas_no_doc={[(a.get('Sigla') or '').lower() for a in assinaturas]} "
+        f"resultado: tem_super={tem_superintendente} tem_sec={tem_secretario} completa={completa}"
+    )
 
     return {
         'completa': completa,
