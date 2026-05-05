@@ -17,6 +17,26 @@
 
 ## Pendências
 
+### Hierarquia de Autorização — Diárias (2026-05-05)
+
+- [ ] **Definir `cargo_gestao = 'secretario_exercicio'` para Bruno Gomes**
+  - Contexto: implementada hierarquia de 3 níveis para autorização de diárias. O Secretário em Exercício precisa do valor `'secretario_exercicio'` no campo `cargo_gestao`. O Secretário titular (Samuel) já deve ter `'secretario'`. O Superintendente (Pedro) já deve ter `'superintendente'`.
+  ```sql
+  -- Verificar situação atual dos cargos de gestão:
+  SELECT id, login, nome, cargo_gestao FROM sis_usuarios WHERE cargo_gestao IS NOT NULL;
+
+  -- Definir Secretário em Exercício (ajustar o id/login do Bruno conforme retorno acima):
+  UPDATE sis_usuarios
+  SET cargo_gestao = 'secretario_exercicio'
+  WHERE nome LIKE '%BRUNO GOMES%' OR login LIKE '%bruno%';
+
+  -- Confirmar resultado:
+  SELECT id, login, nome, cargo_gestao FROM sis_usuarios WHERE cargo_gestao IS NOT NULL;
+  ```
+  - Observação: **sem esta atualização**, o Nível 2 (Bruno) nunca será detectado e o sistema escalará direto para Nível 3. Não há alteração de schema — `cargo_gestao` já é `VARCHAR(50)`.
+
+---
+
 ### Pós-deploy de 2026-04-07 (opcional / quando tiver fonte dos dados)
 
 - [ ] **Popular `diarias_servidores.idpessoa` e promover a NOT NULL + UNIQUE**

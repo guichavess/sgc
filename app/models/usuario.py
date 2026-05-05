@@ -30,7 +30,8 @@ class Usuario(db.Model, UserMixin):
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
 
     # Cargo de gestão (definido manualmente pelo admin)
-    cargo_gestao = db.Column(db.String(50), nullable=True)       # 'secretario', 'superintendente', ou NULL
+    # Valores: 'secretario', 'secretario_exercicio', 'superintendente', 'diretor_dfin', ou NULL
+    cargo_gestao = db.Column(db.String(50), nullable=True)
     setor_vinculado = db.Column(db.String(255), nullable=True)   # DEPRECATED: usar setor_id. Mantido para backfill/compatibilidade.
 
     # Vinculação estruturada ao setor (FK para setores) — mantido como referência
@@ -66,13 +67,34 @@ class Usuario(db.Model, UserMixin):
         return self.ativo
 
     @property
-    def is_secretario(self):
-        """Verifica se o usuário é o Secretário de Estado.
+    def is_secretario_exercicio(self):
+        """Secretário em exercício (substituto do titular quando este está impedido)."""
+        return self.cargo_gestao == 'secretario_exercicio'
 
-        Prioriza o campo cargo_gestao (definido pelo admin).
-        Fallback: text matching no campo cargo do SEI.
+    @property
+    def nivel_secretario(self):
+        """Nível hierárquico de autorização de diárias (1, 2, 3 ou None).
+
+        1 — Secretário titular
+        2 — Secretário em exercício
+        3 — Superintendente (autoriza em último recurso, ação única)
         """
         if self.cargo_gestao == 'secretario':
+            return 1
+        if self.cargo_gestao == 'secretario_exercicio':
+            return 2
+        if self.cargo_gestao == 'superintendente':
+            return 3
+        return None
+
+    @property
+    def is_secretario(self):
+        """Verifica se o usuário é Secretário (titular ou em exercício).
+
+        Prioriza o campo cargo_gestao (definido pelo admin).
+        Fallback: text matching no campo cargo do SEI (somente titular).
+        """
+        if self.cargo_gestao in ('secretario', 'secretario_exercicio'):
             return True
         if not self.cargo:
             return False

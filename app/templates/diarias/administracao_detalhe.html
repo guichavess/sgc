@@ -333,15 +333,27 @@
                                     {{ itinerario.superintendente_assinou_data.strftime('%d/%m/%Y às %H:%M') if itinerario.superintendente_assinou_data else '' }}
                                 </small>
                                 {% elif current_user.is_superintendente or current_user.is_admin %}
+                                {% if super_dispensado %}
+                                <p class="text-warning mb-2" style="font-size: 0.78rem;">
+                                    <i class="bi bi-person-fill me-1"></i>Você é integrante desta solicitação.
+                                    A assinatura de Requisição é dispensada automaticamente.
+                                </p>
+                                {% if itinerario.sei_id_procedimento %}
+                                <button type="button" class="btn btn-sm btn-warning px-4 fw-semibold"
+                                        onclick="dispensarAssinaturaSuper()">
+                                    <i class="bi bi-check-circle me-1"></i> Registrar Dispensa
+                                </button>
+                                {% endif %}
+                                {% else %}
                                 <p class="text-muted mb-2" style="font-size: 0.78rem;">
-                                    Assine as requisições de Diárias{% if itinerario.has_doc('requisicao_passagens') %} e Passagens{% endif %}
+                                    Assine a Requisição de Diárias para liberar a autorização.
                                 </p>
                                 <div class="d-flex flex-column gap-2 align-items-center">
                                     {% if itinerario.sei_id_procedimento %}
                                     <button type="button" class="btn btn-sm px-4 text-white fw-semibold"
                                             style="background: linear-gradient(135deg, #343990, #5b5fc7);"
                                             data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
-                                        <i class="bi bi-vector-pen me-1"></i> Assinar Requisições
+                                        <i class="bi bi-vector-pen me-1"></i> Assinar Requisição
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-secondary px-3"
                                             id="btnVerificarAssinaturas2"
@@ -350,6 +362,7 @@
                                     </button>
                                     {% endif %}
                                 </div>
+                                {% endif %}
                                 {% else %}
                                 <i class="bi bi-hourglass-split d-block" style="font-size: 1.4rem; color: #adb5bd;"></i>
                                 <small class="text-muted" style="font-size: 0.75rem;">Aguardando assinatura</small>
@@ -357,23 +370,54 @@
                             </div>
                         </div>
 
-                        {# Passo 2: Secretário #}
+                        {# Passo 2: Secretário/Autorizador #}
+                        {% set nivel_n = nivel_autorizacao.nivel if nivel_autorizacao else 1 %}
+                        {% set passo2_desbloqueado = itinerario.superintendente_assinou or nivel_n == 3 %}
                         <div class="col-md-6">
                             <div class="rounded-3 p-3 h-100 text-center position-relative"
-                                 style="{{ 'background: linear-gradient(135deg, #fff3cd 0%, #fffef5 100%); border: 1.5px solid #ffc107;' if itinerario.superintendente_assinou else 'background: #f8f9fa; border: 1.5px dashed #dee2e6; opacity: 0.7;' }}">
-                                <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; {{ 'color: #664d03;' if itinerario.superintendente_assinou else 'color: #adb5bd;' }}">
-                                    Passo 2 — Secretário
+                                 style="{{ 'background: linear-gradient(135deg, #fff3cd 0%, #fffef5 100%); border: 1.5px solid #ffc107;' if passo2_desbloqueado else 'background: #f8f9fa; border: 1.5px dashed #dee2e6; opacity: 0.7;' }}">
+                                <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; {{ 'color: #664d03;' if passo2_desbloqueado else 'color: #adb5bd;' }}">
+                                    Passo 2 — Autorização
                                 </div>
-                                {% if not itinerario.superintendente_assinou %}
+                                {# Badge de hierarquia #}
+                                {% if nivel_autorizacao and passo2_desbloqueado %}
+                                    {% if nivel_n == 1 %}
+                                    <span class="badge bg-primary mb-2" style="font-size: 0.65rem;" title="Secretário Titular">Nível 1 — Secretário Titular</span>
+                                    {% elif nivel_n == 2 %}
+                                    <span class="badge bg-warning text-dark mb-2" style="font-size: 0.65rem;"
+                                          title="{{ nivel_autorizacao.motivo_escalada }}">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>Nível 2 — Sec. em Exercício
+                                    </span>
+                                    <div class="text-muted mb-1" style="font-size: 0.68rem;">
+                                        <i class="bi bi-info-circle me-1"></i>{{ nivel_autorizacao.motivo_escalada }}
+                                    </div>
+                                    {% elif nivel_n == 3 %}
+                                    <span class="badge bg-danger mb-2" style="font-size: 0.65rem;"
+                                          title="{{ nivel_autorizacao.motivo_escalada }}">
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Nível 3 — Superintendente
+                                    </span>
+                                    <div class="text-muted mb-1" style="font-size: 0.68rem;">
+                                        <i class="bi bi-info-circle me-1"></i>{{ nivel_autorizacao.motivo_escalada }}
+                                    </div>
+                                    {% endif %}
+                                {% endif %}
+                                {% if not passo2_desbloqueado %}
                                 <i class="bi bi-lock d-block" style="font-size: 1.4rem; color: #ced4da;"></i>
                                 <small style="font-size: 0.75rem; color: #adb5bd;">Aguardando Passo 1</small>
-                                {% elif current_user.is_secretario %}
+                                {% elif current_user.is_secretario or (nivel_n == 3 and current_user.is_superintendente) %}
+                                {% if nivel_n == 3 %}
+                                <p class="text-muted mb-2" style="font-size: 0.78rem;">
+                                    Ação única: você assina e autoriza simultaneamente.
+                                </p>
+                                {% else %}
                                 <p class="text-muted mb-2" style="font-size: 0.78rem;">
                                     Superintendente já assinou. Autorize para prosseguir.
                                 </p>
+                                {% endif %}
                                 <button type="button" class="btn btn-warning btn-sm px-4 fw-semibold"
                                         data-bs-toggle="modal" data-bs-target="#modalAutorizar">
-                                    <i class="bi bi-vector-pen me-1"></i> Autorizar Solicitação
+                                    <i class="bi bi-vector-pen me-1"></i>
+                                    {% if nivel_n == 3 %}Autorizar (Nível 3){% else %}Autorizar Solicitação{% endif %}
                                 </button>
                                 {% else %}
                                 <i class="bi bi-hourglass-split d-block" style="font-size: 1.4rem; color: #adb5bd;"></i>
@@ -1841,8 +1885,11 @@
 </div>
 {% endif %}
 
-{# --- MODAL AUTORIZAÇÃO DO SECRETÁRIO --- #}
-{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_secretario and itinerario.superintendente_assinou %}
+{# --- MODAL AUTORIZAÇÃO DO SECRETÁRIO / NÍVEL 3 --- #}
+{% set _nivel_n = nivel_autorizacao.nivel if nivel_autorizacao else 1 %}
+{% set _pode_autorizar = (current_user.is_secretario and itinerario.superintendente_assinou)
+                          or (_nivel_n == 3 and current_user.is_superintendente) %}
+{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and _pode_autorizar %}
 <div class="modal fade" id="modalAutorizar" tabindex="-1" aria-labelledby="modalAutorizarLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -2085,6 +2132,30 @@ async function reimportarCotacoes(itinerarioId) {
 </script>
 {% endif %}
 
+{# --- JS Dispensa de Assinatura do Superintendente (quando é integrante) --- #}
+{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_superintendente and not itinerario.superintendente_assinou and super_dispensado %}
+<script>
+async function dispensarAssinaturaSuper() {
+    if (!confirm('Você é integrante desta solicitação. Confirma a dispensa automática da assinatura de Requisição?')) return;
+    try {
+        var resp = await fetch('{{ url_for("diarias.assinar_superintendente", id=itinerario.id) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        var data = await resp.json();
+        if (resp.ok && data.sucesso) {
+            window.location.reload();
+        } else {
+            alert(data.erro || 'Erro ao registrar dispensa.');
+        }
+    } catch (err) {
+        alert('Erro de conexão: ' + (err.message || 'tente novamente.'));
+    }
+}
+</script>
+{% endif %}
+
 {# --- JS Assinatura do Superintendente --- #}
 {% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_superintendente and not itinerario.superintendente_assinou %}
 <script>
@@ -2232,8 +2303,8 @@ document.querySelectorAll('#btnVerificarAssinaturas2').forEach(function(btn) {
 </div>
 {% endif %}
 
-{# --- JS Autorização do Secretário --- #}
-{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_secretario and itinerario.superintendente_assinou %}
+{# --- JS Autorização do Secretário / Nível 3 --- #}
+{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and _pode_autorizar %}
 <script>
 async function autorizarSolicitacao() {
     var erroDiv = document.getElementById('autorizar-erro');
