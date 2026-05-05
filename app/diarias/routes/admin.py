@@ -595,9 +595,39 @@ def administracao_detalhe(id):
     aba = request.args.get('aba', 'resumo')
 
     # Hierarquia de autorização (Etapa 1)
-    from app.services.diarias_autorizacao import get_nivel_autorizacao, superintendente_dispensado
+    from app.services.diarias_autorizacao import (
+        get_nivel_autorizacao, superintendente_dispensado,
+        verificar_assinatura_superintendente_sei,
+    )
     nivel_autorizacao = get_nivel_autorizacao(itinerario) if itinerario.etapa_atual_id == 1 else None
     super_dispensado = superintendente_dispensado(itinerario) if itinerario.etapa_atual_id == 1 else False
+
+    # Sincronização passiva: se a Requisição de Diárias já foi assinada no SEI
+    # pelo Superintendente cadastrado, marca o passo 1 como concluído sem
+    # exigir clique manual em "Verificar". Falhas SEI não quebram o detalhe.
+    if (itinerario.etapa_atual_id == 1
+            and not itinerario.superintendente_assinou
+            and itinerario.sei_protocolo):
+        try:
+            checagem = verificar_assinatura_superintendente_sei(itinerario)
+            if checagem.get('assinada'):
+                doc_req = itinerario.get_doc('requisicao')
+                if doc_req:
+                    doc_req.assinado = True
+                else:
+                    itinerario.set_doc(
+                        'requisicao',
+                        sei_id=checagem.get('doc_sei_id'),
+                        sei_formatado=checagem.get('doc_sei_formatado'),
+                        assinado=True,
+                    )
+                itinerario.superintendente_assinou = True
+                itinerario.superintendente_assinou_data = datetime.now()
+                db.session.commit()
+        except Exception as exc:
+            current_app.logger.warning(
+                f'[DIARIAS] Sincronização passiva de assinatura SEI falhou (itinerario={itinerario.id}): {exc}'
+            )
 
     # Contexto extra para modais de edição admin
     from app.models.diaria import (
@@ -1100,24 +1130,53 @@ def verificar_assinaturas_super(id):
         return jsonify({'sucesso': True, 'mensagem': 'Superintendente já havia assinado.', 'ja_assinado': True})
 
     # Superintendente assina APENAS a Requisição de Diárias (532).
-    # A Requisição de Passagens, quando existir, é assinada apenas pelo Secretário.
-    doc_req = itinerario.get_doc('requisicao')
-    req_assinada = doc_req and doc_req.assinado
+    # Verificação dinâmica: consulta o SEI e casa o assinante pela Sigla/CPF
+    # contra o usuário cadastrado com cargo_gestao='superintendente'. Se o
+    # admin trocar quem é o Superintendente no módulo de usuários, o sistema
+    # passa a esperar pela assinatura do novo automaticamente.
+    from app.services.diarias_autorizacao import verificar_assinatura_superintendente_sei
+    resultado = verificar_assinatura_superintendente_sei(itinerario)
 
-    if not req_assinada:
+    if not resultado.get('assinada'):
+        # Atualiza referência local do doc se o SEI já o expôs (mesmo sem assinatura)
+        if resultado.get('doc_sei_id'):
+            itinerario.set_doc(
+                'requisicao',
+                sei_id=resultado['doc_sei_id'],
+                sei_formatado=resultado.get('doc_sei_formatado'),
+            )
+            db.session.commit()
+
+        msg = resultado.get('erro') or (
+            'Requisição de Diárias localizada no SEI, mas ainda não foi '
+            'assinada pelo Superintendente cadastrado no sistema.'
+        )
         return jsonify({
             'sucesso': False,
             'pendente': True,
-            'mensagem': 'Requisição de Diárias ainda não está marcada como assinada no sistema.',
+            'mensagem': msg,
         })
+
+    # Assinatura encontrada — atualiza flag local do doc + libera passo do Secretário
+    doc_req = itinerario.get_doc('requisicao')
+    if doc_req:
+        doc_req.assinado = True
+    else:
+        itinerario.set_doc(
+            'requisicao',
+            sei_id=resultado.get('doc_sei_id'),
+            sei_formatado=resultado.get('doc_sei_formatado'),
+            assinado=True,
+        )
 
     itinerario.superintendente_assinou = True
     itinerario.superintendente_assinou_data = datetime.now()
     db.session.commit()
 
+    assinante_nome = resultado.get('assinante_nome') or 'Superintendente'
     current_app.logger.info(
         f'[DIARIAS] verificar_assinaturas_super: superintendente_assinou=True '
-        f'via verificacao automatica (itinerario={id})'
+        f'via verificacao SEI (itinerario={id}, assinante={assinante_nome!r})'
     )
 
     try:
@@ -1127,7 +1186,8 @@ def verificar_assinaturas_super(id):
 
     return jsonify({
         'sucesso': True,
-        'mensagem': 'Documentos já estavam assinados. Etapa liberada para autorização do Secretário.',
+        'mensagem': f'Requisição de Diárias assinada por {assinante_nome}. Etapa liberada para autorização do Secretário.',
+        'assinante': assinante_nome,
     })
 
 

@@ -380,3 +380,195 @@ class TestSuperAssinaApenasRequisicao:
                 "quando a Requisição de Passagens não está assinada. Deve liberar "
                 "imediatamente quando a Req. Diárias estiver assinada."
             )
+
+
+# ── Testes: verificação dinâmica via SEI ─────────────────────────────────────
+
+class TestVerificarAssinaturaSuperSei:
+    """
+    Testa a verificação que consulta o SEI e casa a assinatura com o usuário
+    cadastrado como Superintendente (cargo_gestao='superintendente'),
+    sem nomes/CPFs hardcoded.
+    """
+
+    def _payload_doc_assinado(self, sigla_assinante, id_origem='99202743304',
+                              nome='SUPER TESTE'):
+        """Payload similar ao que o SEI retorna em /procedimentos/documentos."""
+        return {
+            'sucesso': True,
+            'documentos': [
+                {
+                    'IdDocumento': '26468476',
+                    'DocumentoFormatado': '0023874518',
+                    'Serie': {'IdSerie': '532', 'Nome': 'SEAD_REQUISIÇÃO DE DIÁRIAS'},
+                    'Assinaturas': [
+                        {
+                            'Nome': 'SAMUEL PONTES DO NASCIMENTO - Mat.0209541-2',
+                            'CargoFuncao': 'Secretário de Estado',
+                            'Sigla': 'samuel.nascimento@sead.pi.gov.br',
+                            'IdOrigem': '00281021341',
+                        },
+                        {
+                            'Nome': nome,
+                            'CargoFuncao': 'Superintendente',
+                            'Sigla': sigla_assinante,
+                            'IdOrigem': id_origem,
+                        },
+                    ],
+                },
+            ],
+        }
+
+    def test_assinada_quando_sigla_bate_com_super_cadastrado(self, db_session, app, mocker):
+        """
+        Resposta SEI contém assinatura cuja Sigla == sigla_login do
+        usuário cadastrado como superintendente → 'assinada': True.
+        """
+        with app.app_context():
+            from app.services import diarias_autorizacao as svc
+
+            super_cadastrado = _criar_usuario(
+                db_session, 'sei_n3a', 'PEDRO ALEXANDRE', 'superintendente', CPF_N3
+            )
+            super_cadastrado.sigla_login = 'pedro.alexandre@sead.pi.gov.br'
+            db_session.flush()
+
+            it = _criar_itinerario(db_session)
+            it.sei_protocolo = '00002.004523/2026-52'
+            db_session.flush()
+
+            mocker.patch(
+                'app.services.diarias_sei_integration.consultar_documentos_procedimento',
+                return_value=self._payload_doc_assinado(
+                    'pedro.alexandre@sead.pi.gov.br',
+                    nome='PEDRO ALEXANDRE CABRAL DE OLIVEIRA',
+                ),
+            )
+
+            res = svc.verificar_assinatura_superintendente_sei(it)
+
+            assert res['assinada'] is True
+            assert 'PEDRO' in (res['assinante_nome'] or '')
+            assert res['assinante_usuario_id'] == super_cadastrado.id
+
+    def test_assinada_via_cpf_quando_sigla_diferente(self, db_session, app, mocker):
+        """Fallback por CPF: Sigla diferente mas IdOrigem == cpf cadastrado."""
+        with app.app_context():
+            from app.services import diarias_autorizacao as svc
+
+            u = _criar_usuario(db_session, 'sei_n3b', 'NOVO SUPER', 'superintendente', '12345678901')
+            u.sigla_login = 'super.antiga@sead.pi.gov.br'
+            db_session.flush()
+
+            it = _criar_itinerario(db_session)
+            it.sei_protocolo = '00002.000001/2026-99'
+            db_session.flush()
+
+            mocker.patch(
+                'app.services.diarias_sei_integration.consultar_documentos_procedimento',
+                return_value=self._payload_doc_assinado(
+                    'sigla.diferente@sead.pi.gov.br',
+                    id_origem='12345678901',
+                ),
+            )
+
+            res = svc.verificar_assinatura_superintendente_sei(it)
+
+            assert res['assinada'] is True
+
+    def test_nao_assinada_quando_super_assinou_mas_nao_e_o_cadastrado(self, db_session, app, mocker):
+        """
+        Documento tem assinatura de "Superintendente" no texto, mas o
+        Sigla/CPF não bate com nenhum usuário cargo_gestao='superintendente'.
+        Deve retornar assinada=False (matching dinâmico estrito).
+        """
+        with app.app_context():
+            from app.services import diarias_autorizacao as svc
+
+            u = _criar_usuario(db_session, 'sei_n3c', 'SUPER ATUAL', 'superintendente', '11122233344')
+            u.sigla_login = 'super.atual@sead.pi.gov.br'
+            db_session.flush()
+
+            it = _criar_itinerario(db_session)
+            it.sei_protocolo = '00002.000002/2026-99'
+            db_session.flush()
+
+            mocker.patch(
+                'app.services.diarias_sei_integration.consultar_documentos_procedimento',
+                return_value=self._payload_doc_assinado(
+                    'super.antigo@sead.pi.gov.br',
+                    id_origem='99999999999',
+                ),
+            )
+
+            res = svc.verificar_assinatura_superintendente_sei(it)
+
+            assert res['assinada'] is False
+            assert res['doc_sei_id'] == '26468476'
+
+    def test_doc_532_nao_encontrado_no_processo(self, db_session, app, mocker):
+        """Processo SEI sem Requisição de Diárias → assinada=False com erro descritivo."""
+        with app.app_context():
+            from app.services import diarias_autorizacao as svc
+
+            _criar_usuario(db_session, 'sei_n3d', 'SUPER', 'superintendente', '55566677788')
+
+            it = _criar_itinerario(db_session)
+            it.sei_protocolo = '00002.000003/2026-99'
+            db_session.flush()
+
+            mocker.patch(
+                'app.services.diarias_sei_integration.consultar_documentos_procedimento',
+                return_value={
+                    'sucesso': True,
+                    'documentos': [
+                        {'Serie': {'IdSerie': '2986'}, 'Assinaturas': []},  # só Memorando
+                    ],
+                },
+            )
+
+            res = svc.verificar_assinatura_superintendente_sei(it)
+
+            assert res['assinada'] is False
+            assert 'não encontrada' in res['erro'].lower()
+
+    def test_sem_super_cadastrado_retorna_erro(self, db_session, app, mocker):
+        """Sem Usuario cargo_gestao='superintendente' → retorna erro claro."""
+        with app.app_context():
+            from app.services import diarias_autorizacao as svc
+
+            it = _criar_itinerario(db_session)
+            it.sei_protocolo = '00002.000004/2026-99'
+            db_session.flush()
+
+            res = svc.verificar_assinatura_superintendente_sei(it)
+
+            assert res['assinada'] is False
+            assert 'superintendente' in res['erro'].lower()
+
+    def test_sem_protocolo_sei_retorna_erro(self, db_session, app):
+        """Itinerário sem sei_protocolo → não chama SEI, retorna erro."""
+        with app.app_context():
+            from app.services import diarias_autorizacao as svc
+
+            _criar_usuario(db_session, 'sei_n3e', 'SUPER', 'superintendente', '99988877766')
+
+            it = _criar_itinerario(db_session)  # sem sei_protocolo
+            db_session.flush()
+
+            res = svc.verificar_assinatura_superintendente_sei(it)
+
+            assert res['assinada'] is False
+            assert 'protocolo' in res['erro'].lower()
+
+    def test_endpoint_usa_verificacao_sei_dinamica(self, app):
+        """O endpoint verificar_assinaturas_super deve chamar a verificação SEI dinâmica."""
+        import inspect
+        with app.app_context():
+            from app.diarias.routes.admin import verificar_assinaturas_super
+            source = inspect.getsource(verificar_assinaturas_super)
+
+            assert 'verificar_assinatura_superintendente_sei' in source, (
+                "FALHOU: o endpoint não chama a verificação SEI dinâmica. "
+                "Sem isso, assinaturas feitas direto no SEI não são detectadas."
+            )

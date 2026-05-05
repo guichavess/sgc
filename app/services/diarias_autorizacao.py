@@ -71,3 +71,94 @@ def superintendente_dispensado(itinerario):
 
     supers = Usuario.query.filter_by(cargo_gestao='superintendente', ativo=True).all()
     return any((u.cpf or '').strip() in cpfs_integrantes for u in supers)
+
+
+# ID da série SEI para "SEAD_REQUISIÇÃO DE DIÁRIAS"
+ID_SERIE_REQUISICAO_DIARIAS = '532'
+
+
+def verificar_assinatura_superintendente_sei(itinerario):
+    """
+    Consulta o SEI para verificar se algum usuário cadastrado como
+    Superintendente (cargo_gestao='superintendente') já assinou a
+    Requisição de Diárias (série 532) deste itinerário.
+
+    O matching é dinâmico: usa os usuários cadastrados em sis_usuarios,
+    sem nomes/CPFs hardcoded. Quando o admin troca o Superintendente,
+    basta atualizar o cargo_gestao no módulo de usuários.
+
+    Estratégia de matching (por ordem de prioridade):
+      1. Sigla SEI (ex: 'pedro.alexandre@sead.pi.gov.br') == Usuario.sigla_login
+      2. IdOrigem (CPF) == Usuario.cpf
+
+    Returns:
+        {
+            'assinada': bool,
+            'assinante_nome': str | None,
+            'assinante_usuario_id': int | None,
+            'doc_sei_id': str | None,
+            'doc_sei_formatado': str | None,
+            'erro': str | None,
+        }
+    """
+    from app.models.usuario import Usuario
+    from app.services.diarias_sei_integration import consultar_documentos_procedimento
+
+    if not itinerario.sei_protocolo:
+        return {'assinada': False, 'erro': 'Itinerário sem protocolo SEI'}
+
+    supers = Usuario.query.filter_by(cargo_gestao='superintendente', ativo=True).all()
+    if not supers:
+        return {'assinada': False, 'erro': 'Nenhum Superintendente cadastrado no sistema'}
+
+    # Indexa por sigla (case-insensitive) e CPF para lookup O(1)
+    sigla_to_user = {
+        (u.sigla_login or '').strip().lower(): u
+        for u in supers if u.sigla_login
+    }
+    cpf_to_user = {
+        (u.cpf or '').strip(): u
+        for u in supers if u.cpf
+    }
+
+    resp = consultar_documentos_procedimento(itinerario.sei_protocolo)
+    if not resp or not resp.get('sucesso'):
+        return {
+            'assinada': False,
+            'erro': resp.get('erro', 'Falha ao consultar documentos no SEI') if resp else 'Sem resposta do SEI',
+        }
+
+    doc_req_sei = None
+    for sei_doc in resp.get('documentos', []) or []:
+        serie = sei_doc.get('Serie') or {}
+        if str(serie.get('IdSerie', '')) == ID_SERIE_REQUISICAO_DIARIAS:
+            doc_req_sei = sei_doc
+            break
+
+    if not doc_req_sei:
+        return {'assinada': False, 'erro': 'Requisição de Diárias não encontrada no processo SEI'}
+
+    doc_id = doc_req_sei.get('IdDocumento')
+    doc_fmt = doc_req_sei.get('DocumentoFormatado')
+
+    for ass in (doc_req_sei.get('Assinaturas') or []):
+        sigla = (ass.get('Sigla') or '').strip().lower()
+        id_origem = (ass.get('IdOrigem') or '').strip()
+
+        usuario_match = sigla_to_user.get(sigla) or cpf_to_user.get(id_origem)
+        if usuario_match:
+            return {
+                'assinada': True,
+                'assinante_nome': ass.get('Nome'),
+                'assinante_usuario_id': usuario_match.id,
+                'doc_sei_id': doc_id,
+                'doc_sei_formatado': doc_fmt,
+                'erro': None,
+            }
+
+    return {
+        'assinada': False,
+        'doc_sei_id': doc_id,
+        'doc_sei_formatado': doc_fmt,
+        'erro': None,
+    }

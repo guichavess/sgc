@@ -204,10 +204,14 @@
                             <label class="form-label fw-semibold small" for="cargo_gestao">Cargo de Gestao</label>
                             <select name="cargo_gestao" id="cargo_gestao" class="form-select form-select-sm">
                                 <option value="">-- Nenhum --</option>
-                                <option value="secretario" {{ 'selected' if usuario.cargo_gestao == 'secretario' }}>Secretario</option>
+                                <option value="secretario" {{ 'selected' if usuario.cargo_gestao == 'secretario' }}>Secretario (Titular)</option>
+                                <option value="secretario_exercicio" {{ 'selected' if usuario.cargo_gestao == 'secretario_exercicio' }}>Secretario em Exercicio</option>
                                 <option value="superintendente" {{ 'selected' if usuario.cargo_gestao == 'superintendente' }}>Superintendente</option>
                             </select>
-                            <div class="form-text">Define permissoes de assinatura em fluxos de diarias.</div>
+                            <div class="form-text">
+                                Define quem assina/autoriza nos fluxos de diarias.<br>
+                                <strong>Hierarquia:</strong> Titular &rarr; Em Exercicio &rarr; Superintendente.
+                            </div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold small" for="superintendencia_select">Superintendência</label>
