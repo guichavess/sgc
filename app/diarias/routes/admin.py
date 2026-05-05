@@ -594,40 +594,14 @@ def administracao_detalhe(id):
     timeline_data = DiariaService.obter_timeline(itinerario)
     aba = request.args.get('aba', 'resumo')
 
-    # Hierarquia de autorização (Etapa 1)
-    from app.services.diarias_autorizacao import (
-        get_nivel_autorizacao, superintendente_dispensado,
-        verificar_assinatura_superintendente_sei,
-    )
-    nivel_autorizacao = get_nivel_autorizacao(itinerario) if itinerario.etapa_atual_id == 1 else None
-    super_dispensado = superintendente_dispensado(itinerario) if itinerario.etapa_atual_id == 1 else False
-
-    # Sincronização passiva: se a Requisição de Diárias já foi assinada no SEI
-    # pelo Superintendente cadastrado, marca o passo 1 como concluído sem
-    # exigir clique manual em "Verificar". Falhas SEI não quebram o detalhe.
-    if (itinerario.etapa_atual_id == 1
-            and not itinerario.superintendente_assinou
-            and itinerario.sei_protocolo):
-        try:
-            checagem = verificar_assinatura_superintendente_sei(itinerario)
-            if checagem.get('assinada'):
-                doc_req = itinerario.get_doc('requisicao')
-                if doc_req:
-                    doc_req.assinado = True
-                else:
-                    itinerario.set_doc(
-                        'requisicao',
-                        sei_id=checagem.get('doc_sei_id'),
-                        sei_formatado=checagem.get('doc_sei_formatado'),
-                        assinado=True,
-                    )
-                itinerario.superintendente_assinou = True
-                itinerario.superintendente_assinou_data = datetime.now()
-                db.session.commit()
-        except Exception as exc:
-            current_app.logger.warning(
-                f'[DIARIAS] Sincronização passiva de assinatura SEI falhou (itinerario={itinerario.id}): {exc}'
-            )
+    # Hierarquia de autorização (Etapa 1) — 1 query + 1 iteração
+    nivel_autorizacao = None
+    super_dispensado = False
+    if itinerario.etapa_atual_id == 1:
+        from app.services.diarias_autorizacao import get_estado_etapa1
+        _estado_e1 = get_estado_etapa1(itinerario)
+        nivel_autorizacao = _estado_e1['nivel_autorizacao']
+        super_dispensado = _estado_e1['super_dispensado']
 
     # Contexto extra para modais de edição admin
     from app.models.diaria import (
