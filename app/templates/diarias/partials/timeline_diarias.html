@@ -194,7 +194,6 @@
                                 onclick="verificarAutorizacao({{ itinerario.id }})">
                             <i class="fas fa-sync-alt me-1"></i>Verificar
                         </button>
-                        <div id="resultado-autorizacao" class="mt-1" style="font-size: 0.7rem;"></div>
                         {% endif %}
 
                         {# Sub-itens checklist com links e tooltips de data #}
@@ -259,71 +258,198 @@
     </div>
 </div>
 
+{# ─── MODAL DE VERIFICAÇÃO DE AUTORIZAÇÃO ──────────────────────── #}
+<div class="modal fade" id="modalVerificarAutorizacao" tabindex="-1" aria-labelledby="modalVerificarLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary bg-opacity-10">
+                <h5 class="modal-title" id="modalVerificarLabel">
+                    <i class="bi bi-shield-check me-1"></i> Verificação de Autorização SEI
+                </h5>
+                <button type="button" id="btn-fechar-verificar" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar" disabled></button>
+            </div>
+            <div class="modal-body">
+                {# Estado: carregando #}
+                <div id="verif-loading" class="text-center py-4">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                    <h6 class="fw-semibold text-primary mb-1">Consultando o SEI…</h6>
+                    <p class="text-muted small mb-0">Buscando documentos e verificando assinaturas do Superintendente e Secretário.</p>
+                </div>
+
+                {# Estado: sucesso #}
+                <div id="verif-sucesso" class="d-none">
+                    <div class="alert alert-success d-flex align-items-center" role="alert">
+                        <i class="bi bi-check-circle-fill fs-3 me-3"></i>
+                        <div>
+                            <h6 class="alert-heading mb-1">Solicitação autorizada!</h6>
+                            <p class="mb-0 small" id="verif-sucesso-msg">Etapa avançada para Análise da Solicitação.</p>
+                        </div>
+                    </div>
+                    <div id="verif-sucesso-detalhes"></div>
+                </div>
+
+                {# Estado: pendente / erro #}
+                <div id="verif-pendente" class="d-none">
+                    <div class="alert alert-warning d-flex align-items-start" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill fs-3 me-3"></i>
+                        <div class="flex-grow-1">
+                            <h6 class="alert-heading mb-1">Verificação incompleta</h6>
+                            <p class="mb-0 small" id="verif-pendente-msg"></p>
+                        </div>
+                    </div>
+                    <div id="verif-diagnostico" class="mt-3"></div>
+                </div>
+
+                {# Estado: erro de comunicação #}
+                <div id="verif-erro" class="d-none">
+                    <div class="alert alert-danger d-flex align-items-center" role="alert">
+                        <i class="bi bi-x-circle-fill fs-3 me-3"></i>
+                        <div>
+                            <h6 class="alert-heading mb-1">Erro ao verificar</h6>
+                            <p class="mb-0 small" id="verif-erro-msg"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" id="btn-modal-verif-fechar" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" disabled>
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function verificarAutorizacao(itinerarioId) {
     var btn = document.getElementById('btn-verificar-autorizacao');
-    var resultado = document.getElementById('resultado-autorizacao');
+    var modalEl = document.getElementById('modalVerificarAutorizacao');
+    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
 
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Verificando…';
-    resultado.innerHTML = '';
+    // Reset estados
+    document.getElementById('verif-loading').classList.remove('d-none');
+    document.getElementById('verif-sucesso').classList.add('d-none');
+    document.getElementById('verif-pendente').classList.add('d-none');
+    document.getElementById('verif-erro').classList.add('d-none');
+    document.getElementById('btn-modal-verif-fechar').disabled = true;
+    document.getElementById('btn-fechar-verificar').disabled = true;
+
+    if (btn) btn.disabled = true;
+    modal.show();
 
     fetch('/diarias/api/verificar-autorizacao/' + itinerarioId)
         .then(function(resp) { return resp.json(); })
         .then(function(data) {
-            if (data.erro) {
-                resultado.innerHTML = '<span class="text-danger">' + data.erro + '</span>';
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Verificar';
-                return;
-            }
-
-            var html = '';
+            document.getElementById('verif-loading').classList.add('d-none');
+            document.getElementById('btn-modal-verif-fechar').disabled = false;
+            document.getElementById('btn-fechar-verificar').disabled = false;
+            if (btn) btn.disabled = false;
 
             if (data.autorizada && data.documento) {
-                html += '<i class="fas fa-check-circle text-success"></i> ';
-                html += '<span class="text-success fw-semibold">' + data.documento.serie_nome + '</span>';
-                html += '<br><small class="text-muted">Doc: ' + data.documento.documento_formatado + '</small>';
+                // ── Sucesso ──
+                var sucessoBox = document.getElementById('verif-sucesso');
+                var detalhes = document.getElementById('verif-sucesso-detalhes');
+                var msg = document.getElementById('verif-sucesso-msg');
 
+                msg.textContent = data.avancou_etapa
+                    ? 'Etapa avançada para Análise da Solicitação. A página será recarregada em instantes.'
+                    : 'Documento já estava autorizado.';
+
+                var html = '<ul class="list-unstyled small mb-0">';
+                html += '<li><strong>Documento:</strong> ' + (data.documento.documento_formatado || '-') + '</li>';
+                html += '<li><strong>Série:</strong> ' + (data.documento.serie_nome || '-') + '</li>';
                 if (data.documento.assinaturas && data.documento.assinaturas.length > 0) {
-                    for (var i = 0; i < data.documento.assinaturas.length; i++) {
-                        var a = data.documento.assinaturas[i];
-                        html += '<br><i class="fas fa-pen-nib text-primary"></i> ' + a.nome;
-                        if (a.cargo) html += ' <small class="text-muted">(' + a.cargo + ')</small>';
-                    }
+                    html += '<li class="mt-2"><strong>Assinantes:</strong></li>';
+                    data.documento.assinaturas.forEach(function(a) {
+                        html += '<li class="ms-3"><i class="bi bi-pen-fill text-primary me-1"></i>'
+                              + a.nome + (a.cargo ? ' <span class="text-muted">(' + a.cargo + ')</span>' : '')
+                              + '</li>';
+                    });
                 }
+                if (data.envio && data.envio.sucesso) {
+                    html += '<li class="mt-2 text-info"><i class="bi bi-send-fill me-1"></i>Processo encaminhado para DFIN/APOIO.</li>';
+                } else if (data.envio && data.envio.erro) {
+                    html += '<li class="mt-2 text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Envio: ' + data.envio.erro + '</li>';
+                }
+                html += '</ul>';
+                detalhes.innerHTML = html;
+                sucessoBox.classList.remove('d-none');
 
                 if (data.avancou_etapa) {
-                    html += '<br><span class="badge bg-success mt-1">Autorizada!</span>';
-                    if (data.envio && data.envio.sucesso) {
-                        html += '<br><i class="fas fa-paper-plane text-info"></i> <small>Encaminhado para DFIN/APOIO</small>';
-                    } else if (data.envio && data.envio.erro) {
-                        html += '<br><i class="fas fa-exclamation-triangle text-warning"></i> <small>Envio: ' + data.envio.erro + '</small>';
-                    }
-                    setTimeout(function() { location.reload(); }, 2000);
-                } else {
-                    html += '<br><span class="badge bg-success mt-1">Já autorizada</span>';
+                    setTimeout(function() { location.reload(); }, 2500);
                 }
             } else {
-                html += '<i class="fas fa-clock text-warning"></i> ';
-                if (data.erro) {
-                    html += '<span class="text-warning">' + data.erro + '</span>';
-                } else {
-                    html += '<span class="text-warning">Documento de autorização ainda não encontrado</span>';
-                }
-                if (data.documento && data.documento.documento_formatado) {
-                    html += '<br><small class="text-muted">Doc: ' + data.documento.documento_formatado + '</small>';
-                }
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Verificar';
-            }
+                // ── Pendente: mostra diagnóstico para o usuário entender o que falta ──
+                var pendenteBox = document.getElementById('verif-pendente');
+                document.getElementById('verif-pendente-msg').textContent =
+                    data.erro || 'Documento de autorização ainda não encontrado no SEI.';
 
-            resultado.innerHTML = html;
+                var diagBox = document.getElementById('verif-diagnostico');
+                var diagHtml = '';
+                var d = data.diagnostico || {};
+
+                if (d.docs_sei && d.docs_sei.length > 0) {
+                    diagHtml += '<div class="card border-0 bg-light mb-2">'
+                              + '<div class="card-body p-2">'
+                              + '<h6 class="small fw-semibold mb-2"><i class="bi bi-file-earmark-text me-1"></i>Documentos relevantes encontrados no SEI</h6>'
+                              + '<ul class="list-unstyled small mb-0">';
+                    d.docs_sei.forEach(function(doc) {
+                        diagHtml += '<li class="mb-2">'
+                                  + '<strong>' + (doc.documento_formatado || '?') + '</strong> '
+                                  + '<span class="text-muted">(' + (doc.serie_nome || 'série ' + doc.serie_id) + ')</span><br>'
+                                  + '<small>Assinaturas no SEI: <strong>' + doc.qtd_assinaturas + '</strong></small>';
+                        if (doc.assinantes && doc.assinantes.length > 0) {
+                            diagHtml += '<ul class="ms-3 mt-1 mb-0 small">';
+                            doc.assinantes.forEach(function(a) {
+                                diagHtml += '<li><i class="bi bi-pen text-secondary me-1"></i>'
+                                          + a.nome
+                                          + (a.cargo ? ' <span class="text-muted">— ' + a.cargo + '</span>' : '')
+                                          + (a.sigla ? '<br><span class="ms-3 text-muted"><code>' + a.sigla + '</code></span>' : '')
+                                          + '</li>';
+                            });
+                            diagHtml += '</ul>';
+                        }
+                        diagHtml += '</li>';
+                    });
+                    diagHtml += '</ul></div></div>';
+                }
+
+                if (d.autorizadores_cadastrados && d.autorizadores_cadastrados.length > 0) {
+                    diagHtml += '<div class="card border-0 bg-light mb-2">'
+                              + '<div class="card-body p-2">'
+                              + '<h6 class="small fw-semibold mb-2"><i class="bi bi-people me-1"></i>Autorizadores cadastrados no sistema</h6>'
+                              + '<ul class="list-unstyled small mb-0">';
+                    d.autorizadores_cadastrados.forEach(function(u) {
+                        var cargo_label = u.cargo_gestao === 'superintendente' ? 'Superintendente'
+                                       : (u.cargo_gestao === 'secretario' ? 'Secretário (Titular)'
+                                       : (u.cargo_gestao === 'secretario_exercicio' ? 'Secretário em Exercício' : u.cargo_gestao));
+                        diagHtml += '<li><i class="bi bi-person-badge me-1"></i>'
+                                  + u.nome + ' — <strong>' + cargo_label + '</strong>'
+                                  + (u.sigla_login ? '<br><span class="ms-3 text-muted"><code>' + u.sigla_login + '</code></span>' : '')
+                                  + '</li>';
+                    });
+                    diagHtml += '</ul></div></div>';
+                } else if (d.autorizadores_cadastrados !== undefined) {
+                    diagHtml += '<div class="alert alert-danger small mb-2">'
+                              + '<i class="bi bi-exclamation-octagon me-1"></i>'
+                              + '<strong>Nenhum autorizador cadastrado!</strong> '
+                              + 'Acesse <em>Admin &rarr; Usuários</em> e defina o <code>cargo de gestão</code> do Superintendente/Secretário.'
+                              + '</div>';
+                }
+
+                diagBox.innerHTML = diagHtml;
+                pendenteBox.classList.remove('d-none');
+            }
         })
         .catch(function(err) {
-            resultado.innerHTML = '<span class="text-danger">Erro: ' + err.message + '</span>';
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Verificar';
+            document.getElementById('verif-loading').classList.add('d-none');
+            document.getElementById('verif-erro').classList.remove('d-none');
+            document.getElementById('verif-erro-msg').textContent = 'Falha de conexão: ' + (err.message || 'tente novamente.');
+            document.getElementById('btn-modal-verif-fechar').disabled = false;
+            document.getElementById('btn-fechar-verificar').disabled = false;
+            if (btn) btn.disabled = false;
         });
 }
 </script>

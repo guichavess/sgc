@@ -637,11 +637,17 @@ def api_admin_editar_quadro_orcamentario():
 @requires_permission('diarias.visualizar')
 def api_verificar_autorizacao(itinerario_id):
     """
-    Verifica se o processo SEI possui documento SEAD_AUTORIZACAO_DO_SECRETARIO (IdSerie 574).
-    Se encontrado, avanca automaticamente para etapa 2 (Autorizada).
+    Verifica se o processo SEI possui Req. Diárias assinada por
+    Superintendente + Secretário cadastrados (cargo_gestao).
+    Se sim, avanca automaticamente para etapa de Análise.
+    Inclui dados de diagnóstico para o popup do front-end.
     """
     from app.models.diaria import DiariasItinerario
-    from app.services.diarias_sei_integration import verificar_autorizacao_diaria
+    from app.services.diarias_sei_integration import (
+        verificar_autorizacao_diaria, consultar_documentos_procedimento,
+        ID_SERIE_REQUISICAO_DIARIAS, ID_SERIE_AUTORIZACAO_SECRETARIO,
+    )
+    from app.models.usuario import Usuario
 
     itinerario = DiariasItinerario.query.get(itinerario_id)
     if not itinerario:
@@ -657,9 +663,55 @@ def api_verificar_autorizacao(itinerario_id):
                 'nome': a.get('Nome', ''),
                 'cargo': a.get('CargoFuncao', ''),
                 'data_hora': a.get('DataHora', ''),
+                'sigla': a.get('Sigla', ''),
             })
 
     envio = resultado.get('envio_procedimento')
+
+    # ── Diagnóstico ─────────────────────────────────────────────
+    # Coleta dados que ajudam o usuário a entender por que a verificação
+    # falhou (ex: super não cadastrado, sigla diferente, doc realmente sem
+    # assinatura no SEI).
+    diagnostico = {'docs_sei': [], 'autorizadores_cadastrados': []}
+    try:
+        if itinerario.sei_protocolo:
+            resp_diag = consultar_documentos_procedimento(itinerario.sei_protocolo)
+            if resp_diag and resp_diag.get('sucesso'):
+                for d in resp_diag.get('documentos', []) or []:
+                    serie = d.get('Serie') or {}
+                    id_serie = str(serie.get('IdSerie', ''))
+                    if id_serie in (ID_SERIE_REQUISICAO_DIARIAS, ID_SERIE_AUTORIZACAO_SECRETARIO):
+                        diagnostico['docs_sei'].append({
+                            'documento_formatado': d.get('DocumentoFormatado', ''),
+                            'serie_id': id_serie,
+                            'serie_nome': serie.get('Nome', ''),
+                            'qtd_assinaturas': len(d.get('Assinaturas') or []),
+                            'assinantes': [
+                                {
+                                    'nome': a.get('Nome', ''),
+                                    'cargo': a.get('CargoFuncao', ''),
+                                    'sigla': a.get('Sigla', ''),
+                                }
+                                for a in (d.get('Assinaturas') or [])
+                            ],
+                        })
+        cadastrados = (
+            Usuario.query
+            .filter(Usuario.cargo_gestao.in_(
+                ('superintendente', 'secretario', 'secretario_exercicio')))
+            .filter(Usuario.ativo.isnot(False))
+            .all()
+        )
+        diagnostico['autorizadores_cadastrados'] = [
+            {
+                'nome': u.nome,
+                'sigla_login': u.sigla_login,
+                'cargo_gestao': u.cargo_gestao,
+            }
+            for u in cadastrados
+        ]
+    except Exception as e:
+        diagnostico['erro_diagnostico'] = str(e)
 
     return jsonify({
         'autorizada': resultado['autorizada'],
@@ -675,6 +727,7 @@ def api_verificar_autorizacao(itinerario_id):
             'erro': envio.get('erro') if envio else None,
         } if envio else None,
         'erro': resultado['erro'],
+        'diagnostico': diagnostico,
     })
 
 
