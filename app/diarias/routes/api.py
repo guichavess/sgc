@@ -722,6 +722,7 @@ def api_verificar_autorizacao(itinerario_id):
             'assinaturas': assinaturas_doc,
         } if doc else None,
         'avancou_etapa': resultado['avancou_etapa'],
+        'superintendente_sincronizado': resultado.get('superintendente_sincronizado', False),
         'envio': {
             'sucesso': envio['sucesso'] if envio else None,
             'erro': envio.get('erro') if envio else None,

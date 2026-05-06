@@ -1286,6 +1286,42 @@ def verificar_autorizacao_diaria(itinerario):
     doc_encontrado = None
     info_assinaturas = None
 
+    # Sincronização progressiva: se a Requisição de Diárias (532) já tiver
+    # sido assinada pelo Superintendente cadastrado no SEI (mesmo sem o
+    # Secretário), atualiza o flag local para liberar o sub-passo "Autorização
+    # do Secretário" no fluxo. Esta verificação é o fallback para quando a
+    # assinatura é feita diretamente no SEI (fora do sistema).
+    from app.services.diarias_autorizacao import verificar_assinatura_superintendente_sei
+    try:
+        check_super = verificar_assinatura_superintendente_sei(itinerario)
+        if check_super.get('assinada') and not itinerario.superintendente_assinou:
+            from datetime import datetime as _dt
+            itinerario.superintendente_assinou = True
+            itinerario.superintendente_assinou_data = _dt.now()
+            doc_local = itinerario.get_doc('requisicao')
+            if doc_local:
+                doc_local.assinado = True
+            else:
+                itinerario.set_doc(
+                    'requisicao',
+                    sei_id=check_super.get('doc_sei_id'),
+                    sei_formatado=check_super.get('doc_sei_formatado'),
+                    assinado=True,
+                )
+            from app.extensions import db as _db_sync
+            _db_sync.session.commit()
+            current_app.logger.info(
+                f"[DIARIAS] verificar_autorizacao_diaria: superintendente_assinou=True "
+                f"sincronizado do SEI (itinerario={itinerario.id}, "
+                f"assinante={check_super.get('assinante_nome')!r})"
+            )
+            resultado['superintendente_sincronizado'] = True
+    except Exception as exc:
+        current_app.logger.warning(
+            f"[DIARIAS] Falha na sincronização do Superintendente "
+            f"(itinerario={itinerario.id}): {exc}"
+        )
+
     if apenas_diarias:
         # Tipo 1 (Apenas Diarias):
         # 1) Busca Requisicao de Diarias com assinaturas requeridas

@@ -259,14 +259,14 @@
 </div>
 
 {# ─── MODAL DE VERIFICAÇÃO DE AUTORIZAÇÃO ──────────────────────── #}
-<div class="modal fade" id="modalVerificarAutorizacao" tabindex="-1" aria-labelledby="modalVerificarLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+<div class="modal fade" id="modalVerificarAutorizacao" tabindex="-1" aria-labelledby="modalVerificarLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
-            <div class="modal-header bg-primary bg-opacity-10">
-                <h5 class="modal-title" id="modalVerificarLabel">
+            <div class="modal-header bg-primary">
+                <h5 class="modal-title text-white" id="modalVerificarLabel">
                     <i class="bi bi-shield-check me-1"></i> Verificação de Autorização SEI
                 </h5>
-                <button type="button" id="btn-fechar-verificar" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar" disabled></button>
+                <button type="button" id="btn-fechar-verificar" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
             </div>
             <div class="modal-body">
                 {# Estado: carregando #}
@@ -314,7 +314,7 @@
                 </div>
             </div>
             <div class="modal-footer py-2">
-                <button type="button" id="btn-modal-verif-fechar" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" disabled>
+                <button type="button" id="btn-modal-verif-fechar" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
                     Fechar
                 </button>
             </div>
@@ -323,18 +323,21 @@
 </div>
 
 <script>
+var _verifAutorizacaoEmAndamento = false;
+
 function verificarAutorizacao(itinerarioId) {
+    if (_verifAutorizacaoEmAndamento) return;  // bloqueia clique duplo
+    _verifAutorizacaoEmAndamento = true;
+
     var btn = document.getElementById('btn-verificar-autorizacao');
     var modalEl = document.getElementById('modalVerificarAutorizacao');
     var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
 
-    // Reset estados
+    // Reset estados visuais
     document.getElementById('verif-loading').classList.remove('d-none');
     document.getElementById('verif-sucesso').classList.add('d-none');
     document.getElementById('verif-pendente').classList.add('d-none');
     document.getElementById('verif-erro').classList.add('d-none');
-    document.getElementById('btn-modal-verif-fechar').disabled = true;
-    document.getElementById('btn-fechar-verificar').disabled = true;
 
     if (btn) btn.disabled = true;
     modal.show();
@@ -343,8 +346,7 @@ function verificarAutorizacao(itinerarioId) {
         .then(function(resp) { return resp.json(); })
         .then(function(data) {
             document.getElementById('verif-loading').classList.add('d-none');
-            document.getElementById('btn-modal-verif-fechar').disabled = false;
-            document.getElementById('btn-fechar-verificar').disabled = false;
+            _verifAutorizacaoEmAndamento = false;
             if (btn) btn.disabled = false;
 
             if (data.autorizada && data.documento) {
@@ -380,6 +382,15 @@ function verificarAutorizacao(itinerarioId) {
                 if (data.avancou_etapa) {
                     setTimeout(function() { location.reload(); }, 2500);
                 }
+            } else if (data.superintendente_sincronizado) {
+                // ── Sucesso parcial: Super sincronizado, falta Secretário ──
+                var sucessoBox = document.getElementById('verif-sucesso');
+                document.getElementById('verif-sucesso-msg').textContent =
+                    'Assinatura do Superintendente detectada no SEI e sincronizada. ' +
+                    'Aguardando autorização do Secretário. A página será recarregada em instantes.';
+                document.getElementById('verif-sucesso-detalhes').innerHTML = '';
+                sucessoBox.classList.remove('d-none');
+                setTimeout(function() { location.reload(); }, 2500);
             } else {
                 // ── Pendente: mostra diagnóstico para o usuário entender o que falta ──
                 var pendenteBox = document.getElementById('verif-pendente');
@@ -447,8 +458,7 @@ function verificarAutorizacao(itinerarioId) {
             document.getElementById('verif-loading').classList.add('d-none');
             document.getElementById('verif-erro').classList.remove('d-none');
             document.getElementById('verif-erro-msg').textContent = 'Falha de conexão: ' + (err.message || 'tente novamente.');
-            document.getElementById('btn-modal-verif-fechar').disabled = false;
-            document.getElementById('btn-fechar-verificar').disabled = false;
+            _verifAutorizacaoEmAndamento = false;
             if (btn) btn.disabled = false;
         });
 }
