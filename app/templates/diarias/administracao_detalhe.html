@@ -2525,7 +2525,7 @@ async function autorizarSolicitacao() {
         }
     }
 
-    // Atualizar Etapas Individual (sincronizar com SEI)
+    // Atualizar Etapas Individual (sincronizar com SEI + verificar assinaturas na etapa 1)
     function atualizarIndividual() {
         const modal = new bootstrap.Modal(document.getElementById('modalAtualizarEtapas'));
         const log = document.getElementById('sync-log');
@@ -2601,7 +2601,40 @@ async function autorizarSolicitacao() {
                     addLog(`<i class="bi bi-check-circle me-1"></i> Etapa mantida: <strong>${data.etapa_nova_nome}</strong>`, 'text-success');
                 }
 
-                btnReload.style.display = 'inline-block';
+                // Se ainda em Solicitação Inicial (etapa 1), verificar assinaturas do documento de requisição
+                if (data.etapa_nova === 1) {
+                    addLog('<hr class="my-2">');
+                    addLog('<i class="bi bi-shield-check me-1"></i> Verificando assinaturas do documento de requisição...', 'text-muted');
+                    spinner.style.display = 'flex';
+
+                    fetch('/diarias/api/verificar-autorizacao/{{ itinerario.id }}')
+                        .then(r => r.json())
+                        .then(verif => {
+                            spinner.style.display = 'none';
+                            if (verif.autorizada) {
+                                if (verif.avancou_etapa) {
+                                    addLog('<i class="bi bi-check-circle-fill me-1"></i> Autorização detectada — etapa avançada para Análise da Solicitação.', 'text-success fw-bold');
+                                } else {
+                                    addLog('<i class="bi bi-check-circle me-1"></i> Solicitação já estava autorizada.', 'text-success');
+                                }
+                                if (verif.envio && verif.envio.sucesso) {
+                                    addLog('<i class="bi bi-send-fill me-1"></i> Processo encaminhado para DFIN/APOIO.', 'text-info');
+                                }
+                            } else if (verif.superintendente_sincronizado) {
+                                addLog('<i class="bi bi-person-check me-1"></i> Assinatura do Superintendente registrada. Aguardando Secretário.', 'text-info');
+                            } else {
+                                addLog('<i class="bi bi-exclamation-circle me-1"></i> ' + (verif.erro || 'Autorização ainda pendente no SEI.'), 'text-warning');
+                            }
+                            btnReload.style.display = 'inline-block';
+                        })
+                        .catch(err => {
+                            spinner.style.display = 'none';
+                            addLog('<i class="bi bi-x-circle me-1"></i> Falha na verificação de autorização: ' + err.message, 'text-warning');
+                            btnReload.style.display = 'inline-block';
+                        });
+                } else {
+                    btnReload.style.display = 'inline-block';
+                }
             } else {
                 addLog(`<i class="bi bi-exclamation-triangle me-1"></i> ${data.msg}`, 'text-danger fw-bold');
                 btnFechar.style.display = 'inline-block';
@@ -2625,7 +2658,7 @@ async function autorizarSolicitacao() {
                 </h6>
             </div>
             <div class="modal-body">
-                <div id="sync-spinner" class="d-flex align-items-center gap-2 mb-2">
+                <div id="sync-spinner" class="align-items-center gap-2 mb-2" style="display:flex;">
                     <div class="spinner-border spinner-border-sm text-primary"></div>
                     <span class="text-muted small">Processando...</span>
                 </div>

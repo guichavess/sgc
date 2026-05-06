@@ -1186,9 +1186,19 @@ def autorizar_solicitacao(id):
     from app.services.diarias_sei_integration import (
         gerar_token_sei_admin, gerar_autorizacao_secretario,
         enviar_procedimento, gerar_despacho_dfin,
-        UNIDADE_DFIN_APOIO,
+        UNIDADE_DFIN_APOIO, consultar_documentos_procedimento,
+        ID_SERIE_REQUISICAO_DIARIAS,
     )
     from app.services.sei_integration import assinar_documento
+
+    def _assinante_ja_no_doc(docs_sei, id_serie, sigla):
+        """Retorna True se sigla (login SEI) já consta nas assinaturas do doc da série indicada."""
+        for doc in docs_sei:
+            if str(doc.get('Serie', {}).get('IdSerie', '')) == str(id_serie):
+                for ass in (doc.get('Assinaturas') or []):
+                    if ass.get('Sigla', '').lower() == sigla.lower():
+                        return True
+        return False
 
     itinerario = DiariasItinerario.query.get_or_404(id)
 
@@ -1303,44 +1313,47 @@ def autorizar_solicitacao(id):
                     f"[DIARIAS] Nível 3 — falha ao assinar Req. Diárias: {erro_n3}"
                 )
 
-    # 1.5 Secretário/autorizador assina as Requisições (Diárias)
+    # Consulta documentos do processo no SEI para verificar assinaturas existentes
+    _sei_docs = []
+    try:
+        _resp_docs = consultar_documentos_procedimento(protocolo_proc)
+        if _resp_docs.get('sucesso'):
+            _sei_docs = _resp_docs['documentos']
+    except Exception as _e_docs:
+        current_app.logger.warning(
+            f"[DIARIAS] Falha ao listar docs SEI para verificação de assinatura: {_e_docs}"
+        )
+
+    # 1.5 Assina Requisição de Diárias apenas se o Secretário ainda não assinou
     doc_req_sec = itinerario.get_doc('requisicao')
     if doc_req_sec and doc_req_sec.sei_id:
-        ret_req = assinar_documento(
-            token=token_secretario,
-            unidade_id=unidade_assinatura_sec,
-            dados_assinatura={
-                'protocolo_doc': doc_req_sec.sei_id,
-                'orgao': 'SEAD-PI',
-                'cargo': cargo,
-                'id_login': id_login,
-                'id_usuario': id_usuario,
-                'senha': sei_senha,
-            },
-            protocolo_proc=protocolo_proc,
-        )
-        if not ret_req or not ret_req.get('sucesso'):
-            erro = ret_req.get('erro', 'Erro desconhecido') if ret_req else 'Sem resposta'
-            current_app.logger.warning(f"SEI: Secretário falhou ao assinar Req. Diárias: {erro}")
+        if _assinante_ja_no_doc(_sei_docs, ID_SERIE_REQUISICAO_DIARIAS, sei_usuario):
+            current_app.logger.info(
+                f"[DIARIAS] Requisição de Diárias já assinada pelo Secretário "
+                f"({sei_usuario}) — pulando assinatura."
+            )
+        else:
+            ret_req = assinar_documento(
+                token=token_secretario,
+                unidade_id=unidade_assinatura_sec,
+                dados_assinatura={
+                    'protocolo_doc': doc_req_sec.sei_id,
+                    'orgao': 'SEAD-PI',
+                    'cargo': cargo,
+                    'id_login': id_login,
+                    'id_usuario': id_usuario,
+                    'senha': sei_senha,
+                },
+                protocolo_proc=protocolo_proc,
+            )
+            if not ret_req or not ret_req.get('sucesso'):
+                erro = ret_req.get('erro', 'Erro desconhecido') if ret_req else 'Sem resposta'
+                current_app.logger.warning(
+                    f"[DIARIAS] Secretário falhou ao assinar Req. Diárias: {erro}"
+                )
 
-    doc_req_pass_sec = itinerario.get_doc('requisicao_passagens')
-    if doc_req_pass_sec and doc_req_pass_sec.sei_id:
-        ret_req_pass = assinar_documento(
-            token=token_secretario,
-            unidade_id=unidade_assinatura_sec,
-            dados_assinatura={
-                'protocolo_doc': doc_req_pass_sec.sei_id,
-                'orgao': 'SEAD-PI',
-                'cargo': cargo,
-                'id_login': id_login,
-                'id_usuario': id_usuario,
-                'senha': sei_senha,
-            },
-            protocolo_proc=protocolo_proc,
-        )
-        if not ret_req_pass or not ret_req_pass.get('sucesso'):
-            erro = ret_req_pass.get('erro', 'Erro desconhecido') if ret_req_pass else 'Sem resposta'
-            current_app.logger.warning(f"SEI: Secretário falhou ao assinar Req. Passagens: {erro}")
+    # A Requisição de Passagens não requer assinatura do Secretário —
+    # basta a assinatura de qualquer membro da solicitação para ser válida.
 
     # 2. Obtem token admin para operações SEI
     token_admin = gerar_token_sei_admin()
