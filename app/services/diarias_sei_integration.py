@@ -1298,7 +1298,7 @@ def verificar_autorizacao_diaria(itinerario, documentos_sei=None):
     # assinatura é feita diretamente no SEI (fora do sistema).
     from app.services.diarias_autorizacao import verificar_assinatura_superintendente_sei
     try:
-        check_super = verificar_assinatura_superintendente_sei(itinerario)
+        check_super = verificar_assinatura_superintendente_sei(itinerario, documentos_sei=documentos_sei)
         if check_super.get('assinada') and not itinerario.superintendente_assinou:
             from datetime import datetime as _dt
             itinerario.superintendente_assinou = True

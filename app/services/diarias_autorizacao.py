@@ -140,7 +140,7 @@ def _nome_chave(valor):
     return s.strip().lower()
 
 
-def verificar_assinatura_superintendente_sei(itinerario):
+def verificar_assinatura_superintendente_sei(itinerario, documentos_sei=None):
     """
     Consulta o SEI para verificar se algum usuário cadastrado como
     Superintendente (cargo_gestao='superintendente') já assinou a
@@ -154,6 +154,11 @@ def verificar_assinatura_superintendente_sei(itinerario):
     Sem nomes/CPFs hardcoded — quando o admin troca o Superintendente
     pelo módulo de usuários (cargo_gestao), o sistema passa a esperar
     pela assinatura do novo automaticamente.
+
+    Args:
+        itinerario: objeto DiariasItinerario
+        documentos_sei: lista de docs já buscados do SEI (opcional). Quando
+            fornecida, evita uma chamada extra à API do SEI.
     """
     from flask import current_app
     from app.models.usuario import Usuario
@@ -180,16 +185,18 @@ def verificar_assinatura_superintendente_sei(itinerario):
         if nome_norm:
             nome_to_user[nome_norm] = u
 
-    resp = consultar_documentos_procedimento(itinerario.sei_protocolo)
-    if not resp or not resp.get('sucesso'):
-        erro = (resp.get('erro') if resp else None) or 'Sem resposta do SEI'
-        current_app.logger.warning(
-            f'[DIARIAS] verificar_assinatura_super: falha SEI protocolo={itinerario.sei_protocolo!r} erro={erro!r}'
-        )
-        return {'assinada': False, 'erro': f'Falha ao consultar SEI: {erro}'}
+    if documentos_sei is None:
+        resp = consultar_documentos_procedimento(itinerario.sei_protocolo)
+        if not resp or not resp.get('sucesso'):
+            erro = (resp.get('erro') if resp else None) or 'Sem resposta do SEI'
+            current_app.logger.warning(
+                f'[DIARIAS] verificar_assinatura_super: falha SEI protocolo={itinerario.sei_protocolo!r} erro={erro!r}'
+            )
+            return {'assinada': False, 'erro': f'Falha ao consultar SEI: {erro}'}
+        documentos_sei = resp.get('documentos', []) or []
 
     doc_req_sei = None
-    for sei_doc in resp.get('documentos', []) or []:
+    for sei_doc in documentos_sei:
         serie = sei_doc.get('Serie') or {}
         if str(serie.get('IdSerie', '')) == ID_SERIE_REQUISICAO_DIARIAS:
             doc_req_sei = sei_doc
