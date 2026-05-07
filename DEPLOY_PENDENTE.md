@@ -17,6 +17,39 @@
 
 ## Pendências
 
+### Correção da Timeline — Diárias (2026-05-07)
+
+- [ ] **Corrigir ordem das etapas na timeline de diárias**
+  - Contexto: As etapas 2 (Escolha do Voo) e 3 (Análise 1ª Parte) tiveram seus valores de `ordem` trocados. Etapa 6 (Análise 2ª Parte) também estava faltando. Banco em produção foi copiado para desenvolvimento com dados desconfigurados.
+  - **CRÍTICO**: Executar estes SQLs em PRODUÇÃO para restaurar a timeline correta:
+  ```sql
+  -- Verificar estado ANTES:
+  SELECT id, nome, alias, ordem FROM diarias_etapas ORDER BY id;
+
+  -- Corrigir ordem das etapas:
+  UPDATE diarias_etapas SET ordem = 2 WHERE id = 3;  -- Análise 1ª Parte
+  UPDATE diarias_etapas SET ordem = 3 WHERE id = 2;  -- Escolha do Voo
+  UPDATE diarias_etapas SET ordem = 5 WHERE id = 4;  -- Concessão (deslocar)
+  UPDATE diarias_etapas SET ordem = 6 WHERE id = 5;  -- Prestação (deslocar)
+
+  -- Criar Etapa 6 (se não existir):
+  INSERT INTO diarias_etapas (id, nome, alias, ordem, cor_hex, icone)
+  VALUES (6, 'Análise 2ª Parte', 'analise_2_parte', 4, '#17a2b8', 'fas fa-microscope')
+  ON DUPLICATE KEY UPDATE
+    nome='Análise 2ª Parte',
+    alias='analise_2_parte',
+    ordem=4,
+    cor_hex='#17a2b8',
+    icone='fas fa-microscope';
+
+  -- Verificar estado DEPOIS:
+  SELECT id, nome, alias, ordem FROM diarias_etapas ORDER BY ordem;
+  ```
+  - **Resultado esperado**: 6 etapas com ordem 1-6, sendo a ordem 2=ID3 (Análise), 3=ID2 (Escolha do Voo), 4=ID6 (Análise 2ª Parte).
+  - Local: Já foi corrigido via script `scripts/corrigir_timeline_diarias.py`.
+
+---
+
 ### Hierarquia de Autorização — Diárias (2026-05-05)
 
 - [ ] **Definir `cargo_gestao = 'secretario_exercicio'` para Bruno Gomes**
