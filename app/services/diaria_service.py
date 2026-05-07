@@ -688,7 +688,8 @@ class DiariaService:
             """
             subitens_cfg = DIARIAS_SUBITENS.get(etapa_id, [])
             if not subitens_cfg:
-                return True  # sem sub-itens configurados — considera completa
+                return True
+            tem_ob = itinerario.has_doc('ob')
             for s in subitens_cfg:
                 if s.get('opcional'):
                     continue
@@ -696,6 +697,13 @@ class DiariaService:
                 if cond == 'passagens' and itinerario.tipo_solicitacao_id not in TIPOS_COM_PASSAGENS:
                     continue
                 if not docs_por_tipo.get(s['doc_tipo']):
+                    # Autorização do Secretário: inferida pela assinatura quando
+                    # o processo já avançou além da etapa 1.
+                    if s['doc_tipo'] == 'autorizacao' and etapa_atual_ordem > 1:
+                        continue
+                    # Autorização SCDP: inferida se já tem OB emitida.
+                    if s['doc_tipo'] == 'autorizacao_scdp' and tem_ob:
+                        continue
                     return False
             return True
 
@@ -730,10 +738,11 @@ class DiariaService:
 
             atual = etapa.id == itinerario.etapa_atual_id
 
-            # Sub-itens: só para etapas concluídas ou a atual
+            # Sub-itens: exibir para etapas anteriores/atuais (já percorridas)
+            # mesmo que não 100% concluídas, para o usuário ver o progresso.
             subitens = []
             tem_ob = itinerario.has_doc('ob')
-            if concluida or atual:
+            if etapa_ordem_anterior_ou_igual or atual:
                 config_subitens = DIARIAS_SUBITENS.get(etapa.id, [])
                 for sub_cfg in config_subitens:
                     if sub_cfg.get('condicional') == 'passagens' and not tem_passagens:
@@ -750,8 +759,14 @@ class DiariaService:
                     if not sub_concluido and tem_ob and sub_cfg['doc_tipo'] == 'autorizacao_scdp':
                         sub_concluido = True
 
-                    # Nota: para tipo 1 (Apenas Diárias), o sub-item 'autorizacao'
-                    # nem aparece (filtrado via condicional='passagens' em DIARIAS_SUBITENS).
+                    # Auto-preencher autorizacao do Secretario: se o processo ja
+                    # avancou alem da etapa 1, a assinatura foi verificada e
+                    # causou o avanco — nao ha documento separado, a autorizacao
+                    # e inferida pela assinatura na Requisicao.
+                    if (not sub_concluido
+                            and sub_cfg['doc_tipo'] == 'autorizacao'
+                            and etapa_atual_ordem > 1):
+                        sub_concluido = True
 
                     # Opcional: não exibir na timeline se não tem documento
                     if not sub_concluido and sub_cfg.get('opcional'):
