@@ -48,6 +48,30 @@
   - **Resultado esperado**: 6 etapas com ordem 1-6, sendo a ordem 2=ID3 (Análise), 3=ID2 (Escolha do Voo), 4=ID6 (Análise 2ª Parte).
   - Local: Já foi corrigido via script `scripts/corrigir_timeline_diarias.py`.
 
+- [ ] **Verificar se processo 00002.004523/2026-52 foi avançado indevidamente em produção**
+  - Contexto: bug no `verificar_autorizacao_diaria()` fazia o processo avançar de etapa 1 → 3 ao detectar assinaturas na Requisição de Diárias (532), quando deveria esperar o Autorizo do Secretário (574). Bug já corrigido no código.
+  ```sql
+  -- Verificar estado atual do processo:
+  SELECT id, etapa_atual_id, sei_protocolo
+  FROM diarias_itinerario
+  WHERE sei_protocolo = '00002.004523/2026-52' OR n_processo = '00002.004523/2026-52';
+
+  -- Se etapa_atual_id = 3 (avançou indevidamente), reverter:
+  UPDATE diarias_itinerario
+  SET etapa_atual_id = 1
+  WHERE (sei_protocolo = '00002.004523/2026-52' OR n_processo = '00002.004523/2026-52')
+    AND etapa_atual_id = 3;
+
+  -- Remover histórico de transições indevidas:
+  DELETE FROM diarias_historico_movimentacoes
+  WHERE id_itinerario = (
+    SELECT id FROM diarias_itinerario
+    WHERE sei_protocolo = '00002.004523/2026-52' OR n_processo = '00002.004523/2026-52'
+  )
+  AND id_etapa_anterior = 1 AND id_etapa_nova = 3;
+  ```
+  - Local: Já corrigido via `scripts/reverter_etapa_processo.py`.
+
 ---
 
 ### Hierarquia de Autorização — Diárias (2026-05-05)
