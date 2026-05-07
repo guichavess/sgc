@@ -697,11 +697,6 @@ class DiariaService:
                 if cond == 'passagens' and itinerario.tipo_solicitacao_id not in TIPOS_COM_PASSAGENS:
                     continue
                 if not docs_por_tipo.get(s['doc_tipo']):
-                    # Autorização do Secretário: inferida pela assinatura quando
-                    # o processo já avançou além da etapa 1.
-                    if s['doc_tipo'] == 'autorizacao' and etapa_atual_ordem > 1:
-                        continue
-                    # Autorização SCDP: inferida se já tem OB emitida.
                     if s['doc_tipo'] == 'autorizacao_scdp' and tem_ob:
                         continue
                     return False
@@ -759,14 +754,6 @@ class DiariaService:
                     if not sub_concluido and tem_ob and sub_cfg['doc_tipo'] == 'autorizacao_scdp':
                         sub_concluido = True
 
-                    # Auto-preencher autorizacao do Secretario: se o processo ja
-                    # avancou alem da etapa 1, a assinatura foi verificada e
-                    # causou o avanco — nao ha documento separado, a autorizacao
-                    # e inferida pela assinatura na Requisicao.
-                    if (not sub_concluido
-                            and sub_cfg['doc_tipo'] == 'autorizacao'
-                            and etapa_atual_ordem > 1):
-                        sub_concluido = True
 
                     # Opcional: não exibir na timeline se não tem documento
                     if not sub_concluido and sub_cfg.get('opcional'):

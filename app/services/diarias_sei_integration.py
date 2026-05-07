@@ -1181,6 +1181,7 @@ def consultar_documentos_procedimento(protocolo_procedimento):
         params = {
             'protocolo_procedimento': protocolo_procedimento,
             'quantidade': 500,  # MED-13: ampliado de 100 para 500 para processos grandes
+            'sinal_assinaturas': 'S',
         }
         headers = {
             'token': token,
@@ -1352,27 +1353,26 @@ def verificar_autorizacao_diaria(itinerario, documentos_sei=None):
                         info_assinaturas = info_ass
                     break
     else:
-        # Tipos 2 e 3: busca Requisicao de Diarias ou Autorizacao do Secretario
-        # Verifica todos os documentos-chave por assinaturas requeridas
-        for id_serie in [ID_SERIE_REQUISICAO_DIARIAS, ID_SERIE_REQUISICAO_PASSAGENS,
-                         ID_SERIE_AUTORIZACAO_SECRETARIO]:
-            for doc in documentos_sei:
-                serie = doc.get('Serie', {})
-                if str(serie.get('IdSerie', '')) == id_serie:
-                    info_ass = verificar_assinaturas_requeridas(doc, itinerario)
-                    if info_ass['completa']:
-                        doc_encontrado = doc
-                        info_assinaturas = info_ass
-                        break
-            if doc_encontrado:
+        # Tipos 2 e 3 (com passagens): SOMENTE o Autorizo do Secretário (574)
+        # autoriza a solicitação. Assinaturas na Requisição de Diárias (532)
+        # são administrativas e NÃO devem causar avanço de etapa.
+        for doc in documentos_sei:
+            serie = doc.get('Serie', {})
+            if str(serie.get('IdSerie', '')) == ID_SERIE_AUTORIZACAO_SECRETARIO:
+                info_ass = verificar_assinaturas_requeridas(doc, itinerario)
+                if info_ass['completa']:
+                    doc_encontrado = doc
+                    info_assinaturas = info_ass
+                else:
+                    info_assinaturas = info_ass
                 break
 
-        # Se nenhum doc-chave tem assinaturas completas, guarda info parcial do primeiro encontrado
+        # Fallback informativo: se Autorizo não existe, coleta info parcial
+        # da Requisição para exibir status de assinaturas (sem avançar etapa).
         if not doc_encontrado and not info_assinaturas:
             for doc in documentos_sei:
                 serie = doc.get('Serie', {})
-                if str(serie.get('IdSerie', '')) in (ID_SERIE_REQUISICAO_DIARIAS,
-                                                      ID_SERIE_AUTORIZACAO_SECRETARIO):
+                if str(serie.get('IdSerie', '')) == ID_SERIE_REQUISICAO_DIARIAS:
                     info_assinaturas = verificar_assinaturas_requeridas(doc, itinerario)
                     break
 
