@@ -1841,6 +1841,7 @@ def api_atualizar_individual(id_itinerario):
                 'etapa_anterior': resultado['etapa_anterior'],
                 'etapa_nova': resultado['etapa_nova'],
                 'etapa_nova_nome': etapa_obj.nome if etapa_obj else str(resultado['etapa_nova']),
+                'autorizacao': resultado.get('autorizacao'),
             })
         else:
             return jsonify({'sucesso': False, 'msg': resultado.get('erro', 'Erro desconhecido.')}), 500

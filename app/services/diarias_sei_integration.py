@@ -1229,7 +1229,7 @@ def consultar_documentos_procedimento(protocolo_procedimento):
 # com matching preciso via banco de dados (sigla_login) + fallback textual.
 
 
-def verificar_autorizacao_diaria(itinerario):
+def verificar_autorizacao_diaria(itinerario, documentos_sei=None):
     """
     Verifica autorizacao no processo SEI da solicitacao de diaria.
 
@@ -1246,6 +1246,8 @@ def verificar_autorizacao_diaria(itinerario):
 
     Args:
         itinerario: objeto DiariasItinerario (deve ter sei_protocolo)
+        documentos_sei: lista de documentos já buscados do SEI (opcional).
+            Se fornecida, evita uma segunda chamada à API do SEI.
 
     Returns:
         dict com {
@@ -1271,11 +1273,14 @@ def verificar_autorizacao_diaria(itinerario):
         resultado['erro'] = 'Itinerario nao possui processo SEI.'
         return resultado
 
-    # Lista documentos do processo
-    resp_docs = consultar_documentos_procedimento(protocolo_proc)
-    if not resp_docs['sucesso']:
-        resultado['erro'] = resp_docs['erro']
-        return resultado
+    # Usa docs já buscados ou consulta o SEI (evita chamada duplicada quando chamado
+    # a partir de sincronizar_documentos_diaria que já buscou os docs)
+    if documentos_sei is None:
+        resp_docs = consultar_documentos_procedimento(protocolo_proc)
+        if not resp_docs['sucesso']:
+            resultado['erro'] = resp_docs['erro']
+            return resultado
+        documentos_sei = resp_docs['documentos']
 
     # Determina logica conforme tipo de solicitacao
     tipo_sol = getattr(itinerario, 'tipo_solicitacao_id', None)
@@ -1326,7 +1331,7 @@ def verificar_autorizacao_diaria(itinerario):
         # Tipo 1 (Apenas Diarias):
         # 1) Busca Requisicao de Diarias com assinaturas requeridas
         # 2) Fallback: Autorizacao do Secretario com assinaturas requeridas
-        for doc in resp_docs['documentos']:
+        for doc in documentos_sei:
             serie = doc.get('Serie', {})
             if str(serie.get('IdSerie', '')) == ID_SERIE_REQUISICAO_DIARIAS:
                 info_assinaturas = verificar_assinaturas_requeridas(doc, itinerario)
@@ -1336,7 +1341,7 @@ def verificar_autorizacao_diaria(itinerario):
 
         # Fallback: Autorizacao do Secretario
         if not doc_encontrado:
-            for doc in resp_docs['documentos']:
+            for doc in documentos_sei:
                 serie = doc.get('Serie', {})
                 if str(serie.get('IdSerie', '')) == ID_SERIE_AUTORIZACAO_SECRETARIO:
                     info_ass = verificar_assinaturas_requeridas(doc, itinerario)
@@ -1351,7 +1356,7 @@ def verificar_autorizacao_diaria(itinerario):
         # Verifica todos os documentos-chave por assinaturas requeridas
         for id_serie in [ID_SERIE_REQUISICAO_DIARIAS, ID_SERIE_REQUISICAO_PASSAGENS,
                          ID_SERIE_AUTORIZACAO_SECRETARIO]:
-            for doc in resp_docs['documentos']:
+            for doc in documentos_sei:
                 serie = doc.get('Serie', {})
                 if str(serie.get('IdSerie', '')) == id_serie:
                     info_ass = verificar_assinaturas_requeridas(doc, itinerario)
@@ -1364,7 +1369,7 @@ def verificar_autorizacao_diaria(itinerario):
 
         # Se nenhum doc-chave tem assinaturas completas, guarda info parcial do primeiro encontrado
         if not doc_encontrado and not info_assinaturas:
-            for doc in resp_docs['documentos']:
+            for doc in documentos_sei:
                 serie = doc.get('Serie', {})
                 if str(serie.get('IdSerie', '')) in (ID_SERIE_REQUISICAO_DIARIAS,
                                                       ID_SERIE_AUTORIZACAO_SECRETARIO):
@@ -1488,7 +1493,7 @@ def verificar_autorizacao_diaria(itinerario):
             )
 
         # Retorna dados parciais do documento para referencia
-        for doc in resp_docs['documentos']:
+        for doc in documentos_sei:
             serie = doc.get('Serie', {})
             if str(serie.get('IdSerie', '')) in (ID_SERIE_REQUISICAO_DIARIAS,
                                                   ID_SERIE_AUTORIZACAO_SECRETARIO):
@@ -3919,8 +3924,9 @@ def sincronizar_documentos_diaria(itinerario, force_cotacoes=False):
         etapa_nova = DiariasEtapaID.ESCOLHA_VOO
     elif has('nota_reserva') or has('quadro_orcamentario'):
         etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO
-    elif has('autorizacao'):
-        etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO
+    # Nota: 'autorizacao' sozinho NÃO avança mais a etapa aqui — avançar sem
+    # verificar as assinaturas requeridas levava a transições incorretas.
+    # A verificação de assinaturas ocorre abaixo (passo 4).
 
     resultado['etapa_nova'] = int(etapa_nova)
 
@@ -3933,6 +3939,34 @@ def sincronizar_documentos_diaria(itinerario, force_cotacoes=False):
         resultado['msgs'].append(f'Etapa mantida: {int(etapa_nova)}')
 
     db.session.commit()
+
+    # 4. Se a etapa permaneceu em Solicitação Inicial, verifica assinaturas de autorização.
+    # Reutiliza documentos_sei já buscados — sem segunda chamada ao SEI.
+    autorizacao_resultado = None
+    if int(etapa_nova) == DiariasEtapaID.SOLICITACAO_INICIAL:
+        try:
+            autorizacao_resultado = verificar_autorizacao_diaria(
+                itinerario, documentos_sei=documentos_sei
+            )
+            if autorizacao_resultado.get('avancou_etapa'):
+                resultado['etapa_nova'] = int(DiariasEtapaID.ANALISE_SOLICITACAO)
+                resultado['msgs'].append(
+                    f'Autorização detectada — etapa avançada para '
+                    f'{int(DiariasEtapaID.ANALISE_SOLICITACAO)} (Análise da Solicitação).'
+                )
+            elif autorizacao_resultado.get('superintendente_sincronizado'):
+                resultado['msgs'].append(
+                    'Assinatura do Superintendente registrada. Aguardando Secretário.'
+                )
+        except Exception as e:
+            autorizacao_resultado = {
+                'autorizada': False,
+                'avancou_etapa': False,
+                'erro': str(e),
+            }
+            resultado['msgs'].append(f'Verificação de assinatura: {str(e)[:80]}')
+
+    resultado['autorizacao'] = autorizacao_resultado
     resultado['sucesso'] = True
     return resultado
 

@@ -653,7 +653,19 @@ def api_verificar_autorizacao(itinerario_id):
     if not itinerario:
         return jsonify({'error': 'Itinerario nao encontrado.'}), 404
 
-    resultado = verificar_autorizacao_diaria(itinerario)
+    try:
+        resultado = verificar_autorizacao_diaria(itinerario)
+    except Exception as e:
+        current_app.logger.error(f'[DIARIAS] Erro em verificar_autorizacao (id={itinerario_id}): {e}')
+        return jsonify({
+            'autorizada': False,
+            'avancou_etapa': False,
+            'superintendente_sincronizado': False,
+            'documento': None,
+            'envio': None,
+            'erro': str(e),
+            'diagnostico': {},
+        }), 200
 
     doc = resultado.get('documento_autorizacao')
     assinaturas_doc = []
