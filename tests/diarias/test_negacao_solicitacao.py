@@ -524,6 +524,81 @@ class TestFiltroNegadosAdministracao:
 
 # ── Testes da UI de Negação ───────────────────────────────────────────────
 
+class TestSincronizacaoNegacaoSei:
+    """Processos negados no SEI nao podem virar assinatura da requisicao."""
+
+    @patch('app.services.diarias_sei_integration.baixar_documento_sei')
+    @patch('app.services.diarias_sei_integration.consultar_documentos_procedimento')
+    def test_sincronizar_detecta_despacho_sga_de_negacao(
+        self, mock_consultar, mock_baixar, db_session, app
+    ):
+        with app.app_context():
+            _seed_etapas(db_session)
+            _seed_tipos(db_session)
+            _criar_usuario_superintendente(db_session)
+            it = _criar_itinerario(
+                db_session,
+                sei_protocolo='00002.003034/2026-83',
+                sei_id_procedimento='123456',
+            )
+
+            mock_consultar.return_value = {
+                'sucesso': True,
+                'documentos': [
+                    {
+                        'IdDocumento': '25685504',
+                        'DocumentoFormatado': '0023157882',
+                        'Serie': {'IdSerie': '532', 'Nome': 'SEAD_REQUISICAO DE DIARIAS'},
+                        'Descricao': 'Solicitacao de diarias',
+                        'Assinaturas': [
+                            {
+                                'Nome': 'HELLDANIO MUNIZ BARROS',
+                                'CargoFuncao': 'Gerente',
+                                'Sigla': 'helldanio.barros@sead.pi.gov.br',
+                                'IdOrigem': '51530031320',
+                            },
+                            {
+                                'Nome': 'FRANCISCO GUEDES ALCOFORADO FILHO',
+                                'CargoFuncao': 'Diretor',
+                                'Sigla': 'francisco.filho@sead.pi.gov.br',
+                                'IdOrigem': '10578390353',
+                            },
+                        ],
+                    },
+                    {
+                        'IdDocumento': '25712974',
+                        'DocumentoFormatado': '0023183104',
+                        'Serie': {'IdSerie': '2987', 'Nome': 'SEAD_DESPACHO_SGA'},
+                        'Numero': '6732',
+                        'Assinaturas': [
+                            {
+                                'Nome': 'PEDRO ALEXANDRE CABRAL DE OLIVEIRA',
+                                'CargoFuncao': 'Superintendente',
+                                'Sigla': 'pedro.alexandre@sead.pi.gov.br',
+                                'IdOrigem': '99202743304',
+                            },
+                        ],
+                    },
+                ],
+            }
+            mock_baixar.return_value = (
+                b'<html><body>De ordem do Secretario, informo que nao sera '
+                b'possivel a compra de passagens aereas e concessao de diarias '
+                b'ante as atuais restricoes orcamentarias desta SEAD.</body></html>'
+            )
+
+            from app.services.diarias_sei_integration import sincronizar_documentos_diaria
+
+            resultado = sincronizar_documentos_diaria(it)
+
+            assert resultado['sucesso'] is True
+            assert it.processo_negado is True
+            assert it.processo_negado_doc_sei_id == '25712974'
+            assert it.processo_negado_doc_sei_formatado == '0023183104'
+            assert it.superintendente_assinou is False
+            assert it.secretario_assinou is False
+
+
 class TestUiNegacaoSolicitacao:
     """Botão e modal de negação aparecem apenas quando a ação é permitida."""
 

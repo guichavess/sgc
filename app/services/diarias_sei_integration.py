@@ -1233,6 +1233,131 @@ def consultar_documentos_procedimento(protocolo_procedimento):
         return resultado
 
 
+def _texto_limpo_documento_sei(conteudo):
+    """Extrai texto simples de HTML/PDF-texto retornado pelo SEI."""
+    import html as _html
+    import re
+    import unicodedata
+
+    if not conteudo:
+        return ''
+    if isinstance(conteudo, bytes):
+        texto = ''
+        for encoding in ('utf-8', 'iso-8859-1', 'cp1252'):
+            try:
+                texto = conteudo.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        if not texto:
+            texto = conteudo.decode('utf-8', errors='ignore')
+    else:
+        texto = str(conteudo)
+
+    texto = re.sub(r'<(script|style)\b[^>]*>.*?</\1>', ' ', texto, flags=re.I | re.S)
+    texto = re.sub(r'<[^>]+>', ' ', texto)
+    texto = _html.unescape(texto)
+    texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
+    return re.sub(r'\s+', ' ', texto).strip().lower()
+
+
+def detectar_despacho_sga_negacao(documentos_sei):
+    """
+    Detecta despacho SGA (serie 2987) com conteudo de negacao/indeferimento.
+
+    O SEI usa a mesma serie para despacho SGA normal e despacho de negacao,
+    entao a distincao precisa olhar o texto do documento.
+    """
+    docs = documentos_sei or []
+    termos_fortes = (
+        'nego o prosseguimento',
+        'negacao',
+        'solicitacao negada',
+        'indefer',
+        'nao autoriz',
+        'nao sera possivel',
+    )
+    termos_contexto = ('diaria', 'diarias', 'passagem', 'passagens', 'concessao')
+
+    for doc in docs:
+        serie = doc.get('Serie') or {}
+        if str(serie.get('IdSerie', '')) != str(ID_SERIE_DESPACHO_SGA):
+            continue
+
+        texto_base = _texto_limpo_documento_sei(' '.join(
+            str(doc.get(campo) or '')
+            for campo in ('Descricao', 'Numero', 'Observacao')
+        ))
+        texto = texto_base
+
+        protocolo_doc = doc.get('DocumentoFormatado') or doc.get('IdDocumento')
+        if protocolo_doc:
+            try:
+                conteudo = baixar_documento_sei(protocolo_doc)
+                texto_baixado = _texto_limpo_documento_sei(conteudo)
+                if texto_baixado:
+                    texto = f'{texto_base} {texto_baixado}'.strip()
+            except Exception as exc:
+                current_app.logger.warning(
+                    f'[DIARIAS] Falha ao baixar despacho SGA para detectar negacao: {exc}'
+                )
+
+        if not texto:
+            continue
+
+        tem_negacao = any(t in texto for t in termos_fortes)
+        tem_contexto = any(t in texto for t in termos_contexto)
+        tem_restricao = 'restric' in texto and 'orcament' in texto and tem_contexto
+
+        if (tem_negacao and tem_contexto) or tem_restricao:
+            return {
+                'negado': True,
+                'doc_sei_id': str(doc.get('IdDocumento') or ''),
+                'doc_sei_formatado': str(doc.get('DocumentoFormatado') or ''),
+                'justificativa': 'Negacao detectada automaticamente em despacho SGA no SEI.',
+            }
+
+    return {'negado': False}
+
+
+def aplicar_negacao_detectada_sei(itinerario, info_negacao):
+    """Marca o itinerario como negado e limpa flags de autorizacao incompativeis."""
+    from datetime import datetime as _dt
+
+    if not info_negacao or not info_negacao.get('negado'):
+        return False
+
+    itinerario.processo_negado = True
+    itinerario.processo_negado_data = itinerario.processo_negado_data or _dt.now()
+    itinerario.processo_negado_por_nome = (
+        itinerario.processo_negado_por_nome or 'Detectado automaticamente via SEI'
+    )
+    itinerario.processo_negado_justificativa = (
+        itinerario.processo_negado_justificativa
+        or info_negacao.get('justificativa')
+        or 'Negacao detectada automaticamente em despacho SGA no SEI.'
+    )
+    itinerario.processo_negado_doc_sei_id = (
+        info_negacao.get('doc_sei_id') or itinerario.processo_negado_doc_sei_id
+    )
+    itinerario.processo_negado_doc_sei_formatado = (
+        info_negacao.get('doc_sei_formatado') or itinerario.processo_negado_doc_sei_formatado
+    )
+
+    itinerario.superintendente_assinou = False
+    itinerario.superintendente_assinou_data = None
+    itinerario.superintendente_assinou_nome = None
+    itinerario.secretario_assinou = False
+    itinerario.secretario_assinou_data = None
+    itinerario.secretario_assinou_nome = None
+
+    doc_req = itinerario.get_doc('requisicao')
+    if doc_req:
+        doc_req.assinado = False
+
+    return True
+
+
 # Função antiga _verificar_dupla_assinatura foi substituída por
 # app/services/diarias_assinaturas.py → verificar_assinaturas_requeridas(doc, itinerario).
 # A nova função verifica 3 requisitos (super da área, super da SGA, secretário)
@@ -1291,6 +1416,18 @@ def verificar_autorizacao_diaria(itinerario, documentos_sei=None):
             resultado['erro'] = resp_docs['erro']
             return resultado
         documentos_sei = resp_docs['documentos']
+
+    if itinerario.processo_negado:
+        resultado['erro'] = 'Itinerario negado; verificacao de autorizacao ignorada.'
+        return resultado
+
+    info_negacao = detectar_despacho_sga_negacao(documentos_sei)
+    if aplicar_negacao_detectada_sei(itinerario, info_negacao):
+        from app.extensions import db as _db_neg
+        _db_neg.session.commit()
+        resultado['negacao_detectada'] = True
+        resultado['erro'] = 'Negacao detectada em despacho SGA no SEI.'
+        return resultado
 
     # Determina logica conforme tipo de solicitacao
     tipo_sol = getattr(itinerario, 'tipo_solicitacao_id', None)
@@ -3958,6 +4095,12 @@ def sincronizar_documentos_diaria(itinerario, force_cotacoes=False):
     if docs_count:
         resultado['msgs'].append(f'{docs_count} documento(s) atualizado(s) no banco.')
 
+    info_negacao = detectar_despacho_sga_negacao(documentos_sei)
+    negacao_detectada = aplicar_negacao_detectada_sei(itinerario, info_negacao)
+    if negacao_detectada:
+        resultado['negacao_detectada'] = True
+        resultado['msgs'].append('Negacao detectada em Despacho SGA no SEI.')
+
     # 2b. Se tem cotação, tenta importar opções de voo via OCR
     # Detecta docs de cotação: IdSerie 272 (Cotação) OU secundários (264, 263) com keywords
     _kw_cotacao = ('cotaç', 'cotac', 'passag', 'voo', 'vôo')
@@ -4056,7 +4199,7 @@ def sincronizar_documentos_diaria(itinerario, force_cotacoes=False):
     # 4. Se a etapa permaneceu em Solicitação Inicial, verifica assinaturas de autorização.
     # Reutiliza documentos_sei já buscados — sem segunda chamada ao SEI.
     autorizacao_resultado = None
-    if int(etapa_nova) == DiariasEtapaID.SOLICITACAO_INICIAL:
+    if int(etapa_nova) == DiariasEtapaID.SOLICITACAO_INICIAL and not itinerario.processo_negado:
         try:
             autorizacao_resultado = verificar_autorizacao_diaria(
                 itinerario, documentos_sei=documentos_sei
@@ -4084,7 +4227,7 @@ def sincronizar_documentos_diaria(itinerario, force_cotacoes=False):
     return resultado
 
 
-def baixar_documento_sei(protocolo_documento):
+def baixar_documento_sei(protocolo_documento, token=None, id_unidade=UNIDADE_SEAD, timeout=120):
     """
     Baixa o conteúdo binário de um documento do SEI.
 
@@ -4097,19 +4240,19 @@ def baixar_documento_sei(protocolo_documento):
         bytes do documento (PDF) ou None em caso de erro
     """
     try:
-        token = gerar_token_sei_admin()
-        if not token:
+        token_uso = token or gerar_token_sei_admin()
+        if not token_uso:
             current_app.logger.error("SEI Diarias: falha na autenticação para baixar documento.")
             return None
 
-        url = f"{BASE_URL}/v1/unidades/{UNIDADE_SEAD}/documentos/baixar"
+        url = f"{BASE_URL}/v1/unidades/{id_unidade}/documentos/baixar"
         params = {'protocolo_documento': str(protocolo_documento)}
         headers = {
-            'token': token,
+            'token': token_uso,
             'Accept': 'application/octet-stream',
         }
 
-        response = requests.get(url, params=params, headers=headers, timeout=60, verify=False)
+        response = requests.get(url, params=params, headers=headers, timeout=timeout, verify=False)
 
         if response.status_code != 200:
             body_preview = response.text[:300] if response.text else '(vazio)'

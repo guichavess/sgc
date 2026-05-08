@@ -3,7 +3,7 @@ Rotas administrativas do módulo de Diárias (gerenciar agências, cargos/valore
 """
 import json
 from datetime import datetime
-from flask import render_template, request, redirect, url_for, flash, abort, current_app, jsonify
+from flask import render_template, request, redirect, url_for, flash, abort, current_app, jsonify, session
 from flask_login import login_required, current_user
 
 from app.diarias.routes import diarias_bp
@@ -25,6 +25,8 @@ from app.services.vincular_processo_diaria import (
     verificar_protocolo_sei,
     vincular_processo_sei,
     importar_processo_sei_como_novo,
+    sincronizar_processos_bloco_diarias,
+    prever_processos_bloco_diarias,
 )
 from app.constants import DiariasEtapaID
 from app.extensions import db
@@ -154,6 +156,60 @@ def importar_processo():
             'danger',
         )
         return redirect(url_for('diarias.vincular_processo_pagina'))
+
+
+@diarias_bp.route('/administracao/sincronizar-processos', methods=['POST'])
+@login_required
+@requires_permission('diarias.aprovar')
+def sincronizar_processos():
+    """Sincroniza processos do bloco SEI oficial de diárias."""
+    wants_json = (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or request.accept_mimetypes.best == 'application/json'
+    )
+    token = session.get('sei_token')
+    if not token:
+        msg = 'Token SEI do usuário não encontrado. Faça login novamente.'
+        if wants_json:
+            return jsonify({'sucesso': False, 'erro': msg}), 401
+        flash(msg, 'danger')
+        return redirect(url_for('diarias.administracao'))
+
+    if request.form.get('acao') == 'precheck':
+        resultado_precheck = prever_processos_bloco_diarias(token=token)
+        status = 200 if resultado_precheck.get('sucesso') else 500
+        return jsonify(resultado_precheck), status
+
+    try:
+        resultado = sincronizar_processos_bloco_diarias(
+            token=token,
+            usuario_id=current_user.id,
+            usuario_gerador=current_user.sigla_login or current_user.nome or 'sincronizacao',
+        )
+        if resultado.get('sucesso'):
+            db.session.commit()
+            if wants_json:
+                return jsonify(resultado)
+            flash(
+                f"Sincronização concluída: {resultado.get('criados', 0)} processo(s) criado(s), "
+                f"{resultado.get('existentes', 0)} já existente(s).",
+                'success',
+            )
+            if resultado.get('erros'):
+                flash(f"{len(resultado['erros'])} processo(s) não puderam ser sincronizados.", 'warning')
+        else:
+            db.session.rollback()
+            if wants_json:
+                return jsonify(resultado), 500
+            flash(resultado.get('erro') or 'Não foi possível sincronizar o bloco SEI.', 'danger')
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception('[DIARIAS] Erro inesperado ao sincronizar processos do bloco')
+        if wants_json:
+            return jsonify({'sucesso': False, 'erro': f'Erro ao sincronizar processos: {exc}'}), 500
+        flash(f'Erro ao sincronizar processos: {exc}', 'danger')
+
+    return redirect(url_for('diarias.administracao'))
 
 
 @diarias_bp.route('/administracao')
@@ -1345,6 +1401,12 @@ def verificar_assinaturas_super(id):
 
     if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_INICIAL:
         return jsonify({'sucesso': False, 'erro': 'Solicitação não está na etapa de autorização.'}), 400
+
+    if itinerario.processo_negado:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Esta solicitação foi negada e não pode ter assinatura sincronizada.'
+        }), 400
 
     if itinerario.superintendente_assinou:
         return jsonify({'sucesso': True, 'mensagem': 'Superintendente já havia assinado.', 'ja_assinado': True})

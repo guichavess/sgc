@@ -15,10 +15,71 @@
         <p class="text-muted mb-0">Acompanhe e gerencie todas as solicitações de diárias e passagens.</p>
     </div>
     {% if current_user.tem_permissao('diarias', 'aprovar') %}
-    <a href="{{ url_for('diarias.vincular_processo_pagina') }}" class="btn btn-outline-primary">
-        <i class="bi bi-link-45deg me-1"></i>Vincular Processo
-    </a>
+    <div class="d-flex align-items-center gap-2">
+        <a href="{{ url_for('diarias.vincular_processo_pagina') }}" class="btn btn-outline-primary">
+            <i class="bi bi-link-45deg me-1"></i>Vincular Processo
+        </a>
+        <form method="post" action="{{ url_for('diarias.sincronizar_processos') }}" class="m-0" id="sincronizarProcessosForm">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-arrow-repeat me-1"></i>Sincronizar Processos
+            </button>
+        </form>
+    </div>
     {% endif %}
+</div>
+
+<div class="modal fade" id="modalSincronizarProcessos" data-bs-backdrop="static"
+     data-bs-keyboard="false" tabindex="-1" aria-labelledby="modalSincronizarProcessosLabel"
+     aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="modalSincronizarProcessosLabel">
+                    <i class="bi bi-arrow-repeat me-2 text-primary"></i>Sincronizando processos
+                </h5>
+            </div>
+            <div class="modal-body pt-3">
+                <div class="d-flex align-items-start gap-3">
+                    <div class="spinner-border text-primary flex-shrink-0" role="status" id="syncProcessosSpinner">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                    <div class="flex-grow-1">
+                        <p class="fw-semibold mb-2" id="syncProcessosStatus">Consultando bloco de processos no SEI...</p>
+                        <div class="progress mb-3" style="height: 8px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                 id="syncProcessosProgress" style="width: 18%;"></div>
+                        </div>
+                        <ul class="list-unstyled small text-muted mb-0" id="syncProcessosEtapas">
+                            <li class="mb-1" data-step="0">
+                                <i class="bi bi-hourglass-split me-1 text-primary"></i>Consultando bloco de processos
+                            </li>
+                            <li class="mb-1" data-step="1">
+                                <i class="bi bi-circle me-1"></i><span id="syncProcessosNovos">Aguardando contagem de processos novos encontrados</span>
+                            </li>
+                            <li class="mb-1" data-step="1">
+                                <i class="bi bi-circle me-1"></i>Verificando processos já cadastrados
+                            </li>
+                            <li class="mb-1" data-step="2">
+                                <i class="bi bi-circle me-1"></i>Listando documentos no SEI
+                            </li>
+                            <li class="mb-1" data-step="3">
+                                <i class="bi bi-circle me-1"></i>Analisando memorando, requisição de diárias e passagens
+                            </li>
+                            <li data-step="4">
+                                <i class="bi bi-circle me-1"></i>Criando itinerários e atualizando a lista
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="alert d-none mt-3 mb-0" id="syncProcessosResultado"></div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-primary d-none" id="syncProcessosFechar">
+                    Atualizar lista
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 {% include 'diarias/partials/subnav_administracao.html' %}
@@ -442,6 +503,121 @@ document.addEventListener('DOMContentLoaded', function() {
             window.location = this.dataset.href;
         });
     });
+
+    const syncForm = document.getElementById('sincronizarProcessosForm');
+    const syncModalEl = document.getElementById('modalSincronizarProcessos');
+    if (syncForm && syncModalEl && window.bootstrap) {
+        const syncModal = new bootstrap.Modal(syncModalEl);
+        const statusEl = document.getElementById('syncProcessosStatus');
+        const progressEl = document.getElementById('syncProcessosProgress');
+        const resultadoEl = document.getElementById('syncProcessosResultado');
+        const spinnerEl = document.getElementById('syncProcessosSpinner');
+        const fecharBtn = document.getElementById('syncProcessosFechar');
+        const novosEl = document.getElementById('syncProcessosNovos');
+        const steps = Array.from(document.querySelectorAll('#syncProcessosEtapas li'));
+        const mensagens = [
+            'Consultando bloco de processos no SEI...',
+            'Contando processos novos encontrados no bloco...',
+            'Verificando quais processos ainda não existem no banco...',
+            'Listando documentos de cada processo encontrado...',
+            'Baixando e analisando os documentos iniciais em memória...',
+            'Criando itinerários e registrando documentos vinculados...'
+        ];
+        let timer = null;
+
+        function setStep(stepIndex) {
+            const safeIndex = Math.min(stepIndex, mensagens.length - 1);
+            statusEl.textContent = mensagens[safeIndex];
+            progressEl.style.width = Math.min(18 + safeIndex * 18, 92) + '%';
+            steps.forEach((li, index) => {
+                const icon = li.querySelector('i');
+                li.classList.toggle('text-dark', index <= safeIndex);
+                li.classList.toggle('fw-semibold', index === safeIndex);
+                if (index < safeIndex) {
+                    icon.className = 'bi bi-check-circle-fill me-1 text-success';
+                } else if (index === safeIndex) {
+                    icon.className = 'bi bi-hourglass-split me-1 text-primary';
+                } else {
+                    icon.className = 'bi bi-circle me-1';
+                }
+            });
+        }
+
+        function finalizar(sucesso, mensagem) {
+            clearInterval(timer);
+            spinnerEl.classList.add('d-none');
+            progressEl.classList.remove('progress-bar-animated');
+            progressEl.style.width = '100%';
+            progressEl.classList.toggle('bg-success', sucesso);
+            progressEl.classList.toggle('bg-danger', !sucesso);
+            resultadoEl.className = sucesso ? 'alert alert-success mt-3 mb-0' : 'alert alert-danger mt-3 mb-0';
+            resultadoEl.textContent = mensagem;
+            resultadoEl.classList.remove('d-none');
+            fecharBtn.classList.remove('d-none');
+            statusEl.textContent = sucesso ? 'Sincronização concluída.' : 'Sincronização interrompida.';
+            steps.forEach(li => {
+                const icon = li.querySelector('i');
+                icon.className = sucesso ? 'bi bi-check-circle-fill me-1 text-success' : icon.className;
+            });
+        }
+
+        syncForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            resultadoEl.classList.add('d-none');
+            spinnerEl.classList.remove('d-none');
+            fecharBtn.classList.add('d-none');
+            progressEl.className = 'progress-bar progress-bar-striped progress-bar-animated';
+            progressEl.style.width = '18%';
+            setStep(0);
+            syncModal.show();
+
+            novosEl.textContent = 'Aguardando contagem de processos novos encontrados';
+
+            let step = 0;
+            timer = setInterval(() => {
+                step = Math.min(step + 1, mensagens.length - 1);
+                setStep(step);
+            }, 3500);
+
+            try {
+                const precheckForm = new FormData();
+                precheckForm.append('acao', 'precheck');
+                const precheckResp = await fetch(syncForm.action, {
+                    method: 'POST',
+                    headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'},
+                    body: precheckForm
+                });
+                const precheck = await precheckResp.json();
+                if (!precheckResp.ok || !precheck.sucesso) {
+                    finalizar(false, precheck.erro || 'Não foi possível consultar o bloco de processos.');
+                    return;
+                }
+                novosEl.textContent = `${precheck.novos || 0} processos novos encontrados de ${precheck.total || 0} no bloco (${precheck.existentes || 0} já existentes)`;
+                step = 2;
+                setStep(step);
+
+                const resp = await fetch(syncForm.action, {
+                    method: 'POST',
+                    headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data.sucesso) {
+                    finalizar(false, data.erro || 'Não foi possível sincronizar os processos.');
+                    return;
+                }
+                finalizar(
+                    true,
+                    `Processos no bloco: ${data.total || 0}. Criados: ${data.criados || 0}. Já existentes: ${data.existentes || 0}. Erros: ${(data.erros || []).length}.`
+                );
+            } catch (err) {
+                finalizar(false, 'Erro de comunicação durante a sincronização.');
+            }
+        });
+
+        fecharBtn.addEventListener('click', function() {
+            window.location.reload();
+        });
+    }
 });
 </script>
 

@@ -230,7 +230,7 @@ def assinar_documento(token, unidade_id, dados_assinatura, protocolo_proc=None):
         return {"sucesso": False, "erro": str(e)}
 
 
-def consultar_procedimento_sei(token, protocolo):
+def consultar_procedimento_sei(token, protocolo, timeout=120):
     """
     Consulta um processo existente no SEI via endpoint de Consulta de Procedimento.
 
@@ -275,7 +275,7 @@ def consultar_procedimento_sei(token, protocolo):
 
     try:
         print(f"📡 Consultando procedimento SEI: {protocolo_limpo}...")
-        response = requests.get(url, params=params, headers=headers, timeout=60, verify=False)
+        response = requests.get(url, params=params, headers=headers, timeout=timeout, verify=False)
 
         if response.status_code != 200:
             resultado['erro'] = f'Processo não encontrado no SEI (HTTP {response.status_code}).'
@@ -302,7 +302,7 @@ def consultar_procedimento_sei(token, protocolo):
         return resultado
 
 
-def listar_documentos_procedimento_sei(token, protocolo, max_retries=3, timeout=60):
+def listar_documentos_procedimento_sei(token, protocolo, max_retries=3, timeout=120):
     """
     Lista os documentos de um processo existente no SEI.
 
