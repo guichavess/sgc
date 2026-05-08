@@ -76,7 +76,7 @@
                     </div>
                     <div class="col-12">
                         <label for="edit_objetivo" class="form-label fw-semibold small">Objetivo da Viagem</label>
-                        <textarea id="edit_objetivo" class="form-control form-control-sm" rows="3">{{ itinerario.objetivo or '' }}</textarea>
+                        <textarea id="edit_objetivo" class="form-control form-control-sm" rows="3">{{ (itinerario.objetivo or '')|corrigir_mojibake }}</textarea>
                     </div>
                 </div>
             </div>

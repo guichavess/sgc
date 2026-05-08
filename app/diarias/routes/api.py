@@ -10,6 +10,7 @@ from app.utils.permissions import requires_permission
 from app.services.diaria_service import DiariaService
 from app.services.sga_service import SGAService
 from app.models.diaria import Municipio, Setor, Orgao, DiariasServidor
+from app.utils.text_encoding import corrigir_mojibake_cp850
 
 
 @diarias_bp.route('/api/buscar-pessoa')
@@ -373,7 +374,7 @@ def api_admin_editar_dados_basicos():
         if 'estado_destino' in data:
             itinerario.estado_destino = int(data['estado_destino']) if data['estado_destino'] else None
         if 'objetivo' in data:
-            itinerario.objetivo = (data['objetivo'] or '').strip() or None
+            itinerario.objetivo = corrigir_mojibake_cp850((data['objetivo'] or '').strip() or None)
         if 'valor_total' in data:
             # MED-11: Validar que valor_total não pode ser negativo
             vt = float(data['valor_total']) if data['valor_total'] else None

@@ -121,6 +121,25 @@
     }
     .fluxo-nav .btn { font-size: 0.78rem; }
     .fluxo-nav .fluxo-counter { font-size: 0.78rem; font-weight: 600; color: #6c757d; }
+    .fluxo-approval-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+    .fluxo-approval-card {
+        min-height: 78px;
+        padding: 16px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background: #fff;
+    }
+    .fluxo-approval-card.is-disabled {
+        opacity: 0.55;
+        background: #f8f9fa;
+    }
+    @media (max-width: 767.98px) {
+        .fluxo-approval-grid { grid-template-columns: 1fr; }
+    }
 </style>
 
 <div class="card shadow-sm mb-0">
@@ -194,6 +213,34 @@
                     </div>
                 </div>
             </div>
+            {% elif itinerario.processo_negado %}
+            {# ── SOLICITAÇÃO NEGADA ── #}
+            <div class="rounded-3 p-3 mb-3" style="background: linear-gradient(135deg, #f8d7da, #fff5f5); border: 1.5px solid #dc3545;">
+                <div class="d-flex align-items-start">
+                    <i class="bi bi-x-octagon-fill fs-4 text-danger me-3 mt-1"></i>
+                    <div>
+                        <strong class="text-danger">Solicitação negada pelo Superintendente</strong>
+                        {% if itinerario.processo_negado_data %}
+                        <span class="d-block text-muted small mt-1">
+                            <i class="bi bi-calendar me-1"></i>{{ itinerario.processo_negado_data.strftime('%d/%m/%Y %H:%M') }}
+                            {% if itinerario.processo_negado_por_nome %}
+                            — por {{ itinerario.processo_negado_por_nome }}
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                        {% if itinerario.processo_negado_justificativa %}
+                        <div class="mt-2 p-2 bg-white rounded border small">
+                            <strong>Justificativa:</strong> {{ itinerario.processo_negado_justificativa }}
+                        </div>
+                        {% endif %}
+                        {% if itinerario.processo_negado_doc_sei_formatado %}
+                        <span class="d-block text-muted small mt-1">
+                            <i class="bi bi-file-earmark-text me-1"></i>Despacho SEI: {{ itinerario.processo_negado_doc_sei_formatado }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
             {% elif itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento %}
             {# Assinatura dupla: Superintendente + Secretário #}
             <div class="d-flex align-items-center mb-3" style="gap: 0;">
@@ -207,29 +254,37 @@
                     2
                 </div>
             </div>
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <div class="p-3 rounded-3 border h-100">
+            <div class="fluxo-approval-grid">
+                <div class="fluxo-approval-card">
                         <h6 class="fw-bold mb-2" style="font-size: 0.8rem;">
                             <i class="bi bi-pen me-1"></i>Superintendente
                         </h6>
                         {% if itinerario.superintendente_assinou %}
                         <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Assinado {{ itinerario.superintendente_assinou_data.strftime('%d/%m/%Y %H:%M') if itinerario.superintendente_assinou_data else '' }}</span>
+                        {% if itinerario.superintendente_assinou_nome %}
+                        <span class="d-block text-muted small mt-1">por {{ itinerario.superintendente_assinou_nome }}</span>
+                        {% endif %}
                         {% elif current_user.is_superintendente %}
                         <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
                             <i class="bi bi-pen me-1"></i>Assinar Requisições
                         </button>
+                        <button class="btn btn-outline-danger btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#modalNegarSolicitacao">
+                            <i class="bi bi-x-circle me-1"></i>Negar Solicitação
+                        </button>
                         {% else %}
                         <span class="text-muted small"><i class="bi bi-hourglass-split me-1"></i>Aguardando assinatura</span>
                         {% endif %}
-                    </div>
                 </div>
-                <div class="col-md-6">
-                    <div class="p-3 rounded-3 border h-100 {{ '' if itinerario.superintendente_assinou else 'opacity-50' }}">
+                <div class="fluxo-approval-card {{ '' if itinerario.superintendente_assinou else 'is-disabled' }}">
                         <h6 class="fw-bold mb-2" style="font-size: 0.8rem;">
                             <i class="bi bi-shield-check me-1"></i>Secretário
                         </h6>
-                        {% if not itinerario.superintendente_assinou %}
+                        {% if itinerario.secretario_assinou %}
+                        <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Autorizado {{ itinerario.secretario_assinou_data.strftime('%d/%m/%Y %H:%M') if itinerario.secretario_assinou_data else '' }}</span>
+                        {% if itinerario.secretario_assinou_nome %}
+                        <span class="d-block text-muted small mt-1">por {{ itinerario.secretario_assinou_nome }}</span>
+                        {% endif %}
+                        {% elif not itinerario.superintendente_assinou %}
                         <span class="text-muted small"><i class="bi bi-lock me-1"></i>Aguardando assinatura do Superintendente</span>
                         {% elif current_user.is_secretario %}
                         <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalAutorizar">
@@ -238,7 +293,6 @@
                         {% else %}
                         <span class="text-muted small"><i class="bi bi-hourglass-split me-1"></i>Aguardando autorização</span>
                         {% endif %}
-                    </div>
                 </div>
             </div>
             {% elif not itinerario.sei_id_procedimento %}
@@ -246,8 +300,39 @@
                 <i class="bi bi-info-circle me-1"></i>Processo SEI ainda não vinculado.
             </div>
             {% else %}
-            <div class="alert alert-info py-2 mb-0">
-                <i class="bi bi-info-circle me-1"></i>Etapa de autorização já concluída — processo avançou para a próxima etapa.
+            <div class="fluxo-approval-grid">
+                    <div class="fluxo-approval-card">
+                        <h6 class="fw-bold mb-2" style="font-size: 0.8rem;">
+                            <i class="bi bi-pen me-1"></i>Superintendente
+                        </h6>
+                        {% if itinerario.superintendente_assinou %}
+                        <span class="text-success small">
+                            <i class="bi bi-check-circle-fill me-1"></i>Assinado
+                            {{ itinerario.superintendente_assinou_data.strftime('%d/%m/%Y %H:%M') if itinerario.superintendente_assinou_data else '' }}
+                        </span>
+                        {% if itinerario.superintendente_assinou_nome %}
+                        <span class="d-block text-muted small">por {{ itinerario.superintendente_assinou_nome }}</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted small">Dispensado</span>
+                        {% endif %}
+                    </div>
+                    <div class="fluxo-approval-card">
+                        <h6 class="fw-bold mb-2" style="font-size: 0.8rem;">
+                            <i class="bi bi-shield-check me-1"></i>Secretário
+                        </h6>
+                        {% if itinerario.secretario_assinou %}
+                        <span class="text-success small">
+                            <i class="bi bi-check-circle-fill me-1"></i>Autorizado
+                            {{ itinerario.secretario_assinou_data.strftime('%d/%m/%Y %H:%M') if itinerario.secretario_assinou_data else '' }}
+                        </span>
+                        {% if itinerario.secretario_assinou_nome %}
+                        <span class="d-block text-muted small">por {{ itinerario.secretario_assinou_nome }}</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted small">Concluído</span>
+                        {% endif %}
+                    </div>
             </div>
             {% endif %}
         </div>

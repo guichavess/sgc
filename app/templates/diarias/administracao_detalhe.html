@@ -253,7 +253,7 @@
             <div class="mb-3">
                 <h6 class="section-title mb-2"><i class="bi bi-bullseye me-1"></i>Objetivo da Viagem</h6>
                 <div class="p-2 border rounded bg-light">
-                    <p class="mb-0 small">{{ itinerario.objetivo }}</p>
+                    <p class="mb-0 small">{{ itinerario.objetivo|corrigir_mojibake }}</p>
                 </div>
             </div>
             {% endif %}
@@ -355,6 +355,12 @@
                                             data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
                                         <i class="bi bi-vector-pen me-1"></i> Assinar Requisição
                                     </button>
+                                    {% if current_user.is_superintendente and not itinerario.processo_negado and not itinerario.secretario_assinou %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger px-3"
+                                            data-bs-toggle="modal" data-bs-target="#modalNegarSolicitacao">
+                                        <i class="bi bi-x-circle me-1"></i> Negar Solicitação
+                                    </button>
+                                    {% endif %}
                                     <button type="button" class="btn btn-sm btn-outline-secondary px-3"
                                             id="btnVerificarAssinaturas2"
                                             title="Verifica se os documentos já foram assinados diretamente no SEI">
@@ -1104,7 +1110,8 @@
                             </small>
                             <small class="text-muted">Códigos: {{ itinerario.escolha_justificativa_codigos }}</small>
                             {% if itinerario.escolha_justificativa_outros %}
-                            <br><small class="text-muted">Outros: {{ itinerario.escolha_justificativa_outros[:200] }}{{ '...' if itinerario.escolha_justificativa_outros|length > 200 else '' }}</small>
+                            {% set escolha_outros_corrigida = itinerario.escolha_justificativa_outros|corrigir_mojibake %}
+                            <br><small class="text-muted">Outros: {{ escolha_outros_corrigida[:200] }}{{ '...' if escolha_outros_corrigida|length > 200 else '' }}</small>
                             {% endif %}
                         </div>
                         {% endif %}
@@ -1178,7 +1185,7 @@
                             <br><small class="text-muted">Justificativa(s): {{ itinerario.escolha_justificativa_codigos }}</small>
                             {% endif %}
                             {% if itinerario.escolha_justificativa_outros %}
-                            <br><small class="text-muted">Outros: {{ itinerario.escolha_justificativa_outros }}</small>
+                            <br><small class="text-muted">Outros: {{ itinerario.escolha_justificativa_outros|corrigir_mojibake }}</small>
                             {% endif %}
                         </div>
                         {% endif %}
@@ -1885,6 +1892,68 @@
 </div>
 {% endif %}
 
+{# --- MODAL NEGAR SOLICITAÇÃO --- #}
+{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_superintendente and not itinerario.superintendente_assinou and not itinerario.secretario_assinou and not itinerario.processo_negado %}
+<div class="modal fade" id="modalNegarSolicitacao" tabindex="-1" aria-labelledby="modalNegarSolicitacaoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary">
+                <h5 class="modal-title text-white" id="modalNegarSolicitacaoLabel">
+                    <i class="bi bi-x-circle me-1"></i> Negar Solicitação
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="negar-erro" class="alert alert-danger d-none" role="alert"></div>
+                <div id="negar-sucesso" class="alert alert-success d-none" role="alert"></div>
+
+                <div id="negar-etapa-justificativa">
+                    <div class="mb-3">
+                        <label for="negar_justificativa" class="form-label fw-semibold">Justificativa <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="negar_justificativa" rows="5" maxlength="2000"
+                                  placeholder="Informe o motivo da negativa"></textarea>
+                        <div class="form-text">Esse texto será inserido no despacho SEI de negação.</div>
+                    </div>
+                    {% if itinerario.unidade_geradora_descricao %}
+                    <div class="small text-muted border rounded p-2 bg-light">
+                        <span class="fw-semibold">PARA:</span> {{ itinerario.unidade_geradora_descricao|corrigir_mojibake }}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div id="negar-etapa-assinatura" class="d-none">
+                    <div class="alert alert-primary small py-2">
+                        <i class="bi bi-file-earmark-text me-1"></i>
+                        O despacho será criado, assinado e o processo será encaminhado à unidade solicitante.
+                    </div>
+                    <div class="mb-3">
+                        <label for="negar_usuario" class="form-label fw-semibold">Usuário SEI</label>
+                        <input type="text" class="form-control" id="negar_usuario"
+                               placeholder="Seu login no SEI" autocomplete="off">
+                    </div>
+                    <div class="mb-3">
+                        <label for="negar_senha" class="form-label fw-semibold">Senha SEI</label>
+                        <input type="password" class="form-control" id="negar_senha"
+                               placeholder="Sua senha no SEI" autocomplete="off">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm px-4" id="btn-negar-continuar"
+                        onclick="prepararAssinaturaNegacao()">
+                    Continuar
+                </button>
+                <button type="button" class="btn btn-danger btn-sm px-4 d-none" id="btn-negar-confirmar"
+                        onclick="negarSolicitacao()">
+                    <i class="bi bi-vector-pen me-1"></i> Gerar despacho e assinar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {# --- MODAL AUTORIZAÇÃO DO SECRETÁRIO / NÍVEL 3 --- #}
 {% set _nivel_n = nivel_autorizacao.nivel if nivel_autorizacao else 1 %}
 {# Override Nível 3: Superintendente pode autorizar quando nível computado é 2 e Sec. Exercício está indisponível. #}
@@ -2328,6 +2397,93 @@ document.querySelectorAll('#btnVerificarAssinaturas2').forEach(function(btn) {
         </div>
     </div>
 </div>
+{% endif %}
+
+{# --- JS Negação da Solicitação --- #}
+{% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and current_user.is_superintendente and not itinerario.superintendente_assinou and not itinerario.secretario_assinou and not itinerario.processo_negado %}
+<script>
+function prepararAssinaturaNegacao() {
+    var erroDiv = document.getElementById('negar-erro');
+    var justificativa = document.getElementById('negar_justificativa').value.trim();
+
+    erroDiv.classList.add('d-none');
+
+    if (justificativa.length < 10) {
+        erroDiv.textContent = 'Informe uma justificativa com pelo menos 10 caracteres.';
+        erroDiv.classList.remove('d-none');
+        return;
+    }
+
+    document.getElementById('negar-etapa-justificativa').classList.add('d-none');
+    document.getElementById('negar-etapa-assinatura').classList.remove('d-none');
+    document.getElementById('btn-negar-continuar').classList.add('d-none');
+    document.getElementById('btn-negar-confirmar').classList.remove('d-none');
+    document.getElementById('negar_usuario').focus();
+}
+
+async function negarSolicitacao() {
+    var erroDiv = document.getElementById('negar-erro');
+    var sucessoDiv = document.getElementById('negar-sucesso');
+    var btn = document.getElementById('btn-negar-confirmar');
+
+    erroDiv.classList.add('d-none');
+    sucessoDiv.classList.add('d-none');
+
+    var justificativa = document.getElementById('negar_justificativa').value.trim();
+    var usuario = document.getElementById('negar_usuario').value.trim();
+    var senha = document.getElementById('negar_senha').value.trim();
+
+    if (!usuario || !senha) {
+        erroDiv.textContent = 'Informe usuário e senha do SEI.';
+        erroDiv.classList.remove('d-none');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Processando...';
+
+    try {
+        var resp = await fetch('{{ url_for("diarias.negar_solicitacao", id=itinerario.id) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                justificativa: justificativa,
+                sei_usuario: usuario,
+                sei_senha: senha
+            })
+        });
+
+        var data;
+        try {
+            data = await resp.json();
+        } catch (parseErr) {
+            throw new Error('Servidor retornou resposta inválida (status ' + resp.status + ')');
+        }
+
+        if (resp.ok && data.sucesso) {
+            sucessoDiv.innerHTML = '<i class="bi bi-check-circle me-1"></i> ' +
+                (data.mensagem || 'Solicitação negada com sucesso.') + ' Recarregando...';
+            sucessoDiv.classList.remove('d-none');
+
+            setTimeout(function() {
+                var modal = bootstrap.Modal.getInstance(document.getElementById('modalNegarSolicitacao'));
+                if (modal) modal.hide();
+                window.location.reload();
+            }, 1500);
+        } else {
+            erroDiv.textContent = data.erro || 'Erro desconhecido ao negar solicitação.';
+            erroDiv.classList.remove('d-none');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-vector-pen me-1"></i> Gerar despacho e assinar';
+        }
+    } catch (err) {
+        erroDiv.textContent = 'Erro de conexão: ' + (err.message || 'tente novamente.');
+        erroDiv.classList.remove('d-none');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-vector-pen me-1"></i> Gerar despacho e assinar';
+    }
+}
+</script>
 {% endif %}
 
 {# --- JS Autorização do Secretário / Nível 3 --- #}

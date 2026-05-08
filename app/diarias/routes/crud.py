@@ -14,6 +14,7 @@ from app.services.sei_integration import assinar_documento
 from app.models.diaria import DiariasTipoSolicitacao, DiariasValorCargo, DiariasItinerario, Estado
 from app.constants import DiariasEtapaID
 from app.services.diarias_notification import DiariasNotifier
+from app.utils.text_encoding import corrigir_mojibake_cp850
 
 
 EXTENSOES_PERMITIDAS = {'.pdf', '.png', '.jpg', '.jpeg', '.doc', '.docx', '.xls', '.xlsx'}
@@ -174,13 +175,37 @@ def store():
             })
 
         paradas = request.form.getlist('paradas[]') if tipo == 1 else None
-        justificativa = request.form.get('justificativa', '').strip() or None
-        justificativa_memorando = request.form.get('justificativa_memorando', '').strip() or None
+        justificativa = corrigir_mojibake_cp850(request.form.get('justificativa', '').strip() or None)
+        justificativa_memorando = corrigir_mojibake_cp850(request.form.get('justificativa_memorando', '').strip() or None)
 
         tipo_solicitacao_id = int(request.form.get('tipo_solicitacao') or 0)
 
-        objetivo = request.form.get('objetivo', '').strip() or None
+        objetivo = corrigir_mojibake_cp850(request.form.get('objetivo', '').strip() or None)
         unidade_sei_id = request.form.get('unidade_sei_id', '').strip() or None
+        unidade_sei = None
+        if unidade_sei_id:
+            unidade_sei = next(
+                (
+                    u for u in current_user.unidades_sei
+                    if str(u.unidade_sei_id) == str(unidade_sei_id)
+                ),
+                None,
+            )
+        if not unidade_sei:
+            msg = 'Selecione uma unidade SEI válida vinculada ao seu usuário.'
+            if is_ajax:
+                return jsonify({'success': False, 'error': msg}), 400
+            flash(msg, 'danger')
+            return redirect(url_for('diarias.nova'))
+
+        unidade_sei_sigla = unidade_sei.sigla
+        unidade_sei_descricao = corrigir_mojibake_cp850(unidade_sei.descricao)
+        if not unidade_sei_descricao:
+            msg = 'A unidade SEI selecionada não possui descrição sincronizada. Faça login novamente e tente criar a solicitação.'
+            if is_ajax:
+                return jsonify({'success': False, 'error': msg}), 400
+            flash(msg, 'danger')
+            return redirect(url_for('diarias.nova'))
 
         # Arquivo anexo (documento externo SEI) — com validação de extensão/tamanho
         arquivo_anexo = request.files.get('arquivo_anexo')
@@ -209,6 +234,8 @@ def store():
             'estado_destino': request.form.get('estado_destino'),
             'objetivo': objetivo,
             'unidade_sei_id': unidade_sei_id,
+            'unidade_sei_sigla': unidade_sei_sigla,
+            'unidade_sei_descricao': unidade_sei_descricao,
         }
 
         itinerario = DiariaService.criar_itinerario(dados, pessoas, paradas, justificativa)

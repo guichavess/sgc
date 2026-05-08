@@ -140,6 +140,17 @@ def _nome_chave(valor):
     return s.strip().lower()
 
 
+def parse_sei_datahora(texto):
+    """Parse do formato 'dd/mm/yyyy HH:MM:SS' retornado pela API SEI."""
+    from datetime import datetime as _dt
+    if not texto:
+        return None
+    try:
+        return _dt.strptime(texto.strip(), '%d/%m/%Y %H:%M:%S')
+    except (ValueError, AttributeError):
+        return None
+
+
 def verificar_assinatura_superintendente_sei(itinerario, documentos_sei=None):
     """
     Consulta o SEI para verificar se algum usuário cadastrado como
@@ -231,6 +242,7 @@ def verificar_assinatura_superintendente_sei(itinerario, documentos_sei=None):
                 'assinante_usuario_id': usuario_match.id,
                 'doc_sei_id': doc_id,
                 'doc_sei_formatado': doc_fmt,
+                'data_hora_assinatura': parse_sei_datahora(ass.get('DataHora')),
                 'erro': None,
             }
 

@@ -203,12 +203,20 @@ class DiariasItinerario(db.Model):
     sei_protocolo = db.Column(db.String(50), nullable=True, index=True)  # MED-14: índice para buscas/timeline
     sei_id_procedimento = db.Column(db.String(50), nullable=True)   # ID interno do procedimento SEI
     unidade_geradora_id = db.Column(db.String(50), nullable=True)   # Unidade SEI onde o processo foi criado
+    unidade_geradora_sigla = db.Column(db.String(255), nullable=True)
+    unidade_geradora_descricao = db.Column(db.String(500), nullable=True)
     link_processo_sei = db.Column(db.Text, nullable=True)           # URL de acesso ao processo no SEI
     especificacao_sei = db.Column(db.Text, nullable=True)           # Especificação/assunto do processo SEI
 
     # Assinatura do Superintendente nas Requisições (antes do Secretário)
     superintendente_assinou = db.Column(db.Boolean, default=False, nullable=False)
     superintendente_assinou_data = db.Column(db.DateTime, nullable=True)
+    superintendente_assinou_nome = db.Column(db.String(200), nullable=True)
+
+    # Autorização do Secretário
+    secretario_assinou = db.Column(db.Boolean, default=False, nullable=False, server_default='0')
+    secretario_assinou_data = db.Column(db.DateTime, nullable=True)
+    secretario_assinou_nome = db.Column(db.String(200), nullable=True)
 
     # Escolha de Passagens (administração)
     escolha_voo_ida_id = db.Column(db.BigInteger, db.ForeignKey('diarias_cotacoes_voos.id'), nullable=True)
@@ -241,6 +249,15 @@ class DiariasItinerario(db.Model):
     # Ciência GEO
     ciencia_geo = db.Column(db.Boolean, default=False)
     ciencia_geo_data = db.Column(db.DateTime, nullable=True)
+
+    # Negação pelo Superintendente (Etapa 1)
+    processo_negado = db.Column(db.Boolean, default=False, nullable=False, server_default='0', index=True)
+    processo_negado_data = db.Column(db.DateTime, nullable=True)
+    processo_negado_por_id = db.Column(db.BigInteger, nullable=True)
+    processo_negado_por_nome = db.Column(db.String(200), nullable=True)
+    processo_negado_justificativa = db.Column(db.Text, nullable=True)
+    processo_negado_doc_sei_id = db.Column(db.String(50), nullable=True)
+    processo_negado_doc_sei_formatado = db.Column(db.String(50), nullable=True)
 
     # Timeline / Etapa atual
     etapa_atual_id = db.Column(db.Integer, db.ForeignKey('diarias_etapas.id'), default=1, index=True)

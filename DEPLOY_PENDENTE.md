@@ -94,6 +94,31 @@
 
 ---
 
+### Campos de Assinatura e Negação — Diárias (2026-05-08)
+
+- [ ] **Adicionar colunas de rastreamento de assinaturas e negação na tabela `diarias_itinerario`**
+  - Contexto: corrigido bug onde `superintendente_assinou_data` gravava `datetime.now()` ao invés do timestamp real do SEI. Adicionados campos para nome do superintendente, rastreamento completo da assinatura do secretário, persistência da descrição da unidade SEI solicitante e flag de processos negados.
+  - SQL:
+  ```sql
+  ALTER TABLE diarias_itinerario ADD COLUMN unidade_geradora_sigla VARCHAR(255) NULL;
+  ALTER TABLE diarias_itinerario ADD COLUMN unidade_geradora_descricao VARCHAR(500) NULL;
+  ALTER TABLE diarias_itinerario ADD COLUMN superintendente_assinou_nome VARCHAR(200) NULL;
+  ALTER TABLE diarias_itinerario ADD COLUMN secretario_assinou TINYINT(1) NOT NULL DEFAULT 0;
+  ALTER TABLE diarias_itinerario ADD COLUMN secretario_assinou_data DATETIME NULL;
+  ALTER TABLE diarias_itinerario ADD COLUMN secretario_assinou_nome VARCHAR(200) NULL;
+  ALTER TABLE diarias_itinerario ADD COLUMN processo_negado TINYINT(1) NOT NULL DEFAULT 0;
+  ALTER TABLE diarias_itinerario ADD COLUMN processo_negado_data DATETIME NULL;
+  ALTER TABLE diarias_itinerario ADD COLUMN processo_negado_por_id BIGINT NULL;
+  ALTER TABLE diarias_itinerario ADD COLUMN processo_negado_por_nome VARCHAR(200) NULL;
+  ALTER TABLE diarias_itinerario ADD COLUMN processo_negado_justificativa TEXT NULL;
+  ALTER TABLE diarias_itinerario ADD COLUMN processo_negado_doc_sei_id VARCHAR(50) NULL;
+  ALTER TABLE diarias_itinerario ADD COLUMN processo_negado_doc_sei_formatado VARCHAR(50) NULL;
+  CREATE INDEX idx_diarias_itinerario_processo_negado ON diarias_itinerario (processo_negado);
+  ```
+  - Observação: colunas nullable/com default — seguro para dados existentes. Rows antigos terão NULL/0. Solicitações antigas sem `unidade_geradora_descricao` não poderão ser negadas até a descrição ser preenchida.
+
+---
+
 ### Pós-deploy de 2026-04-07 (opcional / quando tiver fonte dos dados)
 
 - [ ] **Popular `diarias_servidores.idpessoa` e promover a NOT NULL + UNIQUE**

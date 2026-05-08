@@ -131,12 +131,29 @@
                     </div>
                 </div>
                 <div class="col-auto">
+                    {% if filtro_negados == '1' %}
+                    <input type="hidden" name="negados" value="1">
+                    <a class="btn btn-sm btn-danger"
+                       href="{{ url_for('diarias.administracao', q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) }}"
+                       title="Processos negados">
+                        <i class="bi bi-x-octagon me-1"></i>Processos negados
+                    </a>
+                    {% else %}
+                    <button type="submit"
+                            class="btn btn-sm btn-outline-danger"
+                            name="negados" value="1"
+                            title="Processos negados">
+                        <i class="bi bi-x-octagon me-1"></i>Processos negados
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="col-auto">
                     <button type="submit" class="btn btn-primary btn-sm fw-bold" title="Filtrar">
                         <i class="bi bi-funnel me-1"></i>Filtrar
                     </button>
                 </div>
                 <div class="col-auto">
-                    {% if request.args.get('q') or filtro_etapas or filtro_tipos or filtro_solicitacao %}
+                    {% if request.args.get('q') or filtro_etapas or filtro_tipos or filtro_solicitacao or filtro_negados == '1' %}
                     <a href="{{ url_for('diarias.administracao') }}" class="btn btn-outline-danger btn-sm" title="Limpar Filtros">
                         <i class="bi bi-x-lg"></i>
                     </a>
@@ -285,7 +302,11 @@
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            {% if it.etapa_atual %}
+                            {% if it.processo_negado %}
+                            <span class="badge rounded-pill bg-danger">
+                                <i class="bi bi-x-octagon me-1"></i>Negado
+                            </span>
+                            {% elif it.etapa_atual %}
                             <span class="badge rounded-pill" style="background-color: {{ it.etapa_atual.cor_hex or '#6c757d' }};">
                                 <i class="{{ it.etapa_atual.icone }} me-1"></i>{{ it.etapa_atual.nome }}
                             </span>
@@ -317,21 +338,21 @@
             <nav aria-label="Navegação de páginas">
                 <ul class="pagination pagination-sm mb-0">
                     <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-                        <a class="page-link" href="{{ url_for('diarias.administracao', page=pagination.prev_num, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) if pagination.has_prev else '#' }}">
+                        <a class="page-link" href="{{ url_for('diarias.administracao', page=pagination.prev_num, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao, negados=filtro_negados) if pagination.has_prev else '#' }}">
                             <i class="bi bi-chevron-left"></i>
                         </a>
                     </li>
                     {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                         {% if p %}
                         <li class="page-item {{ 'active' if p == pagination.page }}">
-                            <a class="page-link" href="{{ url_for('diarias.administracao', page=p, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) }}">{{ p }}</a>
+                            <a class="page-link" href="{{ url_for('diarias.administracao', page=p, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao, negados=filtro_negados) }}">{{ p }}</a>
                         </li>
                         {% else %}
                         <li class="page-item disabled"><span class="page-link">...</span></li>
                         {% endif %}
                     {% endfor %}
                     <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-                        <a class="page-link" href="{{ url_for('diarias.administracao', page=pagination.next_num, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) if pagination.has_next else '#' }}">
+                        <a class="page-link" href="{{ url_for('diarias.administracao', page=pagination.next_num, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao, negados=filtro_negados) if pagination.has_next else '#' }}">
                             <i class="bi bi-chevron-right"></i>
                         </a>
                     </li>

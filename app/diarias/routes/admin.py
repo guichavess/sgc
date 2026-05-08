@@ -12,7 +12,8 @@ from app.services.diaria_service import DiariaService
 from app.services.sei_auth import autenticar_usuario_sei
 from app.services.sei_integration import assinar_documento
 from app.services.diarias_sei_integration import (
-    gerar_token_sei_admin, gerar_despacho_sga, gerar_analise_pagamento,
+    gerar_token_sei_admin, gerar_despacho_sga, gerar_despacho_sga_negacao,
+    gerar_analise_pagamento,
     gerar_despacho_nci, enviar_procedimento, sincronizar_documentos_diaria,
     UNIDADE_APOIOSGA, UNIDADE_NCI, PERGUNTAS_ANALISE_PAGAMENTO,
 )
@@ -167,12 +168,24 @@ def administracao():
     filtro_etapas = request.args.getlist('filtro_etapa', type=int)
     filtro_tipos = request.args.getlist('filtro_tipo', type=int)
     filtro_solicitacao = request.args.getlist('filtro_solicitacao', type=int)
+    filtro_negados = request.args.get('negados', '').strip()
     try:
         page = max(1, int(request.args.get('page', 1) or 1))
     except (ValueError, TypeError):
         page = 1
 
     query = DiariasItinerario.query
+
+    # Filtro de processos negados: negados=1 mostra só negados; padrão oculta negados
+    if filtro_negados == '1':
+        query = query.filter(DiariasItinerario.processo_negado.is_(True))
+    else:
+        query = query.filter(
+            db.or_(
+                DiariasItinerario.processo_negado.is_(False),
+                DiariasItinerario.processo_negado.is_(None),
+            )
+        )
 
     if busca:
         query = query.filter(
@@ -214,8 +227,17 @@ def administracao():
     etapas = DiariasEtapa.query.order_by(DiariasEtapa.ordem).all()
 
     # ── Contagens dinâmicas (cruzadas entre filtros) ──────────────────────
-    # Base query com busca textual (comum a ambos os filtros)
+    # Base query com busca textual + filtro de negados (comum a todos os filtros)
     base_q = DiariasItinerario.query
+    if filtro_negados == '1':
+        base_q = base_q.filter(DiariasItinerario.processo_negado.is_(True))
+    else:
+        base_q = base_q.filter(
+            db.or_(
+                DiariasItinerario.processo_negado.is_(False),
+                DiariasItinerario.processo_negado.is_(None),
+            )
+        )
     if busca:
         base_q = base_q.filter(
             db.or_(
@@ -322,6 +344,7 @@ def administracao():
         sol_counts=sol_counts,
         filtro_solicitacao=filtro_solicitacao,
         kpis=kpis,
+        filtro_negados=filtro_negados,
     )
 
 
@@ -369,6 +392,10 @@ def aprovar_solicitacoes():
 
     query = DiariasItinerario.query.filter(
         DiariasItinerario.etapa_atual_id == DiariasEtapaID.SOLICITACAO_INICIAL,
+        db.or_(
+            DiariasItinerario.processo_negado.is_(False),
+            DiariasItinerario.processo_negado.is_(None),
+        ),
     )
 
     if eh_secretario:
@@ -420,6 +447,10 @@ def aprovar_solicitacoes():
     # Contagens cruzadas (aplicam mesmos filtros da query principal por papel)
     base_q = DiariasItinerario.query.filter(
         DiariasItinerario.etapa_atual_id == DiariasEtapaID.SOLICITACAO_INICIAL,
+        db.or_(
+            DiariasItinerario.processo_negado.is_(False),
+            DiariasItinerario.processo_negado.is_(None),
+        ),
     )
     if eh_secretario:
         base_q = base_q.filter(DiariasItinerario.superintendente_assinou == True)  # noqa: E712
@@ -962,6 +993,12 @@ def assinar_superintendente(id):
             'erro': 'Esta solicitação não está na etapa de autorização (etapa 1).'
         }), 400
 
+    if itinerario.processo_negado:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Esta solicitação foi negada e não pode mais ser assinada.'
+        }), 400
+
     # Guard: precisa de processo SEI e requisição gerada
     if not itinerario.sei_id_procedimento or not itinerario.has_doc('requisicao'):
         return jsonify({
@@ -982,6 +1019,7 @@ def assinar_superintendente(id):
     if superintendente_dispensado(itinerario):
         itinerario.superintendente_assinou = True
         itinerario.superintendente_assinou_data = datetime.now()
+        itinerario.superintendente_assinou_nome = current_user.nome or 'Superintendente (dispensado)'
         db.session.commit()
         current_app.logger.info(
             f"[DIARIAS] Superintendente dispensado (é integrante) — itinerario={itinerario.id}"
@@ -1063,9 +1101,26 @@ def assinar_superintendente(id):
     # Superintendente assina APENAS a Requisição de Diárias (532).
     # A Requisição de Passagens (2975) não requer assinatura do superintendente.
 
-    # 4. Salvar no banco
+    # 4. Salvar no banco — busca timestamp real do SEI ao invés de datetime.now()
+    from app.services.diarias_autorizacao import verificar_assinatura_superintendente_sei
+    data_assinatura = None
+    nome_assinante = current_user.nome or 'Superintendente'
+    try:
+        check = verificar_assinatura_superintendente_sei(itinerario)
+        if check.get('assinada'):
+            if check.get('data_hora_assinatura'):
+                data_assinatura = check['data_hora_assinatura']
+            if check.get('assinante_nome'):
+                nome_assinante = check['assinante_nome']
+    except Exception as exc:
+        current_app.logger.warning(
+            f'[DIARIAS] assinar_superintendente: falha ao obter timestamp SEI '
+            f'itinerario={itinerario.id}: {exc}'
+        )
+
     itinerario.superintendente_assinou = True
-    itinerario.superintendente_assinou_data = datetime.now()
+    itinerario.superintendente_assinou_data = data_assinatura or datetime.now()
+    itinerario.superintendente_assinou_nome = nome_assinante
     db.session.commit()
 
     # 5. Notificar que Superintendente assinou
@@ -1078,6 +1133,197 @@ def assinar_superintendente(id):
         'sucesso': True,
         'documentos_assinados': documentos_assinados,
         'mensagem': f'Requisições assinadas com sucesso: {", ".join(documentos_assinados)}',
+    })
+
+
+# ── Negar solicitação (Superintendente) ──────────────────────────────────
+
+@diarias_bp.route('/administracao/<int:id>/negar', methods=['POST'])
+@login_required
+def negar_solicitacao(id):
+    """
+    Superintendente nega uma solicitação de diárias na etapa 1.
+
+    Fluxo:
+      1. Autentica no SEI
+      2. Cria despacho SEAD_DESPACHO_SGA (IdSerie 2987) com justificativa
+      3. Assina o despacho
+      4. Encaminha processo SEI para a unidade solicitante
+      5. Marca processo_negado=True no banco
+      6. Registra movimentação/timeline
+    """
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if not current_user.is_superintendente:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Apenas o Superintendente pode negar solicitações.'
+        }), 403
+
+    if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_INICIAL:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Esta solicitação não está na etapa de autorização (etapa 1).'
+        }), 400
+
+    if not itinerario.sei_id_procedimento:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Esta solicitação não possui processo SEI vinculado.'
+        }), 400
+
+    if not itinerario.unidade_geradora_id or not itinerario.unidade_geradora_descricao:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Descrição da unidade solicitante não encontrada nesta solicitação.'
+        }), 400
+
+    if itinerario.processo_negado:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Esta solicitação já foi negada.'
+        }), 400
+
+    if itinerario.superintendente_assinou:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Não é possível negar uma solicitação já assinada pelo Superintendente.'
+        }), 400
+
+    if itinerario.secretario_assinou:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Não é possível negar uma solicitação já autorizada pelo Secretário.'
+        }), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados não informados.'}), 400
+
+    justificativa = (dados.get('justificativa') or '').strip()
+    sei_usuario = (dados.get('sei_usuario') or '').strip()
+    sei_senha = (dados.get('sei_senha') or '').strip()
+
+    if not justificativa:
+        return jsonify({'sucesso': False, 'erro': 'Justificativa é obrigatória.'}), 400
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Usuário e senha do SEI são obrigatórios.'}), 400
+
+    protocolo_proc = itinerario.sei_protocolo or itinerario.n_processo
+
+    # 1. Autentica no SEI
+    auth_result = autenticar_usuario_sei(sei_usuario, sei_senha, protocolo_bypass=protocolo_proc)
+    if not auth_result:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Falha na autenticação no SEI. Verifique usuário e senha.'
+        }), 401
+
+    token_super = auth_result['token']
+    id_usuario = auth_result['id_usuario']
+    id_login = auth_result['id_login']
+    cargo = auth_result.get('cargo') or 'Superintendente de Gestão Administrativa'
+
+    # 2. Criar despacho de negação no SEI
+    doc_despacho = gerar_despacho_sga_negacao(
+        token=token_super,
+        id_procedimento=itinerario.sei_id_procedimento,
+        sei_protocolo=protocolo_proc,
+        justificativa=justificativa,
+        unidade_geradora_descricao=itinerario.unidade_geradora_descricao,
+    )
+
+    if not doc_despacho:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Falha ao criar despacho de negação no SEI.'
+        }), 500
+
+    id_documento = doc_despacho.get('IdDocumento', '')
+    doc_formatado = doc_despacho.get('DocumentoFormatado', '')
+
+    # 3. Assinar o despacho
+    dados_assinatura = {
+        'protocolo_doc': id_documento,
+        'orgao': 'SEAD-PI',
+        'cargo': cargo,
+        'id_login': id_login,
+        'id_usuario': id_usuario,
+        'senha': sei_senha,
+    }
+    ret_assinatura = assinar_documento(
+        token=token_super,
+        unidade_id=UNIDADE_APOIOSGA,
+        dados_assinatura=dados_assinatura,
+        protocolo_proc=protocolo_proc,
+    )
+    if not ret_assinatura or not ret_assinatura.get('sucesso'):
+        erro = ret_assinatura.get('erro', 'Erro desconhecido') if ret_assinatura else 'Sem resposta'
+        return jsonify({
+            'sucesso': False,
+            'erro': f'Falha ao assinar despacho de negação: {erro}'
+        }), 500
+
+    # 4. Encaminhar processo para unidade solicitante antes de marcar no banco
+    try:
+        envio = enviar_procedimento(
+            token=token_super,
+            protocolo_procedimento=protocolo_proc,
+            unidades_destino=[itinerario.unidade_geradora_id],
+            manter_aberto=True,
+            unidade_origem=UNIDADE_APOIOSGA,
+        )
+    except Exception as exc_envio:
+        current_app.logger.warning(
+            f'[DIARIAS] negar_solicitacao: falha ao encaminhar processo '
+            f'para {itinerario.unidade_geradora_id}: {exc_envio}'
+        )
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Despacho assinado, mas houve falha ao encaminhar o processo para a unidade solicitante.'
+        }), 500
+
+    if not envio or not envio.get('sucesso'):
+        erro_envio = envio.get('erro', 'Erro desconhecido') if envio else 'Sem resposta'
+        current_app.logger.warning(
+            f'[DIARIAS] negar_solicitacao: SEI recusou encaminhamento '
+            f'para {itinerario.unidade_geradora_id}: {erro_envio}'
+        )
+        return jsonify({
+            'sucesso': False,
+            'erro': f'Despacho assinado, mas houve falha ao encaminhar o processo: {erro_envio}'
+        }), 500
+
+    # 5. Marcar como negado no banco (commit único ao final)
+    itinerario.processo_negado = True
+    itinerario.processo_negado_data = datetime.now()
+    itinerario.processo_negado_por_id = current_user.id
+    itinerario.processo_negado_por_nome = current_user.nome or 'Superintendente'
+    itinerario.processo_negado_justificativa = justificativa
+    itinerario.processo_negado_doc_sei_id = id_documento
+    itinerario.processo_negado_doc_sei_formatado = doc_formatado
+
+    # 6. Registrar movimentação
+    DiariaService.registrar_movimentacao(
+        itinerario.id,
+        DiariasEtapaID.SOLICITACAO_INICIAL,
+        current_user.id,
+        f'Solicitação negada pelo Superintendente. Justificativa: {justificativa[:200]}',
+        auto_commit=False,
+    )
+
+    db.session.commit()
+
+    current_app.logger.info(
+        f'[DIARIAS] Solicitação {itinerario.id} negada por {current_user.nome} '
+        f'(doc SEI: {doc_formatado})'
+    )
+
+    return jsonify({
+        'sucesso': True,
+        'mensagem': f'Solicitação negada com sucesso. Despacho SEI: {doc_formatado}',
+        'doc_sei_formatado': doc_formatado,
     })
 
 
@@ -1144,7 +1390,14 @@ def verificar_assinaturas_super(id):
         )
 
     itinerario.superintendente_assinou = True
-    itinerario.superintendente_assinou_data = datetime.now()
+    sei_ts = resultado.get('data_hora_assinatura')
+    if not sei_ts:
+        current_app.logger.warning(
+            f'[DIARIAS] verificar_assinaturas_super: data_hora_assinatura is None '
+            f'para itinerario={id}, usando datetime.now()'
+        )
+    itinerario.superintendente_assinou_data = sei_ts or datetime.now()
+    itinerario.superintendente_assinou_nome = resultado.get('assinante_nome')
     db.session.commit()
 
     assinante_nome = resultado.get('assinante_nome') or 'Superintendente'
@@ -1201,6 +1454,12 @@ def autorizar_solicitacao(id):
         return False
 
     itinerario = DiariasItinerario.query.get_or_404(id)
+
+    if itinerario.processo_negado:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Esta solicitação foi negada e não pode mais ser autorizada.'
+        }), 400
 
     # Parse JSON antes dos guards: override_nivel pode alterar a checagem de hierarquia
     dados = request.get_json() or {}
@@ -1330,7 +1589,24 @@ def autorizar_solicitacao(id):
             )
             if ret_n3 and ret_n3.get('sucesso'):
                 itinerario.superintendente_assinou = True
-                itinerario.superintendente_assinou_data = datetime.now()
+                # Busca timestamp real do SEI
+                data_n3 = None
+                nome_n3 = current_user.nome or 'Superintendente'
+                try:
+                    from app.services.diarias_autorizacao import verificar_assinatura_superintendente_sei
+                    check_n3 = verificar_assinatura_superintendente_sei(itinerario)
+                    if check_n3.get('assinada'):
+                        if check_n3.get('data_hora_assinatura'):
+                            data_n3 = check_n3['data_hora_assinatura']
+                        if check_n3.get('assinante_nome'):
+                            nome_n3 = check_n3['assinante_nome']
+                except Exception as exc_n3_ts:
+                    current_app.logger.warning(
+                        f'[DIARIAS] Nível 3: falha ao obter timestamp SEI '
+                        f'itinerario={itinerario.id}: {exc_n3_ts}'
+                    )
+                itinerario.superintendente_assinou_data = data_n3 or datetime.now()
+                itinerario.superintendente_assinou_nome = nome_n3
                 current_app.logger.info(
                     f"[DIARIAS] Nível 3 — superintendente assinou Req. Diárias como ação única "
                     f"itinerario={itinerario.id}"
@@ -1463,6 +1739,11 @@ def autorizar_solicitacao(id):
         comentario_etapa = f'Autorização do Secretário ({doc_formatado}) gerada e assinada pelo sistema'
         if override_nivel == 3:
             comentario_etapa += f' [OVERRIDE Nível 3 — Sec. Exercício indisponível: {motivo_override}]'
+
+    # Registra assinatura do secretário
+    itinerario.secretario_assinou = True
+    itinerario.secretario_assinou_data = datetime.now()
+    itinerario.secretario_assinou_nome = current_user.nome or 'Secretário'
 
     # Avança etapa: sempre vai para Análise da Solicitação (etapa 3)
     DiariaService.registrar_movimentacao(

@@ -191,7 +191,7 @@
             <div class="col-md-12">
                 <h5 class="fw-bold mb-3"><i class="bi bi-bullseye me-2"></i>Objetivo da Viagem</h5>
                 <div class="p-3 border rounded bg-light">
-                    <p class="mb-0">{{ itinerario.objetivo }}</p>
+                    <p class="mb-0">{{ itinerario.objetivo|corrigir_mojibake }}</p>
                 </div>
             </div>
         </div>
@@ -301,7 +301,7 @@
             <h5 class="fw-bold mb-3"><i class="bi bi-chat-left-text me-2"></i>Justificativa</h5>
             <div class="p-3 border rounded bg-light">
                 <p class="mb-1"><strong>Tipo:</strong> {{ itinerario.justificativa.tipo_justificativa }}</p>
-                <p class="mb-0">{{ itinerario.justificativa.descricao }}</p>
+                <p class="mb-0">{{ itinerario.justificativa.descricao|corrigir_mojibake }}</p>
             </div>
         </section>
         {% endif %}

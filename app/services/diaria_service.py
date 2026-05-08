@@ -16,6 +16,7 @@ from app.models.diaria import (
     DiariasEtapa, DiariasHistoricoMovimentacao, DiariasMovimentacao,
 )
 from app.models.contrato import Contrato
+from app.utils.text_encoding import corrigir_mojibake_cp850
 
 
 class DiariaService:
@@ -124,6 +125,9 @@ class DiariaService:
         tipo = dados['tipo_itinerario']
         data_viagem = dados['data_viagem']
         data_retorno = dados['data_retorno']
+        objetivo = corrigir_mojibake_cp850(dados.get('objetivo'))
+        unidade_sei_descricao = corrigir_mojibake_cp850(dados.get('unidade_sei_descricao'))
+        justificativa_texto = corrigir_mojibake_cp850(justificativa_texto)
 
         if isinstance(data_viagem, str):
             try:
@@ -163,8 +167,10 @@ class DiariaService:
             origem=origem,
             estado_origem=estado_origem,
             estado_destino=estado_destino,
-            objetivo=dados.get('objetivo'),
+            objetivo=objetivo,
             unidade_geradora_id=dados.get('unidade_sei_id'),
+            unidade_geradora_sigla=dados.get('unidade_sei_sigla'),
+            unidade_geradora_descricao=unidade_sei_descricao,
         )
         db.session.add(itinerario)
         db.session.flush()  # Para obter o ID
@@ -430,7 +436,7 @@ class DiariaService:
     # ── Timeline / Movimentações ──────────────────────────────────────────
 
     @staticmethod
-    def registrar_movimentacao(id_itinerario, etapa_nova_id, usuario_id=None, comentario=None, auto_commit=True):
+    def registrar_movimentacao(id_itinerario, etapa_nova_id, usuario_id=None, comentario=None, auto_commit=True, data_movimentacao=None):
         """
         Registra uma transição de etapa no histórico e atualiza a etapa atual.
 
@@ -457,7 +463,7 @@ class DiariaService:
             id_etapa_anterior=etapa_anterior_id,
             id_etapa_nova=int(etapa_nova_id),
             id_usuario_responsavel=usuario_id,
-            data_movimentacao=datetime.now(),
+            data_movimentacao=data_movimentacao or datetime.now(),
             comentario=comentario,
         )
         db.session.add(historico)

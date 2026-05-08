@@ -1312,7 +1312,14 @@ def verificar_autorizacao_diaria(itinerario, documentos_sei=None):
         if check_super.get('assinada') and not itinerario.superintendente_assinou:
             from datetime import datetime as _dt
             itinerario.superintendente_assinou = True
-            itinerario.superintendente_assinou_data = _dt.now()
+            sei_ts = check_super.get('data_hora_assinatura')
+            if not sei_ts:
+                current_app.logger.warning(
+                    f'[DIARIAS] verificar_autorizacao_diaria: data_hora_assinatura is None '
+                    f'para itinerario={itinerario.id}, usando datetime.now()'
+                )
+            itinerario.superintendente_assinou_data = sei_ts or _dt.now()
+            itinerario.superintendente_assinou_nome = check_super.get('assinante_nome')
             doc_local = itinerario.get_doc('requisicao')
             if doc_local:
                 doc_local.assinado = True
@@ -1395,6 +1402,20 @@ def verificar_autorizacao_diaria(itinerario, documentos_sei=None):
             'assinaturas': info_assinaturas['assinaturas'],
         }
 
+        # Sincroniza campos do secretário quando detectado via SEI
+        if not itinerario.secretario_assinou:
+            itinerario.secretario_assinou = True
+            sec = next(
+                (a for a in info_assinaturas.get('assinantes', []) if a.get('eh_secretario')),
+                None,
+            )
+            if sec:
+                itinerario.secretario_assinou_nome = sec.get('nome')
+            itinerario.secretario_assinou_data = (
+                info_assinaturas.get('data_hora_secretario')
+                or info_assinaturas.get('data_hora_ultima_assinatura')
+            )
+
         # Avanca etapa se ainda estiver na etapa 1 (Solicitação Inicial)
         # CRIT-05: Lock otimista — re-lê do banco para evitar race condition
         from app.extensions import db as _db
@@ -1416,6 +1437,7 @@ def verificar_autorizacao_diaria(itinerario, documentos_sei=None):
                 proxima_etapa,
                 usuario_id=None,
                 comentario=comentario,
+                data_movimentacao=info_assinaturas.get('data_hora_ultima_assinatura'),
             )
             resultado['avancou_etapa'] = True
             current_app.logger.info(
@@ -2881,6 +2903,88 @@ def gerar_despacho_sga(token, id_procedimento, sei_protocolo, ref_despacho_ccdp_
 
     except Exception as e:
         current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho SGA: {e}")
+        return None
+
+
+def gerar_despacho_sga_negacao(token, id_procedimento, sei_protocolo,
+                                justificativa, unidade_geradora_descricao,
+                                nome_assinante=None, cargo_assinante=None):
+    """
+    Gera o Despacho SGA de Negação (série 2987) assinado pelo Superintendente.
+
+    O despacho contém a justificativa da negação e é direcionado à unidade
+    solicitante (unidade_geradora_descricao).
+
+    Args:
+        token: Token de autenticação SEI
+        id_procedimento: ID do procedimento SEI
+        sei_protocolo: Protocolo formatado do processo
+        justificativa: Texto da justificativa de negação
+        unidade_geradora_descricao: Descrição da caixa SEI do solicitante
+        nome_assinante: Nome do assinante (default: busca do titular)
+        cargo_assinante: Cargo do assinante
+
+    Returns:
+        dict com resposta do SEI (IdDocumento, DocumentoFormatado) ou None
+    """
+    if not token:
+        current_app.logger.error("SEI Diárias: Token não fornecido para despacho negação.")
+        return None
+
+    url = f"{BASE_URL}/v1/unidades/{UNIDADE_APOIOSGA}/documentos"
+
+    nome_sga, cargo_sga = _resolver_titular_por_cargo('superintendente')
+    nome_final = nome_assinante or nome_sga or 'SUPERINTENDÊNCIA DE GESTÃO ADMINISTRATIVA'
+    cargo_final = cargo_assinante or cargo_sga or 'Superintendente de Gestão Administrativa – SEAD'
+
+    corpo = (
+        'Considerando a análise da solicitação, nego o prosseguimento '
+        'pelos motivos abaixo:<br><br>'
+        f'{_escape_html(justificativa)}'
+    )
+    conteudo_html = _montar_despacho_html(
+        corpo, nome_final, cargo_final,
+        para_linha=f'PARA: {unidade_geradora_descricao}',
+    )
+
+    payload = {
+        "Procedimento": str(id_procedimento),
+        "IdSerie": ID_SERIE_DESPACHO_SGA,
+        "Conteudo": conteudo_html,
+        "NivelAcesso": "Restrito",
+        "IdHipoteseLegal": ID_HIPOTESE_LEGAL_INFO_PESSOAL,
+        "SinBloqueado": "N",
+        "Descricao": f"Despacho SGA - Negação - Processo {sei_protocolo}",
+        "Observacao": "Gerado automaticamente pelo SGC - Módulo Diárias"
+    }
+
+    headers = {
+        'token': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+
+    try:
+        current_app.logger.info(
+            f"SEI Diárias: Gerando despacho negação para procedimento {id_procedimento}..."
+        )
+        response = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+
+        if response.status_code not in [200, 201]:
+            current_app.logger.error(
+                f"SEI Diárias: Erro ao gerar despacho negação ({response.status_code}): {response.text}"
+            )
+
+        response.raise_for_status()
+
+        retorno = response.json()
+        current_app.logger.info(
+            f"SEI Diárias: Despacho negação gerado - {retorno.get('DocumentoFormatado', retorno)}"
+        )
+        return retorno
+
+    except Exception as e:
+        current_app.logger.error(f"SEI Diárias: Erro ao gerar despacho negação: {e}")
         return None
 
 

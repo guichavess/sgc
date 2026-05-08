@@ -115,14 +115,24 @@
                     <label for="unidade_sei" class="form-label fw-semibold">Unidade SEI (criação do processo) <span class="text-danger">*</span></label>
                     <select name="unidade_sei_id" id="unidade_sei" class="form-select" required>
                         {% if unidades_sei|length == 1 %}
-                        <option value="{{ unidades_sei[0].unidade_sei_id }}" selected>{{ unidades_sei[0].sigla }}</option>
+                        <option value="{{ unidades_sei[0].unidade_sei_id }}"
+                                data-sigla="{{ unidades_sei[0].sigla }}"
+                                data-descricao="{{ unidades_sei[0].descricao or '' }}"
+                                selected>{{ unidades_sei[0].sigla }}</option>
                         {% else %}
                         <option value="">Selecione a unidade</option>
                         {% for u in unidades_sei %}
-                        <option value="{{ u.unidade_sei_id }}">{{ u.sigla }}</option>
+                        <option value="{{ u.unidade_sei_id }}"
+                                data-sigla="{{ u.sigla }}"
+                                data-descricao="{{ u.descricao or '' }}">{{ u.sigla }}</option>
                         {% endfor %}
                         {% endif %}
                     </select>
+                    <input type="hidden" name="unidade_sei_sigla" id="unidade_sei_sigla"
+                           value="{{ unidades_sei[0].sigla if unidades_sei|length == 1 else '' }}">
+                    <input type="hidden" name="unidade_sei_descricao" id="unidade_sei_descricao"
+                           value="{{ unidades_sei[0].descricao if unidades_sei|length == 1 and unidades_sei[0].descricao else '' }}"
+                    >
                 </div>
             </div>
 
@@ -354,6 +364,16 @@ document.addEventListener('DOMContentLoaded', function() {
     var tipoItinerarioHidden = document.getElementById('tipo_itinerario_hidden');
     var justificativaMemorandoContainer = document.getElementById('justificativa-memorando-container');
     var justificativaMemorandoInput = document.getElementById('justificativa_memorando');
+
+    // Sincroniza hidden fields da unidade SEI ao trocar a seleção
+    var unidadeSeiSelect = document.getElementById('unidade_sei');
+    if (unidadeSeiSelect) {
+        unidadeSeiSelect.addEventListener('change', function() {
+            var opt = this.options[this.selectedIndex];
+            document.getElementById('unidade_sei_sigla').value = opt.dataset.sigla || '';
+            document.getElementById('unidade_sei_descricao').value = opt.dataset.descricao || '';
+        });
+    }
 
     // Verifica se todos os elementos existem
     if (!tipoSolicitacaoSelect || !camposRestantes) {

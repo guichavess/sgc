@@ -207,7 +207,9 @@ def create_app(config_class=None):
 
     # Registra filtros Jinja2
     from app.constants import normalizar_competencia
+    from app.utils.text_encoding import corrigir_mojibake_cp850
     app.jinja_env.filters['normalizar_comp'] = normalizar_competencia
+    app.jinja_env.filters['corrigir_mojibake'] = corrigir_mojibake_cp850
 
     # Hook para renovar token SEI automaticamente antes que expire
     @app.before_request

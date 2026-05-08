@@ -177,6 +177,24 @@ def verificar_assinaturas_requeridas(doc, itinerario=None):
         f"resultado: tem_super={tem_superintendente} tem_sec={tem_secretario} completa={completa}"
     )
 
+    from app.services.diarias_autorizacao import parse_sei_datahora
+    data_hora_ultima = None
+    data_hora_super = None
+    data_hora_secretario = None
+
+    if completa:
+        datas = [parse_sei_datahora(a.get('DataHora')) for a in assinaturas]
+        datas_validas = [d for d in datas if d is not None]
+        if datas_validas:
+            data_hora_ultima = max(datas_validas)
+
+    for a_raw, a_resolved in zip(assinaturas, assinantes):
+        dt = parse_sei_datahora(a_raw.get('DataHora'))
+        if dt and a_resolved['eh_superintendente'] and (not data_hora_super or dt > data_hora_super):
+            data_hora_super = dt
+        if dt and a_resolved['eh_secretario'] and (not data_hora_secretario or dt > data_hora_secretario):
+            data_hora_secretario = dt
+
     return {
         'completa': completa,
         'tem_superintendente': tem_superintendente,
@@ -184,6 +202,9 @@ def verificar_assinaturas_requeridas(doc, itinerario=None):
         'assinaturas': assinaturas,
         'nomes': nomes,
         'assinantes': assinantes,
+        'data_hora_ultima_assinatura': data_hora_ultima,
+        'data_hora_super': data_hora_super,
+        'data_hora_secretario': data_hora_secretario,
         # Compat com código existente (mensagens em verificar_autorizacao_diaria etc.)
         'tem_super_area': tem_superintendente,
         'tem_super_sga': tem_superintendente,
