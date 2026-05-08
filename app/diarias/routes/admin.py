@@ -1202,20 +1202,53 @@ def autorizar_solicitacao(id):
 
     itinerario = DiariasItinerario.query.get_or_404(id)
 
+    # Parse JSON antes dos guards: override_nivel pode alterar a checagem de hierarquia
+    dados = request.get_json() or {}
+    override_nivel = dados.get('override_nivel')
+    motivo_override = (dados.get('motivo_override') or '').strip()
+
     # Guard: hierarquia de autorização (3 níveis)
     from app.services.diarias_autorizacao import get_nivel_autorizacao
     nivel_info = get_nivel_autorizacao(itinerario)
+    nivel_computado = nivel_info['nivel']
     autorizador_ids = {u.id for u in nivel_info['autorizadores']}
 
-    if current_user.id not in autorizador_ids:
+    # Override Nível 3: Superintendente assume quando Sec. em Exercício
+    # está indisponível (viagem, licença, etc.) e o nível computado seria 2.
+    if override_nivel == 3:
+        if (current_user.cargo_gestao or '').strip() != 'superintendente':
+            return jsonify({
+                'sucesso': False,
+                'erro': 'Apenas usuário com cargo de Superintendente pode acionar o override Nível 3.'
+            }), 403
+        if nivel_computado != 2:
+            return jsonify({
+                'sucesso': False,
+                'erro': (
+                    f'Override Nível 3 só é válido quando o nível computado é 2 '
+                    f'(atual: {nivel_computado}).'
+                )
+            }), 400
+        if not motivo_override or len(motivo_override) < 10:
+            return jsonify({
+                'sucesso': False,
+                'erro': 'Motivo da indisponibilidade do Secretário em Exercício é obrigatório (mín. 10 caracteres).'
+            }), 400
+        nivel_atual = 3
+        current_app.logger.warning(
+            f'[DIARIAS] OVERRIDE_N3 itinerario={itinerario.id} '
+            f'super_id={current_user.id} motivo={motivo_override!r}'
+        )
+    elif current_user.id not in autorizador_ids:
+        # Caminho normal: usuário precisa estar entre os autorizadores computados.
         nivel = nivel_info['nivel']
         motivo = nivel_info['motivo_escalada']
         msg = f'Autorização deve ser feita pelo Nível {nivel} da hierarquia.'
         if motivo:
             msg += f' Motivo: {motivo}.'
         return jsonify({'sucesso': False, 'erro': msg}), 403
-
-    nivel_atual = nivel_info['nivel']
+    else:
+        nivel_atual = nivel_computado
 
     # Guard: só permite na etapa 1 (Solicitação Iniciada)
     if itinerario.etapa_atual_id != DiariasEtapaID.SOLICITACAO_INICIAL:
@@ -1239,14 +1272,9 @@ def autorizar_solicitacao(id):
             'erro': 'O Superintendente precisa assinar as requisições antes da autorização do Secretário.'
         }), 400
 
-    # Parse JSON
-    dados = request.get_json()
-    if not dados:
-        return jsonify({'sucesso': False, 'erro': 'Dados não informados.'}), 400
-
-    sei_usuario = dados.get('sei_usuario', '').strip()
-    sei_senha = dados.get('sei_senha', '').strip()
-    cargo = dados.get('cargo', '').strip()
+    sei_usuario = (dados.get('sei_usuario') or '').strip()
+    sei_senha = (dados.get('sei_senha') or '').strip()
+    cargo = (dados.get('cargo') or '').strip()
 
     if not sei_usuario or not sei_senha:
         return jsonify({'sucesso': False, 'erro': 'Usuário e senha do SEI são obrigatórios.'}), 400
@@ -1381,6 +1409,8 @@ def autorizar_solicitacao(id):
         id_documento = doc_req.sei_id
 
         comentario_etapa = f'Requisição de Diárias ({doc_formatado}) assinada pelo Secretário — autorização concedida'
+        if override_nivel == 3:
+            comentario_etapa += f' [OVERRIDE Nível 3 — Sec. Exercício indisponível: {motivo_override}]'
     else:
         # ── Tipos 2,3 (com passagens): gera doc SEAD_AUTORIZAÇÃO_DO_SECRETÁRIO (574) ──
         retorno_doc = gerar_autorizacao_secretario(
@@ -1431,6 +1461,8 @@ def autorizar_solicitacao(id):
             sei_formatado=doc_formatado)
 
         comentario_etapa = f'Autorização do Secretário ({doc_formatado}) gerada e assinada pelo sistema'
+        if override_nivel == 3:
+            comentario_etapa += f' [OVERRIDE Nível 3 — Sec. Exercício indisponível: {motivo_override}]'
 
     # Avança etapa: sempre vai para Análise da Solicitação (etapa 3)
     DiariaService.registrar_movimentacao(

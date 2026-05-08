@@ -349,6 +349,7 @@ def gerar_memorando_diarias(token, id_procedimento, dados_memorando,
     url = f"{BASE_URL}/v1/unidades/{unidade}/documentos"
 
     justificativa = dados_memorando.get('justificativa', '')
+    justificativa_solicitante = dados_memorando.get('justificativa_solicitante', '')
     data_viagem = dados_memorando.get('data_viagem')
     data_retorno = dados_memorando.get('data_retorno')
     tipo_sol = dados_memorando.get('tipo_solicitacao_nome', 'Diárias + Passagens Aéreas')
@@ -405,6 +406,12 @@ def gerar_memorando_diarias(token, id_procedimento, dados_memorando,
     else:
         texto_solicitacao = 'Solicito autorização para a concessão de diárias e passagens'
 
+    bloco_justificativa_solicitante = ''
+    if justificativa_solicitante:
+        bloco_justificativa_solicitante = (
+            f'<br>\n        <p>{_escape_html(justificativa_solicitante)}</p>'
+        )
+
     conteudo_html = f"""
     <div style="font-family: Arial, sans-serif; font-size: 12pt;">
         <p><b>PARA:</b> GABINETE DO SECRETÁRIO DE ADMINISTRAÇÃO</p>
@@ -414,7 +421,7 @@ def gerar_memorando_diarias(token, id_procedimento, dados_memorando,
         <p>{texto_solicitacao}, no período de
         <b>{data_viagem_extenso}</b> a <b>{data_retorno_extenso}</b>.</p>
         <br>
-        <p>{justificativa}</p>
+        <p>{justificativa}</p>{bloco_justificativa_solicitante}
     </div>
     """
 
@@ -915,7 +922,8 @@ def adicionar_documento_externo(token, protocolo_formatado, arquivo_bytes, nome_
 
 def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificativa_texto,
                                     dados_requisicao=None, arquivo_externo=None,
-                                    tipo_solicitacao_id=None, unidade_sei_id=None):
+                                    tipo_solicitacao_id=None, unidade_sei_id=None,
+                                    justificativa_solicitante=None):
     """
     Fluxo completo: autentica, cria procedimento, gera memorando, requisições e documento externo.
 
@@ -1041,6 +1049,7 @@ def criar_processo_diarias_completo(dados_itinerario, dados_servidor, justificat
             'data_retorno': dados_itinerario.get('data_retorno'),
             'tipo_solicitacao_nome': dados_itinerario.get('tipo_solicitacao_nome', 'Diárias + Passagens Aéreas'),
             'id_serie_memorando': serie_memorando,
+            'justificativa_solicitante': justificativa_solicitante or '',
         }
 
         memo = gerar_memorando_diarias(

@@ -1887,8 +1887,11 @@
 
 {# --- MODAL AUTORIZAÇÃO DO SECRETÁRIO / NÍVEL 3 --- #}
 {% set _nivel_n = nivel_autorizacao.nivel if nivel_autorizacao else 1 %}
+{# Override Nível 3: Superintendente pode autorizar quando nível computado é 2 e Sec. Exercício está indisponível. #}
+{% set _pode_override_n3 = (_nivel_n == 2 and current_user.is_superintendente) %}
 {% set _pode_autorizar = (current_user.is_secretario and itinerario.superintendente_assinou)
-                          or (_nivel_n == 3 and current_user.is_superintendente) %}
+                          or (_nivel_n == 3 and current_user.is_superintendente)
+                          or _pode_override_n3 %}
 {% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and _pode_autorizar %}
 <div class="modal fade" id="modalAutorizar" tabindex="-1" aria-labelledby="modalAutorizarLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -1920,6 +1923,30 @@
                            placeholder="Sua senha no SEI" autocomplete="off">
                 </div>
 
+                {% if _pode_override_n3 %}
+                <hr class="my-3">
+                <div class="alert alert-warning small py-2 mb-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Nível computado: <b>2 (Secretário em Exercício)</b>. Como Superintendente,
+                    você pode assumir a autorização caso o Secretário em Exercício esteja indisponível.
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="autorizar_override_n3"
+                           onchange="toggleOverrideN3Motivo()">
+                    <label class="form-check-label fw-semibold" for="autorizar_override_n3">
+                        Acionar como Superintendente (Sec. em Exercício indisponível)
+                    </label>
+                </div>
+                <div class="mb-2 d-none" id="autorizar_override_motivo_wrap">
+                    <label for="autorizar_override_motivo" class="form-label small fw-semibold">
+                        Motivo da indisponibilidade <span class="text-danger">*</span>
+                    </label>
+                    <textarea class="form-control form-control-sm" id="autorizar_override_motivo"
+                              rows="2" maxlength="500"
+                              placeholder="Ex.: Secretário em Exercício em viagem oficial até 15/05"></textarea>
+                    <div class="form-text">Mínimo 10 caracteres. Ficará registrado no histórico.</div>
+                </div>
+                {% endif %}
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -2306,6 +2333,17 @@ document.querySelectorAll('#btnVerificarAssinaturas2').forEach(function(btn) {
 {# --- JS Autorização do Secretário / Nível 3 --- #}
 {% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento and _pode_autorizar %}
 <script>
+function toggleOverrideN3Motivo() {
+    var chk = document.getElementById('autorizar_override_n3');
+    var wrap = document.getElementById('autorizar_override_motivo_wrap');
+    if (!chk || !wrap) return;
+    if (chk.checked) {
+        wrap.classList.remove('d-none');
+    } else {
+        wrap.classList.add('d-none');
+    }
+}
+
 async function autorizarSolicitacao() {
     var erroDiv = document.getElementById('autorizar-erro');
     var sucessoDiv = document.getElementById('autorizar-sucesso');
@@ -2323,6 +2361,23 @@ async function autorizarSolicitacao() {
         return;
     }
 
+    var payload = {
+        sei_usuario: usuario,
+        sei_senha: senha
+    };
+
+    var chkOverride = document.getElementById('autorizar_override_n3');
+    if (chkOverride && chkOverride.checked) {
+        var motivo = (document.getElementById('autorizar_override_motivo').value || '').trim();
+        if (motivo.length < 10) {
+            erroDiv.textContent = 'Informe o motivo da indisponibilidade do Secretário em Exercício (mín. 10 caracteres).';
+            erroDiv.classList.remove('d-none');
+            return;
+        }
+        payload.override_nivel = 3;
+        payload.motivo_override = motivo;
+    }
+
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Autorizando...';
 
@@ -2330,10 +2385,7 @@ async function autorizarSolicitacao() {
         var resp = await fetch('{{ url_for("diarias.autorizar_solicitacao", id=itinerario.id) }}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                sei_usuario: usuario,
-                sei_senha: senha
-            })
+            body: JSON.stringify(payload)
         });
 
         var data;

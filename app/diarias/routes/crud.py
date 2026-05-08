@@ -64,7 +64,7 @@ def nova():
 
 def _executar_sei_background(app, itinerario_id, pessoas, dados, tipo_solicitacao_id,
                              justificativa_memorando, objetivo, arquivo_externo, usuario_id,
-                             unidade_sei_id=None):
+                             unidade_sei_id=None, justificativa_solicitante=None):
     """Executa integração SEI + notificação em thread separada para não bloquear o request."""
     from app.extensions import db
 
@@ -78,7 +78,8 @@ def _executar_sei_background(app, itinerario_id, pessoas, dados, tipo_solicitaca
 
             _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
                                   justificativa_memorando, objetivo, arquivo_externo,
-                                  unidade_sei_id=unidade_sei_id)
+                                  unidade_sei_id=unidade_sei_id,
+                                  justificativa_solicitante=justificativa_solicitante)
             # CRIT-03: Verifica se a integração de fato salvou o protocolo
             db.session.refresh(itinerario)
             sei_ok = bool(itinerario.sei_protocolo)
@@ -229,7 +230,7 @@ def store():
                 target=_executar_sei_background,
                 args=(app, itinerario.id, pessoas, dados, tipo_solicitacao_id,
                       justificativa_memorando, objetivo, arquivo_externo, usuario_id,
-                      unidade_sei_id),
+                      unidade_sei_id, justificativa),
                 daemon=True,
             )
             t.start()
@@ -262,7 +263,7 @@ def store():
 
 def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
                           justificativa_memorando, objetivo, arquivo_externo=None,
-                          unidade_sei_id=None):
+                          unidade_sei_id=None, justificativa_solicitante=None):
     """
     Executa a integração SEI para viagens Nacionais com passagens.
     Cria procedimento + memorando SGA + requisição de diárias + documento externo no SEI.
@@ -367,6 +368,7 @@ def _integrar_sei_diarias(itinerario, pessoas, dados, tipo_solicitacao_id,
             arquivo_externo=arquivo_externo,
             tipo_solicitacao_id=tipo_solicitacao_id,
             unidade_sei_id=unidade_sei_id,
+            justificativa_solicitante=justificativa_solicitante,
         )
 
         if resultado['sucesso']:
