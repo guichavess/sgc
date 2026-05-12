@@ -17,6 +17,18 @@
 
 ## Pendências
 
+### Credenciais Trino Data Lake — CGFR (2026-05-12)
+
+- [ ] **Atualizar credenciais do Trino no `.env` de produção**
+  - Contexto: o módulo CGFR passou a usar as novas credenciais do Data Lake localmente. Em produção, o `.env` sobrescreve os defaults do código.
+  ```bash
+  TRINO_USER=admin
+  TRINO_PASSWORD=LOC35q3dgZn
+  ```
+  - Observação: reiniciar a aplicação após alterar o `.env`.
+
+---
+
 ### Correção da Timeline — Diárias (2026-05-07)
 
 - [ ] **Corrigir ordem das etapas na timeline de diárias**

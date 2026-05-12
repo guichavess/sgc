@@ -8,7 +8,6 @@ from sqlalchemy.orm import joinedload
 from app.financeiro.routes import financeiro_bp
 from app.models import Solicitacao, Contrato, SolicitacaoEmpenho
 from app.extensions import db
-from app.repositories import ContratoRepository
 from app.services.siafe_service import validar_ne_siafe
 from app.utils.permissions import requires_permission
 
@@ -20,7 +19,11 @@ def pendencias_ne():
     """Lista solicitações pendentes de inserção de NE."""
     filtro_contratado = request.args.getlist('filtro_contratado')
     busca = request.args.get('q', '').strip()
-    page = request.args.get('page', 1, type=int)
+    try:
+        page = max(1, int(request.args.get('page', 1) or 1))
+    except (TypeError, ValueError):
+        page = 1
+    per_page = 20
 
     # Busca solicitações com empenho mas sem NE (eager load contrato)
     query = db.session.query(
@@ -45,14 +48,17 @@ def pendencias_ne():
         query = query.filter(
             db.or_(
                 Solicitacao.codigo_contrato.ilike(f'%{busca}%'),
+                Solicitacao.protocolo_gerado_sei.ilike(f'%{busca}%'),
                 Contrato.nomeContratado.ilike(f'%{busca}%'),
                 Contrato.numeroOriginal.ilike(f'%{busca}%')
             )
         )
 
     pagination = query.order_by(
-        Solicitacao.data_solicitacao.desc()
-    ).paginate(page=page, per_page=50, error_out=False)
+        Solicitacao.data_solicitacao.desc(),
+        SolicitacaoEmpenho.data.desc(),
+        SolicitacaoEmpenho.id.desc(),
+    ).paginate(page=page, per_page=per_page, error_out=False)
 
     pendencias = pagination.items
 
@@ -79,24 +85,24 @@ def pendencias_ne():
     )
 
 
-@financeiro_bp.route('/inserir_ne/<int:solicitacao_id>', methods=['POST'])
+@financeiro_bp.route('/inserir_ne/<int:empenho_id>', methods=['POST'])
 @login_required
 @requires_permission('financeiro.criar')
-def inserir_ne(solicitacao_id):
-    """Insere NE em uma solicitação específica."""
+def inserir_ne(empenho_id):
+    """Insere NE em uma solicitação de empenho específica."""
     ne = request.form.get('ne', '').strip()
 
     if not ne or len(ne) < 4:
         flash('NE inválida. Deve ter pelo menos 4 dígitos.', 'danger')
         return redirect(url_for('financeiro.pendencias_ne'))
 
-    # Busca a solicitação de empenho
-    sol_empenho = SolicitacaoEmpenho.query.filter_by(
-        id_solicitacao=solicitacao_id
+    sol_empenho = SolicitacaoEmpenho.query.filter(
+        SolicitacaoEmpenho.id == empenho_id,
+        SolicitacaoEmpenho.ne.is_(None),
     ).first()
 
     if not sol_empenho:
-        flash('Solicitação de empenho não encontrada.', 'danger')
+        flash('Solicitação de empenho pendente não encontrada.', 'danger')
         return redirect(url_for('financeiro.pendencias_ne'))
 
     # Valida NE no SIAFE (opcional)
@@ -107,13 +113,11 @@ def inserir_ne(solicitacao_id):
     except Exception:
         pass  # Continua mesmo se SIAFE falhar
 
-    # Atualiza a NE
     sol_empenho.ne = ne
 
-    # Atualiza status do empenho para "Atendido" (id=2)
-    solicitacao = Solicitacao.query.get(solicitacao_id)
+    solicitacao = db.session.get(Solicitacao, sol_empenho.id_solicitacao)
     if solicitacao:
-        solicitacao.status_empenho_id = 2  # Atendido
+        solicitacao.status_empenho_id = 2
 
     db.session.commit()
 

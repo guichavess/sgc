@@ -32,6 +32,21 @@ class SerieDocumentoCGFR:
 
 
 # =============================================================================
+# CGFR
+# =============================================================================
+CGFR_DELIBERACAO_OPTIONS = [
+    'Aguardando Aprovação',
+    'Aprovado',
+    'Aprovado com redução',
+    'Aprovado, com redução.',
+    'Indeferido',
+    'Negado',
+    'Retirado',
+    'Retirado de pauta',
+]
+
+
+# =============================================================================
 # ETAPAS DO PROCESSO
 # =============================================================================
 class EtapaID(IntEnum):

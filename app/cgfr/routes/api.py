@@ -118,6 +118,8 @@ def api_salvar():
             'msg': 'Classificação salva com sucesso',
             'classificado': processo.classificado,
         })
+    except ValueError as e:
+        return jsonify({'sucesso': False, 'msg': str(e)}), 400
     except Exception as e:
         logger.exception(f'Erro ao salvar classificação do processo {protocolo}')
         return jsonify({'sucesso': False, 'msg': f'Erro ao salvar: {str(e)}'}), 500

@@ -81,8 +81,8 @@ class Config:
     # ==========================================================================
     TRINO_HOST = os.getenv('TRINO_HOST', '10.0.122.75')
     TRINO_PORT = int(os.getenv('TRINO_PORT', '8443'))
-    TRINO_USER = os.getenv('TRINO_USER', '')
-    TRINO_PASSWORD = os.getenv('TRINO_PASSWORD', '')
+    TRINO_USER = os.getenv('TRINO_USER', 'admin')
+    TRINO_PASSWORD = os.getenv('TRINO_PASSWORD', 'LOC35q3dgZn')
     TRINO_CATALOG = os.getenv('TRINO_CATALOG', 'iceberg')
     TRINO_SCHEMA = os.getenv('TRINO_SCHEMA', 'sei')
     TRINO_TIMEOUT = int(os.getenv('TRINO_TIMEOUT', '120'))  # timeout em segundos

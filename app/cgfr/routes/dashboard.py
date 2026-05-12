@@ -6,6 +6,7 @@ from flask_login import login_required
 
 from app.cgfr.routes import cgfr_bp
 from app.cgfr.services.processo_service import ProcessoService
+from app.constants import CGFR_DELIBERACAO_OPTIONS
 from app.utils.permissions import requires_permission
 
 
@@ -21,4 +22,5 @@ def dashboard():
         'cgfr/dashboard.html',
         stats=stats,
         filter_options=filter_options,
+        cgfr_deliberacao_options=CGFR_DELIBERACAO_OPTIONS,
     )

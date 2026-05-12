@@ -82,7 +82,12 @@
                 <div class="row g-2 mb-2">
                     <div class="col-md-6">
                         <label for="modal-deliberacao" class="form-label form-label-sm mb-1">Deliberação</label>
-                        <textarea class="form-control form-control-sm" id="modal-deliberacao" rows="2"></textarea>
+                        <select class="form-select form-select-sm" id="modal-deliberacao">
+                            <option value="">Selecione...</option>
+                            {% for opcao in cgfr_deliberacao_options %}
+                            <option value="{{ opcao }}">{{ opcao }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="col-md-6">
                         <label for="modal-observacao" class="form-label form-label-sm mb-1">Observação</label>

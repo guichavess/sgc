@@ -83,7 +83,7 @@
             <table class="table table-custom table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th class="ps-4">ID</th>
+                        <th class="ps-4">N&ordm; Processo</th>
                         <th>Competência</th>
                         <th>Dados do Contrato</th>
                         <th>Valor Solicitado</th>
@@ -95,7 +95,17 @@
                 <tbody>
                     {% for sol, empenho in pendencias %}
                     <tr>
-                        <td class="ps-4 fw-bold text-secondary">#{{ sol.id }}</td>
+                        <td class="ps-4">
+                            {% if sol.link_processo_sei %}
+                                <a href="{{ sol.link_processo_sei }}" target="_blank" class="fw-bold text-primary text-decoration-none">
+                                    <i class="bi bi-box-arrow-up-right me-1"></i>{{ sol.protocolo_gerado_sei or 'Processo SEI' }}
+                                </a>
+                            {% elif sol.protocolo_gerado_sei %}
+                                <span class="fw-bold text-secondary">{{ sol.protocolo_gerado_sei }}</span>
+                            {% else %}
+                                <span class="text-muted small">Sem protocolo</span>
+                            {% endif %}
+                        </td>
 
                         <td>
                             <span class="badge bg-light text-dark border border-secondary">
@@ -115,7 +125,7 @@
 
                         {% if current_user.tem_permissao('financeiro', 'criar') %}
                         <td class="pe-4" style="width: 300px;">
-                            <form method="POST" action="{{ url_for('financeiro.inserir_ne', solicitacao_id=sol.id) }}" class="d-flex gap-2">
+                            <form method="POST" action="{{ url_for('financeiro.inserir_ne', empenho_id=empenho.id) }}" class="d-flex gap-2">
                                 <input type="text" name="ne" class="form-control form-control-sm" placeholder="Ex: 2026NE..." required>
                                 <button type="submit" class="btn btn-sm btn-primary">
                                     <i class="bi bi-save"></i> Salvar
@@ -131,6 +141,48 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <div class="card-footer bg-white border-top py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                Mostrando <strong>{{ pendencias|length }}</strong> de <strong>{{ pagination.total }}</strong> pend&ecirc;ncias
+            </div>
+
+            {% macro page_url(page_num) %}
+                {%- set params = [] -%}
+                {%- if request.args.get('q') -%}{{ params.append('q=' ~ request.args.get('q')) or '' }}{%- endif -%}
+                {%- for c in request.args.getlist('filtro_contratado') -%}{{ params.append('filtro_contratado=' ~ c) or '' }}{%- endfor -%}
+                {{ params.append('page=' ~ page_num) or '' }}
+                {{- url_for('financeiro.pendencias_ne') }}?{{ params | join('&') -}}
+            {% endmacro %}
+
+            <nav aria-label="Navegacao de paginas">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                        <a class="page-link" href="{{ page_url(pagination.prev_num) if pagination.has_prev else '#' }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+
+                    {% for pg in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if pg %}
+                            <li class="page-item {{ 'active' if pg == pagination.page }}">
+                                <a class="page-link" href="{{ page_url(pg) }}">{{ pg }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                        <a class="page-link" href="{{ page_url(pagination.next_num) if pagination.has_next else '#' }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
         </div>
     </div>
 </div>
