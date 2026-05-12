@@ -248,6 +248,29 @@ function atualizarProgresso(barra, msg, pct, texto) {
     msg.innerText = texto;
 }
 
+function escaparHtml(valor) {
+    return String(valor || '').replace(/[&<>"']/g, function(ch) {
+        return ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[ch];
+    });
+}
+
+async function lerRespostaJson(resp) {
+    var contentType = resp.headers.get('content-type') || '';
+    if (contentType.indexOf('application/json') !== -1) {
+        var data = await resp.json();
+        if (!resp.ok && !data.error) {
+            data.error = 'Servidor retornou HTTP ' + resp.status + '.';
+        }
+        return data;
+    }
+
+    await resp.text();
+    return {
+        success: false,
+        error: 'Servidor retornou uma resposta inesperada (HTTP ' + resp.status + '). Verifique se a sessao ainda esta ativa e consulte os logs do servidor.'
+    };
+}
+
 function sincronizarDocumentos() {
     var btn = document.getElementById('btnSyncDocs');
     var originalHtml = btn.innerHTML;
@@ -303,7 +326,7 @@ function sincronizarDocumentos() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     })
-    .then(function(resp) { return resp.json(); })
+    .then(lerRespostaJson)
     .then(function(data) {
         clearInterval(progressInterval);
         btn.disabled = false;
@@ -330,7 +353,7 @@ function sincronizarDocumentos() {
             titulo.className = 'fw-bold text-danger mb-2';
             msg.innerText = data.error || 'Erro desconhecido.';
 
-            logarDetalhe(logDiv, '<span class="text-danger fw-bold">ERRO: ' + (data.error || 'Falha desconhecida') + '</span>');
+            logarDetalhe(logDiv, '<span class="text-danger fw-bold">ERRO: ' + escaparHtml(data.error || 'Falha desconhecida') + '</span>');
 
             btnFechar.removeAttribute('disabled');
             btnFechar.innerText = 'Fechar';
@@ -348,7 +371,7 @@ function sincronizarDocumentos() {
         titulo.className = 'fw-bold text-danger mb-2';
         msg.innerText = 'Não foi possível conectar ao servidor.';
 
-        logarDetalhe(logDiv, '<span class="text-danger fw-bold">ERRO: ' + err.message + '</span>');
+        logarDetalhe(logDiv, '<span class="text-danger fw-bold">ERRO: ' + escaparHtml(err.message) + '</span>');
 
         btnFechar.removeAttribute('disabled');
         btnFechar.innerText = 'Fechar';

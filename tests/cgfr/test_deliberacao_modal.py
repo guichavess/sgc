@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from flask import render_template
@@ -7,6 +8,26 @@ from app.cgfr.models import CgfrProcessoEnviado
 from app.cgfr.services.processo_service import ProcessoService
 from app.config import Config
 from app.constants import CGFR_DELIBERACAO_OPTIONS
+
+
+def _login_admin_cgfr(client, db_session):
+    import uuid
+
+    from app.models.usuario import Usuario
+
+    uid = uuid.uuid4().hex[:12]
+    usuario = Usuario(
+        id_usuario_sei=f'cgfr_{uid}',
+        nome='Admin CGFR',
+        sigla_login=f'admin_cgfr_{uid}',
+        is_admin=True,
+        ativo=True,
+    )
+    db_session.add(usuario)
+    db_session.flush()
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(usuario.id)
+    return usuario
 
 
 def test_modal_edicao_deliberacao_renderiza_dropdown(app):
@@ -50,3 +71,26 @@ def test_modal_edicao_nao_mantem_campo_aberto_para_deliberacao():
     html = template_path.read_text(encoding='utf-8')
 
     assert 'textarea class="form-control form-control-sm" id="modal-deliberacao"' not in html
+
+
+def test_sync_documentos_retorna_json_em_erro_inesperado(client, app, db_session):
+    protocolo = '00002.000099/2026-09'
+    processo = CgfrProcessoEnviado(processo_formatado=protocolo)
+    db_session.add(processo)
+    db_session.flush()
+
+    with app.app_context():
+        _login_admin_cgfr(client, db_session)
+        with patch('app.cgfr.routes.acompanhar.gerar_token_sei_admin', return_value='TOKEN'), \
+             patch('app.cgfr.routes.acompanhar._update_processo_from_sei'), \
+             patch(
+                 'app.cgfr.routes.acompanhar._fetch_and_save_docs',
+                 side_effect=RuntimeError('falha simulada'),
+             ):
+            resp = client.post(f'/cgfr/acompanhar/{protocolo}/sync')
+
+    assert resp.status_code == 500
+    assert resp.is_json
+    data = resp.get_json()
+    assert data['success'] is False
+    assert 'falha simulada' in data['error']

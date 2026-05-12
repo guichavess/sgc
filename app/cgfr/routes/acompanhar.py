@@ -206,18 +206,26 @@ def sync_documentos(protocolo):
     except Exception as e:
         return jsonify({'success': False, 'error': f'Erro autenticacao SEI: {str(e)}'}), 500
 
-    app_obj = current_app._get_current_object()
+    try:
+        app_obj = current_app._get_current_object()
 
-    # 1. Atualiza campos sync do processo (link_acesso, especificacao, etc.)
-    _update_processo_from_sei(protocolo, token_sei, app_obj)
+        # 1. Atualiza campos sync do processo (link_acesso, especificacao, etc.)
+        _update_processo_from_sei(protocolo, token_sei, app_obj)
 
-    # 2. Sincroniza documentos (usa sei_integration compartilhada)
-    success, msg = _fetch_and_save_docs(protocolo, token_sei, app_obj)
+        # 2. Sincroniza documentos (usa sei_integration compartilhada)
+        success, msg = _fetch_and_save_docs(protocolo, token_sei, app_obj)
 
-    if success:
-        return jsonify({'success': True, 'message': msg})
-    else:
+        if success:
+            return jsonify({'success': True, 'message': msg})
+
         return jsonify({'success': False, 'error': msg}), 500
+    except Exception as e:
+        current_app.logger.exception('[CGFR] Erro inesperado ao sincronizar documentos')
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Erro inesperado ao sincronizar documentos: {e}',
+        }), 500
 
 
 @cgfr_bp.route('/acompanhar/sync-bulk')
