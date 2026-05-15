@@ -20,6 +20,7 @@ from app.services.diarias_sei_integration import (
 from app.models.diaria import (
     DiariasValorCargo, DiariasCargo,
     DiariasItinerario, DiariasItemItinerario,
+    DiariasCotacaoVoo,
 )
 from app.services.vincular_processo_diaria import (
     verificar_protocolo_sei,
@@ -32,6 +33,17 @@ from app.constants import DiariasEtapaID
 from app.extensions import db
 from app.services.diarias_notification import DiariasNotifier
 
+TIPOS_COM_PASSAGENS = {2, 3}
+
+
+def _get_cotacoes_pendentes_count():
+    ids_com_cotacao = db.session.query(DiariasCotacaoVoo.itinerario_id.distinct())
+    return DiariasItinerario.query.filter(
+        DiariasItinerario.tipo_solicitacao_id.in_(TIPOS_COM_PASSAGENS),
+        DiariasItinerario.processo_negado.isnot(True),
+        ~DiariasItinerario.id.in_(ids_com_cotacao),
+    ).count()
+
 
 # ── Agências (leitura a partir dos contratos com Natureza 339033) ────────────
 
@@ -42,6 +54,7 @@ def agencias():
     """Lista agências de viagem vinculadas a contratos com Natureza 339033."""
     return render_template('diarias/agencias.html',
         agencias=DiariaService.get_agencias(),
+        cotacoes_pendentes_count=_get_cotacoes_pendentes_count(),
     )
 
 
@@ -58,6 +71,7 @@ def cargos():
             DiariasValorCargo.cargo_id,
             DiariasValorCargo.tipo_itinerario_id,
         ).all(),
+        cotacoes_pendentes_count=_get_cotacoes_pendentes_count(),
     )
 
 
@@ -357,16 +371,29 @@ def administracao():
     ]
 
     # ── KPIs globais (toda a query filtrada, não só a página atual) ───────────
-    from app.constants import DiariasEtapaID
 
     kpi_row = query.with_entities(
         db.func.count(DiariasItinerario.id),
         db.func.coalesce(db.func.sum(DiariasItinerario.valor_total), 0),
     ).one()
 
-    # Em andamento = não estão na etapa final (Prestação de Contas)
     em_andamento_kpi = query.filter(
         DiariasItinerario.etapa_atual_id != DiariasEtapaID.PRESTACAO_CONTAS.value
+    ).count()
+
+    concluidas_kpi = query.filter(
+        DiariasItinerario.etapa_atual_id == DiariasEtapaID.PRESTACAO_CONTAS.value
+    ).count()
+
+    canceladas_kpi = DiariasItinerario.query.filter(
+        DiariasItinerario.processo_negado.is_(True)
+    ).count()
+
+    ids_com_cotacao_voo = db.session.query(DiariasCotacaoVoo.itinerario_id.distinct())
+    cotacoes_realizadas_kpi = DiariasItinerario.query.filter(
+        DiariasItinerario.tipo_solicitacao_id.in_(TIPOS_COM_PASSAGENS),
+        DiariasItinerario.processo_negado.isnot(True),
+        DiariasItinerario.id.in_(ids_com_cotacao_voo),
     ).count()
 
     total_pessoas_kpi = db.session.query(
@@ -381,8 +408,11 @@ def administracao():
     kpis = {
         'total_solicitacoes': kpi_row[0],
         'valor_total': kpi_row[1],
-        'em_andamento': em_andamento_kpi,
+        'cotacoes_realizadas': cotacoes_realizadas_kpi,
         'total_pessoas': total_pessoas_kpi,
+        'em_andamento': em_andamento_kpi,
+        'concluidas': concluidas_kpi,
+        'canceladas': canceladas_kpi,
     }
 
     return render_template(
@@ -401,6 +431,165 @@ def administracao():
         filtro_solicitacao=filtro_solicitacao,
         kpis=kpis,
         filtro_negados=filtro_negados,
+        cotacoes_pendentes_count=_get_cotacoes_pendentes_count(),
+    )
+
+
+@diarias_bp.route('/administracao/cotacoes')
+@login_required
+@requires_permission('diarias.aprovar')
+def administracao_cotacoes():
+    """Painel de cotações: lista itinerários com passagens (tipo 2/3) e status de cotação."""
+    from app.models.diaria import DiariasEtapa
+
+    busca = request.args.get('q', '').strip()
+    filtro_etapas = request.args.getlist('filtro_etapa', type=int)
+    filtro_tipos = request.args.getlist('filtro_tipo', type=int)
+    filtro_status_cotacao = request.args.get('status_cotacao', '').strip()
+    filtro_negados = request.args.get('negados', '').strip()
+    try:
+        page = max(1, int(request.args.get('page', 1) or 1))
+    except (ValueError, TypeError):
+        page = 1
+
+    query = DiariasItinerario.query.filter(
+        DiariasItinerario.tipo_solicitacao_id.in_(TIPOS_COM_PASSAGENS),
+    )
+
+    if filtro_negados == '1':
+        query = query.filter(DiariasItinerario.processo_negado.is_(True))
+    else:
+        query = query.filter(
+            db.or_(
+                DiariasItinerario.processo_negado.is_(False),
+                DiariasItinerario.processo_negado.is_(None),
+            )
+        )
+
+    if busca:
+        query = query.filter(
+            db.or_(
+                DiariasItinerario.sei_protocolo.ilike(f'%{busca}%'),
+                DiariasItinerario.n_processo.ilike(f'%{busca}%'),
+                DiariasItinerario.usuario_gerador.ilike(f'%{busca}%'),
+            )
+        )
+
+    if filtro_etapas:
+        query = query.filter(DiariasItinerario.etapa_atual_id.in_(filtro_etapas))
+
+    if filtro_tipos:
+        query = query.filter(DiariasItinerario.tipo_itinerario.in_(filtro_tipos))
+
+    ids_com_cotacao_sub = db.session.query(
+        DiariasCotacaoVoo.itinerario_id.distinct()
+    )
+
+    if filtro_status_cotacao == 'pendente':
+        query = query.filter(~DiariasItinerario.id.in_(ids_com_cotacao_sub))
+    elif filtro_status_cotacao == 'realizada':
+        query = query.filter(DiariasItinerario.id.in_(ids_com_cotacao_sub))
+
+    # Ordenação: pendentes primeiro (LEFT JOIN), depois data_solicitacao DESC
+    tem_cotacao = db.session.query(
+        DiariasCotacaoVoo.itinerario_id
+    ).filter(
+        DiariasCotacaoVoo.itinerario_id == DiariasItinerario.id
+    ).correlate(DiariasItinerario).exists()
+
+    pagination = query.order_by(
+        db.case((tem_cotacao, 1), else_=0).asc(),
+        DiariasItinerario.data_solicitacao.desc(),
+    ).paginate(page=page, per_page=20, error_out=False)
+
+    itinerarios = pagination.items
+
+    pessoas_count = {}
+    if itinerarios:
+        ids = [it.id for it in itinerarios]
+        counts = db.session.query(
+            DiariasItemItinerario.id_itinerario,
+            db.func.count(DiariasItemItinerario.id)
+        ).filter(
+            DiariasItemItinerario.id_itinerario.in_(ids)
+        ).group_by(DiariasItemItinerario.id_itinerario).all()
+        pessoas_count = {row[0]: row[1] for row in counts}
+
+    ids_na_pagina = [it.id for it in itinerarios]
+    ids_com_cotacao = set()
+    if ids_na_pagina:
+        rows = db.session.query(
+            DiariasCotacaoVoo.itinerario_id.distinct()
+        ).filter(
+            DiariasCotacaoVoo.itinerario_id.in_(ids_na_pagina)
+        ).all()
+        ids_com_cotacao = {r[0] for r in rows}
+
+    etapas = DiariasEtapa.query.order_by(DiariasEtapa.ordem).all()
+
+    # ── Contagens cruzadas ──────────────────────────────────────────────────
+    base_q = DiariasItinerario.query.filter(
+        DiariasItinerario.tipo_solicitacao_id.in_(TIPOS_COM_PASSAGENS),
+    )
+    if filtro_negados == '1':
+        base_q = base_q.filter(DiariasItinerario.processo_negado.is_(True))
+    else:
+        base_q = base_q.filter(
+            db.or_(
+                DiariasItinerario.processo_negado.is_(False),
+                DiariasItinerario.processo_negado.is_(None),
+            )
+        )
+    if busca:
+        base_q = base_q.filter(
+            db.or_(
+                DiariasItinerario.sei_protocolo.ilike(f'%{busca}%'),
+                DiariasItinerario.n_processo.ilike(f'%{busca}%'),
+                DiariasItinerario.usuario_gerador.ilike(f'%{busca}%'),
+            )
+        )
+
+    etapa_count_q = base_q
+    if filtro_tipos:
+        etapa_count_q = etapa_count_q.filter(DiariasItinerario.tipo_itinerario.in_(filtro_tipos))
+    etapa_counts = {
+        row[0]: row[1] for row in etapa_count_q.with_entities(
+            DiariasItinerario.etapa_atual_id,
+            db.func.count(DiariasItinerario.id)
+        ).group_by(DiariasItinerario.etapa_atual_id).all()
+    }
+
+    tipo_count_q = base_q
+    if filtro_etapas:
+        tipo_count_q = tipo_count_q.filter(DiariasItinerario.etapa_atual_id.in_(filtro_etapas))
+    tipo_counts = {
+        row[0]: row[1] for row in tipo_count_q.with_entities(
+            DiariasItinerario.tipo_itinerario,
+            db.func.count(DiariasItinerario.id)
+        ).group_by(DiariasItinerario.tipo_itinerario).all()
+    }
+
+    tipos_itinerario = [
+        {'id': 1, 'nome': 'Estadual', 'cor': '#0dcaf0', 'icone': 'bi-geo-alt'},
+        {'id': 2, 'nome': 'Nacional', 'cor': '#ffc107', 'icone': 'bi-airplane'},
+        {'id': 3, 'nome': 'Internacional', 'cor': '#dc3545', 'icone': 'bi-globe'},
+    ]
+
+    return render_template(
+        'diarias/cotacoes_admin.html',
+        itinerarios=itinerarios,
+        pagination=pagination,
+        pessoas_count=pessoas_count,
+        ids_com_cotacao=ids_com_cotacao,
+        etapas=etapas,
+        etapa_counts=etapa_counts,
+        filtro_etapas=filtro_etapas,
+        tipos_itinerario=tipos_itinerario,
+        tipo_counts=tipo_counts,
+        filtro_tipos=filtro_tipos,
+        filtro_status_cotacao=filtro_status_cotacao,
+        filtro_negados=filtro_negados,
+        cotacoes_pendentes_count=_get_cotacoes_pendentes_count(),
     )
 
 

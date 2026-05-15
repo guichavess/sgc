@@ -1,0 +1,326 @@
+{% extends 'diarias/base_diarias.html' %}
+{% block title %}SGC - Cotações de Passagens{% endblock %}
+
+{% block content %}
+<style>
+    .tr-link { cursor: pointer; }
+    .tr-link:hover { background-color: rgba(0,0,0,0.035); }
+</style>
+<div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+        <h2 class="fw-bold mb-0">
+            <i class="bi bi-kanban me-2"></i>Administração
+        </h2>
+        <p class="text-muted mb-0">Cotações de passagens aéreas para solicitações com passagens.</p>
+    </div>
+</div>
+
+{% include 'diarias/partials/subnav_administracao.html' %}
+
+{# Filtros #}
+<div class="card mb-4 border-0 shadow-sm" style="overflow: visible; position: relative; z-index: 10;">
+    <div class="card-body p-3" style="overflow: visible;">
+        <form method="get" action="{{ url_for('diarias.administracao_cotacoes') }}" id="filtro-form">
+            <div class="row g-2 align-items-center">
+                <div class="col-auto">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                        <input type="text" name="q" class="form-control border-start-0 ps-0"
+                               placeholder="Processo, CPF, solicitante..." value="{{ request.args.get('q', '') }}">
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
+                                type="button" id="dropdownEtapas" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                            <i class="fas fa-tasks me-1"></i>
+                            <span id="labelEtapas">Etapa</span>
+                            <span class="badge bg-primary ms-1" id="badgeEtapas" style="display: none;">0</span>
+                        </button>
+                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 280px; z-index: 1060;">
+                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                                <small class="text-muted fw-bold">Etapas desejadas:</small>
+                                <a href="#" class="text-decoration-none small" onclick="limparSelecaoEtapa(this); return false;">Limpar</a>
+                            </div>
+                            <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
+                                {% for e in etapas %}
+                                <div class="form-check item-filtro py-1">
+                                    <input class="form-check-input filtro-check-etapa" type="checkbox" name="filtro_etapa"
+                                        value="{{ e.id }}" id="et_{{ loop.index }}"
+                                        {% if e.id in filtro_etapas %}checked{% endif %}
+                                        onchange="atualizarLabelEtapa()">
+                                    <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="et_{{ loop.index }}" style="cursor: pointer;">
+                                        <span>
+                                            <span class="d-inline-block rounded-circle me-1" style="width: 10px; height: 10px; background-color: {{ e.cor_hex }};"></span>
+                                            {{ e.nome }}
+                                        </span>
+                                        <span class="badge bg-light text-muted border ms-2">{{ etapa_counts.get(e.id, 0) }}</span>
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
+                                type="button" id="dropdownTipos" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                            <i class="bi bi-signpost-split me-1"></i>
+                            <span id="labelTipos">Tipo</span>
+                            <span class="badge bg-primary ms-1" id="badgeTipos" style="display: none;">0</span>
+                        </button>
+                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 240px; z-index: 1060;">
+                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+                                <small class="text-muted fw-bold">Tipo de diária:</small>
+                                <a href="#" class="text-decoration-none small" onclick="limparSelecaoTipo(this); return false;">Limpar</a>
+                            </div>
+                            {% for t in tipos_itinerario %}
+                            <div class="form-check item-filtro py-1">
+                                <input class="form-check-input filtro-check-tipo" type="checkbox" name="filtro_tipo"
+                                    value="{{ t.id }}" id="tipo_{{ t.id }}"
+                                    {% if t.id in filtro_tipos %}checked{% endif %}
+                                    onchange="atualizarLabelTipo()">
+                                <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="tipo_{{ t.id }}" style="cursor: pointer;">
+                                    <span>
+                                        <i class="bi {{ t.icone }} me-1" style="color: {{ t.cor }};"></i>
+                                        {{ t.nome }}
+                                    </span>
+                                    <span class="badge bg-light text-muted border ms-2">{{ tipo_counts.get(t.id, 0) }}</span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <select name="status_cotacao" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 160px;">
+                        <option value="" {% if not filtro_status_cotacao %}selected{% endif %}>Status Cotação</option>
+                        <option value="pendente" {% if filtro_status_cotacao == 'pendente' %}selected{% endif %}>Pendente</option>
+                        <option value="realizada" {% if filtro_status_cotacao == 'realizada' %}selected{% endif %}>Realizada</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    {% if filtro_negados == '1' %}
+                    <input type="hidden" name="negados" value="1">
+                    <a class="btn btn-sm btn-danger"
+                       href="{{ url_for('diarias.administracao_cotacoes', q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, status_cotacao=filtro_status_cotacao) }}"
+                       title="Processos negados">
+                        <i class="bi bi-x-octagon me-1"></i>Processos negados
+                    </a>
+                    {% else %}
+                    <button type="submit"
+                            class="btn btn-sm btn-outline-danger"
+                            name="negados" value="1"
+                            title="Processos negados">
+                        <i class="bi bi-x-octagon me-1"></i>Processos negados
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold" title="Filtrar">
+                        <i class="bi bi-funnel me-1"></i>Filtrar
+                    </button>
+                </div>
+                <div class="col-auto">
+                    {% if request.args.get('q') or filtro_etapas or filtro_tipos or filtro_status_cotacao or filtro_negados == '1' %}
+                    <a href="{{ url_for('diarias.administracao_cotacoes') }}" class="btn btn-outline-danger btn-sm" title="Limpar Filtros">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# Tabela #}
+<div class="card border-0 shadow-sm overflow-hidden">
+    <div class="card-header bg-white border-bottom py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Cotações de Passagens</h5>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-secondary">{{ pagination.total }} registro(s)</span>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive table-rounded">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Solicitante</th>
+                        <th>Tipo</th>
+                        <th>Processo SEI</th>
+                        <th class="text-center">Pessoas</th>
+                        <th>Período</th>
+                        <th class="text-end">Valor</th>
+                        <th class="text-center">Status Cotação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for it in itinerarios %}
+                    <tr class="tr-link" data-href="{{ url_for('diarias.administracao_detalhe', id=it.id) }}">
+                        <td class="ps-4">
+                            <span class="fw-semibold">{{ it.usuario_gerador.split('@')[0].replace('.', ' ').title() }}</span>
+                            <br><small class="text-muted">{{ it.data_solicitacao.strftime('%d/%m/%Y') if it.data_solicitacao else '' }}</small>
+                        </td>
+                        <td>
+                            {% if it.tipo_itinerario == 1 %}
+                                <span class="badge rounded-pill bg-info text-white">Estadual</span>
+                            {% elif it.tipo_itinerario == 3 %}
+                                <span class="badge rounded-pill bg-danger text-white">Internacional</span>
+                            {% else %}
+                                <span class="badge rounded-pill bg-warning text-dark">Nacional</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if it.sei_protocolo %}
+                            <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ it.sei_id_procedimento }}"
+                               target="_blank" class="fw-bold text-decoration-none">
+                                {{ it.sei_protocolo }} <i class="bi bi-box-arrow-up-right small"></i>
+                            </a>
+                            {% else %}
+                            <span class="text-muted small">---</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-light text-dark border">{{ pessoas_count.get(it.id, 0) }}</span>
+                        </td>
+                        <td>
+                            <div class="small">
+                                <i class="bi bi-calendar-event text-muted me-1"></i>
+                                {{ it.data_viagem.strftime('%d/%m/%Y') if it.data_viagem else '-' }}
+                            </div>
+                            <div class="small text-muted">
+                                <i class="bi bi-calendar-check me-1"></i>
+                                {{ it.data_retorno.strftime('%d/%m/%Y') if it.data_retorno else '-' }}
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            {% if it.valor_total %}
+                            <span class="fw-bold text-success">
+                                R$ {{ "{:,.2f}".format(it.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted small">---</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if it.id in ids_com_cotacao %}
+                            <span class="badge rounded-pill bg-success">
+                                <i class="bi bi-check-circle me-1"></i>Realizada
+                            </span>
+                            {% else %}
+                            <span class="badge rounded-pill bg-warning text-dark">
+                                <i class="bi bi-hourglass-split me-1"></i>Pendente
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                            Nenhuma cotação encontrada.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# Paginação #}
+    {% if pagination.pages > 1 %}
+    <div class="card-footer bg-white border-top py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                Mostrando <strong>{{ itinerarios|length }}</strong> de <strong>{{ pagination.total }}</strong> registros
+            </div>
+            <nav aria-label="Navegação de páginas">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                        <a class="page-link" href="{{ url_for('diarias.administracao_cotacoes', page=pagination.prev_num, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, status_cotacao=filtro_status_cotacao, negados=filtro_negados) if pagination.has_prev else '#' }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if p %}
+                        <li class="page-item {{ 'active' if p == pagination.page }}">
+                            <a class="page-link" href="{{ url_for('diarias.administracao_cotacoes', page=p, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, status_cotacao=filtro_status_cotacao, negados=filtro_negados) }}">{{ p }}</a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                        <a class="page-link" href="{{ url_for('diarias.administracao_cotacoes', page=pagination.next_num, q=request.args.get('q',''), filtro_etapa=filtro_etapas, filtro_tipo=filtro_tipos, status_cotacao=filtro_status_cotacao, negados=filtro_negados) if pagination.has_next else '#' }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function atualizarLabelEtapa() {
+    const checkboxes = document.querySelectorAll('.filtro-check-etapa:checked');
+    const count = checkboxes.length;
+    const label = document.getElementById('labelEtapas');
+    const badge = document.getElementById('badgeEtapas');
+    if (count > 0) {
+        label.innerText = count === 1 ? '1 Selecionada' : count + ' Selecionadas';
+        badge.innerText = count;
+        badge.style.display = 'inline-block';
+    } else {
+        label.innerText = 'Etapa';
+        badge.style.display = 'none';
+    }
+}
+
+function limparSelecaoEtapa(link) {
+    const dropdown = link.closest('.dropdown-menu');
+    const inputs = dropdown.querySelectorAll('input[type="checkbox"]');
+    inputs.forEach(function(input) { input.checked = false; });
+    atualizarLabelEtapa();
+}
+
+function atualizarLabelTipo() {
+    const checkboxes = document.querySelectorAll('.filtro-check-tipo:checked');
+    const count = checkboxes.length;
+    const label = document.getElementById('labelTipos');
+    const badge = document.getElementById('badgeTipos');
+    if (count > 0) {
+        label.innerText = count === 1 ? '1 Selecionado' : count + ' Selecionados';
+        badge.innerText = count;
+        badge.style.display = 'inline-block';
+    } else {
+        label.innerText = 'Tipo';
+        badge.style.display = 'none';
+    }
+}
+
+function limparSelecaoTipo(link) {
+    const dropdown = link.closest('.dropdown-menu');
+    const inputs = dropdown.querySelectorAll('input[type="checkbox"]');
+    inputs.forEach(function(input) { input.checked = false; });
+    atualizarLabelTipo();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    atualizarLabelEtapa();
+    atualizarLabelTipo();
+
+    document.querySelectorAll('.tr-link[data-href]').forEach(tr => {
+        tr.addEventListener('click', function(e) {
+            if (e.target.closest('a, button, .btn')) return;
+            window.location = this.dataset.href;
+        });
+    });
+});
+</script>
+{% endblock %}

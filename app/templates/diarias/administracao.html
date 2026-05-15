@@ -6,6 +6,8 @@
     /* Linha clicável via JS — cursor pointer + hover highlight */
     .tr-link { cursor: pointer; }
     .tr-link:hover { background-color: rgba(0,0,0,0.035); }
+    .kpi-chevron { transition: transform 0.2s ease; }
+    [aria-expanded="true"] .kpi-chevron { transform: rotate(180deg); }
 </style>
 <div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
     <div>
@@ -230,15 +232,20 @@
 {% set vt_fmt = "{:,.2f}".format(vt).replace(',', 'X').replace('.', ',').replace('X', '.') %}
 <div class="row g-3 mb-3">
     <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm h-100">
+        <div class="card border-0 shadow-sm h-100" style="cursor:pointer;"
+             data-bs-toggle="collapse" data-bs-target="#kpiSolicitacoesDetalhes"
+             aria-expanded="false" aria-controls="kpiSolicitacoesDetalhes">
             <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
                 <div class="rounded-circle d-flex align-items-center justify-content-center"
                      style="width:42px;height:42px;background:rgba(224,122,36,.15);flex-shrink:0;">
                     <i class="bi bi-file-earmark-text" style="color:#E07A24;font-size:1.2rem;"></i>
                 </div>
-                <div>
+                <div class="flex-grow-1">
                     <div class="fw-bold fs-4 lh-1">{{ kpis.total_solicitacoes }}</div>
-                    <div class="text-muted small">Solicitações</div>
+                    <div class="text-muted small d-flex align-items-center justify-content-between">
+                        <span>Solicitações</span>
+                        <i class="bi bi-chevron-down small ms-2 kpi-chevron"></i>
+                    </div>
                 </div>
             </div>
         </div>
@@ -275,12 +282,40 @@
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
                 <div class="rounded-circle d-flex align-items-center justify-content-center"
-                     style="width:42px;height:42px;background:rgba(220,53,69,.12);flex-shrink:0;">
-                    <i class="bi bi-hourglass-split" style="color:#dc3545;font-size:1.2rem;"></i>
+                     style="width:42px;height:42px;background:rgba(111,66,193,.12);flex-shrink:0;">
+                    <i class="bi bi-ticket-perforated" style="color:#6f42c1;font-size:1.2rem;"></i>
                 </div>
                 <div>
-                    <div class="fw-bold fs-4 lh-1">{{ kpis.em_andamento }}</div>
-                    <div class="text-muted small">Em Andamento</div>
+                    <div class="fw-bold fs-4 lh-1">{{ kpis.cotacoes_realizadas }}</div>
+                    <div class="text-muted small">Cotações Realizadas</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Breakdown Solicitações (collapse) ── #}
+<div class="collapse mb-3" id="kpiSolicitacoesDetalhes">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body py-3">
+            <div class="row g-3 text-center">
+                <div class="col-4">
+                    <div class="text-warning fw-bold fs-5">{{ kpis.em_andamento }}</div>
+                    <div class="text-muted small">
+                        <i class="bi bi-hourglass-split me-1"></i>Em Andamento
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="text-success fw-bold fs-5">{{ kpis.concluidas }}</div>
+                    <div class="text-muted small">
+                        <i class="bi bi-check-circle me-1"></i>Concluídas
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="text-danger fw-bold fs-5">{{ kpis.canceladas }}</div>
+                    <div class="text-muted small">
+                        <i class="bi bi-x-octagon me-1"></i>Negadas
+                    </div>
                 </div>
             </div>
         </div>

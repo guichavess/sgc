@@ -75,6 +75,14 @@
         <i class="bi bi-list-check"></i>
         <span>Solicitações</span>
     </a>
+    <a class="subnav-item {{ 'active' if request.endpoint == 'diarias.administracao_cotacoes' }}"
+       href="{{ url_for('diarias.administracao_cotacoes') }}">
+        <i class="bi bi-ticket-perforated"></i>
+        <span>Cotações</span>
+        {% if cotacoes_pendentes_count is defined and cotacoes_pendentes_count %}
+        <span class="subnav-count">{{ cotacoes_pendentes_count }}</span>
+        {% endif %}
+    </a>
     <a class="subnav-item {{ 'active' if request.endpoint == 'diarias.agencias' }}"
        href="{{ url_for('diarias.agencias') }}">
         <i class="bi bi-building"></i>
