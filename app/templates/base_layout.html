@@ -39,7 +39,7 @@
                 {% endif %}
                 <a class="top-navbar-brand" href="{{ url_for('hub') }}">
                     <img src="{{ url_for('static', filename='img/logo-sead-branca.png') }}" alt="SEAD" class="top-navbar-logo">
-                    <span class="top-navbar-title">SGC <span style="opacity:.5;margin:0 4px;">|</span> <span style="font-weight:400;font-size:.9rem;opacity:.8;">{% block module_name %}Gestao de Contratos{% endblock %}</span></span>
+                    <span class="top-navbar-title">SGC <span class="navbar-separator">|</span> <span class="navbar-module-name">{% block module_name %}Gestao de Contratos{% endblock %}</span></span>
                 </a>
             </div>
             <div class="top-navbar-right">
@@ -49,7 +49,7 @@
                     {% set nome_curto = (partes_nome[:2]|join(' ')) if partes_nome|length >= 2 else nome_completo %}
 
                     {# Notification bell #}
-                    <div style="margin-right: 8px;">
+                    <div class="me-2">
                         {% include 'components/notification_bell_topbar.html' ignore missing %}
                     </div>
 

@@ -1,5 +1,6 @@
 /**
  * Componente: Tabelas
+ * Header neutro (cinza), texto escuro, compacto — estilo Stripe
  */
 
 /* Tabela customizada */
@@ -9,25 +10,28 @@
 }
 
 .table-custom thead th {
-    background-color: var(--color-primary);
-    color: white;
+    background-color: var(--color-gray-100);
+    color: var(--color-text-secondary);
     font-weight: var(--font-weight-semibold);
     border: none;
-    padding: var(--spacing-md) var(--spacing-lg);
-    font-size: var(--font-size-sm);
+    border-bottom: 1px solid var(--color-surface-border);
+    padding: 0.625rem 1rem;
+    font-size: var(--font-size-xs);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.04em;
 }
 
 .table-custom tbody td {
     vertical-align: middle;
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-bottom: 1px solid var(--color-gray-200);
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid var(--color-gray-100);
+    font-size: var(--font-size-base);
+    color: var(--color-text-primary);
 }
 
 /* Hover na tabela */
 .table-hover tbody tr:hover {
-    background-color: #eef0f7;
+    background-color: var(--color-gray-100);
 }
 
 /* Tabela arredondada */
@@ -48,7 +52,7 @@
 
 /* Input dentro da tabela */
 .table-custom input.form-control {
-    border: 1px solid var(--color-gray-400);
+    border: 1px solid var(--color-surface-border);
     background-color: var(--color-gray-100);
     font-size: var(--font-size-base);
     padding: 0.4rem 0.8rem;
@@ -64,15 +68,16 @@
 
 /* Botão de ação na tabela */
 .table-custom .btn-action {
-    font-weight: var(--font-weight-semibold);
+    font-weight: var(--font-weight-medium);
     font-size: var(--font-size-sm);
-    letter-spacing: 0.3px;
-    padding: 0.4rem 0.8rem;
+    letter-spacing: 0.02em;
+    padding: 0.375rem 0.75rem;
 }
 
-/* Valor monetário */
+/* Valor monetário — alinhamento numérico */
 .text-value {
-    color: var(--color-primary);
-    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
     font-size: var(--font-size-base);
+    font-variant-numeric: tabular-nums;
 }

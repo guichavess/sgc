@@ -4,30 +4,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
 
 /* --- Configurações Globais --- */
-body { 
-    background-color: #f4f6f9; 
-    font-family: 'Inter', sans-serif;
-    color: #495057;
-}
-
-/* --- Cores e Identidade --- */
-.bg-custom-blue {
-    background-color: #343990 !important;
-}
-
-.text-custom-blue {
-    color: #343990 !important;
-}
-
-/* Override do Bootstrap Primary para manter consistência */
-.bg-primary {
-    background-color: #343990 !important;
-}
-.text-primary {
-    color: #343990 !important;
-}
-.border-primary {
-    border-color: #343990 !important;
+body {
+    background-color: var(--color-page-bg);
+    font-family: var(--font-family);
+    color: var(--color-text-primary);
+    line-height: var(--line-height-normal);
 }
 
 /* ========================================
@@ -49,9 +30,9 @@ body.has-layout {
     left: 0;
     right: 0;
     height: var(--navbar-height);
-    background-color: #003399;
+    background-color: var(--color-navbar);
     z-index: 1050;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-navbar);
 }
 
 .top-navbar-inner {
@@ -86,9 +67,21 @@ body.has-layout {
 }
 
 .top-navbar-title {
-    font-size: 1.05rem;
-    font-weight: 600;
+    font-size: 0.95rem;
+    font-weight: 500;
     letter-spacing: 0.02em;
+}
+
+/* Classes para evitar inline styles no navbar */
+.navbar-separator {
+    opacity: 0.35;
+    margin: 0 6px;
+}
+
+.navbar-module-name {
+    font-weight: 400;
+    font-size: 0.85rem;
+    opacity: 0.6;
 }
 
 .top-navbar-right {
@@ -100,18 +93,18 @@ body.has-layout {
     display: flex;
     align-items: center;
     gap: 6px;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.65);
     text-decoration: none;
-    font-size: 0.9rem;
+    font-size: var(--font-size-base);
     padding: 0.4rem 0.6rem;
-    border-radius: 6px;
-    transition: background-color 0.2s;
+    border-radius: var(--border-radius-md);
+    transition: all var(--transition-fast);
 }
 
 .top-navbar-user:hover,
 .top-navbar-user.show {
     color: #fff;
-    background-color: #002266;
+    background-color: var(--color-navbar-hover);
 }
 
 .top-navbar-user i {
@@ -121,15 +114,16 @@ body.has-layout {
 .sidebar-toggle-btn {
     background: none;
     border: none;
-    color: #fff;
-    font-size: 1.4rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1.25rem;
     padding: 0.25rem;
     line-height: 1;
     cursor: pointer;
+    transition: color var(--transition-fast);
 }
 
 .sidebar-toggle-btn:hover {
-    color: rgba(255, 255, 255, 0.8);
+    color: #fff;
 }
 
 /* ---------- Sidebar ---------- */
@@ -139,20 +133,20 @@ body.has-layout {
     left: 0;
     width: var(--sidebar-width);
     height: calc(100vh - var(--navbar-height));
-    background-color: #fff;
-    border-right: 1px solid #e0e0e0;
+    background-color: var(--color-sidebar-bg);
+    border-right: 1px solid var(--color-sidebar-border);
     overflow-y: auto;
     z-index: 1040;
     padding-top: 0.5rem;
 }
 
 .sidebar-section-label {
-    font-size: 0.7rem;
-    font-weight: 700;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #999;
-    padding: 0.75rem 1.25rem 0.4rem;
+    letter-spacing: 0.06em;
+    color: var(--color-text-tertiary);
+    padding: 0.75rem 1rem 0.4rem;
 }
 
 .sidebar-menu {
@@ -165,32 +159,38 @@ body.has-layout {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 0.6rem 1.25rem;
-    color: #555;
+    padding: 0.5rem 1rem;
+    color: var(--color-sidebar-text);
     text-decoration: none;
-    font-size: 0.88rem;
-    border-left: 3px solid transparent;
-    transition: all 0.15s ease;
+    font-size: 0.85rem;
+    border-left: 2px solid transparent;
+    transition: all var(--transition-fast);
+    border-radius: 0;
 }
 
 .sidebar-link:hover {
-    color: #003399;
-    background-color: #e8edf8;
-    border-left-color: #003399;
+    color: var(--color-text-primary);
+    background-color: var(--color-sidebar-hover);
+    border-left-color: var(--color-gray-400);
 }
 
 .sidebar-link.active {
-    color: #003399;
-    background-color: #dce3f5;
-    border-left-color: #003399;
+    color: var(--color-sidebar-text-active);
+    background-color: var(--color-sidebar-active);
+    border-left-color: var(--color-primary);
     font-weight: 600;
 }
 
 .sidebar-link i {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     width: 20px;
     text-align: center;
     flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.sidebar-link.active i {
+    opacity: 1;
 }
 
 /* Sidebar Accordion (sanfona) */
@@ -285,94 +285,30 @@ body.no-sidebar .main-content {
    FIM LAYOUT
    ======================================== */
 
-/* --- Navbar (legacy) --- */
-.navbar {
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-.navbar-brand {
-    font-weight: 600;
-    letter-spacing: 0.5px;
-}
-
-/* --- Cards (Cartões) --- */
-.card, .card-custom {
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    background-color: #ffffff;
-    transition: transform 0.2s ease-in-out;
-}
-
-/* --- Tabelas --- */
-.table-custom thead th {
-    background-color: #343990;
-    color: white;
-    font-weight: 500;
-    border: none;
-    padding: 12px 15px;
-}
-.table-custom tbody td {
-    vertical-align: middle;
-    padding: 12px 15px;
-    border-bottom: 1px solid #f0f2f5;
-}
-.table-hover tbody tr:hover {
-    background-color: #eef0f7;
-}
-.table-rounded {
-    border-radius: 12px;
-    overflow: hidden;
-}
-
-/* --- Botões --- */
-.btn-primary {
-    background-color: #343990;
-    border-color: #343990;
-}
-.btn-primary:hover, .btn-primary:active, .btn-primary:focus {
-    background-color: #282c6e !important;
-    border-color: #282c6e !important;
-}
-
-/* --- Formulários --- */
-.form-control, .form-select {
-    border-radius: 8px;
-    padding: 10px 15px;
-    border: 1px solid #ced4da;
-}
-.form-control:focus, .form-select:focus {
-    border-color: #343990;
-    box-shadow: 0 0 0 0.25rem rgba(52, 57, 144, 0.25);
-}
-
-/* Grupos de Input (Ícone + Campo) */
-.input-group-text {
-    background-color: #f8f9fa;
-    border-right: none;
-}
-.input-group .form-control {
-    border-left: none;
-}
+/* --- Regras de componentes movidas para components/*.css ---
+   navbar.css, cards.css, tables.css, buttons.css, forms.css
+   NÃO duplicar aqui.
+   -------------------------------------------------------- */
 
 /* --- Estilos Específicos: Login --- */
 .login-header-gradient {
-    background: linear-gradient(135deg, #007121, #343990);
+    background: linear-gradient(135deg, #007121, var(--color-primary));
     border-bottom: none;
-    border-radius: 12px 12px 0 0;
+    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
 }
 
 /* --- Estilos Específicos: Steps (Nova Solicitação) --- */
 .step-label {
-    font-weight: bold;
+    font-weight: var(--font-weight-semibold);
     text-transform: uppercase;
     font-size: 0.85rem;
-    color: #343990;
+    color: var(--color-primary);
     margin-bottom: 0.5rem;
     display: block;
 }
 
 .step-badge {
-    background-color: #343990;
+    background-color: var(--color-primary);
     color: white;
     border-radius: 50%;
     
@@ -580,8 +516,8 @@ body.no-sidebar .main-content {
 
 .table-custom input.form-control:focus {
     background-color: #fff;
-    border-color: #343990;
-    box-shadow: 0 0 0 2px rgba(52, 57, 144, 0.1);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.1);
 }
 
 /* Estilo para o botão de ação dentro da linha */
@@ -592,21 +528,7 @@ body.no-sidebar .main-content {
     padding: 0.4rem 0.8rem;
 }
 
-/* Destaque suave para o valor monetário */
-.text-value {
-    color: #343990;
-    font-weight: 700;
-    font-size: 0.95rem;
-}
-
-/* Badge de contagem no topo */
-.badge-count {
-    background-color: #ffc107; /* Amarelo Warning */
-    color: #212529;
-    font-weight: 600;
-    border-radius: 6px;
-    padding: 0.5em 0.8em;
-}
+/* text-value e badge-count agora em components/tables.css e components/badges.css */
 
 
 /* =========================================
@@ -785,11 +707,11 @@ body.no-sidebar .main-content {
     font-weight: bold;
     text-transform: uppercase;
     font-size: 0.85rem;
-    color: #343990;
+    color: var(--color-primary);
     margin-bottom: 0.5rem;
     /* Correção de Alinhamento */
     display: flex;
-    align-items: center; 
+    align-items: center;
 }
 
 .step-name {

@@ -18,27 +18,27 @@
     }
 
     .hub-title {
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: #343990;
-        margin-bottom: 0.5rem;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--color-text-primary);
+        margin-bottom: 0.35rem;
     }
 
     .hub-subtitle {
-        font-size: 1rem;
-        color: #6c757d;
-        margin-bottom: 2.5rem;
+        font-size: 0.9rem;
+        color: var(--color-text-tertiary);
+        margin-bottom: 2rem;
     }
 
     .module-card {
-        border: none;
-        border-radius: 16px;
-        padding: 2.5rem 2rem;
+        border: 1px solid var(--color-surface-border);
+        border-radius: var(--border-radius-xl);
+        padding: 2rem 1.75rem;
         text-align: center;
         cursor: pointer;
-        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        background: #ffffff;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        transition: all 0.25s ease;
+        background: var(--color-surface);
+        box-shadow: var(--shadow-card);
         text-decoration: none;
         color: inherit;
         display: block;
@@ -46,25 +46,26 @@
     }
 
     .module-card:hover {
-        transform: translateY(-8px);
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-lg);
+        border-color: var(--color-gray-400);
         color: inherit;
         text-decoration: none;
     }
 
     .module-card:active {
-        transform: translateY(-4px);
+        transform: translateY(-2px);
     }
 
     .module-icon {
-        width: 90px;
-        height: 90px;
-        border-radius: 20px;
+        width: 72px;
+        height: 72px;
+        border-radius: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin: 0 auto 1.5rem;
-        font-size: 2.5rem;
+        margin: 0 auto 1.25rem;
+        font-size: 2rem;
         color: white;
     }
 
@@ -81,28 +82,29 @@
     }
 
     .module-name {
-        font-size: 1.25rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+        color: var(--color-text-primary);
     }
 
     .module-description {
-        font-size: 0.9rem;
-        color: #6c757d;
+        font-size: 0.85rem;
+        color: var(--color-text-tertiary);
         line-height: 1.5;
         margin-bottom: 0;
     }
 
     .module-card-pagamentos:hover .module-icon {
-        box-shadow: 0 8px 20px rgba(52, 57, 144, 0.4);
+        box-shadow: 0 6px 16px rgba(52, 57, 144, 0.25);
     }
 
     .module-card-prestacoes:hover .module-icon {
-        box-shadow: 0 8px 20px rgba(13, 122, 53, 0.4);
+        box-shadow: 0 6px 16px rgba(13, 122, 53, 0.25);
     }
 
     .module-card-financeiro:hover .module-icon {
-        box-shadow: 0 8px 20px rgba(184, 134, 11, 0.4);
+        box-shadow: 0 6px 16px rgba(184, 134, 11, 0.25);
     }
 
     .module-icon-usuarios {
@@ -110,7 +112,7 @@
     }
 
     .module-card-usuarios:hover .module-icon {
-        box-shadow: 0 8px 20px rgba(111, 66, 193, 0.4);
+        box-shadow: 0 6px 16px rgba(111, 66, 193, 0.25);
     }
 
     .module-icon-dashboards {
@@ -118,7 +120,7 @@
     }
 
     .module-card-dashboards:hover .module-icon {
-        box-shadow: 0 8px 20px rgba(27, 153, 139, 0.4);
+        box-shadow: 0 6px 16px rgba(27, 153, 139, 0.25);
     }
 
     .module-icon-diarias {
@@ -126,7 +128,7 @@
     }
 
     .module-card-diarias:hover .module-icon {
-        box-shadow: 0 8px 20px rgba(224, 122, 36, 0.4);
+        box-shadow: 0 6px 16px rgba(224, 122, 36, 0.25);
     }
 
     .module-icon-cgfr {
@@ -134,7 +136,7 @@
     }
 
     .module-card-cgfr:hover .module-icon {
-        box-shadow: 0 8px 20px rgba(220, 38, 38, 0.4);
+        box-shadow: 0 6px 16px rgba(220, 38, 38, 0.25);
     }
 
     .user-greeting {
@@ -143,13 +145,13 @@
     }
 
     .user-greeting .greeting-text {
-        font-size: 1.1rem;
-        color: #495057;
+        font-size: 1rem;
+        color: var(--color-text-secondary);
     }
 
     .user-greeting .greeting-name {
-        font-weight: 700;
-        color: #343990;
+        font-weight: 600;
+        color: var(--color-text-primary);
     }
 </style>
 {% endblock %}

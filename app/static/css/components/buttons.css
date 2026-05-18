@@ -1,5 +1,6 @@
 /**
  * Componente: Botões
+ * 3 níveis: Primary (solid), Secondary (outline), Ghost (texto)
  */
 
 /* Botão primário */
@@ -26,6 +27,43 @@
     background-color: var(--color-primary);
     border-color: var(--color-primary);
     color: white;
+}
+
+/* Ghost button — estilo mínimo, transparente */
+.btn-ghost {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+    transition: all var(--transition-fast);
+}
+
+.btn-ghost:hover {
+    background-color: var(--color-gray-100);
+    color: var(--color-text-primary);
+}
+
+/* Botão de filtro — borda sutil */
+.btn-filter {
+    background: var(--color-surface);
+    border: 1px solid var(--color-surface-border);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--border-radius-md);
+    transition: all var(--transition-fast);
+}
+
+.btn-filter:hover {
+    border-color: var(--color-gray-500);
+    color: var(--color-text-primary);
+}
+
+.btn-filter.active {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background-color: var(--color-info-bg);
 }
 
 /* Botão com ícone */

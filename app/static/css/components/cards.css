@@ -1,26 +1,29 @@
 /**
  * Componente: Cards
+ * Estilo flat com borda sutil — sem hover bounce genérico
  */
 
 .card,
 .card-custom {
-    border: none;
+    border: 1px solid var(--color-surface-border);
     border-radius: var(--border-radius-lg);
     box-shadow: var(--shadow-card);
-    background-color: var(--color-white);
-    transition: transform var(--transition-normal);
+    background-color: var(--color-surface);
+    transition: box-shadow var(--transition-fast);
 }
 
-.card:hover {
-    transform: translateY(-2px);
+/* Hover APENAS em cards interativos (hub, links clicáveis) */
+.card-interactive:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-gray-400);
 }
 
-/* Cabeçalho do card */
+/* Cabeçalho do card — transparente, só borda */
 .card-header {
-    background-color: var(--color-gray-100);
-    border-bottom: 1px solid var(--color-gray-300);
+    background-color: transparent;
+    border-bottom: 1px solid var(--color-surface-border);
     border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0 !important;
-    padding: var(--spacing-md) var(--spacing-lg);
+    padding: 0.875rem 1.25rem;
 }
 
 /* Corpo do card */
