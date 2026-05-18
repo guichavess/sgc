@@ -1,4 +1,4 @@
-{% extends "base_layout.html" %}
+﻿{% extends "base_layout.html" %}
 
 {% block title %}SGC - Selecione o Módulo{% endblock %}
 {% block module_name %}Gestão de Contratos{% endblock %}
@@ -9,305 +9,305 @@
 
 {% block extra_css %}
 <style>
-    .hub-container {
-        min-height: calc(100vh - var(--navbar-height) - 120px);
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-    }
+ .hub-container {
+ min-height: calc(100vh - var(--navbar-height) - 120px);
+ display: flex;
+ flex-direction: column;
+ justify-content: center;
+ align-items: center;
+ }
 
-    .hub-title {
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: var(--color-text-primary);
-        margin-bottom: 0.35rem;
-    }
+ .hub-title {
+ font-size: 1.5rem;
+ font-weight: 600;
+ color: var(--color-text-primary);
+ margin-bottom: 0.35rem;
+ }
 
-    .hub-subtitle {
-        font-size: 0.9rem;
-        color: var(--color-text-tertiary);
-        margin-bottom: 2rem;
-    }
+ .hub-subtitle {
+ font-size: 0.9rem;
+ color: var(--color-text-tertiary);
+ margin-bottom: 2rem;
+ }
 
-    .module-card {
-        border: 1px solid var(--color-surface-border);
-        border-radius: var(--border-radius-xl);
-        padding: 2rem 1.75rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.25s ease;
-        background: var(--color-surface);
-        box-shadow: var(--shadow-card);
-        text-decoration: none;
-        color: inherit;
-        display: block;
-        height: 100%;
-    }
+ .module-card {
+ border: 1px solid var(--color-surface-border);
+ border-radius: var(--border-radius-xl);
+ padding: 2rem 1.75rem;
+ text-align: center;
+ cursor: pointer;
+ transition: all 0.25s ease;
+ background: var(--color-surface);
+ box-shadow: var(--shadow-card);
+ text-decoration: none;
+ color: inherit;
+ display: block;
+ height: 100%;
+ }
 
-    .module-card:hover {
-        transform: translateY(-4px);
-        box-shadow: var(--shadow-lg);
-        border-color: var(--color-gray-400);
-        color: inherit;
-        text-decoration: none;
-    }
+ .module-card:hover {
+ transform: translateY(-4px);
+ box-shadow: var(--shadow-lg);
+ border-color: var(--color-gray-400);
+ color: inherit;
+ text-decoration: none;
+ }
 
-    .module-card:active {
-        transform: translateY(-2px);
-    }
+ .module-card:active {
+ transform: translateY(-2px);
+ }
 
-    .module-icon {
-        width: 72px;
-        height: 72px;
-        border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin: 0 auto 1.25rem;
-        font-size: 2rem;
-        color: white;
-    }
+ .module-icon {
+ width: 72px;
+ height: 72px;
+ border-radius: 16px;
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ margin: 0 auto 1.25rem;
+ font-size: 2rem;
+ color: white;
+ }
 
-    .module-icon-pagamentos {
-        background: linear-gradient(135deg, #343990, #4e56b5);
-    }
+ .module-icon-pagamentos {
+ background: linear-gradient(135deg, #343990, #4e56b5);
+ }
 
-    .module-icon-prestacoes {
-        background: linear-gradient(135deg, #0D7A35, #15a049);
-    }
+ .module-icon-prestacoes {
+ background: linear-gradient(135deg, #0D7A35, #15a049);
+ }
 
-    .module-icon-financeiro {
-        background: linear-gradient(135deg, #B8860B, #DAA520);
-    }
+ .module-icon-financeiro {
+ background: linear-gradient(135deg, #B8860B, #DAA520);
+ }
 
-    .module-name {
-        font-size: 1.1rem;
-        font-weight: 600;
-        margin-bottom: 0.35rem;
-        color: var(--color-text-primary);
-    }
+ .module-name {
+ font-size: 1.1rem;
+ font-weight: 600;
+ margin-bottom: 0.35rem;
+ color: var(--color-text-primary);
+ }
 
-    .module-description {
-        font-size: 0.85rem;
-        color: var(--color-text-tertiary);
-        line-height: 1.5;
-        margin-bottom: 0;
-    }
+ .module-description {
+ font-size: 0.85rem;
+ color: var(--color-text-tertiary);
+ line-height: 1.5;
+ margin-bottom: 0;
+ }
 
-    .module-card-pagamentos:hover .module-icon {
-        box-shadow: 0 6px 16px rgba(52, 57, 144, 0.25);
-    }
+ .module-card-pagamentos:hover .module-icon {
+ box-shadow: 0 6px 16px rgba(52, 57, 144, 0.25);
+ }
 
-    .module-card-prestacoes:hover .module-icon {
-        box-shadow: 0 6px 16px rgba(13, 122, 53, 0.25);
-    }
+ .module-card-prestacoes:hover .module-icon {
+ box-shadow: 0 6px 16px rgba(13, 122, 53, 0.25);
+ }
 
-    .module-card-financeiro:hover .module-icon {
-        box-shadow: 0 6px 16px rgba(184, 134, 11, 0.25);
-    }
+ .module-card-financeiro:hover .module-icon {
+ box-shadow: 0 6px 16px rgba(184, 134, 11, 0.25);
+ }
 
-    .module-icon-usuarios {
-        background: linear-gradient(135deg, #6f42c1, #8b5cf6);
-    }
+ .module-icon-usuarios {
+ background: linear-gradient(135deg, #6f42c1, #8b5cf6);
+ }
 
-    .module-card-usuarios:hover .module-icon {
-        box-shadow: 0 6px 16px rgba(111, 66, 193, 0.25);
-    }
+ .module-card-usuarios:hover .module-icon {
+ box-shadow: 0 6px 16px rgba(111, 66, 193, 0.25);
+ }
 
-    .module-icon-dashboards {
-        background: linear-gradient(135deg, #1B998B, #2DC4B2);
-    }
+ .module-icon-dashboards {
+ background: linear-gradient(135deg, #1B998B, #2DC4B2);
+ }
 
-    .module-card-dashboards:hover .module-icon {
-        box-shadow: 0 6px 16px rgba(27, 153, 139, 0.25);
-    }
+ .module-card-dashboards:hover .module-icon {
+ box-shadow: 0 6px 16px rgba(27, 153, 139, 0.25);
+ }
 
-    .module-icon-diarias {
-        background: linear-gradient(135deg, #E07A24, #F5A623);
-    }
+ .module-icon-diarias {
+ background: linear-gradient(135deg, #E07A24, #F5A623);
+ }
 
-    .module-card-diarias:hover .module-icon {
-        box-shadow: 0 6px 16px rgba(224, 122, 36, 0.25);
-    }
+ .module-card-diarias:hover .module-icon {
+ box-shadow: 0 6px 16px rgba(224, 122, 36, 0.25);
+ }
 
-    .module-icon-cgfr {
-        background: linear-gradient(135deg, #DC2626, #EF4444);
-    }
+ .module-icon-cgfr {
+ background: linear-gradient(135deg, #DC2626, #EF4444);
+ }
 
-    .module-card-cgfr:hover .module-icon {
-        box-shadow: 0 6px 16px rgba(220, 38, 38, 0.25);
-    }
+ .module-card-cgfr:hover .module-icon {
+ box-shadow: 0 6px 16px rgba(220, 38, 38, 0.25);
+ }
 
-    .user-greeting {
-        text-align: center;
-        margin-bottom: 2rem;
-    }
+ .user-greeting {
+ text-align: center;
+ margin-bottom: 2rem;
+ }
 
-    .user-greeting .greeting-text {
-        font-size: 1rem;
-        color: var(--color-text-secondary);
-    }
+ .user-greeting .greeting-text {
+ font-size: 1rem;
+ color: var(--color-text-secondary);
+ }
 
-    .user-greeting .greeting-name {
-        font-weight: 600;
-        color: var(--color-text-primary);
-    }
+ .user-greeting .greeting-name {
+ font-weight: 600;
+ color: var(--color-text-primary);
+ }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="hub-container">
 
-    {# Saudacao #}
-    {% set nome_completo = session.get('usuario_nome', '') %}
-    {% set partes_nome = nome_completo.split() %}
-    {% set nome_curto = (partes_nome[:2]|join(' ')) if partes_nome|length >= 2 else nome_completo %}
+ {# Saudacao #}
+ {% set nome_completo = session.get('usuario_nome', '') %}
+ {% set partes_nome = nome_completo.split() %}
+ {% set nome_curto = (partes_nome[:2]|join(' ')) if partes_nome|length >= 2 else nome_completo %}
 
-    <div class="user-greeting">
-        <p class="greeting-text">
-            <i class="bi bi-person-circle me-1"></i>
-            Olá, <span class="greeting-name">{{ nome_curto }}</span>
-        </p>
-    </div>
+ <div class="user-greeting">
+ <p class="greeting-text">
+ <i class="bi bi-person-circle me-1"></i>
+ Olá, <span class="greeting-name">{{ nome_curto }}</span>
+ </p>
+ </div>
 
-    {# Titulo #}
-    <h1 class="hub-title">Selecione o Módulo</h1>
-    <p class="hub-subtitle">Escolha o sistema que deseja acessar</p>
+ {# Titulo #}
+ <h1 class="hub-title">Selecione o Módulo</h1>
+ <p class="hub-subtitle">Escolha o sistema que deseja acessar</p>
 
-    {# Cards dos Modulos #}
-    <div class="row g-4 justify-content-center" style="max-width: 1000px; width: 100%;">
+ {# Cards dos Modulos #}
+ <div class="row g-4 justify-content-center" style="max-width: 1000px; width: 100%;">
 
-        {# Modulo Pagamentos #}
-        {% if current_user.tem_permissao('solicitacoes', 'visualizar') %}
-        <div class="col-md-4">
-            <a href="{{ url_for('solicitacoes.dashboard') }}" class="module-card module-card-pagamentos">
-                <div class="module-icon module-icon-pagamentos">
-                    <i class="bi bi-cash-stack"></i>
-                </div>
-                <h3 class="module-name">Solicitação de Pagamentos</h3>
-                <p class="module-description">
-                    Gestão de solicitações de pagamento e acompanhamento de processos
-                </p>
-            </a>
-        </div>
-        {% endif %}
+ {# Modulo Pagamentos #}
+ {% if current_user.tem_permissao('solicitacoes', 'visualizar') %}
+ <div class="col-md-4">
+ <a href="{{ url_for('solicitacoes.dashboard') }}" class="module-card module-card-pagamentos">
+ <div class="module-icon module-icon-pagamentos">
+ <i class="bi bi-cash-stack"></i>
+ </div>
+ <h3 class="module-name">Solicitação de Pagamentos</h3>
+ <p class="module-description">
+ Gestão de solicitações de pagamento e acompanhamento de processos
+ </p>
+ </a>
+ </div>
+ {% endif %}
 
-        {# Modulo Financeiro #}
-        {% if current_user.tem_permissao('financeiro', 'visualizar') %}
-        <div class="col-md-4">
-            <a href="{{ url_for('financeiro.dashboard') }}" class="module-card module-card-financeiro">
-                <div class="module-icon module-icon-financeiro">
-                    <i class="bi bi-bank"></i>
-                </div>
-                <h3 class="module-name">Gestão Orçamentária/Financeira</h3>
-                <p class="module-description">
-                    Saldos de empenho, inserção de NEs e controle financeiro dos contratos
-                </p>
-            </a>
-        </div>
-        {% endif %}
+ {# Modulo Financeiro #}
+ {% if current_user.tem_permissao('financeiro', 'visualizar') %}
+ <div class="col-md-4">
+ <a href="{{ url_for('financeiro.dashboard') }}" class="module-card module-card-financeiro">
+ <div class="module-icon module-icon-financeiro">
+ <i class="bi bi-bank"></i>
+ </div>
+ <h3 class="module-name">Gestão Orçamentária/Financeira</h3>
+ <p class="module-description">
+ Saldos de empenho, inserção de NEs e controle financeiro dos contratos
+ </p>
+ </a>
+ </div>
+ {% endif %}
 
-        {# Modulo Execucoes de Contratos #}
-        {% if current_user.tem_permissao('prestacoes_contratos', 'visualizar') %}
-        <div class="col-md-4">
-            <a href="{{ url_for('prestacoes_contratos.dashboard') }}" class="module-card module-card-prestacoes">
-                <div class="module-icon module-icon-prestacoes">
-                    <i class="bi bi-clipboard-check"></i>
-                </div>
-                <h3 class="module-name">Execuções de Contratos</h3>
-                <p class="module-description">
-                    Registro de execuções, categorias e itens vinculados a contratos
-                </p>
-            </a>
-        </div>
-        {% endif %}
+ {# Modulo Execucoes de Contratos #}
+ {% if current_user.tem_permissao('prestacoes_contratos', 'visualizar') %}
+ <div class="col-md-4">
+ <a href="{{ url_for('prestacoes_contratos.dashboard') }}" class="module-card module-card-prestacoes">
+ <div class="module-icon module-icon-prestacoes">
+ <i class="bi bi-clipboard-check"></i>
+ </div>
+ <h3 class="module-name">Execuções de Contratos</h3>
+ <p class="module-description">
+ Registro de execuções, categorias e itens vinculados a contratos
+ </p>
+ </a>
+ </div>
+ {% endif %}
 
-        {# Modulo Diarias #}
-        {% if current_user.tem_permissao('diarias', 'visualizar') %}
-        <div class="col-md-4">
-            <a href="{{ url_for('diarias.dashboard') }}" class="module-card module-card-diarias">
-                <div class="module-icon module-icon-diarias">
-                    <i class="bi bi-airplane-engines"></i>
-                </div>
-                <h3 class="module-name">Diárias</h3>
-                <p class="module-description">
-                    Solicitação e aprovação de diárias e viagens
-                </p>
-            </a>
-        </div>
-        {% endif %}
+ {# Modulo Diarias #}
+ {% if current_user.tem_permissao('diarias', 'visualizar') %}
+ <div class="col-md-4">
+ <a href="{{ url_for('diarias.dashboard') }}" class="module-card module-card-diarias">
+ <div class="module-icon module-icon-diarias">
+ <i class="bi bi-airplane-engines"></i>
+ </div>
+ <h3 class="module-name">Diárias</h3>
+ <p class="module-description">
+ Solicitação e aprovação de diárias e viagens
+ </p>
+ </a>
+ </div>
+ {% endif %}
 
-        {# Modulo Admin (visivel apenas para administradores) #}
-        {% if current_user.is_admin %}
-        <div class="col-md-4">
-            <a href="{{ url_for('usuarios.dashboard') }}" class="module-card module-card-usuarios">
-                <div class="module-icon module-icon-usuarios">
-                    <i class="bi bi-people-fill"></i>
-                </div>
-                <h3 class="module-name">Admin</h3>
-                <p class="module-description">
-                    Gerenciamento de usuários, perfis e controle de acesso
-                </p>
-            </a>
-        </div>
-        {% endif %}
+ {# Modulo Admin (visivel apenas para administradores) #}
+ {% if current_user.is_admin %}
+ <div class="col-md-4">
+ <a href="{{ url_for('usuarios.dashboard') }}" class="module-card module-card-usuarios">
+ <div class="module-icon module-icon-usuarios">
+ <i class="bi bi-people-fill"></i>
+ </div>
+ <h3 class="module-name">Admin</h3>
+ <p class="module-description">
+ Gerenciamento de usuários, perfis e controle de acesso
+ </p>
+ </a>
+ </div>
+ {% endif %}
 
-        {# Modulo Dashboards (visivel para quem tem permissão ou admins) #}
-        {% if current_user.tem_permissao('dashboards') %}
-        <div class="col-md-4">
-            <a href="{{ url_for('dashboards.spa_shell') }}" class="module-card module-card-dashboards">
-                <div class="module-icon module-icon-dashboards">
-                    <i class="bi bi-speedometer2"></i>
-                </div>
-                <h3 class="module-name">Dashboards</h3>
-                <p class="module-description">
-                    Visão consolidada com gráficos e indicadores de desempenho
-                </p>
-            </a>
-        </div>
-        {% endif %}
+ {# Modulo Dashboards (visivel para quem tem permissão ou admins) #}
+ {% if current_user.tem_permissao('dashboards') %}
+ <div class="col-md-4">
+ <a href="{{ url_for('dashboards.spa_shell') }}" class="module-card module-card-dashboards">
+ <div class="module-icon module-icon-dashboards">
+ <i class="bi bi-speedometer2"></i>
+ </div>
+ <h3 class="module-name">Dashboards</h3>
+ <p class="module-description">
+ Visão consolidada com gráficos e indicadores de desempenho
+ </p>
+ </a>
+ </div>
+ {% endif %}
 
-        {# Modulo CGFR (visivel para quem tem permissão ou admins) #}
-        {% if current_user.tem_permissao('cgfr') %}
-        <div class="col-md-4">
-            <a href="{{ url_for('cgfr.dashboard') }}" class="module-card module-card-cgfr">
-                <div class="module-icon module-icon-cgfr">
-                    <i class="bi bi-file-earmark-bar-graph"></i>
-                </div>
-                <h3 class="module-name">CGFR</h3>
-                <p class="module-description">
-                    Consultoria de Gestao Financeira e classificacao de processos
-                </p>
-            </a>
-        </div>
-        {% endif %}
+ {# Modulo CGFR (visivel para quem tem permissão ou admins) #}
+ {% if current_user.tem_permissao('cgfr') %}
+ <div class="col-md-4">
+ <a href="{{ url_for('cgfr.dashboard') }}" class="module-card module-card-cgfr">
+ <div class="module-icon module-icon-cgfr">
+ <i class="bi bi-file-earmark-bar-graph"></i>
+ </div>
+ <h3 class="module-name">CGFR</h3>
+ <p class="module-description">
+ Consultoria de Gestao Financeira e classificacao de processos
+ </p>
+ </a>
+ </div>
+ {% endif %}
 
-    </div>
+ </div>
 
-    {# Aviso para usuarios sem nenhuma permissao definida #}
-    {% if not current_user.is_admin
-        and not current_user.tem_permissao('solicitacoes', 'visualizar')
-        and not current_user.tem_permissao('financeiro', 'visualizar')
-        and not current_user.tem_permissao('prestacoes_contratos', 'visualizar')
-        and not current_user.tem_permissao('diarias', 'visualizar')
-        and not current_user.tem_permissao('cgfr', 'visualizar') %}
-    <div class="mt-4" style="max-width: 600px; width: 100%;">
-        <div class="card border-0 shadow-sm text-center p-5">
-            <div class="mb-3">
-                <i class="bi bi-hourglass-split fs-1" style="color: #343990;"></i>
-            </div>
-            <h5 class="fw-bold text-dark mb-2">Aguardando liberação de acesso</h5>
-            <p class="text-muted mb-3">
-                Seu cadastro foi realizado com sucesso, mas ainda não foram definidos quais módulos você poderá acessar.
-            </p>
-            <p class="text-muted small mb-0">
-                <i class="bi bi-info-circle me-1"></i>
-                Um administrador do sistema precisa configurar seu nível de acesso. Entre em contato com a equipe responsável caso necessário.
-            </p>
-        </div>
-    </div>
-    {% endif %}
+ {# Aviso para usuarios sem nenhuma permissao definida #}
+ {% if not current_user.is_admin
+ and not current_user.tem_permissao('solicitacoes', 'visualizar')
+ and not current_user.tem_permissao('financeiro', 'visualizar')
+ and not current_user.tem_permissao('prestacoes_contratos', 'visualizar')
+ and not current_user.tem_permissao('diarias', 'visualizar')
+ and not current_user.tem_permissao('cgfr', 'visualizar') %}
+ <div class="mt-4" style="max-width: 600px; width: 100%;">
+ <div class="card text-center p-5">
+ <div class="mb-3">
+ <i class="bi bi-hourglass-split fs-1" style="color: #343990;"></i>
+ </div>
+ <h5 class="fw-bold text-dark mb-2">Aguardando liberação de acesso</h5>
+ <p class="text-muted mb-3">
+ Seu cadastro foi realizado com sucesso, mas ainda não foram definidos quais módulos você poderá acessar.
+ </p>
+ <p class="text-muted small mb-0">
+ <i class="bi bi-info-circle me-1"></i>
+ Um administrador do sistema precisa configurar seu nível de acesso. Entre em contato com a equipe responsável caso necessário.
+ </p>
+ </div>
+ </div>
+ {% endif %}
 
 </div>
 {% endblock %}

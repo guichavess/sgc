@@ -1,4 +1,4 @@
-{# Timeline horizontal do modulo de Diarias e Passagens.
+﻿{# Timeline horizontal do modulo de Diarias e Passagens.
    Espera variaveis:
      - timeline_data (lista de dicts do DiariaService.obter_timeline)
        Cada item tem: etapa, concluida, data, data_fim, atual, comentario,
@@ -143,7 +143,7 @@
                         <div class="connector-fill {{ 'active' if (item.concluida or item.atual) }}"></div>
                         {% if item.tempo_decorrido %}
                         <div class="duration-pill">
-                            <i class="fas fa-history"></i> {{ item.tempo_decorrido }}
+                            <i class="bi bi-clock-history"></i> {{ item.tempo_decorrido }}
                         </div>
                         {% endif %}
                     </div>
@@ -162,9 +162,9 @@
                     {% set tem_range = item.data and item.data_fim %}
                     <div class="step-circle {{ 'completed' if item.concluida }} {{ 'current' if (item.atual and not item.concluida) }} {% if tem_range %}tl-tooltip{% endif %}" style="position: relative; z-index: 5;">
                         {% if item.atual and not item.concluida %}
-                            <i class="fas fa-map-marker-alt fs-5 pin-pulse"></i>
+                            <i class="bi bi-geo-alt-fill fs-5 pin-pulse"></i>
                         {% else %}
-                            <i class="{{ item.etapa.icone or 'fas fa-circle' }} fs-6"></i>
+                            <i class="{{ item.etapa.icone or 'bi bi-circle-fill' }} fs-6"></i>
                         {% endif %}
                         {% if tem_range %}
                         <span class="tl-tooltip-text">
@@ -185,9 +185,9 @@
                             {% for sub in item.subitens %}
                             <div class="subitem-row tl-tooltip-sub">
                                 {% if sub.concluido %}
-                                    <i class="fas fa-check-circle text-success"></i>
+                                    <i class="bi bi-check-circle-fill text-success"></i>
                                 {% else %}
-                                    <i class="far fa-circle text-muted"></i>
+                                    <i class="bi bi-circle text-muted"></i>
                                 {% endif %}
 
                                 {# Nome: se tem link_acesso, é um link clicável #}

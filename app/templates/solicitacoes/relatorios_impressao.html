@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
@@ -117,7 +117,7 @@
 <div class="container-fluid mt-2">
         <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
             <div>
-                <h4 class="fw-bold mb-0 text-dark"><i class="fas fa-file-alt me-2"></i>{{ titulo }}</h4>
+                <h4 class="fw-bold mb-0 text-dark"><i class="bi bi-file-earmark-text me-2"></i>{{ titulo }}</h4>
                 <div class="text-muted small">Gerado em: {{ agora.strftime('%d/%m/%Y às %H:%M') }}</div>
                 <div class="text-muted small">
                     Etapas SEI atualizadas em: {{ timestamps.etapas_sei.strftime('%d/%m/%Y às %H:%M') if timestamps.etapas_sei else 'N/D' }}
@@ -126,8 +126,8 @@
                 </div>
             </div>
             <div class="no-print">
-                <button onclick="baixarPDF()" id="btnBaixarPdf" class="btn btn-danger btn-sm"><i class="fas fa-file-pdf me-2"></i>Baixar PDF</button>
-                <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="fas fa-print me-2"></i>Imprimir</button>
+                <button onclick="baixarPDF()" id="btnBaixarPdf" class="btn btn-danger btn-sm"><i class="bi bi-file-earmark-pdf me-2"></i>Baixar PDF</button>
+                <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="bi bi-printer me-2"></i>Imprimir</button>
                 <button onclick="window.close()" class="btn btn-secondary btn-sm">Fechar</button>
             </div>
         </div>
@@ -211,7 +211,7 @@
                             {% for item in timeline_medias %}
                             <div class="timeline-step">
                                 <div class="step-circle" style="background-color: {{ item.cor }} !important;">
-                                    {% if item.eh_grupo %}<i class="fas fa-layer-group" style="font-size: 10px"></i>{% else %}{{ loop.index }}{% endif %}
+                                    {% if item.eh_grupo %}<i class="bi bi-layers" style="font-size: 10px"></i>{% else %}{{ loop.index }}{% endif %}
                                 </div>
                                 
                                 <div class="step-label mt-1">{{ item.nome }}</div>

@@ -1,4 +1,4 @@
-<div class="timeline-horizontal-wrapper mb-4">
+﻿<div class="timeline-horizontal-wrapper mb-4">
     <div class="timeline-flex-container">
         
         {% for item in timeline_data %}
@@ -11,7 +11,7 @@
                     <div class="timeline-connector">
                         <div class="connector-fill {{ 'active' if (item.concluida or item.atual) }}"></div>
                         {% if item.tempo_decorrido %}
-                            <div class="duration-pill"><i class="fas fa-history"></i> {{ item.tempo_decorrido }}</div>
+                            <div class="duration-pill"><i class="bi bi-clock-history"></i> {{ item.tempo_decorrido }}</div>
                         {% endif %}
                     </div>
 
@@ -23,7 +23,7 @@
 
                     {# Z-INDEX 5 garante que o círculo fique por cima de qualquer linha saindo ou chegando #}
                     <div class="step-circle {{ 'completed' if item.concluida }} {{ 'current' if item.atual }}" style="position: relative; z-index: 5;">
-                        <i class="fas fa-file-signature fs-6"></i>
+                        <i class="bi bi-file-earmark-signature fs-6"></i>
                     </div>
 
                     <div class="step-info">
@@ -35,7 +35,7 @@
                             <div class="mt-2 text-start small border-top pt-1" style="font-size: 0.75rem; min-width: 150px;">
                                 {% for sub in item.subetapas %}
                                     <div class="text-nowrap mb-1">
-                                        <i class="fas fa-check-circle {{ 'text-success' if item.concluida or (item.atual and loop.index < item.subetapas|length) else 'text-muted' }}"></i>
+                                        <i class="bi bi-check-circle-fill {{ 'text-success' if item.concluida or (item.atual and loop.index < item.subetapas|length) else 'text-muted' }}"></i>
                                         <span class="text-muted">{{ sub.data.strftime('%d/%m') if sub.data else '--' }}:</span>
                                         <strong>{{ sub.nome }}</strong>
                                     </div>
@@ -55,7 +55,7 @@
                             {# CORREÇÃO: Usa flags calculadas no Python baseadas na ordem #}
                             <div class="connector-fill {{ 'active' if (item.concluida or item.atual) }}"></div>
                             {% if item.tempo_decorrido %}
-                                <div class="duration-pill"><i class="fas fa-history"></i> {{ item.tempo_decorrido }}</div>
+                                <div class="duration-pill"><i class="bi bi-clock-history"></i> {{ item.tempo_decorrido }}</div>
                             {% endif %}
                         </div>
 
@@ -67,7 +67,7 @@
 
                         {# CORREÇÃO: 'completed' se já passou (item.concluida), 'current' se é a atual (item.atual) #}
                         <div class="step-circle {{ 'completed' if item.concluida else ('current' if item.atual else '') }}" style="position: relative; z-index: 5;">
-                            <i class="fas fa-search-dollar fs-6"></i>
+                            <i class="bi bi-search-dollar fs-6"></i>
                         </div>
 
                         <div class="step-info">
@@ -82,32 +82,32 @@
                                     {% if mov_ne %}
                                     <a href="{{ mov_ne.link_acesso }}" target="_blank" class="text-decoration-none d-block mb-1">
                                         <div class="text-nowrap" title="Nota de Empenho">
-                                            <i class="fas fa-file-alt text-info me-1"></i> <strong>NE:</strong> {{ mov_ne.numero }}
+                                            <i class="bi bi-file-earmark-text text-info me-1"></i> <strong>NE:</strong> {{ mov_ne.numero }}
                                         </div>
                                     </a>
                                     {% elif ultimo_empenho and ultimo_empenho.ne %}
                                     <div class="text-nowrap d-block mb-1">
-                                        <i class="fas fa-file-alt text-info me-1"></i> <strong>NE:</strong> {{ ultimo_empenho.ne }}
+                                        <i class="bi bi-file-earmark-text text-info me-1"></i> <strong>NE:</strong> {{ ultimo_empenho.ne }}
                                     </div>
                                     {% endif %}
                                     {% if mov_nl or solicitacao.num_nl %}
                                     <a href="{{ mov_nl.link_acesso if mov_nl else '#' }}" target="_blank" class="text-decoration-none d-block mb-1">
                                         <div class="text-nowrap" title="Nota de Liquidação">
-                                            <i class="fas fa-file-invoice-dollar text-primary me-1"></i> <strong>NL:</strong> {{ mov_nl.numero if mov_nl else solicitacao.num_nl }}
+                                            <i class="bi bi-file-earmark-text text-primary me-1"></i> <strong>NL:</strong> {{ mov_nl.numero if mov_nl else solicitacao.num_nl }}
                                         </div>
                                     </a>
                                     {% endif %}
                                     {% if mov_pd or solicitacao.num_pd %}
                                     <a href="{{ mov_pd.link_acesso if mov_pd else '#' }}" target="_blank" class="text-decoration-none d-block mb-1">
                                         <div class="text-nowrap" title="Programação de Desembolso">
-                                            <i class="fas fa-calendar-check text-warning me-1"></i> <strong>PD:</strong> {{ mov_pd.numero if mov_pd else solicitacao.num_pd }}
+                                            <i class="bi bi-calendar-check text-warning me-1"></i> <strong>PD:</strong> {{ mov_pd.numero if mov_pd else solicitacao.num_pd }}
                                         </div>
                                     </a>
                                     {% endif %}
                                     {% if mov_ob or solicitacao.num_ob %}
                                     <a href="{{ mov_ob.link_acesso if mov_ob else '#' }}" target="_blank" class="text-decoration-none d-block">
                                         <div class="text-nowrap text-success fw-bold" title="Ordem Bancária">
-                                            <i class="fas fa-money-check-alt me-1"></i> <strong>OB:</strong> {{ mov_ob.numero if mov_ob else solicitacao.num_ob }}
+                                            <i class="bi bi-cash-coin me-1"></i> <strong>OB:</strong> {{ mov_ob.numero if mov_ob else solicitacao.num_ob }}
                                         </div>
                                     </a>
                                     {% endif %}
@@ -126,7 +126,7 @@
                     <div class="timeline-connector">
                         <div class="connector-fill {{ 'active' if (item.concluida or item.atual) }}"></div>
                         {% if item.tempo_decorrido %}
-                            <div class="duration-pill"><i class="fas fa-history"></i> {{ item.tempo_decorrido }}</div>
+                            <div class="duration-pill"><i class="bi bi-clock-history"></i> {{ item.tempo_decorrido }}</div>
                         {% endif %}
                     </div>
                     {% endif %}
@@ -139,20 +139,20 @@
 
                     <div class="step-circle {{ 'completed' if item.concluida }} {{ 'current' if item.atual }}" style="position: relative; z-index: 5;">
                         {% if item.atual %}
-                            <i class="fas fa-map-marker-alt fs-5 pin-pulse"></i>
+                            <i class="bi bi-geo-alt-fill fs-5 pin-pulse"></i>
                         {% else %}
                             {# MAPEAMENTO DE ÍCONES POR ID DE ETAPA #}
                             {% set icones = {
-                                1: 'fas fa-file-alt',
-                                2: 'fas fa-user-check',
-                                3: 'fas fa-clipboard-list',
-                                4: 'fas fa-envelope-open-text',
-                                7: 'fas fa-handshake',
-                                8: 'fas fa-archive'
+                                1: 'bi bi-file-earmark-text',
+                                2: 'bi bi-person-check',
+                                3: 'bi bi-clipboard-data',
+                                4: 'bi bi-envelope-open-text',
+                                7: 'bi bi-handshake',
+                                8: 'bi bi-archive'
                             } %}
                             
                             {# Tenta pegar o ícone do mapa, se não existir, usa um ícone de círculo padrão #}
-                            <i class="{{ icones.get(item.etapa.id, 'fas fa-circle') }} fs-6"></i>
+                            <i class="{{ icones.get(item.etapa.id, 'bi bi-circle-fill') }} fs-6"></i>
                         {% endif %}
                     </div>
 

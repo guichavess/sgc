@@ -1,451 +1,451 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
 {% block content %}
 <div class="container-fluid px-4">
 
-    <div class="d-flex justify-content-between align-items-center mt-4 mb-3">
-        <div>
-            <h3 class="fw-bold text-dark mb-0"><i class="fas fa-clipboard-check me-2"></i>Auditoria de Dados</h3>
-            <p class="text-muted mb-0">Identifica informações faltantes nos processos de pagamento.</p>
-        </div>
-        <div>
-            <a href="{{ url_for('solicitacoes.relatorios_auditoria_csv') }}" class="btn btn-outline-success fw-bold shadow-sm">
-                <i class="fas fa-file-csv me-1"></i> Exportar CSV
-            </a>
-        </div>
-    </div>
+ <div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+ <div>
+ <h3 class="fw-bold text-dark mb-0"><i class="bi bi-clipboard-check me-2"></i>Auditoria de Dados</h3>
+ <p class="text-muted mb-0">Identifica informações faltantes nos processos de pagamento.</p>
+ </div>
+ <div>
+ <a href="{{ url_for('solicitacoes.relatorios_auditoria_csv') }}" class="btn btn-outline-success fw-bold shadow-sm">
+ <i class="bi bi-file-earmark-csv me-1"></i> Exportar CSV
+ </a>
+ </div>
+ </div>
 
-    {# === CARDS KPI === #}
-    <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body text-center py-3">
-                    <div class="fs-2 fw-bold text-dark">{{ contadores.total }}</div>
-                    <small class="text-muted fw-bold text-uppercase">Total de Processos</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body text-center py-3">
-                    <div class="fs-2 fw-bold text-success">{{ contadores.completos }}</div>
-                    <small class="text-muted fw-bold text-uppercase">Completos</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body text-center py-3">
-                    <div class="fs-2 fw-bold text-danger">{{ contadores.total - contadores.completos }}</div>
-                    <small class="text-muted fw-bold text-uppercase">Incompletos</small>
-                </div>
-            </div>
-        </div>
-    </div>
+ {# === CARDS KPI === #}
+ <div class="row g-3 mb-4">
+ <div class="col-md-4">
+ <div class="card h-100">
+ <div class="card-body text-center py-3">
+ <div class="fs-2 fw-bold text-dark">{{ contadores.total }}</div>
+ <small class="text-muted fw-bold text-uppercase">Total de Processos</small>
+ </div>
+ </div>
+ </div>
+ <div class="col-md-4">
+ <div class="card h-100">
+ <div class="card-body text-center py-3">
+ <div class="fs-2 fw-bold text-success">{{ contadores.completos }}</div>
+ <small class="text-muted fw-bold text-uppercase">Completos</small>
+ </div>
+ </div>
+ </div>
+ <div class="col-md-4">
+ <div class="card h-100">
+ <div class="card-body text-center py-3">
+ <div class="fs-2 fw-bold text-danger">{{ contadores.total - contadores.completos }}</div>
+ <small class="text-muted fw-bold text-uppercase">Incompletos</small>
+ </div>
+ </div>
+ </div>
+ </div>
 
-    {# === BARRA DE FILTROS === #}
-    <div class="card mb-4 border-0 shadow-sm" style="overflow: visible; position: relative; z-index: 10;">
-        <div class="card-body p-3" style="overflow: visible;">
-            <form method="GET" action="{{ url_for('solicitacoes.relatorios_auditoria') }}" id="formFiltrosAuditoria">
-                <div class="row g-2 align-items-center">
+ {# === BARRA DE FILTROS === #}
+ <div class="card mb-4 " style="overflow: visible; position: relative; z-index: 10;">
+ <div class="card-body p-3" style="overflow: visible;">
+ <form method="GET" action="{{ url_for('solicitacoes.relatorios_auditoria') }}" id="formFiltrosAuditoria">
+ <div class="row g-2 align-items-center">
 
-                    {# --- Competência --- #}
-                    <div class="col-auto">
-                        <div class="dropdown">
-                            <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
-                                    type="button" id="dropdownCompAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
-                                <i class="bi bi-calendar-event me-1"></i>
-                                <span id="labelCompAud">Competência</span>
-                                <span class="badge bg-primary ms-1" id="badgeCompAud" style="display: none;">0</span>
-                            </button>
-                            <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
-                                <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
-                                    <small class="text-muted fw-bold">Selecione:</small>
-                                    <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'CompAud'); return false;">Limpar</a>
-                                </div>
-                                <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
-                                    {% for comp in todas_competencias %}
-                                    <div class="form-check item-filtro py-1">
-                                        <input class="form-check-input chk-CompAud" type="checkbox" name="filtro_competencia"
-                                               value="{{ comp }}" id="aud_comp_{{ loop.index }}"
-                                               {% if comp in request.args.getlist('filtro_competencia') %}checked{% endif %}
-                                               onchange="atualizarLabelAud('CompAud', 'Competência')">
-                                        <label class="form-check-label small" for="aud_comp_{{ loop.index }}" style="cursor: pointer;">{{ comp }}</label>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+ {# --- Competência --- #}
+ <div class="col-auto">
+ <div class="dropdown">
+ <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+ type="button" id="dropdownCompAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+ <i class="bi bi-calendar-event me-1"></i>
+ <span id="labelCompAud">Competência</span>
+ <span class="badge bg-primary ms-1" id="badgeCompAud" style="display: none;">0</span>
+ </button>
+ <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
+ <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+ <small class="text-muted fw-bold">Selecione:</small>
+ <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'CompAud'); return false;">Limpar</a>
+ </div>
+ <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
+ {% for comp in todas_competencias %}
+ <div class="form-check item-filtro py-1">
+ <input class="form-check-input chk-CompAud" type="checkbox" name="filtro_competencia"
+ value="{{ comp }}" id="aud_comp_{{ loop.index }}"
+ {% if comp in request.args.getlist('filtro_competencia') %}checked{% endif %}
+ onchange="atualizarLabelAud('CompAud', 'Competência')">
+ <label class="form-check-label small" for="aud_comp_{{ loop.index }}" style="cursor: pointer;">{{ comp }}</label>
+ </div>
+ {% endfor %}
+ </div>
+ </div>
+ </div>
+ </div>
 
-                    {# --- Contratado --- #}
-                    <div class="col-auto">
-                        <div class="dropdown">
-                            <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
-                                    type="button" id="dropdownContAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
-                                <i class="fas fa-building me-1"></i>
-                                <span id="labelContAud">Contratado</span>
-                                <span class="badge bg-primary ms-1" id="badgeContAud" style="display: none;">0</span>
-                            </button>
-                            <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 300px; z-index: 1060;">
-                                <input type="text" class="form-control form-control-sm mb-2" placeholder="Filtrar lista..." onkeyup="filtrarDropdownAud(this)">
-                                <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
-                                    <small class="text-muted fw-bold">Selecione:</small>
-                                    <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'ContAud'); return false;">Limpar</a>
-                                </div>
-                                <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
-                                    {% for cont in todos_contratados %}
-                                    <div class="form-check item-filtro py-1">
-                                        <input class="form-check-input chk-ContAud" type="checkbox" name="filtro_contratado"
-                                               value="{{ cont }}" id="aud_cont_{{ loop.index }}"
-                                               {% if cont in request.args.getlist('filtro_contratado') %}checked{% endif %}
-                                               onchange="atualizarLabelAud('ContAud', 'Contratado')">
-                                        <label class="form-check-label small text-truncate d-block" for="aud_cont_{{ loop.index }}"
-                                               title="{{ cont }}" style="cursor: pointer; max-width: 260px;">{{ cont }}</label>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+ {# --- Contratado --- #}
+ <div class="col-auto">
+ <div class="dropdown">
+ <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+ type="button" id="dropdownContAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+ <i class="bi bi-building me-1"></i>
+ <span id="labelContAud">Contratado</span>
+ <span class="badge bg-primary ms-1" id="badgeContAud" style="display: none;">0</span>
+ </button>
+ <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 300px; z-index: 1060;">
+ <input type="text" class="form-control form-control-sm mb-2" placeholder="Filtrar lista..." onkeyup="filtrarDropdownAud(this)">
+ <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+ <small class="text-muted fw-bold">Selecione:</small>
+ <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'ContAud'); return false;">Limpar</a>
+ </div>
+ <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
+ {% for cont in todos_contratados %}
+ <div class="form-check item-filtro py-1">
+ <input class="form-check-input chk-ContAud" type="checkbox" name="filtro_contratado"
+ value="{{ cont }}" id="aud_cont_{{ loop.index }}"
+ {% if cont in request.args.getlist('filtro_contratado') %}checked{% endif %}
+ onchange="atualizarLabelAud('ContAud', 'Contratado')">
+ <label class="form-check-label small text-truncate d-block" for="aud_cont_{{ loop.index }}"
+ title="{{ cont }}" style="cursor: pointer; max-width: 260px;">{{ cont }}</label>
+ </div>
+ {% endfor %}
+ </div>
+ </div>
+ </div>
+ </div>
 
-                    {# --- Etapa --- #}
-                    <div class="col-auto">
-                        <div class="dropdown">
-                            <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
-                                    type="button" id="dropdownEtapaAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
-                                <i class="fas fa-tasks me-1"></i>
-                                <span id="labelEtapaAud">Etapa</span>
-                                <span class="badge bg-primary ms-1" id="badgeEtapaAud" style="display: none;">0</span>
-                            </button>
-                            <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
-                                <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
-                                    <small class="text-muted fw-bold">Selecione:</small>
-                                    <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'EtapaAud'); return false;">Limpar</a>
-                                </div>
-                                <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
-                                    {% for etapa in todas_etapas %}
-                                    <div class="form-check item-filtro py-1">
-                                        <input class="form-check-input chk-EtapaAud" type="checkbox" name="filtro_etapa"
-                                               value="{{ etapa }}" id="aud_etapa_{{ loop.index }}"
-                                               {% if etapa in request.args.getlist('filtro_etapa') %}checked{% endif %}
-                                               onchange="atualizarLabelAud('EtapaAud', 'Etapa')">
-                                        <label class="form-check-label small" for="aud_etapa_{{ loop.index }}" style="cursor: pointer;">{{ etapa }}</label>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+ {# --- Etapa --- #}
+ <div class="col-auto">
+ <div class="dropdown">
+ <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+ type="button" id="dropdownEtapaAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+ <i class="bi bi-list-task me-1"></i>
+ <span id="labelEtapaAud">Etapa</span>
+ <span class="badge bg-primary ms-1" id="badgeEtapaAud" style="display: none;">0</span>
+ </button>
+ <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
+ <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+ <small class="text-muted fw-bold">Selecione:</small>
+ <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'EtapaAud'); return false;">Limpar</a>
+ </div>
+ <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
+ {% for etapa in todas_etapas %}
+ <div class="form-check item-filtro py-1">
+ <input class="form-check-input chk-EtapaAud" type="checkbox" name="filtro_etapa"
+ value="{{ etapa }}" id="aud_etapa_{{ loop.index }}"
+ {% if etapa in request.args.getlist('filtro_etapa') %}checked{% endif %}
+ onchange="atualizarLabelAud('EtapaAud', 'Etapa')">
+ <label class="form-check-label small" for="aud_etapa_{{ loop.index }}" style="cursor: pointer;">{{ etapa }}</label>
+ </div>
+ {% endfor %}
+ </div>
+ </div>
+ </div>
+ </div>
 
-                    {# --- Status Geral --- #}
-                    <div class="col-auto">
-                        <div class="dropdown">
-                            <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
-                                    type="button" id="dropdownStatusAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
-                                <i class="bi bi-flag me-1"></i>
-                                <span id="labelStatusAud">Status</span>
-                                <span class="badge bg-primary ms-1" id="badgeStatusAud" style="display: none;">0</span>
-                            </button>
-                            <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 200px; z-index: 1060;">
-                                <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
-                                    <small class="text-muted fw-bold">Selecione:</small>
-                                    <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'StatusAud'); return false;">Limpar</a>
-                                </div>
-                                <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
-                                    {% for st in todos_status %}
-                                    <div class="form-check item-filtro py-1">
-                                        <input class="form-check-input chk-StatusAud" type="checkbox" name="filtro_status"
-                                               value="{{ st }}" id="aud_status_{{ loop.index }}"
-                                               {% if st in request.args.getlist('filtro_status') %}checked{% endif %}
-                                               onchange="atualizarLabelAud('StatusAud', 'Status')">
-                                        <label class="form-check-label small" for="aud_status_{{ loop.index }}" style="cursor: pointer;">{{ st }}</label>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+ {# --- Status Geral --- #}
+ <div class="col-auto">
+ <div class="dropdown">
+ <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+ type="button" id="dropdownStatusAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+ <i class="bi bi-flag me-1"></i>
+ <span id="labelStatusAud">Status</span>
+ <span class="badge bg-primary ms-1" id="badgeStatusAud" style="display: none;">0</span>
+ </button>
+ <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 200px; z-index: 1060;">
+ <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+ <small class="text-muted fw-bold">Selecione:</small>
+ <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'StatusAud'); return false;">Limpar</a>
+ </div>
+ <div class="overflow-auto custom-scrollbar" style="max-height: 250px;">
+ {% for st in todos_status %}
+ <div class="form-check item-filtro py-1">
+ <input class="form-check-input chk-StatusAud" type="checkbox" name="filtro_status"
+ value="{{ st }}" id="aud_status_{{ loop.index }}"
+ {% if st in request.args.getlist('filtro_status') %}checked{% endif %}
+ onchange="atualizarLabelAud('StatusAud', 'Status')">
+ <label class="form-check-label small" for="aud_status_{{ loop.index }}" style="cursor: pointer;">{{ st }}</label>
+ </div>
+ {% endfor %}
+ </div>
+ </div>
+ </div>
+ </div>
 
-                    {# --- Docs Financeiros (ausentes) --- #}
-                    <div class="col-auto">
-                        <div class="dropdown">
-                            <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
-                                    type="button" id="dropdownDocsAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
-                                <i class="bi bi-file-earmark-x me-1"></i>
-                                <span id="labelDocsAud">Docs Ausentes</span>
-                                <span class="badge bg-primary ms-1" id="badgeDocsAud" style="display: none;">0</span>
-                            </button>
-                            <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 200px; z-index: 1060;">
-                                <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
-                                    <small class="text-muted fw-bold">Sem documento:</small>
-                                    <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'DocsAud'); return false;">Limpar</a>
-                                </div>
-                                {% set docs_opcoes = [('sem_ne', 'Sem NE'), ('sem_nl', 'Sem NL'), ('sem_pd', 'Sem PD'), ('sem_ob', 'Sem OB')] %}
-                                {% for val, label in docs_opcoes %}
-                                <div class="form-check item-filtro py-1">
-                                    <input class="form-check-input chk-DocsAud" type="checkbox" name="filtro_docs"
-                                           value="{{ val }}" id="aud_docs_{{ loop.index }}"
-                                           {% if val in request.args.getlist('filtro_docs') %}checked{% endif %}
-                                           onchange="atualizarLabelAud('DocsAud', 'Docs Ausentes')">
-                                    <label class="form-check-label small" for="aud_docs_{{ loop.index }}" style="cursor: pointer;">{{ label }}</label>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </div>
+ {# --- Docs Financeiros (ausentes) --- #}
+ <div class="col-auto">
+ <div class="dropdown">
+ <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+ type="button" id="dropdownDocsAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+ <i class="bi bi-file-earmark-x me-1"></i>
+ <span id="labelDocsAud">Docs Ausentes</span>
+ <span class="badge bg-primary ms-1" id="badgeDocsAud" style="display: none;">0</span>
+ </button>
+ <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 200px; z-index: 1060;">
+ <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+ <small class="text-muted fw-bold">Sem documento:</small>
+ <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'DocsAud'); return false;">Limpar</a>
+ </div>
+ {% set docs_opcoes = [('sem_ne', 'Sem NE'), ('sem_nl', 'Sem NL'), ('sem_pd', 'Sem PD'), ('sem_ob', 'Sem OB')] %}
+ {% for val, label in docs_opcoes %}
+ <div class="form-check item-filtro py-1">
+ <input class="form-check-input chk-DocsAud" type="checkbox" name="filtro_docs"
+ value="{{ val }}" id="aud_docs_{{ loop.index }}"
+ {% if val in request.args.getlist('filtro_docs') %}checked{% endif %}
+ onchange="atualizarLabelAud('DocsAud', 'Docs Ausentes')">
+ <label class="form-check-label small" for="aud_docs_{{ loop.index }}" style="cursor: pointer;">{{ label }}</label>
+ </div>
+ {% endfor %}
+ </div>
+ </div>
+ </div>
 
-                    {# --- Pendência --- #}
-                    <div class="col-auto">
-                        <div class="dropdown">
-                            <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
-                                    type="button" id="dropdownPendAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
-                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                <span id="labelPendAud">Pendência</span>
-                                <span class="badge bg-primary ms-1" id="badgePendAud" style="display: none;">0</span>
-                            </button>
-                            <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 180px; z-index: 1060;">
-                                <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
-                                    <small class="text-muted fw-bold">Selecione:</small>
-                                    <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'PendAud'); return false;">Limpar</a>
-                                </div>
-                                <div class="form-check item-filtro py-1">
-                                    <input class="form-check-input chk-PendAud" type="checkbox" name="filtro_pendencia"
-                                           value="completos" id="aud_pend_1"
-                                           {% if 'completos' in request.args.getlist('filtro_pendencia') %}checked{% endif %}
-                                           onchange="atualizarLabelAud('PendAud', 'Pendência')">
-                                    <label class="form-check-label small" for="aud_pend_1" style="cursor: pointer;">Completos</label>
-                                </div>
-                                <div class="form-check item-filtro py-1">
-                                    <input class="form-check-input chk-PendAud" type="checkbox" name="filtro_pendencia"
-                                           value="incompletos" id="aud_pend_2"
-                                           {% if 'incompletos' in request.args.getlist('filtro_pendencia') %}checked{% endif %}
-                                           onchange="atualizarLabelAud('PendAud', 'Pendência')">
-                                    <label class="form-check-label small" for="aud_pend_2" style="cursor: pointer;">Incompletos</label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+ {# --- Pendência --- #}
+ <div class="col-auto">
+ <div class="dropdown">
+ <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+ type="button" id="dropdownPendAud" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+ <i class="bi bi-exclamation-triangle me-1"></i>
+ <span id="labelPendAud">Pendência</span>
+ <span class="badge bg-primary ms-1" id="badgePendAud" style="display: none;">0</span>
+ </button>
+ <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 180px; z-index: 1060;">
+ <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+ <small class="text-muted fw-bold">Selecione:</small>
+ <a href="#" class="text-decoration-none small" onclick="limparSelecaoAud(this, 'PendAud'); return false;">Limpar</a>
+ </div>
+ <div class="form-check item-filtro py-1">
+ <input class="form-check-input chk-PendAud" type="checkbox" name="filtro_pendencia"
+ value="completos" id="aud_pend_1"
+ {% if 'completos' in request.args.getlist('filtro_pendencia') %}checked{% endif %}
+ onchange="atualizarLabelAud('PendAud', 'Pendência')">
+ <label class="form-check-label small" for="aud_pend_1" style="cursor: pointer;">Completos</label>
+ </div>
+ <div class="form-check item-filtro py-1">
+ <input class="form-check-input chk-PendAud" type="checkbox" name="filtro_pendencia"
+ value="incompletos" id="aud_pend_2"
+ {% if 'incompletos' in request.args.getlist('filtro_pendencia') %}checked{% endif %}
+ onchange="atualizarLabelAud('PendAud', 'Pendência')">
+ <label class="form-check-label small" for="aud_pend_2" style="cursor: pointer;">Incompletos</label>
+ </div>
+ </div>
+ </div>
+ </div>
 
-                    {# --- Botões --- #}
-                    <div class="col-auto d-flex gap-2">
-                        <button type="submit" class="btn btn-primary fw-bold shadow-sm px-3" title="Filtrar">
-                            <i class="fas fa-filter"></i>
-                        </button>
-                        {% if tem_filtros %}
-                        <a href="{{ url_for('solicitacoes.relatorios_auditoria') }}" class="btn btn-outline-danger" title="Limpar Filtros">
-                            <i class="fas fa-times"></i>
-                        </a>
-                        {% endif %}
-                    </div>
+ {# --- Botões --- #}
+ <div class="col-auto d-flex gap-2">
+ <button type="submit" class="btn btn-primary fw-bold shadow-sm px-3" title="Filtrar">
+ <i class="bi bi-funnel"></i>
+ </button>
+ {% if tem_filtros %}
+ <a href="{{ url_for('solicitacoes.relatorios_auditoria') }}" class="btn btn-outline-danger" title="Limpar Filtros">
+ <i class="bi bi-x-lg"></i>
+ </a>
+ {% endif %}
+ </div>
 
-                </div>
-            </form>
-        </div>
-    </div>
+ </div>
+ </form>
+ </div>
+ </div>
 
-    {# === CONTADOR RESULTADOS + ITENS POR PÁGINA === #}
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <small class="text-muted" id="contadorResultados">
-            Mostrando <strong>{{ resultados|length }}</strong> de <strong>{{ contadores.total }}</strong> processos
-        </small>
-        <div class="d-flex align-items-center gap-2">
-            <small class="text-muted">Exibir:</small>
-            <select id="itensPorPagina" class="form-select form-select-sm" style="width: auto;" onchange="mudarPagina(1)">
-                <option value="25">25</option>
-                <option value="50" selected>50</option>
-                <option value="100">100</option>
-                <option value="0">Todos</option>
-            </select>
-        </div>
-    </div>
+ {# === CONTADOR RESULTADOS + ITENS POR PÁGINA === #}
+ <div class="d-flex justify-content-between align-items-center mb-2">
+ <small class="text-muted" id="contadorResultados">
+ Mostrando <strong>{{ resultados|length }}</strong> de <strong>{{ contadores.total }}</strong> processos
+ </small>
+ <div class="d-flex align-items-center gap-2">
+ <small class="text-muted">Exibir:</small>
+ <select id="itensPorPagina" class="form-select form-select-sm" style="width: auto;" onchange="mudarPagina(1)">
+ <option value="25">25</option>
+ <option value="50" selected>50</option>
+ <option value="100">100</option>
+ <option value="0">Todos</option>
+ </select>
+ </div>
+ </div>
 
-    {# === TABELA DE RESULTADOS === #}
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-custom table-compact table-hover align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th class="ps-3">ID</th>
-                            <th>Protocolo SEI</th>
-                            <th>Competência</th>
-                            <th>Contratado</th>
-                            <th>Etapa Atual</th>
-                            <th class="text-center">Tipo Pgto</th>
-                            <th class="text-center">Status Emp.</th>
-                            <th class="text-end">Valor Emp.</th>
-                            <th class="text-center">NE</th>
-                            <th class="text-center">NL</th>
-                            <th class="text-center">PD</th>
-                            <th class="text-center">OB</th>
-                            <th class="text-center">Link SEI</th>
-                            <th class="text-center">Histórico</th>
-                            <th class="text-center">Tempo Total</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center">Pendências</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for r in resultados %}
-                        {% set sol = r.solicitacao %}
-                        <tr style="cursor: pointer;" onclick="window.location='{{ url_for('solicitacoes.detalhes_solicitacao', id_solicitacao=sol.id) }}'">
-                            <td class="ps-3">
-                                <span class="fw-bold text-primary">{{ sol.id }}</span>
-                            </td>
-                            <td>
-                                {% if r.tem_protocolo %}
-                                    <span class="text-dark">{{ sol.protocolo_gerado_sei }}</span>
-                                {% else %}
-                                    <span class="text-danger"><i class="fas fa-exclamation-circle"></i> Ausente</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ sol.competencia or '-' }}</td>
-                            <td>
-                                <span class="text-truncate d-inline-block" style="max-width: 200px;" title="{{ r.contratado }}">
-                                    {{ r.contratado or '-' }}
-                                </span>
-                            </td>
-                            <td>
-                                {% if r.tem_etapa %}
-                                    <span class="badge bg-light text-dark border">{{ r.etapa_nome }}</span>
-                                {% else %}
-                                    <span class="text-danger"><i class="fas fa-exclamation-circle"></i></span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.tem_tipo_pgto %}
-                                    <span class="badge {{ 'bg-danger' if sol.tipo_pagamento.nome == 'DEA: Indenizatório' else 'bg-info' }} text-white">{{ sol.tipo_pagamento.nome }}</span>
-                                {% else %}
-                                    <span class="text-muted">–</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.tem_status_emp %}
-                                    <span class="badge bg-{{ sol.status_empenho.cor_badge if sol.status_empenho else 'secondary' }}">
-                                        {{ r.status_empenho_nome }}
-                                    </span>
-                                {% else %}
-                                    <i class="fas fa-times text-danger"></i>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                {% if r.tem_valor_emp %}
-                                    <span class="fw-bold">R$ {{ "{:,.2f}".format(r.empenho_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
-                                {% else %}
-                                    <span class="text-danger">-</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.tem_ne %}
-                                    <i class="fas fa-check-circle text-success" title="{{ r.mov_ne.numero if r.mov_ne else sol.num_ne }}"></i>
-                                {% else %}
-                                    <i class="fas fa-times-circle text-danger"></i>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.tem_nl %}
-                                    <i class="fas fa-check-circle text-success" title="{{ r.mov_nl.numero if r.mov_nl else sol.num_nl }}"></i>
-                                {% else %}
-                                    <i class="fas fa-times-circle text-danger"></i>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.tem_pd %}
-                                    <i class="fas fa-check-circle text-success" title="{{ r.mov_pd.numero if r.mov_pd else sol.num_pd }}"></i>
-                                {% else %}
-                                    <i class="fas fa-times-circle text-danger"></i>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.tem_ob %}
-                                    <i class="fas fa-check-circle text-success" title="{{ r.mov_ob.numero if r.mov_ob else sol.num_ob }}"></i>
-                                {% else %}
-                                    <i class="fas fa-times-circle text-danger"></i>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.tem_link_sei %}
-                                    <i class="fas fa-check text-success"></i>
-                                {% else %}
-                                    <i class="fas fa-times text-danger"></i>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.tem_historico %}
-                                    <span class="badge bg-light text-dark border">{{ r.qtd_historico }}</span>
-                                {% else %}
-                                    <span class="text-danger">0</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.tem_tempo %}
-                                    <span class="text-muted">{{ sol.tempo_total }}</span>
-                                {% else %}
-                                    <span class="text-danger">-</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.tem_status %}
-                                    {% if sol.status_geral == 'PAGO' %}
-                                        <span class="badge bg-success">PAGO</span>
-                                    {% elif sol.status_geral == 'EM ANDAMENTO' %}
-                                        <span class="badge bg-primary">EM ANDAMENTO</span>
-                                    {% elif sol.status_geral == 'EM LIQUIDAÇÃO' %}
-                                        <span class="badge bg-info">EM LIQUIDAÇÃO</span>
-                                    {% elif sol.status_geral == 'CANCELADO' %}
-                                        <span class="badge bg-dark">CANCELADO</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary">{{ sol.status_geral }}</span>
-                                    {% endif %}
-                                {% else %}
-                                    <i class="fas fa-times text-danger"></i>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if r.qtd_faltando == 0 %}
-                                    <span class="badge bg-success"><i class="fas fa-check"></i> OK</span>
-                                {% elif r.qtd_faltando <= 3 %}
-                                    <span class="badge bg-warning text-dark" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
-                                {% else %}
-                                    <span class="badge bg-danger" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="17" class="text-center py-5 text-muted">
-                                <i class="fas fa-search me-1"></i> Nenhum resultado encontrado com os filtros aplicados.
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+ {# === TABELA DE RESULTADOS === #}
+ <div class="card mb-4">
+ <div class="card-body p-0">
+ <div class="table-responsive">
+ <table class="table table-custom table-compact table-hover align-middle mb-0">
+ <thead>
+ <tr>
+ <th class="ps-3">ID</th>
+ <th>Protocolo SEI</th>
+ <th>Competência</th>
+ <th>Contratado</th>
+ <th>Etapa Atual</th>
+ <th class="text-center">Tipo Pgto</th>
+ <th class="text-center">Status Emp.</th>
+ <th class="text-end">Valor Emp.</th>
+ <th class="text-center">NE</th>
+ <th class="text-center">NL</th>
+ <th class="text-center">PD</th>
+ <th class="text-center">OB</th>
+ <th class="text-center">Link SEI</th>
+ <th class="text-center">Histórico</th>
+ <th class="text-center">Tempo Total</th>
+ <th class="text-center">Status</th>
+ <th class="text-center">Pendências</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for r in resultados %}
+ {% set sol = r.solicitacao %}
+ <tr style="cursor: pointer;" onclick="window.location='{{ url_for('solicitacoes.detalhes_solicitacao', id_solicitacao=sol.id) }}'">
+ <td class="ps-3">
+ <span class="fw-bold text-primary">{{ sol.id }}</span>
+ </td>
+ <td>
+ {% if r.tem_protocolo %}
+ <span class="text-dark">{{ sol.protocolo_gerado_sei }}</span>
+ {% else %}
+ <span class="text-danger"><i class="bi bi-exclamation-circle-fill"></i> Ausente</span>
+ {% endif %}
+ </td>
+ <td>{{ sol.competencia or '-' }}</td>
+ <td>
+ <span class="text-truncate d-inline-block" style="max-width: 200px;" title="{{ r.contratado }}">
+ {{ r.contratado or '-' }}
+ </span>
+ </td>
+ <td>
+ {% if r.tem_etapa %}
+ <span class="badge bg-light text-dark border">{{ r.etapa_nome }}</span>
+ {% else %}
+ <span class="text-danger"><i class="bi bi-exclamation-circle-fill"></i></span>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.tem_tipo_pgto %}
+ <span class="badge {{ 'bg-danger' if sol.tipo_pagamento.nome == 'DEA: Indenizatório' else 'bg-info' }} text-white">{{ sol.tipo_pagamento.nome }}</span>
+ {% else %}
+ <span class="text-muted">–</span>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.tem_status_emp %}
+ <span class="badge bg-{{ sol.status_empenho.cor_badge if sol.status_empenho else 'secondary' }}">
+ {{ r.status_empenho_nome }}
+ </span>
+ {% else %}
+ <i class="bi bi-x-lg text-danger"></i>
+ {% endif %}
+ </td>
+ <td class="text-end">
+ {% if r.tem_valor_emp %}
+ <span class="fw-bold">R$ {{ "{:,.2f}".format(r.empenho_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+ {% else %}
+ <span class="text-danger">-</span>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.tem_ne %}
+ <i class="bi bi-check-circle-fill text-success" title="{{ r.mov_ne.numero if r.mov_ne else sol.num_ne }}"></i>
+ {% else %}
+ <i class="bi bi-x-lg-circle text-danger"></i>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.tem_nl %}
+ <i class="bi bi-check-circle-fill text-success" title="{{ r.mov_nl.numero if r.mov_nl else sol.num_nl }}"></i>
+ {% else %}
+ <i class="bi bi-x-lg-circle text-danger"></i>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.tem_pd %}
+ <i class="bi bi-check-circle-fill text-success" title="{{ r.mov_pd.numero if r.mov_pd else sol.num_pd }}"></i>
+ {% else %}
+ <i class="bi bi-x-lg-circle text-danger"></i>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.tem_ob %}
+ <i class="bi bi-check-circle-fill text-success" title="{{ r.mov_ob.numero if r.mov_ob else sol.num_ob }}"></i>
+ {% else %}
+ <i class="bi bi-x-lg-circle text-danger"></i>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.tem_link_sei %}
+ <i class="bi bi-check-lg text-success"></i>
+ {% else %}
+ <i class="bi bi-x-lg text-danger"></i>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.tem_historico %}
+ <span class="badge bg-light text-dark border">{{ r.qtd_historico }}</span>
+ {% else %}
+ <span class="text-danger">0</span>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.tem_tempo %}
+ <span class="text-muted">{{ sol.tempo_total }}</span>
+ {% else %}
+ <span class="text-danger">-</span>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.tem_status %}
+ {% if sol.status_geral == 'PAGO' %}
+ <span class="badge bg-success">PAGO</span>
+ {% elif sol.status_geral == 'EM ANDAMENTO' %}
+ <span class="badge bg-primary">EM ANDAMENTO</span>
+ {% elif sol.status_geral == 'EM LIQUIDAÇÃO' %}
+ <span class="badge bg-info">EM LIQUIDAÇÃO</span>
+ {% elif sol.status_geral == 'CANCELADO' %}
+ <span class="badge bg-dark">CANCELADO</span>
+ {% else %}
+ <span class="badge bg-secondary">{{ sol.status_geral }}</span>
+ {% endif %}
+ {% else %}
+ <i class="bi bi-x-lg text-danger"></i>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if r.qtd_faltando == 0 %}
+ <span class="badge bg-success"><i class="bi bi-check-lg"></i> OK</span>
+ {% elif r.qtd_faltando <= 3 %}
+ <span class="badge bg-warning text-dark" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
+ {% else %}
+ <span class="badge bg-danger" title="{{ r.faltando|join(', ') }}">{{ r.qtd_faltando }}</span>
+ {% endif %}
+ </td>
+ </tr>
+ {% else %}
+ <tr>
+ <td colspan="17" class="text-center py-5 text-muted">
+ <i class="bi bi-search me-1"></i> Nenhum resultado encontrado com os filtros aplicados.
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ </div>
+ </div>
+ </div>
 
-    {# === PAGINAÇÃO === #}
-    <nav id="paginacaoAuditoria" class="d-flex justify-content-center mb-4" style="display: none !important;">
-        <ul class="pagination pagination-sm mb-0" id="paginacaoControles">
-        </ul>
-    </nav>
+ {# === PAGINAÇÃO === #}
+ <nav id="paginacaoAuditoria" class="d-flex justify-content-center mb-4" style="display: none !important;">
+ <ul class="pagination pagination-sm mb-0" id="paginacaoControles">
+ </ul>
+ </nav>
 
-    {# === LEGENDA === #}
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-body py-2">
-            <small class="text-muted">
-                <i class="fas fa-info-circle me-1"></i>
-                <strong>Legenda:</strong>
-                <i class="fas fa-check-circle text-success ms-2"></i> Presente |
-                <i class="fas fa-times-circle text-danger ms-2"></i> Ausente |
-                <span class="badge bg-success ms-2">OK</span> Sem pendências |
-                <span class="badge bg-warning text-dark ms-2">N</span> N campos faltando |
-                <span class="badge bg-danger ms-2">N</span> Muitos campos faltando |
-                NE = Nota de Empenho | NL = Liquidação | PD = Progr. Desembolso | OB = Ordem Bancária
-            </small>
-        </div>
-    </div>
+ {# === LEGENDA === #}
+ <div class="card mb-4">
+ <div class="card-body py-2">
+ <small class="text-muted">
+ <i class="bi bi-info-circle-fill me-1"></i>
+ <strong>Legenda:</strong>
+ <i class="bi bi-check-circle-fill text-success ms-2"></i> Presente |
+ <i class="bi bi-x-lg-circle text-danger ms-2"></i> Ausente |
+ <span class="badge bg-success ms-2">OK</span> Sem pendências |
+ <span class="badge bg-warning text-dark ms-2">N</span> N campos faltando |
+ <span class="badge bg-danger ms-2">N</span> Muitos campos faltando |
+ NE = Nota de Empenho | NL = Liquidação | PD = Progr. Desembolso | OB = Ordem Bancária
+ </small>
+ </div>
+ </div>
 
 </div>
 
@@ -462,156 +462,156 @@
 <script>
 /* --- Funções genéricas de filtro para auditoria --- */
 function atualizarLabelAud(id, defaultLabel) {
-    const checkboxes = document.querySelectorAll('.chk-' + id + ':checked');
-    const count = checkboxes.length;
-    const label = document.getElementById('label' + id);
-    const badge = document.getElementById('badge' + id);
+ const checkboxes = document.querySelectorAll('.chk-' + id + ':checked');
+ const count = checkboxes.length;
+ const label = document.getElementById('label' + id);
+ const badge = document.getElementById('badge' + id);
 
-    if (count > 0) {
-        label.innerText = count === 1 ? '1 selecionado' : count + ' selecionados';
-        badge.innerText = count;
-        badge.style.display = 'inline-block';
-    } else {
-        label.innerText = defaultLabel;
-        badge.style.display = 'none';
-    }
+ if (count > 0) {
+ label.innerText = count === 1 ? '1 selecionado' : count + ' selecionados';
+ badge.innerText = count;
+ badge.style.display = 'inline-block';
+ } else {
+ label.innerText = defaultLabel;
+ badge.style.display = 'none';
+ }
 }
 
 function limparSelecaoAud(link, id) {
-    const dropdown = link.closest('.dropdown-menu');
-    const inputs = dropdown.querySelectorAll('input[type="checkbox"]');
-    inputs.forEach(function(input) { input.checked = false; });
-    const searchInput = dropdown.querySelector('input[type="text"]');
-    if (searchInput) {
-        searchInput.value = '';
-        filtrarDropdownAud(searchInput);
-    }
-    /* Mapear id para default label */
-    var labels = {
-        'CompAud': 'Competência', 'ContAud': 'Contratado', 'EtapaAud': 'Etapa',
-        'StatusAud': 'Status', 'DocsAud': 'Docs Ausentes', 'PendAud': 'Pendência'
-    };
-    atualizarLabelAud(id, labels[id] || id);
+ const dropdown = link.closest('.dropdown-menu');
+ const inputs = dropdown.querySelectorAll('input[type="checkbox"]');
+ inputs.forEach(function(input) { input.checked = false; });
+ const searchInput = dropdown.querySelector('input[type="text"]');
+ if (searchInput) {
+ searchInput.value = '';
+ filtrarDropdownAud(searchInput);
+ }
+ /* Mapear id para default label */
+ var labels = {
+ 'CompAud': 'Competência', 'ContAud': 'Contratado', 'EtapaAud': 'Etapa',
+ 'StatusAud': 'Status', 'DocsAud': 'Docs Ausentes', 'PendAud': 'Pendência'
+ };
+ atualizarLabelAud(id, labels[id] || id);
 }
 
 function filtrarDropdownAud(input) {
-    var termo = input.value.toLowerCase();
-    var container = input.closest('.dropdown-menu').querySelector('.overflow-auto');
-    var items = container.getElementsByClassName('item-filtro');
-    for (var i = 0; i < items.length; i++) {
-        var label = items[i].querySelector('label').innerText.toLowerCase();
-        items[i].style.display = label.indexOf(termo) > -1 ? 'block' : 'none';
-    }
+ var termo = input.value.toLowerCase();
+ var container = input.closest('.dropdown-menu').querySelector('.overflow-auto');
+ var items = container.getElementsByClassName('item-filtro');
+ for (var i = 0; i < items.length; i++) {
+ var label = items[i].querySelector('label').innerText.toLowerCase();
+ items[i].style.display = label.indexOf(termo) > -1 ? 'block' : 'none';
+ }
 }
 
 /* --- Paginação client-side --- */
 var paginaAtual = 1;
 
 function mudarPagina(pagina) {
-    var tabela = document.querySelector('.table-custom tbody');
-    var linhas = tabela.querySelectorAll('tr[onclick]');
-    var totalLinhas = linhas.length;
+ var tabela = document.querySelector('.table-custom tbody');
+ var linhas = tabela.querySelectorAll('tr[onclick]');
+ var totalLinhas = linhas.length;
 
-    if (totalLinhas === 0) {
-        document.getElementById('paginacaoAuditoria').style.display = 'none';
-        return;
-    }
+ if (totalLinhas === 0) {
+ document.getElementById('paginacaoAuditoria').style.display = 'none';
+ return;
+ }
 
-    var porPagina = parseInt(document.getElementById('itensPorPagina').value);
-    var totalRegistros = {{ resultados|length }};
+ var porPagina = parseInt(document.getElementById('itensPorPagina').value);
+ var totalRegistros = {{ resultados|length }};
 
-    // Se "Todos", exibe tudo
-    if (porPagina === 0) {
-        linhas.forEach(function(tr) { tr.style.display = ''; });
-        document.getElementById('paginacaoAuditoria').style.display = 'none';
-        document.getElementById('contadorResultados').innerHTML =
-            'Mostrando <strong>' + totalRegistros + '</strong> de <strong>{{ contadores.total }}</strong> processos';
-        paginaAtual = 1;
-        return;
-    }
+ // Se "Todos", exibe tudo
+ if (porPagina === 0) {
+ linhas.forEach(function(tr) { tr.style.display = ''; });
+ document.getElementById('paginacaoAuditoria').style.display = 'none';
+ document.getElementById('contadorResultados').innerHTML =
+ 'Mostrando <strong>' + totalRegistros + '</strong> de <strong>{{ contadores.total }}</strong> processos';
+ paginaAtual = 1;
+ return;
+ }
 
-    var totalPaginas = Math.ceil(totalLinhas / porPagina);
-    if (pagina < 1) pagina = 1;
-    if (pagina > totalPaginas) pagina = totalPaginas;
-    paginaAtual = pagina;
+ var totalPaginas = Math.ceil(totalLinhas / porPagina);
+ if (pagina < 1) pagina = 1;
+ if (pagina > totalPaginas) pagina = totalPaginas;
+ paginaAtual = pagina;
 
-    var inicio = (pagina - 1) * porPagina;
-    var fim = inicio + porPagina;
+ var inicio = (pagina - 1) * porPagina;
+ var fim = inicio + porPagina;
 
-    // Exibir/ocultar linhas
-    linhas.forEach(function(tr, i) {
-        tr.style.display = (i >= inicio && i < fim) ? '' : 'none';
-    });
+ // Exibir/ocultar linhas
+ linhas.forEach(function(tr, i) {
+ tr.style.display = (i >= inicio && i < fim) ? '' : 'none';
+ });
 
-    // Atualizar contador
-    var mostrandoAte = Math.min(fim, totalLinhas);
-    document.getElementById('contadorResultados').innerHTML =
-        'Mostrando <strong>' + (inicio + 1) + '-' + mostrandoAte + '</strong> de <strong>' + totalRegistros + '</strong> processos';
+ // Atualizar contador
+ var mostrandoAte = Math.min(fim, totalLinhas);
+ document.getElementById('contadorResultados').innerHTML =
+ 'Mostrando <strong>' + (inicio + 1) + '-' + mostrandoAte + '</strong> de <strong>' + totalRegistros + '</strong> processos';
 
-    // Renderizar controles de paginação
-    renderizarPaginacao(pagina, totalPaginas);
+ // Renderizar controles de paginação
+ renderizarPaginacao(pagina, totalPaginas);
 }
 
 function renderizarPaginacao(paginaAtual, totalPaginas) {
-    var nav = document.getElementById('paginacaoAuditoria');
-    var ul = document.getElementById('paginacaoControles');
+ var nav = document.getElementById('paginacaoAuditoria');
+ var ul = document.getElementById('paginacaoControles');
 
-    if (totalPaginas <= 1) {
-        nav.style.display = 'none';
-        return;
-    }
+ if (totalPaginas <= 1) {
+ nav.style.display = 'none';
+ return;
+ }
 
-    nav.style.display = 'flex';
-    var html = '';
+ nav.style.display = 'flex';
+ var html = '';
 
-    // Botão Anterior
-    html += '<li class="page-item ' + (paginaAtual === 1 ? 'disabled' : '') + '">';
-    html += '<a class="page-link" href="#" onclick="mudarPagina(' + (paginaAtual - 1) + '); return false;">&laquo;</a></li>';
+ // Botão Anterior
+ html += '<li class="page-item ' + (paginaAtual === 1 ? 'disabled' : '') + '">';
+ html += '<a class="page-link" href="#" onclick="mudarPagina(' + (paginaAtual - 1) + '); return false;">&laquo;</a></li>';
 
-    // Páginas com reticências
-    var paginas = gerarNumerosPagina(paginaAtual, totalPaginas);
-    paginas.forEach(function(p) {
-        if (p === '...') {
-            html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
-        } else {
-            html += '<li class="page-item ' + (p === paginaAtual ? 'active' : '') + '">';
-            html += '<a class="page-link" href="#" onclick="mudarPagina(' + p + '); return false;">' + p + '</a></li>';
-        }
-    });
+ // Páginas com reticências
+ var paginas = gerarNumerosPagina(paginaAtual, totalPaginas);
+ paginas.forEach(function(p) {
+ if (p === '...') {
+ html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+ } else {
+ html += '<li class="page-item ' + (p === paginaAtual ? 'active' : '') + '">';
+ html += '<a class="page-link" href="#" onclick="mudarPagina(' + p + '); return false;">' + p + '</a></li>';
+ }
+ });
 
-    // Botão Próximo
-    html += '<li class="page-item ' + (paginaAtual === totalPaginas ? 'disabled' : '') + '">';
-    html += '<a class="page-link" href="#" onclick="mudarPagina(' + (paginaAtual + 1) + '); return false;">&raquo;</a></li>';
+ // Botão Próximo
+ html += '<li class="page-item ' + (paginaAtual === totalPaginas ? 'disabled' : '') + '">';
+ html += '<a class="page-link" href="#" onclick="mudarPagina(' + (paginaAtual + 1) + '); return false;">&raquo;</a></li>';
 
-    ul.innerHTML = html;
+ ul.innerHTML = html;
 }
 
 function gerarNumerosPagina(atual, total) {
-    var paginas = [];
-    if (total <= 7) {
-        for (var i = 1; i <= total; i++) paginas.push(i);
-    } else {
-        paginas.push(1);
-        if (atual > 3) paginas.push('...');
-        var de = Math.max(2, atual - 1);
-        var ate = Math.min(total - 1, atual + 1);
-        for (var j = de; j <= ate; j++) paginas.push(j);
-        if (atual < total - 2) paginas.push('...');
-        paginas.push(total);
-    }
-    return paginas;
+ var paginas = [];
+ if (total <= 7) {
+ for (var i = 1; i <= total; i++) paginas.push(i);
+ } else {
+ paginas.push(1);
+ if (atual > 3) paginas.push('...');
+ var de = Math.max(2, atual - 1);
+ var ate = Math.min(total - 1, atual + 1);
+ for (var j = de; j <= ate; j++) paginas.push(j);
+ if (atual < total - 2) paginas.push('...');
+ paginas.push(total);
+ }
+ return paginas;
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    atualizarLabelAud('CompAud', 'Competência');
-    atualizarLabelAud('ContAud', 'Contratado');
-    atualizarLabelAud('EtapaAud', 'Etapa');
-    atualizarLabelAud('StatusAud', 'Status');
-    atualizarLabelAud('DocsAud', 'Docs Ausentes');
-    atualizarLabelAud('PendAud', 'Pendência');
+ atualizarLabelAud('CompAud', 'Competência');
+ atualizarLabelAud('ContAud', 'Contratado');
+ atualizarLabelAud('EtapaAud', 'Etapa');
+ atualizarLabelAud('StatusAud', 'Status');
+ atualizarLabelAud('DocsAud', 'Docs Ausentes');
+ atualizarLabelAud('PendAud', 'Pendência');
 
-    // Inicializa paginação
-    mudarPagina(1);
+ // Inicializa paginação
+ mudarPagina(1);
 });
 </script>
 {% endblock %}

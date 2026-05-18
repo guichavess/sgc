@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -203,8 +203,8 @@ function selecionarContrato(codigo) {
 <div class="modal fade" id="modalAssinatura" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content shadow-lg">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title"><i class="fas fa-file-signature"></i> Assinatura SEI</h5>
+      <div class="modal-header bg-light text-dark">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-signature"></i> Assinatura SEI</h5>
       </div>
       <div class="modal-body">
         <div class="alert alert-success">
@@ -227,7 +227,7 @@ function selecionarContrato(codigo) {
         <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary">Assinar Manualmente Depois</a>
         
         <button type="button" class="btn btn-success btn-lg px-4" id="btnConfirmarAssinatura" onclick="confirmarAssinatura()">
-            <i class="fas fa-pen-nib"></i> Assinar Documento
+            <i class="bi bi-pen"></i> Assinar Documento
         </button>
       </div>
     </div>
@@ -282,7 +282,7 @@ function selecionarContrato(codigo) {
                 erroDiv.innerText = "Erro na assinatura: " + (data.erro || "Senha incorreta ou falha no sistema.");
                 erroDiv.style.display = 'block';
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-pen-nib"></i> Assinar Documento';
+                btn.innerHTML = '<i class="bi bi-pen"></i> Assinar Documento';
             }
         })
         .catch(error => {
@@ -290,7 +290,7 @@ function selecionarContrato(codigo) {
             erroDiv.innerText = "Erro de comunicação com o servidor.";
             erroDiv.style.display = 'block';
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-pen-nib"></i> Assinar Documento';
+            btn.innerHTML = '<i class="bi bi-pen"></i> Assinar Documento';
         });
     }
 </script>

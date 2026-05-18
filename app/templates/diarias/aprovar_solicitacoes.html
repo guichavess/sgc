@@ -1,304 +1,304 @@
-{% extends 'diarias/base_diarias.html' %}
+﻿{% extends 'diarias/base_diarias.html' %}
 {% block title %}SGC - Aprovar Solicitações{% endblock %}
 
 {% block content %}
 <style>
-    .tr-link { cursor: pointer; }
-    .tr-link:hover { background-color: rgba(0,0,0,0.035); }
+ .tr-link { cursor: pointer; }
+ .tr-link:hover { background-color: rgba(0,0,0,0.035); }
 </style>
 <div class="mb-4">
-    <h2 class="fw-bold">
-        <i class="bi bi-check2-square me-2"></i>Aprovar Solicitações
-    </h2>
-    <p class="text-muted mb-0">
-        {% if eh_secretario %}
-        Solicitações aguardando sua autorização como Secretário.
-        {% elif eh_super_sga %}
-        Solicitações pendentes de assinatura do Superintendente (SGA — autoriza todas as superintendências).
-        {% else %}
-        Solicitações pendentes da sua assinatura como Superintendente.
-        {% endif %}
-    </p>
+ <h2 class="fw-bold">
+ <i class="bi bi-check2-square me-2"></i>Aprovar Solicitações
+ </h2>
+ <p class="text-muted mb-0">
+ {% if eh_secretario %}
+ Solicitações aguardando sua autorização como Secretário.
+ {% elif eh_super_sga %}
+ Solicitações pendentes de assinatura do Superintendente (SGA — autoriza todas as superintendências).
+ {% else %}
+ Solicitações pendentes da sua assinatura como Superintendente.
+ {% endif %}
+ </p>
 </div>
 
 {# Filtros #}
-<div class="card mb-4 border-0 shadow-sm" style="overflow: visible; position: relative; z-index: 10;">
-    <div class="card-body p-3" style="overflow: visible;">
-        <form method="get" action="{{ url_for('diarias.aprovar_solicitacoes') }}" id="filtro-form">
-            <div class="row g-2 align-items-center">
-                <div class="col-auto">
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                        <input type="text" name="q" class="form-control border-start-0 ps-0"
-                               placeholder="Processo, CPF, solicitante..." value="{{ request.args.get('q', '') }}">
-                    </div>
-                </div>
-                <div class="col-auto">
-                    <div class="dropdown">
-                        <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
-                                type="button" id="dropdownTipos" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
-                            <i class="bi bi-signpost-split me-1"></i>
-                            <span id="labelTipos">Tipo</span>
-                            <span class="badge bg-primary ms-1" id="badgeTipos" style="display: none;">0</span>
-                        </button>
-                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 240px; z-index: 1060;">
-                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
-                                <small class="text-muted fw-bold">Tipo de itinerário:</small>
-                                <a href="#" class="text-decoration-none small" onclick="limparSelecaoTipo(this); return false;">Limpar</a>
-                            </div>
-                            {% for t in tipos_itinerario %}
-                            <div class="form-check item-filtro py-1">
-                                <input class="form-check-input filtro-check-tipo" type="checkbox" name="filtro_tipo"
-                                    value="{{ t.id }}" id="tipo_{{ t.id }}"
-                                    {% if t.id in filtro_tipos %}checked{% endif %}
-                                    onchange="atualizarLabelTipo()">
-                                <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="tipo_{{ t.id }}" style="cursor: pointer;">
-                                    <span>
-                                        <i class="bi {{ t.icone }} me-1" style="color: {{ t.cor }};"></i>
-                                        {{ t.nome }}
-                                    </span>
-                                    <span class="badge bg-light text-muted border ms-2">{{ tipo_counts.get(t.id, 0) }}</span>
-                                </label>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-                <div class="col-auto">
-                    <div class="dropdown">
-                        <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
-                                type="button" id="dropdownSolicitacao" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
-                            <i class="bi bi-receipt me-1"></i>
-                            <span id="labelSolicitacao">Solicitação</span>
-                            <span class="badge bg-primary ms-1" id="badgeSolicitacao" style="display: none;">0</span>
-                        </button>
-                        <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 260px; z-index: 1060;">
-                            <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
-                                <small class="text-muted fw-bold">Tipo de solicitação:</small>
-                                <a href="#" class="text-decoration-none small" onclick="limparSelecaoSolicitacao(this); return false;">Limpar</a>
-                            </div>
-                            {% for s in tipos_solicitacao %}
-                            <div class="form-check item-filtro py-1">
-                                <input class="form-check-input filtro-check-solicitacao" type="checkbox" name="filtro_solicitacao"
-                                    value="{{ s.id }}" id="sol_{{ s.id }}"
-                                    {% if s.id in filtro_solicitacao %}checked{% endif %}
-                                    onchange="atualizarLabelSolicitacao()">
-                                <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="sol_{{ s.id }}" style="cursor: pointer;">
-                                    <span>
-                                        <i class="bi {{ s.icone }} me-1" style="color: {{ s.cor }};"></i>
-                                        {{ s.nome }}
-                                    </span>
-                                    <span class="badge bg-light text-muted border ms-2">{{ sol_counts.get(s.id, 0) }}</span>
-                                </label>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary btn-sm fw-bold" title="Filtrar">
-                        <i class="bi bi-funnel me-1"></i>Filtrar
-                    </button>
-                </div>
-                <div class="col-auto">
-                    {% if request.args.get('q') or filtro_tipos or filtro_solicitacao %}
-                    <a href="{{ url_for('diarias.aprovar_solicitacoes') }}" class="btn btn-outline-danger btn-sm" title="Limpar Filtros">
-                        <i class="bi bi-x-lg"></i>
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-        </form>
-    </div>
+<div class="card mb-4 " style="overflow: visible; position: relative; z-index: 10;">
+ <div class="card-body p-3" style="overflow: visible;">
+ <form method="get" action="{{ url_for('diarias.aprovar_solicitacoes') }}" id="filtro-form">
+ <div class="row g-2 align-items-center">
+ <div class="col-auto">
+ <div class="input-group input-group-sm">
+ <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+ <input type="text" name="q" class="form-control border-start-0 ps-0"
+ placeholder="Processo, CPF, solicitante..." value="{{ request.args.get('q', '') }}">
+ </div>
+ </div>
+ <div class="col-auto">
+ <div class="dropdown">
+ <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
+ type="button" id="dropdownTipos" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+ <i class="bi bi-signpost-split me-1"></i>
+ <span id="labelTipos">Tipo</span>
+ <span class="badge bg-primary ms-1" id="badgeTipos" style="display: none;">0</span>
+ </button>
+ <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 240px; z-index: 1060;">
+ <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+ <small class="text-muted fw-bold">Tipo de itinerário:</small>
+ <a href="#" class="text-decoration-none small" onclick="limparSelecaoTipo(this); return false;">Limpar</a>
+ </div>
+ {% for t in tipos_itinerario %}
+ <div class="form-check item-filtro py-1">
+ <input class="form-check-input filtro-check-tipo" type="checkbox" name="filtro_tipo"
+ value="{{ t.id }}" id="tipo_{{ t.id }}"
+ {% if t.id in filtro_tipos %}checked{% endif %}
+ onchange="atualizarLabelTipo()">
+ <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="tipo_{{ t.id }}" style="cursor: pointer;">
+ <span>
+ <i class="bi {{ t.icone }} me-1" style="color: {{ t.cor }};"></i>
+ {{ t.nome }}
+ </span>
+ <span class="badge bg-light text-muted border ms-2">{{ tipo_counts.get(t.id, 0) }}</span>
+ </label>
+ </div>
+ {% endfor %}
+ </div>
+ </div>
+ </div>
+ <div class="col-auto">
+ <div class="dropdown">
+ <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
+ type="button" id="dropdownSolicitacao" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+ <i class="bi bi-receipt me-1"></i>
+ <span id="labelSolicitacao">Solicitação</span>
+ <span class="badge bg-primary ms-1" id="badgeSolicitacao" style="display: none;">0</span>
+ </button>
+ <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 260px; z-index: 1060;">
+ <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
+ <small class="text-muted fw-bold">Tipo de solicitação:</small>
+ <a href="#" class="text-decoration-none small" onclick="limparSelecaoSolicitacao(this); return false;">Limpar</a>
+ </div>
+ {% for s in tipos_solicitacao %}
+ <div class="form-check item-filtro py-1">
+ <input class="form-check-input filtro-check-solicitacao" type="checkbox" name="filtro_solicitacao"
+ value="{{ s.id }}" id="sol_{{ s.id }}"
+ {% if s.id in filtro_solicitacao %}checked{% endif %}
+ onchange="atualizarLabelSolicitacao()">
+ <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="sol_{{ s.id }}" style="cursor: pointer;">
+ <span>
+ <i class="bi {{ s.icone }} me-1" style="color: {{ s.cor }};"></i>
+ {{ s.nome }}
+ </span>
+ <span class="badge bg-light text-muted border ms-2">{{ sol_counts.get(s.id, 0) }}</span>
+ </label>
+ </div>
+ {% endfor %}
+ </div>
+ </div>
+ </div>
+ <div class="col-auto">
+ <button type="submit" class="btn btn-primary btn-sm fw-bold" title="Filtrar">
+ <i class="bi bi-funnel me-1"></i>Filtrar
+ </button>
+ </div>
+ <div class="col-auto">
+ {% if request.args.get('q') or filtro_tipos or filtro_solicitacao %}
+ <a href="{{ url_for('diarias.aprovar_solicitacoes') }}" class="btn btn-outline-danger btn-sm" title="Limpar Filtros">
+ <i class="bi bi-x-lg"></i>
+ </a>
+ {% endif %}
+ </div>
+ </div>
+ </form>
+ </div>
 </div>
 
 {# Tabela #}
-<div class="card border-0 shadow-sm overflow-hidden">
-    <div class="card-header bg-white border-bottom py-3">
-        <div class="d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 fw-bold">Solicitações Pendentes</h5>
-            <span class="badge bg-warning text-dark">{{ pagination.total }} aguardando assinatura</span>
-        </div>
-    </div>
-    <div class="card-body p-0">
-        <div class="table-responsive table-rounded">
-            <table class="table table-custom table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th class="ps-4">Solicitante</th>
-                        <th>Tipo</th>
-                        <th>Processo SEI</th>
-                        <th class="text-center">Pessoas</th>
-                        <th>Período</th>
-                        <th class="text-end">Valor</th>
-                        <th class="text-center">Ação</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for it in itinerarios %}
-                    <tr class="tr-link" data-href="{{ url_for('diarias.administracao_detalhe', id=it.id) }}">
-                        <td class="ps-4">
-                            <span class="fw-semibold">{{ it.usuario_gerador.split('@')[0].replace('.', ' ').title() }}</span>
-                            <br><small class="text-muted">{{ it.data_solicitacao.strftime('%d/%m/%Y') if it.data_solicitacao else '' }}</small>
-                        </td>
-                        <td>
-                            {% if it.tipo_itinerario == 1 %}
-                                <span class="badge rounded-pill bg-info text-white">Estadual</span>
-                            {% elif it.tipo_itinerario == 3 %}
-                                <span class="badge rounded-pill bg-danger text-white">Internacional</span>
-                            {% else %}
-                                <span class="badge rounded-pill bg-warning text-dark">Nacional</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if it.sei_protocolo %}
-                            <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ it.sei_id_procedimento }}" target="_blank" class="fw-bold text-decoration-none">
-                                {{ it.sei_protocolo }} <i class="bi bi-box-arrow-up-right small"></i>
-                            </a>
-                            {% else %}
-                            <span class="text-muted small">---</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-center">
-                            <span class="badge bg-light text-dark border">{{ pessoas_count.get(it.id, 0) }}</span>
-                        </td>
-                        <td>
-                            <div class="small">
-                                <i class="bi bi-calendar-event text-muted me-1"></i>
-                                {{ it.data_viagem.strftime('%d/%m/%Y') if it.data_viagem else '-' }}
-                            </div>
-                            <div class="small text-muted">
-                                <i class="bi bi-calendar-check me-1"></i>
-                                {{ it.data_retorno.strftime('%d/%m/%Y') if it.data_retorno else '-' }}
-                            </div>
-                        </td>
-                        <td class="text-end">
-                            {% if it.valor_total %}
-                            <span class="fw-bold text-success">
-                                R$ {{ "{:,.2f}".format(it.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
-                            </span>
-                            {% else %}
-                            <span class="text-muted small">---</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-center">
-                            {% if eh_secretario %}
-                            <button type="button" class="btn btn-warning btn-sm fw-semibold"
-                                    onclick="abrirModalAssinar({{ it.id }}, '{{ it.sei_protocolo or it.n_processo or ('#' ~ it.id) }}')">
-                                <i class="bi bi-shield-check me-1"></i>Autorizar
-                            </button>
-                            {% else %}
-                            <button type="button" class="btn btn-primary btn-sm"
-                                    onclick="abrirModalAssinar({{ it.id }}, '{{ it.sei_protocolo or it.n_processo or ('#' ~ it.id) }}')">
-                                <i class="bi bi-pen me-1"></i>Assinar
-                            </button>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="7" class="text-center py-5 text-muted">
-                            <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
-                            Nenhuma solicitação pendente de assinatura.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
+<div class="card overflow-hidden">
+ <div class="card-header bg-white border-bottom py-3">
+ <div class="d-flex justify-content-between align-items-center">
+ <h5 class="mb-0 fw-bold">Solicitações Pendentes</h5>
+ <span class="badge bg-warning text-dark">{{ pagination.total }} aguardando assinatura</span>
+ </div>
+ </div>
+ <div class="card-body p-0">
+ <div class="table-responsive table-rounded">
+ <table class="table table-custom table-hover align-middle mb-0">
+ <thead>
+ <tr>
+ <th class="ps-4">Solicitante</th>
+ <th>Tipo</th>
+ <th>Processo SEI</th>
+ <th class="text-center">Pessoas</th>
+ <th>Período</th>
+ <th class="text-end">Valor</th>
+ <th class="text-center">Ação</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for it in itinerarios %}
+ <tr class="tr-link" data-href="{{ url_for('diarias.administracao_detalhe', id=it.id) }}">
+ <td class="ps-4">
+ <span class="fw-semibold">{{ it.usuario_gerador.split('@')[0].replace('.', ' ').title() }}</span>
+ <br><small class="text-muted">{{ it.data_solicitacao.strftime('%d/%m/%Y') if it.data_solicitacao else '' }}</small>
+ </td>
+ <td>
+ {% if it.tipo_itinerario == 1 %}
+ <span class="badge rounded-pill bg-info text-white">Estadual</span>
+ {% elif it.tipo_itinerario == 3 %}
+ <span class="badge rounded-pill bg-danger text-white">Internacional</span>
+ {% else %}
+ <span class="badge rounded-pill bg-warning text-dark">Nacional</span>
+ {% endif %}
+ </td>
+ <td>
+ {% if it.sei_protocolo %}
+ <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ it.sei_id_procedimento }}" target="_blank" class="fw-bold text-decoration-none">
+ {{ it.sei_protocolo }} <i class="bi bi-box-arrow-up-right small"></i>
+ </a>
+ {% else %}
+ <span class="text-muted small">---</span>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ <span class="badge bg-light text-dark border">{{ pessoas_count.get(it.id, 0) }}</span>
+ </td>
+ <td>
+ <div class="small">
+ <i class="bi bi-calendar-event text-muted me-1"></i>
+ {{ it.data_viagem.strftime('%d/%m/%Y') if it.data_viagem else '-' }}
+ </div>
+ <div class="small text-muted">
+ <i class="bi bi-calendar-check me-1"></i>
+ {{ it.data_retorno.strftime('%d/%m/%Y') if it.data_retorno else '-' }}
+ </div>
+ </td>
+ <td class="text-end">
+ {% if it.valor_total %}
+ <span class="fw-bold text-success">
+ R$ {{ "{:,.2f}".format(it.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+ </span>
+ {% else %}
+ <span class="text-muted small">---</span>
+ {% endif %}
+ </td>
+ <td class="text-center">
+ {% if eh_secretario %}
+ <button type="button" class="btn btn-warning btn-sm fw-semibold"
+ onclick="abrirModalAssinar({{ it.id }}, '{{ it.sei_protocolo or it.n_processo or ('#' ~ it.id) }}')">
+ <i class="bi bi-shield-check me-1"></i>Autorizar
+ </button>
+ {% else %}
+ <button type="button" class="btn btn-primary btn-sm"
+ onclick="abrirModalAssinar({{ it.id }}, '{{ it.sei_protocolo or it.n_processo or ('#' ~ it.id) }}')">
+ <i class="bi bi-pen me-1"></i>Assinar
+ </button>
+ {% endif %}
+ </td>
+ </tr>
+ {% else %}
+ <tr>
+ <td colspan="7" class="text-center py-5 text-muted">
+ <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
+ Nenhuma solicitação pendente de assinatura.
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ </div>
+ </div>
 
-    {# Paginacao #}
-    {% if pagination.pages > 1 %}
-    <div class="card-footer bg-white border-top py-3">
-        <div class="d-flex justify-content-between align-items-center">
-            <div class="text-muted small">
-                Mostrando <strong>{{ itinerarios|length }}</strong> de <strong>{{ pagination.total }}</strong> solicitações
-            </div>
-            <nav aria-label="Navegação de páginas">
-                <ul class="pagination pagination-sm mb-0">
-                    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-                        <a class="page-link" href="{{ url_for('diarias.aprovar_solicitacoes', page=pagination.prev_num, q=request.args.get('q',''), filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) if pagination.has_prev else '#' }}">
-                            <i class="bi bi-chevron-left"></i>
-                        </a>
-                    </li>
-                    {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
-                        {% if p %}
-                        <li class="page-item {{ 'active' if p == pagination.page }}">
-                            <a class="page-link" href="{{ url_for('diarias.aprovar_solicitacoes', page=p, q=request.args.get('q',''), filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) }}">{{ p }}</a>
-                        </li>
-                        {% else %}
-                        <li class="page-item disabled"><span class="page-link">...</span></li>
-                        {% endif %}
-                    {% endfor %}
-                    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-                        <a class="page-link" href="{{ url_for('diarias.aprovar_solicitacoes', page=pagination.next_num, q=request.args.get('q',''), filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) if pagination.has_next else '#' }}">
-                            <i class="bi bi-chevron-right"></i>
-                        </a>
-                    </li>
-                </ul>
-            </nav>
-        </div>
-    </div>
-    {% endif %}
+ {# Paginacao #}
+ {% if pagination.pages > 1 %}
+ <div class="card-footer bg-white border-top py-3">
+ <div class="d-flex justify-content-between align-items-center">
+ <div class="text-muted small">
+ Mostrando <strong>{{ itinerarios|length }}</strong> de <strong>{{ pagination.total }}</strong> solicitações
+ </div>
+ <nav aria-label="Navegação de páginas">
+ <ul class="pagination pagination-sm mb-0">
+ <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+ <a class="page-link" href="{{ url_for('diarias.aprovar_solicitacoes', page=pagination.prev_num, q=request.args.get('q',''), filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) if pagination.has_prev else '#' }}">
+ <i class="bi bi-chevron-left"></i>
+ </a>
+ </li>
+ {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+ {% if p %}
+ <li class="page-item {{ 'active' if p == pagination.page }}">
+ <a class="page-link" href="{{ url_for('diarias.aprovar_solicitacoes', page=p, q=request.args.get('q',''), filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) }}">{{ p }}</a>
+ </li>
+ {% else %}
+ <li class="page-item disabled"><span class="page-link">...</span></li>
+ {% endif %}
+ {% endfor %}
+ <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+ <a class="page-link" href="{{ url_for('diarias.aprovar_solicitacoes', page=pagination.next_num, q=request.args.get('q',''), filtro_tipo=filtro_tipos, filtro_solicitacao=filtro_solicitacao) if pagination.has_next else '#' }}">
+ <i class="bi bi-chevron-right"></i>
+ </a>
+ </li>
+ </ul>
+ </nav>
+ </div>
+ </div>
+ {% endif %}
 </div>
 
 {# Modal compartilhado de Assinatura / Autorização — preenchido dinamicamente via JS #}
 {% set is_secretario_flag = 'true' if eh_secretario else 'false' %}
 {% if eh_secretario %}
-    {% set modal_bg = 'bg-warning' %}
-    {% set modal_title = 'Autorizar Solicitação' %}
-    {% set modal_action_label = 'Autorizar' %}
-    {% set modal_action_icon = 'bi-shield-check' %}
-    {% set modal_btn_class = 'btn-warning' %}
-    {% set modal_prompt_verb = 'autorizar' %}
+ {% set modal_bg = 'bg-warning' %}
+ {% set modal_title = 'Autorizar Solicitação' %}
+ {% set modal_action_label = 'Autorizar' %}
+ {% set modal_action_icon = 'bi-shield-check' %}
+ {% set modal_btn_class = 'btn-warning' %}
+ {% set modal_prompt_verb = 'autorizar' %}
 {% else %}
-    {% set modal_bg = 'bg-primary' %}
-    {% set modal_title = 'Assinar Requisições' %}
-    {% set modal_action_label = 'Assinar Requisições' %}
-    {% set modal_action_icon = 'bi-pen' %}
-    {% set modal_btn_class = 'btn-primary' %}
-    {% set modal_prompt_verb = 'assinar' %}
+ {% set modal_bg = 'bg-primary' %}
+ {% set modal_title = 'Assinar Requisições' %}
+ {% set modal_action_label = 'Assinar Requisições' %}
+ {% set modal_action_icon = 'bi-pen' %}
+ {% set modal_btn_class = 'btn-primary' %}
+ {% set modal_prompt_verb = 'assinar' %}
 {% endif %}
 <div class="modal fade" id="modalAssinarLista" tabindex="-1" aria-labelledby="modalAssinarListaLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header {{ modal_bg }}">
-                <h5 class="modal-title {{ 'text-dark' if eh_secretario else 'text-white' }}" id="modalAssinarListaLabel">
-                    <i class="bi {{ modal_action_icon }} me-1"></i> {{ modal_title }}
-                </h5>
-                <button type="button" class="btn-close {{ '' if eh_secretario else 'btn-close-white' }}" data-bs-dismiss="modal" aria-label="Fechar"></button>
-            </div>
-            <div class="modal-body">
-                <div id="lista-assinar-erro" class="alert alert-danger d-none" role="alert"></div>
-                <div id="lista-assinar-sucesso" class="alert alert-success d-none" role="alert"></div>
+ <div class="modal-dialog modal-dialog-centered">
+ <div class="modal-content">
+ <div class="modal-header {{ modal_bg }}">
+ <h5 class="modal-title {{ 'text-dark' if eh_secretario else 'text-white' }}" id="modalAssinarListaLabel">
+ <i class="bi {{ modal_action_icon }} me-1"></i> {{ modal_title }}
+ </h5>
+ <button type="button" class="btn-close {{ '' if eh_secretario else 'btn-close-white' }}" data-bs-dismiss="modal" aria-label="Fechar"></button>
+ </div>
+ <div class="modal-body">
+ <div id="lista-assinar-erro" class="alert alert-danger d-none" role="alert"></div>
+ <div id="lista-assinar-sucesso" class="alert alert-success d-none" role="alert"></div>
 
-                <p class="text-muted small mb-3">
-                    Processo: <strong id="lista-assinar-processo">—</strong><br>
-                    Informe suas credenciais do SEI para {{ modal_prompt_verb }} a solicitação.
-                </p>
+ <p class="text-muted small mb-3">
+ Processo: <strong id="lista-assinar-processo">—</strong><br>
+ Informe suas credenciais do SEI para {{ modal_prompt_verb }} a solicitação.
+ </p>
 
-                <div class="mb-3">
-                    <label for="lista_assinar_usuario" class="form-label fw-semibold">Usuário SEI</label>
-                    <input type="text" class="form-control" id="lista_assinar_usuario"
-                           placeholder="Seu login no SEI" autocomplete="off">
-                </div>
+ <div class="mb-3">
+ <label for="lista_assinar_usuario" class="form-label fw-semibold">Usuário SEI</label>
+ <input type="text" class="form-control" id="lista_assinar_usuario"
+ placeholder="Seu login no SEI" autocomplete="off">
+ </div>
 
-                <div class="mb-3">
-                    <label for="lista_assinar_senha" class="form-label fw-semibold">Senha SEI</label>
-                    <input type="password" class="form-control" id="lista_assinar_senha"
-                           placeholder="Sua senha no SEI" autocomplete="off">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn {{ modal_btn_class }} btn-sm px-4" id="btn-lista-assinar"
-                        onclick="confirmarAssinatura()">
-                    <i class="bi {{ modal_action_icon }} me-1"></i> {{ modal_action_label }}
-                </button>
-            </div>
-        </div>
-    </div>
+ <div class="mb-3">
+ <label for="lista_assinar_senha" class="form-label fw-semibold">Senha SEI</label>
+ <input type="password" class="form-control" id="lista_assinar_senha"
+ placeholder="Sua senha no SEI" autocomplete="off">
+ </div>
+ </div>
+ <div class="modal-footer">
+ <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+ <button type="button" class="btn {{ modal_btn_class }} btn-sm px-4" id="btn-lista-assinar"
+ onclick="confirmarAssinatura()">
+ <i class="bi {{ modal_action_icon }} me-1"></i> {{ modal_action_label }}
+ </button>
+ </div>
+ </div>
+ </div>
 </div>
 
 <script>
@@ -306,125 +306,125 @@ const EH_SECRETARIO = {{ is_secretario_flag }};
 let itinerarioIdAtual = null;
 
 function abrirModalAssinar(id, processo) {
-    itinerarioIdAtual = id;
-    document.getElementById('lista-assinar-processo').textContent = processo;
-    document.getElementById('lista_assinar_usuario').value = '';
-    document.getElementById('lista_assinar_senha').value = '';
-    document.getElementById('lista-assinar-erro').classList.add('d-none');
-    document.getElementById('lista-assinar-sucesso').classList.add('d-none');
-    new bootstrap.Modal(document.getElementById('modalAssinarLista')).show();
+ itinerarioIdAtual = id;
+ document.getElementById('lista-assinar-processo').textContent = processo;
+ document.getElementById('lista_assinar_usuario').value = '';
+ document.getElementById('lista_assinar_senha').value = '';
+ document.getElementById('lista-assinar-erro').classList.add('d-none');
+ document.getElementById('lista-assinar-sucesso').classList.add('d-none');
+ new bootstrap.Modal(document.getElementById('modalAssinarLista')).show();
 }
 
 async function confirmarAssinatura() {
-    if (!itinerarioIdAtual) return;
+ if (!itinerarioIdAtual) return;
 
-    const usuario = document.getElementById('lista_assinar_usuario').value.trim();
-    const senha = document.getElementById('lista_assinar_senha').value.trim();
-    const erroDiv = document.getElementById('lista-assinar-erro');
-    const sucessoDiv = document.getElementById('lista-assinar-sucesso');
-    const btn = document.getElementById('btn-lista-assinar');
+ const usuario = document.getElementById('lista_assinar_usuario').value.trim();
+ const senha = document.getElementById('lista_assinar_senha').value.trim();
+ const erroDiv = document.getElementById('lista-assinar-erro');
+ const sucessoDiv = document.getElementById('lista-assinar-sucesso');
+ const btn = document.getElementById('btn-lista-assinar');
 
-    erroDiv.classList.add('d-none');
-    sucessoDiv.classList.add('d-none');
+ erroDiv.classList.add('d-none');
+ sucessoDiv.classList.add('d-none');
 
-    if (!usuario || !senha) {
-        erroDiv.textContent = 'Informe usuário e senha do SEI.';
-        erroDiv.classList.remove('d-none');
-        return;
-    }
+ if (!usuario || !senha) {
+ erroDiv.textContent = 'Informe usuário e senha do SEI.';
+ erroDiv.classList.remove('d-none');
+ return;
+ }
 
-    btn.disabled = true;
-    const acaoLabel = EH_SECRETARIO ? 'Autorizando' : 'Assinando';
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> ${acaoLabel}...`;
+ btn.disabled = true;
+ const acaoLabel = EH_SECRETARIO ? 'Autorizando' : 'Assinando';
+ btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> ${acaoLabel}...`;
 
-    const endpoint = EH_SECRETARIO
-        ? `/diarias/administracao/${itinerarioIdAtual}/autorizar`
-        : `/diarias/administracao/${itinerarioIdAtual}/assinar-superintendente`;
+ const endpoint = EH_SECRETARIO
+ ? `/diarias/administracao/${itinerarioIdAtual}/autorizar`
+ : `/diarias/administracao/${itinerarioIdAtual}/assinar-superintendente`;
 
-    const btnLabelOriginal = btn.innerHTML;
-    try {
-        const resp = await fetch(endpoint, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({sei_usuario: usuario, sei_senha: senha})
-        });
-        const data = await resp.json();
+ const btnLabelOriginal = btn.innerHTML;
+ try {
+ const resp = await fetch(endpoint, {
+ method: 'POST',
+ headers: {'Content-Type': 'application/json'},
+ body: JSON.stringify({sei_usuario: usuario, sei_senha: senha})
+ });
+ const data = await resp.json();
 
-        if (data.sucesso) {
-            const verbo = EH_SECRETARIO ? 'Autorização' : 'Assinatura';
-            sucessoDiv.textContent = `${verbo} realizada com sucesso! Atualizando...`;
-            sucessoDiv.classList.remove('d-none');
-            setTimeout(() => location.reload(), 1200);
-        } else {
-            erroDiv.textContent = data.erro || 'Erro desconhecido.';
-            erroDiv.classList.remove('d-none');
-            btn.disabled = false;
-            const icon = EH_SECRETARIO ? 'bi-shield-check' : 'bi-pen';
-            const label = EH_SECRETARIO ? 'Autorizar' : 'Assinar Requisições';
-            btn.innerHTML = `<i class="bi ${icon} me-1"></i> ${label}`;
-        }
-    } catch (e) {
-        erroDiv.textContent = 'Erro de comunicação: ' + e.message;
-        erroDiv.classList.remove('d-none');
-        btn.disabled = false;
-        const icon = EH_SECRETARIO ? 'bi-shield-check' : 'bi-pen';
-        const label = EH_SECRETARIO ? 'Autorizar' : 'Assinar Requisições';
-        btn.innerHTML = `<i class="bi ${icon} me-1"></i> ${label}`;
-    }
+ if (data.sucesso) {
+ const verbo = EH_SECRETARIO ? 'Autorização' : 'Assinatura';
+ sucessoDiv.textContent = `${verbo} realizada com sucesso! Atualizando...`;
+ sucessoDiv.classList.remove('d-none');
+ setTimeout(() => location.reload(), 1200);
+ } else {
+ erroDiv.textContent = data.erro || 'Erro desconhecido.';
+ erroDiv.classList.remove('d-none');
+ btn.disabled = false;
+ const icon = EH_SECRETARIO ? 'bi-shield-check' : 'bi-pen';
+ const label = EH_SECRETARIO ? 'Autorizar' : 'Assinar Requisições';
+ btn.innerHTML = `<i class="bi ${icon} me-1"></i> ${label}`;
+ }
+ } catch (e) {
+ erroDiv.textContent = 'Erro de comunicação: ' + e.message;
+ erroDiv.classList.remove('d-none');
+ btn.disabled = false;
+ const icon = EH_SECRETARIO ? 'bi-shield-check' : 'bi-pen';
+ const label = EH_SECRETARIO ? 'Autorizar' : 'Assinar Requisições';
+ btn.innerHTML = `<i class="bi ${icon} me-1"></i> ${label}`;
+ }
 }
 
 // Filtros: labels dinâmicos
 function atualizarLabelTipo() {
-    const checkboxes = document.querySelectorAll('.filtro-check-tipo:checked');
-    const count = checkboxes.length;
-    const label = document.getElementById('labelTipos');
-    const badge = document.getElementById('badgeTipos');
-    if (count > 0) {
-        label.innerText = count === 1 ? '1 Selecionado' : count + ' Selecionados';
-        badge.innerText = count;
-        badge.style.display = 'inline-block';
-    } else {
-        label.innerText = 'Tipo';
-        badge.style.display = 'none';
-    }
+ const checkboxes = document.querySelectorAll('.filtro-check-tipo:checked');
+ const count = checkboxes.length;
+ const label = document.getElementById('labelTipos');
+ const badge = document.getElementById('badgeTipos');
+ if (count > 0) {
+ label.innerText = count === 1 ? '1 Selecionado' : count + ' Selecionados';
+ badge.innerText = count;
+ badge.style.display = 'inline-block';
+ } else {
+ label.innerText = 'Tipo';
+ badge.style.display = 'none';
+ }
 }
 function limparSelecaoTipo(link) {
-    const dropdown = link.closest('.dropdown-menu');
-    dropdown.querySelectorAll('input[type="checkbox"]').forEach(i => i.checked = false);
-    atualizarLabelTipo();
+ const dropdown = link.closest('.dropdown-menu');
+ dropdown.querySelectorAll('input[type="checkbox"]').forEach(i => i.checked = false);
+ atualizarLabelTipo();
 }
 function atualizarLabelSolicitacao() {
-    const checkboxes = document.querySelectorAll('.filtro-check-solicitacao:checked');
-    const count = checkboxes.length;
-    const label = document.getElementById('labelSolicitacao');
-    const badge = document.getElementById('badgeSolicitacao');
-    if (count > 0) {
-        label.innerText = count === 1 ? '1 Selecionado' : count + ' Selecionados';
-        badge.innerText = count;
-        badge.style.display = 'inline-block';
-    } else {
-        label.innerText = 'Solicitação';
-        badge.style.display = 'none';
-    }
+ const checkboxes = document.querySelectorAll('.filtro-check-solicitacao:checked');
+ const count = checkboxes.length;
+ const label = document.getElementById('labelSolicitacao');
+ const badge = document.getElementById('badgeSolicitacao');
+ if (count > 0) {
+ label.innerText = count === 1 ? '1 Selecionado' : count + ' Selecionados';
+ badge.innerText = count;
+ badge.style.display = 'inline-block';
+ } else {
+ label.innerText = 'Solicitação';
+ badge.style.display = 'none';
+ }
 }
 function limparSelecaoSolicitacao(link) {
-    const dropdown = link.closest('.dropdown-menu');
-    dropdown.querySelectorAll('input[type="checkbox"]').forEach(i => i.checked = false);
-    atualizarLabelSolicitacao();
+ const dropdown = link.closest('.dropdown-menu');
+ dropdown.querySelectorAll('input[type="checkbox"]').forEach(i => i.checked = false);
+ atualizarLabelSolicitacao();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    atualizarLabelTipo();
-    atualizarLabelSolicitacao();
+ atualizarLabelTipo();
+ atualizarLabelSolicitacao();
 
-    // Toda linha com .tr-link e clicavel — redireciona para data-href.
-    // Clicks em <a>, <button> ou .btn nao navegam (mantém acao propria).
-    document.querySelectorAll('.tr-link[data-href]').forEach(tr => {
-        tr.addEventListener('click', function(e) {
-            if (e.target.closest('a, button, .btn')) return;
-            window.location = this.dataset.href;
-        });
-    });
+ // Toda linha com .tr-link e clicavel — redireciona para data-href.
+ // Clicks em <a>, <button> ou .btn nao navegam (mantém acao propria).
+ document.querySelectorAll('.tr-link[data-href]').forEach(tr => {
+ tr.addEventListener('click', function(e) {
+ if (e.target.closest('a, button, .btn')) return;
+ window.location = this.dataset.href;
+ });
+ });
 });
 </script>
 {% endblock %}

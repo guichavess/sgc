@@ -1,15 +1,15 @@
-{% extends 'diarias/base_diarias.html' %}
+﻿{% extends 'diarias/base_diarias.html' %}
 {% block title %}SGC - Detalhes da Solicitação{% endblock %}
 
 {% block content %}
 <div class="mb-4">
-    <a href="{{ url_for('diarias.dashboard') }}" class="btn btn-outline-secondary btn-sm mb-3">
-        <i class="bi bi-arrow-left me-1"></i> Voltar
-    </a>
+ <a href="{{ url_for('diarias.dashboard') }}" class="btn btn-outline-secondary btn-sm mb-3">
+ <i class="bi bi-arrow-left me-1"></i> Voltar
+ </a>
 </div>
 
 {# Tipo de viagem — define exibicao inteligente de origem/destino
-   (cabeçalho E bloco de Datas e Locais abaixo) #}
+ (cabeçalho E bloco de Datas e Locais abaixo) #}
 {% set is_estadual = itinerario.tipo_itinerario == 1 %}
 {% set is_nacional = itinerario.tipo_itinerario == 2 %}
 {% set ultima_parada = paradas[-1] if paradas else None %}
@@ -17,297 +17,297 @@
 {# ===== CARD PRINCIPAL — CABEÇALHO + TIMELINE ===== #}
 {# Mesmo padrão do módulo financeiro e da aba administração #}
 <div class="card shadow-sm mb-4">
-    <div class="card-body p-0">
+ <div class="card-body p-0">
 
-        {# --- Cabeçalho compacto --- #}
-        <div class="bg-light p-3 border-bottom">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <h5 class="fw-bold text-dark mb-1">
-                        {% if itinerario.sei_id_procedimento %}
-                        <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}"
-                           target="_blank" class="text-decoration-none">
-                            {{ itinerario.sei_protocolo or itinerario.n_processo }}
-                            <i class="bi bi-box-arrow-up-right" style="font-size: 0.75rem;"></i>
-                        </a>
-                        {% else %}
-                        {{ itinerario.n_processo or 'Sem processo' }}
-                        {% endif %}
-                    </h5>
-                    <div class="d-flex flex-wrap gap-1 align-items-center" style="font-size: 0.82rem;">
-                        <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else ('bg-danger' if itinerario.tipo_itinerario == 3 else 'bg-warning text-dark') }}">
-                            {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
-                        </span>
-                        {% if itinerario.tipo_solicitacao %}
-                        <span class="badge bg-primary">{{ itinerario.tipo_solicitacao.nome }}</span>
-                        {% endif %}
-                        {% if itinerario.status %}
-                        <span class="badge {{ 'bg-secondary' if itinerario.status_id == 1 else ('bg-success' if itinerario.status_id == 2 else ('bg-danger' if itinerario.status_id == 3 else 'bg-dark')) }}">
-                            {{ itinerario.status.nome }}
-                        </span>
-                        {% endif %}
-                        <span class="text-muted">|</span>
-                        <span><strong>{{ itinerario.qtd_diarias_solicitadas }}</strong> diária(s)</span>
-                        <span class="text-muted">|</span>
-                        <span>{{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}
-                            a {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}</span>
-                        {% if itinerario.valor_total %}
-                        <span class="text-muted">|</span>
-                        <strong class="text-success">{{ "R$ {:,.2f}".format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
-                        {% endif %}
-                    </div>
-                    <p class="text-secondary mb-0 mt-1" style="font-size: 0.8rem;">
-                        <i class="bi bi-person me-1"></i>
-                        <strong>{{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() if itinerario.usuario_gerador else '-' }}</strong>
-                        <span class="text-muted mx-1">|</span>
-                        {# Origem → Destino inteligente por tipo #}
-                        {% if is_estadual %}
-                            <i class="bi bi-geo-alt me-1"></i>
-                            {{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}
-                            <i class="bi bi-arrow-right mx-1" style="font-size: 0.6rem;"></i>
-                            {{ ultima_parada.municipio.nome if ultima_parada and ultima_parada.municipio else 'Não informado' }}
-                        {% else %}
-                            <i class="bi bi-flag me-1"></i>
-                            {{ itinerario.estado_origem_obj.nome if itinerario.estado_origem_obj else '-' }}
-                            <i class="bi bi-arrow-right mx-1" style="font-size: 0.6rem;"></i>
-                            {{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}
-                        {% endif %}
-                    </p>
-                </div>
-                <div class="text-end">
-                    {% if itinerario.etapa_atual %}
-                    <span class="badge" style="background-color: {{ itinerario.etapa_atual.cor_hex or '#6c757d' }};">
-                        <i class="{{ itinerario.etapa_atual.icone }} me-1"></i>{{ itinerario.etapa_atual.nome }}
-                    </span>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
+ {# --- Cabeçalho compacto --- #}
+ <div class="bg-light p-3 border-bottom">
+ <div class="d-flex justify-content-between align-items-start">
+ <div>
+ <h5 class="fw-bold text-dark mb-1">
+ {% if itinerario.sei_id_procedimento %}
+ <a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}"
+ target="_blank" class="text-decoration-none">
+ {{ itinerario.sei_protocolo or itinerario.n_processo }}
+ <i class="bi bi-box-arrow-up-right" style="font-size: 0.75rem;"></i>
+ </a>
+ {% else %}
+ {{ itinerario.n_processo or 'Sem processo' }}
+ {% endif %}
+ </h5>
+ <div class="d-flex flex-wrap gap-1 align-items-center" style="font-size: 0.82rem;">
+ <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else ('bg-danger' if itinerario.tipo_itinerario == 3 else 'bg-warning text-dark') }}">
+ {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
+ </span>
+ {% if itinerario.tipo_solicitacao %}
+ <span class="badge bg-primary">{{ itinerario.tipo_solicitacao.nome }}</span>
+ {% endif %}
+ {% if itinerario.status %}
+ <span class="badge {{ 'bg-secondary' if itinerario.status_id == 1 else ('bg-success' if itinerario.status_id == 2 else ('bg-danger' if itinerario.status_id == 3 else 'bg-dark')) }}">
+ {{ itinerario.status.nome }}
+ </span>
+ {% endif %}
+ <span class="text-muted">|</span>
+ <span><strong>{{ itinerario.qtd_diarias_solicitadas }}</strong> diária(s)</span>
+ <span class="text-muted">|</span>
+ <span>{{ itinerario.data_viagem.strftime('%d/%m/%Y') if itinerario.data_viagem else '-' }}
+ a {{ itinerario.data_retorno.strftime('%d/%m/%Y') if itinerario.data_retorno else '-' }}</span>
+ {% if itinerario.valor_total %}
+ <span class="text-muted">|</span>
+ <strong class="text-success">{{ "R$ {:,.2f}".format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
+ {% endif %}
+ </div>
+ <p class="text-secondary mb-0 mt-1" style="font-size: 0.8rem;">
+ <i class="bi bi-person me-1"></i>
+ <strong>{{ itinerario.usuario_gerador.split('@')[0].replace('.', ' ').title() if itinerario.usuario_gerador else '-' }}</strong>
+ <span class="text-muted mx-1">|</span>
+ {# Origem → Destino inteligente por tipo #}
+ {% if is_estadual %}
+ <i class="bi bi-geo-alt me-1"></i>
+ {{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}
+ <i class="bi bi-arrow-right mx-1" style="font-size: 0.6rem;"></i>
+ {{ ultima_parada.municipio.nome if ultima_parada and ultima_parada.municipio else 'Não informado' }}
+ {% else %}
+ <i class="bi bi-flag me-1"></i>
+ {{ itinerario.estado_origem_obj.nome if itinerario.estado_origem_obj else '-' }}
+ <i class="bi bi-arrow-right mx-1" style="font-size: 0.6rem;"></i>
+ {{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}
+ {% endif %}
+ </p>
+ </div>
+ <div class="text-end">
+ {% if itinerario.etapa_atual %}
+ <span class="badge" style="background-color: {{ itinerario.etapa_atual.cor_hex or '#6c757d' }};">
+ <i class="{{ itinerario.etapa_atual.icone }} me-1"></i>{{ itinerario.etapa_atual.nome }}
+ </span>
+ {% endif %}
+ </div>
+ </div>
+ </div>
 
-        <div class="p-3">
-            {# Timeline de progresso #}
-            {% include 'diarias/partials/timeline_diarias.html' %}
+ <div class="p-3">
+ {# Timeline de progresso #}
+ {% include 'diarias/partials/timeline_diarias.html' %}
 
-            {# ══════════════════════════════════════════════════════════ #}
-            {# ACOMPANHAMENTO (stepper do solicitante) — logo apos a      #}
-            {# timeline principal, pois espelha o andamento real          #}
-            {# ══════════════════════════════════════════════════════════ #}
-            <div class="mb-4">
-                {% include 'diarias/partials/fluxo_solicitante.html' %}
-            </div>
+ {# ══════════════════════════════════════════════════════════ #}
+ {# ACOMPANHAMENTO (stepper do solicitante) — logo apos a #}
+ {# timeline principal, pois espelha o andamento real #}
+ {# ══════════════════════════════════════════════════════════ #}
+ <div class="mb-4">
+ {% include 'diarias/partials/fluxo_solicitante.html' %}
+ </div>
 
-        <div class="row mb-4">
-            {# Informações Gerais #}
-            <div class="col-md-6">
-                <h5 class="fw-bold mb-3"><i class="bi bi-info-circle me-2"></i>Informações Gerais</h5>
-                <table class="table table-bordered table-sm">
-                    <tr>
-                        <th class="bg-light" style="width:40%">Tipo de Itinerário</th>
-                        <td>
-                            <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else ('bg-danger' if itinerario.tipo_itinerario == 3 else 'bg-warning text-dark') }}">
-                                {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
-                            </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Nº Processo</th>
-                        <td>{% if itinerario.sei_id_procedimento %}<a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank">{{ itinerario.n_processo }} <i class="bi bi-box-arrow-up-right small"></i></a>{% else %}{{ itinerario.n_processo or '-' }}{% endif %}</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Data de Solicitação</th>
-                        <td>{{ itinerario.data_solicitacao.strftime('%d/%m/%Y') if itinerario.data_solicitacao else '-' }}</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Qtd. Diárias</th>
-                        <td>{{ itinerario.qtd_diarias_solicitadas }}</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Valor Total</th>
-                        <td class="fw-bold {{ 'text-success' if itinerario.valor_total }}">
-                            {{ "R$ {:,.2f}".format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') if itinerario.valor_total else 'Pendente' }}
-                        </td>
-                    </tr>
-                </table>
-            </div>
+ <div class="row mb-4">
+ {# Informações Gerais #}
+ <div class="col-md-6">
+ <h5 class="fw-bold mb-3"><i class="bi bi-info-circle me-2"></i>Informações Gerais</h5>
+ <table class="table table-bordered table-sm">
+ <tr>
+ <th class="bg-light" style="width:40%">Tipo de Itinerário</th>
+ <td>
+ <span class="badge {{ 'bg-info' if itinerario.tipo_itinerario == 1 else ('bg-danger' if itinerario.tipo_itinerario == 3 else 'bg-warning text-dark') }}">
+ {{ itinerario.tipo.nome if itinerario.tipo else '-' }}
+ </span>
+ </td>
+ </tr>
+ <tr>
+ <th class="bg-light">Nº Processo</th>
+ <td>{% if itinerario.sei_id_procedimento %}<a href="https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={{ itinerario.sei_id_procedimento }}" target="_blank">{{ itinerario.n_processo }} <i class="bi bi-box-arrow-up-right small"></i></a>{% else %}{{ itinerario.n_processo or '-' }}{% endif %}</td>
+ </tr>
+ <tr>
+ <th class="bg-light">Data de Solicitação</th>
+ <td>{{ itinerario.data_solicitacao.strftime('%d/%m/%Y') if itinerario.data_solicitacao else '-' }}</td>
+ </tr>
+ <tr>
+ <th class="bg-light">Qtd. Diárias</th>
+ <td>{{ itinerario.qtd_diarias_solicitadas }}</td>
+ </tr>
+ <tr>
+ <th class="bg-light">Valor Total</th>
+ <td class="fw-bold {{ 'text-success' if itinerario.valor_total }}">
+ {{ "R$ {:,.2f}".format(itinerario.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') if itinerario.valor_total else 'Pendente' }}
+ </td>
+ </tr>
+ </table>
+ </div>
 
-            {# Datas e Locais — origem/destino adaptativo ao tipo #}
-            <div class="col-md-6">
-                <h5 class="fw-bold mb-3"><i class="bi bi-calendar-event me-2"></i>Datas e Locais</h5>
-                <table class="table table-bordered table-sm">
-                    <tr>
-                        <th class="bg-light" style="width:40%">Data da Viagem</th>
-                        <td>{{ itinerario.data_viagem.strftime('%d/%m/%Y %H:%M') if itinerario.data_viagem else '-' }}</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">Data de Retorno</th>
-                        <td>{{ itinerario.data_retorno.strftime('%d/%m/%Y %H:%M') if itinerario.data_retorno else '-' }}</td>
-                    </tr>
-                    {# Estadual: municipio origem + municipio destino (ultima parada).
-                       Nacional: estado origem + estado destino.
-                       Tipo 3 (Apenas Passagens) trata como nacional por enquanto. #}
-                    {% if is_estadual %}
-                    <tr>
-                        <th class="bg-light"><i class="bi bi-geo-alt me-1 text-primary"></i>Município de Origem</th>
-                        <td>
-                            {{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}
-                            {% if itinerario.estado_origem_obj %}
-                                <small class="text-muted">/ {{ itinerario.estado_origem_obj.sigla or itinerario.estado_origem_obj.nome }}</small>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light"><i class="bi bi-geo-alt-fill me-1 text-success"></i>Município de Destino</th>
-                        <td>
-                            {% set ultima_parada = paradas[-1] if paradas else None %}
-                            {% if ultima_parada and ultima_parada.municipio %}
-                                {{ ultima_parada.municipio.nome }}
-                            {% else %}
-                                <span class="text-muted">Não informado</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <th class="bg-light"><i class="bi bi-flag me-1 text-primary"></i>Estado de Origem</th>
-                        <td>
-                            {{ itinerario.estado_origem_obj.nome if itinerario.estado_origem_obj else '-' }}
-                            {% if itinerario.municipio_origem_obj %}
-                                <small class="text-muted">({{ itinerario.municipio_origem_obj.nome }})</small>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light"><i class="bi bi-flag-fill me-1 text-success"></i>Estado de Destino</th>
-                        <td>{{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}</td>
-                    </tr>
-                    {% endif %}
-                </table>
-            </div>
-        </div>
+ {# Datas e Locais — origem/destino adaptativo ao tipo #}
+ <div class="col-md-6">
+ <h5 class="fw-bold mb-3"><i class="bi bi-calendar-event me-2"></i>Datas e Locais</h5>
+ <table class="table table-bordered table-sm">
+ <tr>
+ <th class="bg-light" style="width:40%">Data da Viagem</th>
+ <td>{{ itinerario.data_viagem.strftime('%d/%m/%Y %H:%M') if itinerario.data_viagem else '-' }}</td>
+ </tr>
+ <tr>
+ <th class="bg-light">Data de Retorno</th>
+ <td>{{ itinerario.data_retorno.strftime('%d/%m/%Y %H:%M') if itinerario.data_retorno else '-' }}</td>
+ </tr>
+ {# Estadual: municipio origem + municipio destino (ultima parada).
+ Nacional: estado origem + estado destino.
+ Tipo 3 (Apenas Passagens) trata como nacional por enquanto. #}
+ {% if is_estadual %}
+ <tr>
+ <th class="bg-light"><i class="bi bi-geo-alt me-1 text-primary"></i>Município de Origem</th>
+ <td>
+ {{ itinerario.municipio_origem_obj.nome if itinerario.municipio_origem_obj else '-' }}
+ {% if itinerario.estado_origem_obj %}
+ <small class="text-muted">/ {{ itinerario.estado_origem_obj.sigla or itinerario.estado_origem_obj.nome }}</small>
+ {% endif %}
+ </td>
+ </tr>
+ <tr>
+ <th class="bg-light"><i class="bi bi-geo-alt-fill me-1 text-success"></i>Município de Destino</th>
+ <td>
+ {% set ultima_parada = paradas[-1] if paradas else None %}
+ {% if ultima_parada and ultima_parada.municipio %}
+ {{ ultima_parada.municipio.nome }}
+ {% else %}
+ <span class="text-muted">Não informado</span>
+ {% endif %}
+ </td>
+ </tr>
+ {% else %}
+ <tr>
+ <th class="bg-light"><i class="bi bi-flag me-1 text-primary"></i>Estado de Origem</th>
+ <td>
+ {{ itinerario.estado_origem_obj.nome if itinerario.estado_origem_obj else '-' }}
+ {% if itinerario.municipio_origem_obj %}
+ <small class="text-muted">({{ itinerario.municipio_origem_obj.nome }})</small>
+ {% endif %}
+ </td>
+ </tr>
+ <tr>
+ <th class="bg-light"><i class="bi bi-flag-fill me-1 text-success"></i>Estado de Destino</th>
+ <td>{{ itinerario.estado_destino_obj.nome if itinerario.estado_destino_obj else '-' }}</td>
+ </tr>
+ {% endif %}
+ </table>
+ </div>
+ </div>
 
-        {# Objetivo #}
-        {% if itinerario.objetivo %}
-        <div class="row mb-4">
-            <div class="col-md-12">
-                <h5 class="fw-bold mb-3"><i class="bi bi-bullseye me-2"></i>Objetivo da Viagem</h5>
-                <div class="p-3 border rounded bg-light">
-                    <p class="mb-0">{{ itinerario.objetivo|corrigir_mojibake }}</p>
-                </div>
-            </div>
-        </div>
-        {% endif %}
+ {# Objetivo #}
+ {% if itinerario.objetivo %}
+ <div class="row mb-4">
+ <div class="col-md-12">
+ <h5 class="fw-bold mb-3"><i class="bi bi-bullseye me-2"></i>Objetivo da Viagem</h5>
+ <div class="p-3 border rounded bg-light">
+ <p class="mb-0">{{ itinerario.objetivo|corrigir_mojibake }}</p>
+ </div>
+ </div>
+ </div>
+ {% endif %}
 
-        {# Pessoas #}
-        <section class="mb-4">
-            <div class="card border-0 shadow-sm overflow-hidden">
-                <div class="card-header bg-white border-bottom py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-people me-2"></i>Pessoas</h5>
-                        <span class="badge bg-secondary">{{ itens|length }} pessoa(s)</span>
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive table-rounded">
-                        <table class="table table-custom table-hover align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th class="ps-4">Nome</th>
-                                    <th>CPF / Mat.</th>
-                                    <th>Cargo (Folha)</th>
-                                    <th>Setor / Órgão</th>
-                                    <th>Cargo Diária</th>
-                                    <th>Assessorando</th>
-                                    <th class="text-end">Valor Diária</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in itens %}
-                                <tr>
-                                    <td class="ps-4 fw-semibold">{{ item.nome_pessoa or item.cpf_pessoa }}</td>
-                                    <td>
-                                        <small>{{ item.cpf_pessoa }}</small>
-                                        {% if item.matricula_pessoa %}<br><small class="text-muted">Mat: {{ item.matricula_pessoa }}</small>{% endif %}
-                                    </td>
-                                    <td><small>{{ item.cargo_folha or '-' }}</small></td>
-                                    <td>
-                                        {% if item.setor or item.orgao %}
-                                        <small>{{ item.orgao or '' }}{% if item.setor and item.orgao %} / {% endif %}{{ item.setor or '' }}</small>
-                                        {% else %}<span class="text-muted small">-</span>{% endif %}
-                                    </td>
-                                    <td>{{ item.cargo.nome if item.cargo else '-' }}</td>
-                                    <td>
-                                        {% if item.cargo_assessorado %}
-                                        <span class="badge rounded-pill bg-success">{{ item.cargo_assessorado.nome }}</span>
-                                        {% else %}<span class="text-muted small">---</span>{% endif %}
-                                    </td>
-                                    <td class="text-end">
-                                        {% if item.valor_cargo %}
-                                        <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(item.valor_cargo).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
-                                        {% else %}<span class="text-muted small">---</span>{% endif %}
-                                    </td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="7" class="text-center py-5 text-muted">
-                                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                                        Nenhuma pessoa adicionada.
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </section>
+ {# Pessoas #}
+ <section class="mb-4">
+ <div class="card overflow-hidden">
+ <div class="card-header bg-white border-bottom py-3">
+ <div class="d-flex justify-content-between align-items-center">
+ <h5 class="mb-0 fw-bold"><i class="bi bi-people me-2"></i>Pessoas</h5>
+ <span class="badge bg-secondary">{{ itens|length }} pessoa(s)</span>
+ </div>
+ </div>
+ <div class="card-body p-0">
+ <div class="table-responsive table-rounded">
+ <table class="table table-custom table-hover align-middle mb-0">
+ <thead>
+ <tr>
+ <th class="ps-4">Nome</th>
+ <th>CPF / Mat.</th>
+ <th>Cargo (Folha)</th>
+ <th>Setor / Órgão</th>
+ <th>Cargo Diária</th>
+ <th>Assessorando</th>
+ <th class="text-end">Valor Diária</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for item in itens %}
+ <tr>
+ <td class="ps-4 fw-semibold">{{ item.nome_pessoa or item.cpf_pessoa }}</td>
+ <td>
+ <small>{{ item.cpf_pessoa }}</small>
+ {% if item.matricula_pessoa %}<br><small class="text-muted">Mat: {{ item.matricula_pessoa }}</small>{% endif %}
+ </td>
+ <td><small>{{ item.cargo_folha or '-' }}</small></td>
+ <td>
+ {% if item.setor or item.orgao %}
+ <small>{{ item.orgao or '' }}{% if item.setor and item.orgao %} / {% endif %}{{ item.setor or '' }}</small>
+ {% else %}<span class="text-muted small">-</span>{% endif %}
+ </td>
+ <td>{{ item.cargo.nome if item.cargo else '-' }}</td>
+ <td>
+ {% if item.cargo_assessorado %}
+ <span class="badge rounded-pill bg-success">{{ item.cargo_assessorado.nome }}</span>
+ {% else %}<span class="text-muted small">---</span>{% endif %}
+ </td>
+ <td class="text-end">
+ {% if item.valor_cargo %}
+ <span class="fw-bold text-success">R$ {{ "{:,.2f}".format(item.valor_cargo).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+ {% else %}<span class="text-muted small">---</span>{% endif %}
+ </td>
+ </tr>
+ {% else %}
+ <tr>
+ <td colspan="7" class="text-center py-5 text-muted">
+ <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+ Nenhuma pessoa adicionada.
+ </td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ </div>
+ </div>
+ </div>
+ </section>
 
-        {# Paradas (Estadual) #}
-        {% if paradas %}
-        <section class="mb-4">
-            <div class="card border-0 shadow-sm overflow-hidden">
-                <div class="card-header bg-white border-bottom py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-geo-alt me-2"></i>Paradas</h5>
-                        <span class="badge bg-secondary">{{ paradas|length }} parada(s)</span>
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive table-rounded">
-                        <table class="table table-custom table-hover align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th class="ps-4">Município</th>
-                                    <th>Código IBGE</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for p in paradas %}
-                                <tr>
-                                    <td class="ps-4 fw-semibold">{{ p.municipio.nome if p.municipio else '-' }}</td>
-                                    <td>{{ p.municipio_id }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </section>
-        {% endif %}
+ {# Paradas (Estadual) #}
+ {% if paradas %}
+ <section class="mb-4">
+ <div class="card overflow-hidden">
+ <div class="card-header bg-white border-bottom py-3">
+ <div class="d-flex justify-content-between align-items-center">
+ <h5 class="mb-0 fw-bold"><i class="bi bi-geo-alt me-2"></i>Paradas</h5>
+ <span class="badge bg-secondary">{{ paradas|length }} parada(s)</span>
+ </div>
+ </div>
+ <div class="card-body p-0">
+ <div class="table-responsive table-rounded">
+ <table class="table table-custom table-hover align-middle mb-0">
+ <thead>
+ <tr>
+ <th class="ps-4">Município</th>
+ <th>Código IBGE</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for p in paradas %}
+ <tr>
+ <td class="ps-4 fw-semibold">{{ p.municipio.nome if p.municipio else '-' }}</td>
+ <td>{{ p.municipio_id }}</td>
+ </tr>
+ {% endfor %}
+ </tbody>
+ </table>
+ </div>
+ </div>
+ </div>
+ </section>
+ {% endif %}
 
-        {# Justificativa #}
-        {% if itinerario.justificativa %}
-        <section class="mb-4">
-            <h5 class="fw-bold mb-3"><i class="bi bi-chat-left-text me-2"></i>Justificativa</h5>
-            <div class="p-3 border rounded bg-light">
-                <p class="mb-1"><strong>Tipo:</strong> {{ itinerario.justificativa.tipo_justificativa }}</p>
-                <p class="mb-0">{{ itinerario.justificativa.descricao|corrigir_mojibake }}</p>
-            </div>
-        </section>
-        {% endif %}
+ {# Justificativa #}
+ {% if itinerario.justificativa %}
+ <section class="mb-4">
+ <h5 class="fw-bold mb-3"><i class="bi bi-chat-left-text me-2"></i>Justificativa</h5>
+ <div class="p-3 border rounded bg-light">
+ <p class="mb-1"><strong>Tipo:</strong> {{ itinerario.justificativa.tipo_justificativa }}</p>
+ <p class="mb-0">{{ itinerario.justificativa.descricao|corrigir_mojibake }}</p>
+ </div>
+ </section>
+ {% endif %}
 
-        </div>{# /p-3 wrapper conteudo #}
-    </div>{# /card-body p-0 #}
+ </div>{# /p-3 wrapper conteudo #}
+ </div>{# /card-body p-0 #}
 </div>{# /card principal #}
 
 {# Modal de loading padronizado (NR/NE/NL/PD/OB/Relatorio/Comprovante) #}
@@ -315,120 +315,120 @@
 
 {# ── Modal de feedback estilizado ── #}
 <div class="modal fade" id="modalFeedback" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg">
-            <div class="modal-header py-2" id="modalFeedbackHeader">
-                <h6 class="modal-title" id="modalFeedbackTitle"></h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
-            </div>
-            <div class="modal-body text-center py-4">
-                <div class="mb-3" id="modalFeedbackIcon"></div>
-                <p class="mb-1 fw-semibold" id="modalFeedbackMsg"></p>
-                <p class="text-muted small mb-0" id="modalFeedbackSub" style="display:none;"></p>
-            </div>
-            <div class="modal-footer border-0 justify-content-center py-2">
-                <button type="button" class="btn btn-sm px-4" id="modalFeedbackBtn" data-bs-dismiss="modal">OK</button>
-            </div>
-        </div>
-    </div>
+ <div class="modal-dialog modal-dialog-centered">
+ <div class="modal-content border-0 shadow-lg">
+ <div class="modal-header py-2" id="modalFeedbackHeader">
+ <h6 class="modal-title" id="modalFeedbackTitle"></h6>
+ <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+ </div>
+ <div class="modal-body text-center py-4">
+ <div class="mb-3" id="modalFeedbackIcon"></div>
+ <p class="mb-1 fw-semibold" id="modalFeedbackMsg"></p>
+ <p class="text-muted small mb-0" id="modalFeedbackSub" style="display:none;"></p>
+ </div>
+ <div class="modal-footer border-0 justify-content-center py-2">
+ <button type="button" class="btn btn-sm px-4" id="modalFeedbackBtn" data-bs-dismiss="modal">OK</button>
+ </div>
+ </div>
+ </div>
 </div>
 
 <script>
 function mostrarFeedback(tipo, mensagem, submensagem, aoFechar) {
-    const header = document.getElementById('modalFeedbackHeader');
-    const title  = document.getElementById('modalFeedbackTitle');
-    const icon   = document.getElementById('modalFeedbackIcon');
-    const msg    = document.getElementById('modalFeedbackMsg');
-    const sub    = document.getElementById('modalFeedbackSub');
-    const btn    = document.getElementById('modalFeedbackBtn');
-    const modal  = document.getElementById('modalFeedback');
+ const header = document.getElementById('modalFeedbackHeader');
+ const title = document.getElementById('modalFeedbackTitle');
+ const icon = document.getElementById('modalFeedbackIcon');
+ const msg = document.getElementById('modalFeedbackMsg');
+ const sub = document.getElementById('modalFeedbackSub');
+ const btn = document.getElementById('modalFeedbackBtn');
+ const modal = document.getElementById('modalFeedback');
 
-    if (tipo === 'success') {
-        header.className = 'modal-header py-2 bg-success text-white';
-        title.textContent = 'Sucesso';
-        icon.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size:3rem;"></i>';
-        btn.className = 'btn btn-sm px-4 btn-success';
-    } else if (tipo === 'warning') {
-        header.className = 'modal-header py-2 bg-warning bg-opacity-75 text-dark';
-        title.textContent = 'Atenção';
-        icon.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning" style="font-size:3rem;"></i>';
-        btn.className = 'btn btn-sm px-4 btn-warning';
-    } else {
-        header.className = 'modal-header py-2 bg-danger text-white';
-        title.textContent = 'Erro';
-        icon.innerHTML = '<i class="bi bi-x-circle-fill text-danger" style="font-size:3rem;"></i>';
-        btn.className = 'btn btn-sm px-4 btn-danger';
-    }
+ if (tipo === 'success') {
+ header.className = 'modal-header py-2 bg-success text-white';
+ title.textContent = 'Sucesso';
+ icon.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size:3rem;"></i>';
+ btn.className = 'btn btn-sm px-4 btn-success';
+ } else if (tipo === 'warning') {
+ header.className = 'modal-header py-2 bg-warning bg-opacity-75 text-dark';
+ title.textContent = 'Atenção';
+ icon.innerHTML = '<i class="bi bi-exclamation-triangle-fill text-warning" style="font-size:3rem;"></i>';
+ btn.className = 'btn btn-sm px-4 btn-warning';
+ } else {
+ header.className = 'modal-header py-2 bg-danger text-white';
+ title.textContent = 'Erro';
+ icon.innerHTML = '<i class="bi bi-x-circle-fill text-danger" style="font-size:3rem;"></i>';
+ btn.className = 'btn btn-sm px-4 btn-danger';
+ }
 
-    msg.textContent = mensagem;
-    if (submensagem) { sub.textContent = submensagem; sub.style.display = 'block'; }
-    else { sub.style.display = 'none'; }
+ msg.textContent = mensagem;
+ if (submensagem) { sub.textContent = submensagem; sub.style.display = 'block'; }
+ else { sub.style.display = 'none'; }
 
-    if (aoFechar) {
-        modal.addEventListener('hidden.bs.modal', function handler() {
-            modal.removeEventListener('hidden.bs.modal', handler);
-            aoFechar();
-        });
-    }
+ if (aoFechar) {
+ modal.addEventListener('hidden.bs.modal', function handler() {
+ modal.removeEventListener('hidden.bs.modal', handler);
+ aoFechar();
+ });
+ }
 
-    new bootstrap.Modal(modal).show();
+ new bootstrap.Modal(modal).show();
 }
 </script>
 
 {# Scripts para relatório e comprovante.
-   Gate frouxo: usa get_doc (truthy se marcador existe, com sei_id OU codigo),
-   compatível com o padrão de OB 1-por-servidor onde o marcador agregado
-   carrega apenas `codigo`. Analogamente para relatorio_viagem. #}
+ Gate frouxo: usa get_doc (truthy se marcador existe, com sei_id OU codigo),
+ compatível com o padrão de OB 1-por-servidor onde o marcador agregado
+ carrega apenas `codigo`. Analogamente para relatorio_viagem. #}
 {% set _doc_ob_ref = itinerario.get_doc('ob') %}
 {% set _doc_rel_ref = itinerario.get_doc('relatorio_viagem') %}
 {% if _doc_ob_ref and not _doc_rel_ref %}
 <script>
 function gerarRelatorioViagem() {
-    const relato = document.getElementById('relatoViagem').value.trim();
-    const usuarioSei = document.getElementById('relatorioUsuarioSei').value.trim();
-    const senhaSei = document.getElementById('relatorioSenhaSei').value.trim();
-    const cargoSei = (document.getElementById('relatorioCargoSei') || {}).value || '';
+ const relato = document.getElementById('relatoViagem').value.trim();
+ const usuarioSei = document.getElementById('relatorioUsuarioSei').value.trim();
+ const senhaSei = document.getElementById('relatorioSenhaSei').value.trim();
+ const cargoSei = (document.getElementById('relatorioCargoSei') || {}).value || '';
 
-    if (!relato) { mostrarFeedback('warning', 'O relato da viagem é obrigatório.'); return; }
-    if (!usuarioSei || !senhaSei) { mostrarFeedback('warning', 'Preencha usuário e senha SEI.'); return; }
+ if (!relato) { mostrarFeedback('warning', 'O relato da viagem é obrigatório.'); return; }
+ if (!usuarioSei || !senhaSei) { mostrarFeedback('warning', 'Preencha usuário e senha SEI.'); return; }
 
-    const btn = document.getElementById('btnGerarRelatorio');
-    const orig = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Gerando...';
+ const btn = document.getElementById('btnGerarRelatorio');
+ const orig = btn.innerHTML;
+ btn.disabled = true;
+ btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Gerando...';
 
-    // Exibe popup de loading padronizado com contexto do processo
-    const contexto = '{{ itinerario.n_processo or "Processo sem número" }}';
-    exibirLoadingSEI('relatorio', contexto);
+ // Exibe popup de loading padronizado com contexto do processo
+ const contexto = '{{ itinerario.n_processo or "Processo sem número" }}';
+ exibirLoadingSEI('relatorio', contexto);
 
-    const fd = new FormData();
-    fd.append('relato', relato);
-    fd.append('usuario_sei', usuarioSei);
-    fd.append('senha_sei', senhaSei);
-    fd.append('cargo_sei', cargoSei);
+ const fd = new FormData();
+ fd.append('relato', relato);
+ fd.append('usuario_sei', usuarioSei);
+ fd.append('senha_sei', senhaSei);
+ fd.append('cargo_sei', cargoSei);
 
-    fetch('{{ url_for("diarias.gerar_relatorio", id=itinerario.id) }}', { method: 'POST', body: fd })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            // Marca estagio final como concluido antes do reload (feedback visual)
-            finalizarLoadingSEI();
-            // Mantem o popup visivel por ~500ms para o usuario ver o sucesso
-            setTimeout(() => {
-                ocultarLoadingSEI();
-                mostrarFeedback('success', data.message, data.aviso || null, () => location.reload());
-            }, 500);
-        } else {
-            ocultarLoadingSEI();
-            mostrarFeedback('error', data.error || 'Erro desconhecido');
-            btn.disabled = false; btn.innerHTML = orig;
-        }
-    })
-    .catch(err => {
-        ocultarLoadingSEI();
-        mostrarFeedback('error', 'Erro de conexão: ' + err.message);
-        btn.disabled = false; btn.innerHTML = orig;
-    });
+ fetch('{{ url_for("diarias.gerar_relatorio", id=itinerario.id) }}', { method: 'POST', body: fd })
+ .then(r => r.json())
+ .then(data => {
+ if (data.success) {
+ // Marca estagio final como concluido antes do reload (feedback visual)
+ finalizarLoadingSEI();
+ // Mantem o popup visivel por ~500ms para o usuario ver o sucesso
+ setTimeout(() => {
+ ocultarLoadingSEI();
+ mostrarFeedback('success', data.message, data.aviso || null, () => location.reload());
+ }, 500);
+ } else {
+ ocultarLoadingSEI();
+ mostrarFeedback('error', data.error || 'Erro desconhecido');
+ btn.disabled = false; btn.innerHTML = orig;
+ }
+ })
+ .catch(err => {
+ ocultarLoadingSEI();
+ mostrarFeedback('error', 'Erro de conexão: ' + err.message);
+ btn.disabled = false; btn.innerHTML = orig;
+ });
 }
 </script>
 {% endif %}
@@ -437,12 +437,12 @@ function gerarRelatorioViagem() {
 {% if _doc_rel_ref and not _doc_comp_ref %}
 <script>
 document.getElementById('formComprovante')?.addEventListener('submit', function() {
-    const btn = document.getElementById('btnEnviarComprovante');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando...';
-    // Mostra popup de loading padronizado
-    const contexto = '{{ itinerario.n_processo or "" }}';
-    exibirLoadingSEI('comprovante', contexto);
+ const btn = document.getElementById('btnEnviarComprovante');
+ btn.disabled = true;
+ btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando...';
+ // Mostra popup de loading padronizado
+ const contexto = '{{ itinerario.n_processo or "" }}';
+ exibirLoadingSEI('comprovante', contexto);
 });
 </script>
 {% endif %}

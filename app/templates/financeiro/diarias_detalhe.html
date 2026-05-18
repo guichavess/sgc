@@ -1,4 +1,4 @@
-{% extends "financeiro/base_financeiro.html" %}
+﻿{% extends "financeiro/base_financeiro.html" %}
 {% block title %}SGC - Diária #{{ itinerario.id }}{% endblock %}
 
 {% block content %}
@@ -1791,7 +1791,7 @@
         <form method="POST" action="{{ url_for('financeiro.inserir_nr', id=itinerario.id) }}"
               enctype="multipart/form-data" class="modal-content" id="formInserirNR">
             <input type="hidden" name="item_itinerario_id" id="nr_item_itinerario_id">
-            <div class="modal-header bg-primary text-white">
+            <div class="modal-header bg-light text-dark">
                 <h5 class="modal-title"><i class="bi bi-file-earmark-plus me-1"></i>Nota de Reserva — <span id="nr_servidor_nome">—</span></h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
