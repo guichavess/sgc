@@ -244,8 +244,8 @@
             </section>
             {% endif %}
 
-            {# ===== SECAO DE COTACOES DE VOOS (Nacional / Passagens — só na etapa Aquisição de Passagens) ===== #}
-            {% if itinerario.tipo_itinerario in [2, 3] and itinerario.etapa_atual_id == 2 %}
+            {# ===== SECAO DE COTACOES DE VOOS (Nacional / Passagens — fluxo independente) ===== #}
+            {% if itinerario.tipo_itinerario in [2, 3] %}
             <section class="mb-4">
                 <div class="card border-0 shadow-sm overflow-hidden">
                     <div class="card-header bg-white border-bottom py-2">

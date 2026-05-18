@@ -29,9 +29,6 @@
 {% set steps = [] %}
 {% set steps = steps + [{'key': 'solicitacao', 'icon': 'bi-send-check', 'label': 'Solicitação', 'done': etapas_ok.get(1, True)}] %}
 {% set steps = steps + [{'key': 'analise1',    'icon': 'bi-receipt',    'label': 'Análise 1ª Parte', 'done': etapas_ok.get(3, False)}] %}
-{% if tem_passagens %}
-{% set steps = steps + [{'key': 'escolha',     'icon': 'bi-airplane',    'label': 'Escolha de Voo',   'done': etapas_ok.get(2, escolha_feita|default(False))}] %}
-{% endif %}
 {% set steps = steps + [{'key': 'analise2',    'icon': 'bi-clipboard-check', 'label': 'Análise 2ª Parte', 'done': etapas_ok.get(6, False)}] %}
 {% set steps = steps + [{'key': 'concessao',   'icon': 'bi-cash-stack',  'label': 'Pagamento',        'done': etapas_ok.get(4, False)}] %}
 {% set steps = steps + [{'key': 'relatorio',   'icon': 'bi-file-earmark-text', 'label': 'Relatório',    'done': doc_relatorio and (doc_relatorio.sei_id or doc_relatorio.codigo)}] %}
@@ -153,17 +150,27 @@
             {% endif %}
         </div>
 
-        {# ── PASSO: ESCOLHA DE VOO (condicional — só após NR) ── #}
+        {# ══ SEÇÃO INDEPENDENTE: PASSAGENS AÉREAS (fora do stepper — fluxo paralelo) ══ #}
         {% if tem_passagens %}
-        {% set panel_idx.n = panel_idx.n + 1 %}
         {% set voos_ida_sorted = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'ida')|sort(attribute='valor')|list %}
         {% set voos_volta_sorted = cotacoes_voos|selectattr('tipo_trecho', 'equalto', 'volta')|sort(attribute='valor')|list %}
-        <div class="sol-panel {{ 'active' if ns.passo_ativo == panel_idx.n }}" data-step="{{ panel_idx.n }}">
+        <div class="card border-0 shadow-sm mt-4 mb-3" style="border-left: 4px solid #E07A24 !important;">
+            <div class="card-header bg-white d-flex align-items-center py-2">
+                <i class="bi bi-airplane fs-5 me-2" style="color: #E07A24;"></i>
+                <strong style="font-size: 0.9rem;">Passagens Aéreas</strong>
+                {% if escolha_feita %}
+                <span class="badge bg-success ms-2" style="font-size: 0.6rem;">Concluído</span>
+                {% elif voos_ida_sorted|length > 0 %}
+                <span class="badge bg-warning text-dark ms-2" style="font-size: 0.6rem;">Selecione seu voo</span>
+                {% else %}
+                <span class="badge bg-secondary ms-2" style="font-size: 0.6rem;">Aguardando cotações</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
 
             {% if escolha_feita %}
-            {# Já escolheu #}
-            <div class="alert alert-success d-flex align-items-center mb-3">
-                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+            <div class="alert alert-success d-flex align-items-center mb-3 py-2">
+                <i class="bi bi-check-circle-fill fs-5 me-3"></i>
                 <strong>Passagens escolhidas!</strong>
             </div>
             <div class="row g-3">
@@ -191,9 +198,8 @@
                 {% endif %}
             </div>
 
-            {% elif nr_ok and voos_ida_sorted|length > 0 and voos_volta_sorted|length > 0 %}
-            {# Formulário de escolha #}
-            <div class="alert alert-info mb-3">
+            {% elif voos_ida_sorted|length > 0 and voos_volta_sorted|length > 0 %}
+            <div class="alert alert-info mb-3 py-2">
                 <i class="bi bi-info-circle me-2"></i>
                 Selecione os voos. <strong>Por lei, o menor valor deve ser escolhido</strong>, salvo justificativa.
             </div>
@@ -260,16 +266,14 @@
             </form>
 
             {% else %}
-            <div class="alert alert-secondary mb-0">
+            <div class="alert alert-secondary mb-0 py-2">
                 <i class="bi bi-hourglass-split me-1"></i>
-                {% if not nr_ok %}
-                Aguardando análise financeira (NR + Quadro Orçamentário) para liberar cotações.
-                {% else %}
                 Aguardando cadastro de cotações de voo pela administração.
-                {% endif %}
             </div>
             {% endif %}
-        </div>
+
+            </div>{# /card-body #}
+        </div>{# /card passagens #}
         {% endif %}
 
         {# ── PASSO: ANÁLISE 2ª PARTE ── #}

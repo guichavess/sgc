@@ -322,6 +322,68 @@
     </div>
 </div>
 
+{# ── Passagens Pendentes ── #}
+{% if passagens_pendentes|length > 0 %}
+<div class="card border-0 shadow-sm mb-4" style="border-left: 4px solid #E07A24 !important;">
+    <div class="card-header bg-white py-2 d-flex align-items-center">
+        <i class="bi bi-airplane fs-5 me-2" style="color: #E07A24;"></i>
+        <strong style="font-size: 0.9rem;">Passagens Pendentes</strong>
+        <span class="badge bg-warning text-dark ms-2">{{ passagens_pendentes|length }}</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0" style="font-size: 0.8rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>Processo</th>
+                        <th>Solicitante</th>
+                        <th>Tipo</th>
+                        <th>Data Viagem</th>
+                        <th>Etapa Atual</th>
+                        <th>Status Passagens</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for it in passagens_pendentes %}
+                    <tr>
+                        <td class="fw-semibold">{{ it.n_processo or it.sei_protocolo or '—' }}</td>
+                        <td>{{ it.usuario_gerador or '—' }}</td>
+                        <td>
+                            {% if it.tipo_solicitacao_id == 2 %}
+                            <span class="badge" style="background:#6f42c1; font-size:0.65rem;">Diárias+Passagens</span>
+                            {% else %}
+                            <span class="badge" style="background:#0d6efd; font-size:0.65rem;">Apenas Passagens</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ it.data_viagem.strftime('%d/%m/%Y') if it.data_viagem else '—' }}</td>
+                        <td><span class="badge bg-secondary" style="font-size:0.65rem;">{{ it.etapa_atual.nome if it.etapa_atual else '—' }}</span></td>
+                        <td>
+                            {% if it.id in ids_com_cotacoes %}
+                            <span class="badge bg-info text-dark" style="font-size:0.65rem;">
+                                <i class="bi bi-clock me-1"></i>Aguardando escolha
+                            </span>
+                            {% else %}
+                            <span class="badge bg-secondary" style="font-size:0.65rem;">
+                                <i class="bi bi-dash-circle me-1"></i>Sem cotações
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('diarias.administracao_detalhe', id=it.id, aba='passagens') }}"
+                               class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size:0.7rem;">
+                                <i class="bi bi-airplane me-1"></i>Gerenciar
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {# Tabela #}
 <div class="card border-0 shadow-sm overflow-hidden">
     <div class="card-header bg-white border-bottom py-3">

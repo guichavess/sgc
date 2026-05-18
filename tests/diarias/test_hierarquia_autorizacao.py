@@ -348,20 +348,21 @@ class TestSuperAssinaApenasRequisicao:
                 "O front-end precisa dessa chave para saber que foi uma dispensa automática."
             )
 
-    def test_super_nao_assina_requisicao_passagens(self, app):
+    def test_super_assina_requisicao_passagens_para_tipo3(self, app):
         """
-        Verifica pelo código-fonte que o endpoint assinar-superintendente
-        não contém lógica para assinar 'requisicao_passagens'.
+        Para tipo_solicitacao_id=3 (Apenas Passagens), o superintendente
+        deve assinar a Requisição de Passagens (série 2975) como fallback
+        quando não há Requisição de Diárias (série 532).
         """
         import inspect
         with app.app_context():
             from app.diarias.routes.admin import assinar_superintendente
             source = inspect.getsource(assinar_superintendente)
 
-            assert 'requisicao_passagens' not in source, (
-                "FALHOU: assinar_superintendente ainda contém lógica para assinar "
-                "'requisicao_passagens'. O superintendente deve assinar APENAS a "
-                "Requisição de Diárias (série 532)."
+            assert 'requisicao_passagens' in source, (
+                "FALHOU: assinar_superintendente não contém fallback para "
+                "'requisicao_passagens'. Para tipo 3, o Superintendente deve "
+                "assinar a Req. Passagens quando a Req. Diárias não existe."
             )
 
     def test_verificar_assinaturas_nao_exige_passagens(self, app):

@@ -31,21 +31,15 @@
 {% set nci_ok = doc_analise and doc_analise.sei_id %}
 {% set prestacao_ok = doc_relatorio and doc_relatorio.sei_id %}
 
-{# Construir lista de passos — 6 etapas #}
+{# Construir lista de passos — 5 etapas (passagens são fluxo paralelo) #}
 {% set analise1_ok = nr_ok and quadro and quadro.ug %}
 {% set analise2_ok = nci_ok %}
 {% set steps = [
     {'num': 1, 'icon': 'bi-shield-check', 'label': 'Autorização', 'done': autorizacao_ok},
     {'num': 2, 'icon': 'bi-receipt', 'label': 'Análise 1ª Parte', 'done': analise1_ok and ccdp_ok},
-] %}
-{% if tem_passagens %}
-{% set steps = steps + [{'num': 3, 'icon': 'bi-airplane', 'label': 'Cotações e Voo', 'done': cotacoes_ok}] %}
-{% endif %}
-{% set p_next = steps|length + 1 %}
-{% set steps = steps + [
-    {'num': p_next, 'icon': 'bi-clipboard-check', 'label': 'Análise 2ª Parte', 'done': analise2_ok},
-    {'num': p_next + 1, 'icon': 'bi-cash-stack', 'label': 'Concessão', 'done': itinerario.has_doc('ob')},
-    {'num': p_next + 2, 'icon': 'bi-journal-check', 'label': 'Prestação de Contas', 'done': prestacao_ok},
+    {'num': 3, 'icon': 'bi-clipboard-check', 'label': 'Análise 2ª Parte', 'done': analise2_ok},
+    {'num': 4, 'icon': 'bi-cash-stack', 'label': 'Concessão', 'done': itinerario.has_doc('ob')},
+    {'num': 5, 'icon': 'bi-journal-check', 'label': 'Prestação de Contas', 'done': prestacao_ok},
 ] %}
 
 {# Calcular passo ativo e progresso #}
@@ -455,59 +449,11 @@
         </div>
 
         {# ══════════════════════════════════════════════════════ #}
-        {# PASSO 3: COTAÇÕES E VOO (condicional, após Análise 1ª) #}
+        {# PASSO 3: ANÁLISE 2ª PARTE (SCDP, NE, SGA, NCI)        #}
         {# ══════════════════════════════════════════════════════ #}
-        {% if tem_passagens %}
         <div class="fluxo-panel {{ 'active' if ns.passo_ativo == 3 }}" id="fluxo-panel-3" data-step="3">
             <div class="fluxo-panel-header">
-                <div class="fp-icon {{ 'done' if cotacoes_ok else ('active' if ns.passo_ativo == 3 else 'locked') }}">
-                    <i class="bi bi-airplane"></i>
-                </div>
-                <div>
-                    <span class="fp-title">Cotações e Escolha do Voo</span>
-                    {% if cotacoes_ok %}
-                    <span class="d-block" style="font-size: 0.75rem; color: #198754;">
-                        <i class="bi bi-check-circle-fill me-1"></i>Voo escolhido
-                    </span>
-                    {% elif ns.passo_ativo == 3 %}
-                    <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
-                    {% endif %}
-                </div>
-            </div>
-
-            {% if not analise1_ok %}
-            <div class="alert alert-secondary py-2 mb-0">
-                <i class="bi bi-lock me-1"></i>Aguardando GPO: Nota de Reserva e Quadro Orçamentário.
-            </div>
-            {% elif not ccdp_ok %}
-            <div class="alert alert-secondary py-2 mb-0">
-                <i class="bi bi-lock me-1"></i>Aguardando CCDP: Análise de Habilitação para receber diárias ainda não concluída.
-            </div>
-            {% elif cotacoes_ok %}
-            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #d1e7dd, #f0fdf4); border: 1.5px solid #198754;">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-check-circle-fill fs-4 text-success me-3"></i>
-                    <div>
-                        <strong>Voo selecionado!</strong>
-                        <span class="d-block text-muted small">{{ cotacoes_voos|length }} cotação(ões).</span>
-                    </div>
-                </div>
-            </div>
-            {% else %}
-            <a href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='passagens') }}" class="btn btn-primary btn-sm">
-                <i class="bi bi-airplane me-1"></i>Gerenciar Cotações e Escolha de Voo
-            </a>
-            {% endif %}
-        </div>
-        {% endif %}
-
-        {# ══════════════════════════════════════════════════════ #}
-        {# PASSO: ANÁLISE 2ª PARTE (SCDP, NE, SGA, NCI)           #}
-        {# ══════════════════════════════════════════════════════ #}
-        {% set p_a2 = p_next %}
-        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == p_a2 }}" id="fluxo-panel-{{ p_a2 }}" data-step="{{ p_a2 }}">
-            <div class="fluxo-panel-header">
-                <div class="fp-icon {{ 'done' if analise2_ok else ('active' if ns.passo_ativo == p_a2 else 'locked') }}">
+                <div class="fp-icon {{ 'done' if analise2_ok else ('active' if ns.passo_ativo == 3 else 'locked') }}">
                     <i class="bi bi-clipboard-check"></i>
                 </div>
                 <div>
@@ -516,7 +462,7 @@
                     <span class="d-block" style="font-size: 0.75rem; color: #198754;">
                         <i class="bi bi-check-circle-fill me-1"></i>Concluída
                     </span>
-                    {% elif ns.passo_ativo == p_a2 %}
+                    {% elif ns.passo_ativo == 3 %}
                     <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
                     {% endif %}
                 </div>
@@ -544,10 +490,9 @@
         {# ══════════════════════════════════════════════════════ #}
         {# PASSO: CONCESSÃO (NL, PD, OB)                           #}
         {# ══════════════════════════════════════════════════════ #}
-        {% set p_concessao = p_next + 1 %}
-        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == p_concessao }}" id="fluxo-panel-{{ p_concessao }}" data-step="{{ p_concessao }}">
+        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == 4 }}" id="fluxo-panel-4" data-step="4">
             <div class="fluxo-panel-header">
-                <div class="fp-icon {{ 'done' if itinerario.has_doc('ob') else ('active' if ns.passo_ativo == p_concessao else 'locked') }}">
+                <div class="fp-icon {{ 'done' if itinerario.has_doc('ob') else ('active' if ns.passo_ativo == 4 else 'locked') }}">
                     <i class="bi bi-cash-stack"></i>
                 </div>
                 <div>
@@ -556,7 +501,7 @@
                     <span class="d-block" style="font-size: 0.75rem; color: #198754;">
                         <i class="bi bi-check-circle-fill me-1"></i>Pago
                     </span>
-                    {% elif ns.passo_ativo == p_concessao %}
+                    {% elif ns.passo_ativo == 4 %}
                     <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
                     {% endif %}
                 </div>
@@ -589,10 +534,9 @@
         {# ══════════════════════════════════════════════════════ #}
         {# PASSO: PRESTAÇÃO DE CONTAS                              #}
         {# ══════════════════════════════════════════════════════ #}
-        {% set p_prestacao = p_next + 2 %}
-        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == p_prestacao }}" id="fluxo-panel-{{ p_prestacao }}" data-step="{{ p_prestacao }}">
+        <div class="fluxo-panel {{ 'active' if ns.passo_ativo == 5 }}" id="fluxo-panel-5" data-step="5">
             <div class="fluxo-panel-header">
-                <div class="fp-icon {{ 'done' if prestacao_ok else ('active' if ns.passo_ativo == p_prestacao else 'locked') }}">
+                <div class="fp-icon {{ 'done' if prestacao_ok else ('active' if ns.passo_ativo == 5 else 'locked') }}">
                     <i class="bi bi-journal-check"></i>
                 </div>
                 <div>
@@ -601,7 +545,7 @@
                     <span class="d-block" style="font-size: 0.75rem; color: #198754;">
                         <i class="bi bi-check-circle-fill me-1"></i>Relatório: {{ doc_relatorio.sei_formatado }}
                     </span>
-                    {% elif ns.passo_ativo == p_prestacao %}
+                    {% elif ns.passo_ativo == 5 %}
                     <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
                     {% endif %}
                 </div>

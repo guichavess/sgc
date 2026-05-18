@@ -200,6 +200,22 @@ def vincular_processo_sei(itinerario_id, protocolo_sei, etapa_id, usuario_id):
     if documentos:
         resultado['msgs'].append(f'{len(documentos)} documento(s) identificado(s) no processo.')
 
+    # ── 6b. Detectar tipo_solicitacao_id com base nos documentos ─────────────
+    _tem_req_diarias = any(
+        str((d.get('Serie') or {}).get('IdSerie', '')) == str(ID_SERIE_REQUISICAO_DIARIAS)
+        for d in documentos
+    )
+    _tem_req_passagens = any(
+        str((d.get('Serie') or {}).get('IdSerie', '')) == str(ID_SERIE_REQUISICAO_PASSAGENS)
+        for d in documentos
+    )
+    if _tem_req_passagens and not _tem_req_diarias:
+        itinerario.tipo_solicitacao_id = 3
+    elif _tem_req_passagens:
+        itinerario.tipo_solicitacao_id = 2
+    elif _tem_req_diarias:
+        itinerario.tipo_solicitacao_id = 1
+
     # ── 7. Download e parse da Requisição de Diárias (IdSerie 532) ───────────
     if requisicao_id_doc:
         try:
@@ -470,8 +486,6 @@ def _inferir_etapa_por_documentos(tipos_encontrados, tipo_solicitacao_id):
         return int(DiariasEtapaID.CONCESSAO_DIARIAS)
     if has('analise_pagamento') or has('despacho_nci') or has('autorizacao_scdp') or has('nota_empenho'):
         return int(DiariasEtapaID.ANALISE_SOLICITACAO_2)
-    if tem_passagens and (has('memorando_cotacoes') or has('escolha_passagens')):
-        return int(DiariasEtapaID.ESCOLHA_VOO)
     if has('nota_reserva') or has('quadro_orcamentario'):
         return int(DiariasEtapaID.ANALISE_SOLICITACAO)
     return int(DiariasEtapaID.SOLICITACAO_INICIAL)
@@ -629,6 +643,7 @@ def sincronizar_processos_bloco_diarias(
 
             documentos = docs_result.get('documentos') or []
             tipos_encontrados = set()
+            tem_requisicao_diarias = False
             tem_requisicao_passagens = False
             for doc in documentos:
                 id_serie = str((doc.get('Serie') or {}).get('IdSerie', ''))
@@ -637,8 +652,15 @@ def sincronizar_processos_bloco_diarias(
                     tipos_encontrados.add(tipo_doc)
                 if id_serie == str(ID_SERIE_REQUISICAO_PASSAGENS):
                     tem_requisicao_passagens = True
+                if id_serie == str(ID_SERIE_REQUISICAO_DIARIAS):
+                    tem_requisicao_diarias = True
 
-            tipo_solicitacao_id = 2 if tem_requisicao_passagens else 1
+            if tem_requisicao_passagens and not tem_requisicao_diarias:
+                tipo_solicitacao_id = 3
+            elif tem_requisicao_passagens:
+                tipo_solicitacao_id = 2
+            else:
+                tipo_solicitacao_id = 1
             etapa_id = _inferir_etapa_por_documentos(tipos_encontrados, tipo_solicitacao_id)
 
             novo = DiariasItinerario(

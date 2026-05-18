@@ -116,9 +116,9 @@ def diarias_lista():
     filtro_solicitacao = [int(x) for x in request.args.getlist('filtro_solicitacao') if x.isdigit()]
     page = request.args.get('page', 1, type=int)
 
-    # Query base: processos autorizados (etapa >= 2)
+    # Query base: processos autorizados (etapa >= Análise 1ª Parte)
     query_base = DiariasItinerario.query.filter(
-        DiariasItinerario.etapa_atual_id >= int(DiariasEtapaID.ESCOLHA_VOO)
+        DiariasItinerario.etapa_atual_id >= int(DiariasEtapaID.ANALISE_SOLICITACAO)
     )
 
     # Contadores para badges (antes de aplicar filtros)
@@ -265,8 +265,8 @@ def despachar_dfin(id):
             'mensagem': f'Despacho já gerado: {doc.sei_formatado or doc.sei_id}',
         })
 
-    # Guard: precisa ter sido autorizado (etapa >= 2)
-    if itinerario.etapa_atual_id < DiariasEtapaID.ESCOLHA_VOO:
+    # Guard: precisa ter sido autorizado (etapa >= Análise 1ª Parte)
+    if itinerario.etapa_atual_id < DiariasEtapaID.ANALISE_SOLICITACAO:
         return jsonify({'sucesso': False, 'erro': 'Solicitação ainda não foi autorizada.'}), 400
 
     if not itinerario.sei_id_procedimento:
@@ -383,7 +383,7 @@ def diarias_detalhe(id):
     itinerario = dados['itinerario']
 
     # Só mostra se já passou da etapa 1 (autorizado)
-    if itinerario.etapa_atual_id < DiariasEtapaID.ESCOLHA_VOO:
+    if itinerario.etapa_atual_id < DiariasEtapaID.ANALISE_SOLICITACAO:
         abort(404)
 
     # Auto-varredura: tenta extrair NR do SEI se ainda não preenchida
@@ -498,8 +498,8 @@ def inserir_nr(id):
 
     itinerario = DiariasItinerario.query.get_or_404(id)
 
-    # Guard: só permite inserção em etapas 2 ou 3 (após autorização, antes de concessão)
-    if itinerario.etapa_atual_id < DiariasEtapaID.ESCOLHA_VOO or itinerario.etapa_atual_id > DiariasEtapaID.ANALISE_SOLICITACAO:
+    # Guard: só permite inserção na etapa 3 (Análise 1ª Parte)
+    if itinerario.etapa_atual_id != DiariasEtapaID.ANALISE_SOLICITACAO:
         flash('Esta solicitação não está na etapa correta para inserção de NR.', 'warning')
         return redirect(url_for('financeiro.diarias_detalhe', id=id))
 
@@ -888,9 +888,7 @@ def despacho_geo_quadro(id):
         if itinerario.etapa_atual_id == DiariasEtapaID.ANALISE_SOLICITACAO:
             tem_habilitacao = itinerario.has_doc('analise_habilitacao')
             if tem_habilitacao:
-                proxima = (DiariasEtapaID.ESCOLHA_VOO
-                           if itinerario.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
-                           else DiariasEtapaID.ANALISE_SOLICITACAO_2)
+                proxima = DiariasEtapaID.ANALISE_SOLICITACAO_2
                 DiariaService.registrar_movimentacao(
                     id_itinerario=id,
                     etapa_nova_id=proxima,
@@ -1040,9 +1038,7 @@ def gerar_analise_habilitacao(id):
         avanco_msg = ''
         if (itinerario.etapa_atual_id == DiariasEtapaID.ANALISE_SOLICITACAO
                 and itinerario.has_doc('despacho_geo_quadro')):
-            proxima = (DiariasEtapaID.ESCOLHA_VOO
-                       if itinerario.tipo_solicitacao_id in TIPOS_COM_PASSAGENS
-                       else DiariasEtapaID.ANALISE_SOLICITACAO_2)
+            proxima = DiariasEtapaID.ANALISE_SOLICITACAO_2
             DiariaService.registrar_movimentacao(
                 id_itinerario=id,
                 etapa_nova_id=proxima,

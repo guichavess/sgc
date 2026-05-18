@@ -91,6 +91,10 @@ class DiariaService:
         ).scalar() or Decimal('0.00')
         soma_cotacoes = Decimal(str(soma_cotacoes))
 
+        TIPO_SOL_APENAS_PASSAGENS = 3
+        if int(itinerario.tipo_solicitacao_id or 0) == TIPO_SOL_APENAS_PASSAGENS:
+            return soma_cotacoes
+
         return soma_valores * Decimal(str(itinerario.qtd_diarias_solicitadas)) + soma_cotacoes
 
     @staticmethod
@@ -140,7 +144,13 @@ class DiariaService:
             except ValueError:
                 data_retorno = datetime.strptime(data_retorno, '%Y-%m-%d')
 
-        qtd_diarias = DiariaService.calcular_diarias(data_viagem, data_retorno)
+        TIPO_SOL_APENAS_PASSAGENS = 3
+        tipo_solicitacao_id = dados.get('tipo_solicitacao_id')
+
+        if int(tipo_solicitacao_id or 0) == TIPO_SOL_APENAS_PASSAGENS:
+            qtd_diarias = Decimal('0')
+        else:
+            qtd_diarias = DiariaService.calcular_diarias(data_viagem, data_retorno)
 
         # Regras por tipo
         if tipo == DiariaService.TIPO_ESTADUAL:
@@ -205,8 +215,10 @@ class DiariaService:
             )
             db.session.add(item)
 
-        # Calcula valor total: SUM(valor_cargo) × qtd_diarias
-        itinerario.valor_total = valor_total_diarias * Decimal(str(qtd_diarias))
+        if int(tipo_solicitacao_id or 0) == TIPO_SOL_APENAS_PASSAGENS:
+            itinerario.valor_total = Decimal('0')
+        else:
+            itinerario.valor_total = valor_total_diarias * Decimal(str(qtd_diarias))
 
         # Adiciona paradas (estadual)
         if paradas_ids:
@@ -499,12 +511,10 @@ class DiariaService:
         # 1. Busca todas as etapas ordenadas
         todas_etapas = DiariasEtapa.query.order_by(DiariasEtapa.ordem).all()
 
-        # 2. Filtra etapa "Escolha do Voo" se não tem passagens
+        # 2. Exclui etapa "Escolha do Voo" (descontinuada — passagens são fluxo paralelo)
         tipo_sol = getattr(itinerario, 'tipo_solicitacao_id', None)
         tem_passagens = tipo_sol in TIPOS_COM_PASSAGENS
-
-        if not tem_passagens:
-            todas_etapas = [e for e in todas_etapas if e.id != DiariasEtapaID.ESCOLHA_VOO]
+        todas_etapas = [e for e in todas_etapas if e.id != DiariasEtapaID.ESCOLHA_VOO]
 
         # 3. Determina ordem da etapa atual para cálculo de concluída
         etapa_atual_obj = next((e for e in todas_etapas if e.id == itinerario.etapa_atual_id), None)

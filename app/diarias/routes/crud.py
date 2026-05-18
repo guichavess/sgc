@@ -743,8 +743,9 @@ def escolha_passagens_solicitante(id):
         flash('A escolha de passagens já foi realizada.', 'warning')
         return redirect(url_for('diarias.detalhes', id=id))
 
-    if itinerario.etapa_atual_id not in (DiariasEtapaID.ESCOLHA_VOO, DiariasEtapaID.ANALISE_SOLICITACAO):
-        flash('Esta solicitação não está na etapa de escolha de voo.', 'warning')
+    cotacoes_existem = DiariasCotacaoVoo.query.filter_by(itinerario_id=id).first()
+    if not cotacoes_existem:
+        flash('Aguarde o cadastro das cotações de voo.', 'warning')
         return redirect(url_for('diarias.detalhes', id=id))
 
     voo_ida_id = request.form.get('escolha_voo_ida', type=int)
@@ -853,15 +854,6 @@ def escolha_passagens_solicitante(id):
             current_app.logger.error(f'[DIARIAS] Erro SEI escolha passagens: {e}')
             flash(f'Escolha salva, mas erro na integração SEI: {e}', 'warning')
 
-    # Escolha de passagens concluída → avança para Análise 2ª Parte (etapa 6)
-    if itinerario.etapa_atual_id == DiariasEtapaID.ESCOLHA_VOO:
-        DiariaService.registrar_movimentacao(
-            id_itinerario=id,
-            etapa_nova_id=DiariasEtapaID.ANALISE_SOLICITACAO_2,
-            usuario_id=current_user.id,
-            comentario='Escolha de passagens registrada. Avançando para Análise 2ª Parte.',
-            auto_commit=False,
-        )
     db.session.commit()
 
     try:

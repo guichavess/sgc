@@ -136,18 +136,20 @@ def protocolo_tem_bypass_assinatura(protocolo):
 # pelo campo `ordem` da tabela, não pelo valor do ID.
 # =============================================================================
 class DiariasEtapaID(IntEnum):
-    """IDs das 6 etapas no fluxo de diárias e passagens.
+    """IDs das etapas no fluxo de diárias e passagens.
 
     Ordem do fluxo (campo `ordem` no banco):
     1. Solicitação Inicial (ID=1)
     2. Análise 1ª Parte (ID=3) — NR, Quadro, Habilitação
-    3. Escolha do Voo (ID=2) — condicional: só tipos 2,3
-    4. Análise 2ª Parte (ID=6) — SCDP, NE, SGA, NCI
-    5. Concessão (ID=4) — NL, PD, OB
-    6. Prestação de Contas (ID=5)
+    3. Análise 2ª Parte (ID=6) — SCDP, NE, SGA, NCI
+    4. Concessão (ID=4) — NL, PD, OB
+    5. Prestação de Contas (ID=5)
+
+    Passagens aéreas (tipos 2 e 3) são gerenciadas em fluxo paralelo
+    independente, sem etapa fixa no fluxo principal.
     """
     SOLICITACAO_INICIAL = 1
-    ESCOLHA_VOO = 2
+    ESCOLHA_VOO = 2              # DESCONTINUADA — mantida para compatibilidade com dados históricos
     ANALISE_SOLICITACAO = 3      # 1ª Parte: NR, Quadro, Habilitação
     CONCESSAO_DIARIAS = 4
     PRESTACAO_CONTAS = 5
@@ -173,10 +175,6 @@ DIARIAS_SUBITENS = {
         {'id': 'quadro_orcamentario',    'nome': 'Quadro orçamentário',          'doc_tipo': 'quadro_orcamentario'},
         {'id': 'habilitacao',            'nome': 'Análise de habilitação para receber diárias', 'doc_tipo': 'analise_habilitacao'},
     ],
-    DiariasEtapaID.ESCOLHA_VOO: [
-        {'id': 'cotacoes',               'nome': 'Cotações aéreas',              'doc_tipo': 'memorando_cotacoes'},
-        {'id': 'escolha_passagens',      'nome': 'Justificativa de escolha da passagem', 'doc_tipo': 'escolha_passagens'},
-    ],
     DiariasEtapaID.ANALISE_SOLICITACAO_2: [
         {'id': 'scdp',                   'nome': 'Comprovante de lançamento do SCDP', 'doc_tipo': 'autorizacao_scdp'},
         {'id': 'nota_empenho',           'nome': 'Nota de empenho',              'doc_tipo': 'nota_empenho'},
@@ -199,6 +197,12 @@ DIARIAS_SUBITENS = {
 
 # Tipos de solicitação que incluem passagens aéreas
 TIPOS_COM_PASSAGENS = {2, 3}  # Diárias+Passagens, Apenas Passagens
+
+# Sub-itens de passagens — fluxo paralelo independente (não vinculado a etapa)
+PASSAGENS_SUBITENS = [
+    {'id': 'cotacoes',          'nome': 'Cotações aéreas',                      'doc_tipo': 'memorando_cotacoes'},
+    {'id': 'escolha_passagens', 'nome': 'Justificativa de escolha da passagem', 'doc_tipo': 'escolha_passagens'},
+]
 
 
 # =============================================================================

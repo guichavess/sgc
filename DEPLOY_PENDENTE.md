@@ -142,6 +142,30 @@
 
 ---
 
+### Migração: Passagens Desacopladas do Fluxo (2026-05-14)
+
+- [ ] **Migrar itinerários da etapa 2 (Escolha do Voo) para etapa 6 (Análise 2ª Parte)**
+  - Contexto: A cotação de passagens foi desacoplada do fluxo de etapas e agora funciona como fluxo paralelo independente. A etapa 2 não é mais usada no fluxo ativo.
+  - **Opção 1** — Via script (recomendado):
+  ```bash
+  python scripts/migrar_etapa2_para_etapa6.py              # DRY-RUN primeiro
+  python scripts/migrar_etapa2_para_etapa6.py --executar    # Aplicar
+  ```
+  - **Opção 2** — SQL direto (fallback):
+  ```sql
+  -- Verificar antes:
+  SELECT id, sei_protocolo, etapa_atual_id FROM diarias_itinerario WHERE etapa_atual_id = 2;
+
+  -- Migrar:
+  UPDATE diarias_itinerario SET etapa_atual_id = 6 WHERE etapa_atual_id = 2;
+  ```
+  - Verificação: após executar, nenhum itinerário deve estar na etapa 2:
+  ```sql
+  SELECT COUNT(*) FROM diarias_itinerario WHERE etapa_atual_id = 2;  -- deve retornar 0
+  ```
+
+---
+
 ## Formato para novos itens
 
 Ao adicionar um novo item, use o formato abaixo:

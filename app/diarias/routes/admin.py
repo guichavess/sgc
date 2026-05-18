@@ -1190,15 +1190,6 @@ def escolha_passagens(id):
         except Exception as e:
             flash(f'Aviso: Escolha salva, mas erro na integração SEI: {e}', 'warning')
 
-    # Escolha de passagens concluída → avança para Análise 2ª Parte (etapa 6)
-    if itinerario.etapa_atual_id == DiariasEtapaID.ESCOLHA_VOO:
-        DiariaService.registrar_movimentacao(
-            id_itinerario=id,
-            etapa_nova_id=DiariasEtapaID.ANALISE_SOLICITACAO_2,
-            usuario_id=current_user.id if current_user else None,
-            comentario='Escolha de passagens registrada. Avançando para Análise 2ª Parte.',
-            auto_commit=False,
-        )
     db.session.commit()
 
     if sei_ok:
@@ -1244,11 +1235,12 @@ def assinar_superintendente(id):
             'erro': 'Esta solicitação foi negada e não pode mais ser assinada.'
         }), 400
 
-    # Guard: precisa de processo SEI e requisição gerada
-    if not itinerario.sei_id_procedimento or not itinerario.has_doc('requisicao'):
+    # Guard: precisa de processo SEI e requisição gerada (diárias ou passagens)
+    _tem_requisicao = itinerario.has_doc('requisicao') or itinerario.has_doc('requisicao_passagens')
+    if not itinerario.sei_id_procedimento or not _tem_requisicao:
         return jsonify({
             'sucesso': False,
-            'erro': 'Esta solicitação não possui processo SEI ou requisição de diárias vinculada.'
+            'erro': 'Esta solicitação não possui processo SEI ou requisição vinculada.'
         }), 400
 
     # Guard: já assinou
@@ -1311,15 +1303,24 @@ def assinar_superintendente(id):
         f"[DIARIAS] Assinatura superintendente - usuario={sei_usuario} "
         f"id_usuario={id_usuario!r} id_login={id_login!r} "
         f"unidade_assinatura={unidade_assinatura!r} "
-        f"protocolo_doc={(itinerario.get_doc('requisicao').sei_formatado if itinerario.has_doc('requisicao') else '')!r}"
+        f"tipo_solicitacao={itinerario.tipo_solicitacao_id}"
     )
 
     documentos_assinados = []
 
-    # 2. Assinar Requisição de Diárias
+    # 2. Assinar Requisição de Diárias (532) ou Requisição de Passagens (2975)
     doc_requisicao = itinerario.get_doc('requisicao')
+    if not doc_requisicao or not doc_requisicao.sei_id:
+        doc_requisicao = itinerario.get_doc('requisicao_passagens')
+
+    if not doc_requisicao or not doc_requisicao.sei_id:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Nenhuma requisição (diárias ou passagens) encontrada para assinar.'
+        }), 400
+
     dados_assinatura = {
-        'protocolo_doc': doc_requisicao.sei_id if doc_requisicao else '',
+        'protocolo_doc': doc_requisicao.sei_id,
         'orgao': 'SEAD-PI',
         'cargo': cargo,
         'id_login': id_login,
@@ -1338,13 +1339,10 @@ def assinar_superintendente(id):
         erro = ret.get('erro', 'Erro desconhecido') if ret else 'Sem resposta'
         return jsonify({
             'sucesso': False,
-            'erro': f'Falha ao assinar Requisição de Diárias: {erro}'
+            'erro': f'Falha ao assinar requisição: {erro}'
         }), 500
 
-    documentos_assinados.append((doc_requisicao.sei_formatado if doc_requisicao else '') or 'Req. Diárias')
-
-    # Superintendente assina APENAS a Requisição de Diárias (532).
-    # A Requisição de Passagens (2975) não requer assinatura do superintendente.
+    documentos_assinados.append(doc_requisicao.sei_formatado or 'Requisição')
 
     # 4. Salvar no banco — busca timestamp real do SEI ao invés de datetime.now()
     from app.services.diarias_autorizacao import verificar_assinatura_superintendente_sei
@@ -1691,7 +1689,7 @@ def autorizar_solicitacao(id):
         gerar_token_sei_admin, gerar_autorizacao_secretario,
         enviar_procedimento, gerar_despacho_dfin,
         UNIDADE_DFIN_APOIO, consultar_documentos_procedimento,
-        ID_SERIE_REQUISICAO_DIARIAS,
+        ID_SERIE_REQUISICAO_DIARIAS, ID_SERIE_REQUISICAO_PASSAGENS,
     )
     from app.services.sei_integration import assinar_documento
 
@@ -1821,9 +1819,9 @@ def autorizar_solicitacao(id):
     )
 
     # Nível 3 — ação única: superintendente assume ambos os papéis.
-    # Marca a pré-assinatura e assina a Requisição de Diárias antes de autorizar.
+    # Marca a pré-assinatura e assina a Requisição (Diárias ou Passagens) antes de autorizar.
     if nivel_atual == 3 and not itinerario.superintendente_assinou:
-        doc_req_n3 = itinerario.get_doc('requisicao')
+        doc_req_n3 = itinerario.get_doc('requisicao') or itinerario.get_doc('requisicao_passagens')
         if doc_req_n3 and doc_req_n3.sei_id:
             ret_n3 = assinar_documento(
                 token=token_secretario,
@@ -1859,7 +1857,7 @@ def autorizar_solicitacao(id):
                 itinerario.superintendente_assinou_data = data_n3 or datetime.now()
                 itinerario.superintendente_assinou_nome = nome_n3
                 current_app.logger.info(
-                    f"[DIARIAS] Nível 3 — superintendente assinou Req. Diárias como ação única "
+                    f"[DIARIAS] Nível 3 — superintendente assinou requisição como ação única "
                     f"itinerario={itinerario.id}"
                 )
             else:
@@ -1879,12 +1877,17 @@ def autorizar_solicitacao(id):
             f"[DIARIAS] Falha ao listar docs SEI para verificação de assinatura: {_e_docs}"
         )
 
-    # 1.5 Assina Requisição de Diárias apenas se o Secretário ainda não assinou
+    # 1.5 Assina requisição (Diárias ou Passagens) se o Secretário ainda não assinou
     doc_req_sec = itinerario.get_doc('requisicao')
+    _serie_req_sec = ID_SERIE_REQUISICAO_DIARIAS
+    if not doc_req_sec or not doc_req_sec.sei_id:
+        doc_req_sec = itinerario.get_doc('requisicao_passagens')
+        _serie_req_sec = ID_SERIE_REQUISICAO_PASSAGENS
+
     if doc_req_sec and doc_req_sec.sei_id:
-        if _assinante_ja_no_doc(_sei_docs, ID_SERIE_REQUISICAO_DIARIAS, sei_usuario):
+        if _assinante_ja_no_doc(_sei_docs, _serie_req_sec, sei_usuario):
             current_app.logger.info(
-                f"[DIARIAS] Requisição de Diárias já assinada pelo Secretário "
+                f"[DIARIAS] Requisição já assinada pelo Secretário "
                 f"({sei_usuario}) — pulando assinatura."
             )
         else:
@@ -1904,11 +1907,8 @@ def autorizar_solicitacao(id):
             if not ret_req or not ret_req.get('sucesso'):
                 erro = ret_req.get('erro', 'Erro desconhecido') if ret_req else 'Sem resposta'
                 current_app.logger.warning(
-                    f"[DIARIAS] Secretário falhou ao assinar Req. Diárias: {erro}"
+                    f"[DIARIAS] Secretário falhou ao assinar requisição: {erro}"
                 )
-
-    # A Requisição de Passagens não requer assinatura do Secretário —
-    # basta a assinatura de qualquer membro da solicitação para ser válida.
 
     # 2. Obtem token admin para operações SEI
     token_admin = gerar_token_sei_admin()
@@ -2543,9 +2543,6 @@ def auditoria():
             for sub in subitens:
                 # Pular condicionais que não se aplicam
                 if sub.get('condicional') == 'passagens' and not tem_passagens:
-                    continue
-                # Pular etapa 2 (Escolha Voo) para processos sem passagens
-                if etapa_id == DiariasEtapaID.ESCOLHA_VOO and not tem_passagens:
                     continue
 
                 doc_tipo = sub['doc_tipo']

@@ -67,6 +67,14 @@
         background: rgba(255, 255, 255, 0.25);
         color: #fff;
     }
+    .subnav-admin .subnav-item:not(.active) .subnav-count-danger {
+        background: #dc3545;
+        color: #fff;
+    }
+    .subnav-admin .subnav-item.active .subnav-count-danger {
+        background: rgba(220, 53, 69, 0.85);
+        color: #fff;
+    }
 </style>
 
 <nav class="subnav-admin" aria-label="Sub-navegação Administração">
@@ -80,12 +88,12 @@
         <i class="bi bi-ticket-perforated"></i>
         <span>Cotações</span>
         {% if cotacoes_pendentes_count is defined and cotacoes_pendentes_count %}
-        <span class="subnav-count">{{ cotacoes_pendentes_count }}</span>
+        <span class="subnav-count subnav-count-danger">{{ cotacoes_pendentes_count }}</span>
         {% endif %}
     </a>
     <a class="subnav-item {{ 'active' if request.endpoint == 'diarias.agencias' }}"
        href="{{ url_for('diarias.agencias') }}">
-        <i class="bi bi-building"></i>
+        <i class="bi bi-globe2"></i>
         <span>Agências</span>
     </a>
     <a class="subnav-item {{ 'active' if request.endpoint == 'diarias.cargos' }}"

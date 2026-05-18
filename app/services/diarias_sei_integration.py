@@ -4176,8 +4176,6 @@ def sincronizar_documentos_diaria(itinerario, force_cotacoes=False):
         etapa_nova = DiariasEtapaID.CONCESSAO_DIARIAS
     elif has('analise_pagamento') or has('despacho_nci') or has('autorizacao_scdp') or has('nota_empenho'):
         etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO_2
-    elif tem_passagens and (has('memorando_cotacoes') or has('escolha_passagens')):
-        etapa_nova = DiariasEtapaID.ESCOLHA_VOO
     elif has('nota_reserva') or has('quadro_orcamentario'):
         etapa_nova = DiariasEtapaID.ANALISE_SOLICITACAO
     # Nota: 'autorizacao' sozinho NÃO avança mais a etapa aqui — avançar sem

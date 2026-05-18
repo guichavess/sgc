@@ -267,11 +267,20 @@
                     </a>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <a class="nav-link {{ 'active' if aba == 'fluxo' or aba == 'passagens' or aba == 'financeiro' }}"
+                    <a class="nav-link {{ 'active' if aba == 'fluxo' or aba == 'financeiro' }}"
                        href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='fluxo') }}">
                         <i class="bi bi-signpost-split me-1"></i> Fluxo
                     </a>
                 </li>
+                {% if itinerario.tipo_solicitacao_id in [2, 3] %}
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link {{ 'active' if aba == 'passagens' }}"
+                       href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='passagens') }}">
+                        <i class="bi bi-airplane me-1"></i> Passagens
+                        {% if not escolha_feita %}<span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;">Pendente</span>{% endif %}
+                    </a>
+                </li>
+                {% endif %}
             </ul>
 
             {# ===== CONTEÚDO DAS ABAS ===== #}
@@ -529,61 +538,8 @@
 
             {% endif %}{# /aba resumo #}
 
-            {# ===================== ABA PASSAGENS (acessada pelo link do stepper) ===================== #}
-            {% if aba == 'passagens' and itinerario.tipo_itinerario in [2, 3] %}
-
-            {# --- Botão voltar ao fluxo --- #}
-            <a href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='fluxo') }}"
-               class="btn btn-outline-secondary btn-sm mb-3">
-                <i class="bi bi-arrow-left me-1"></i>Voltar ao Fluxo
-            </a>
-
-            {# ── Guard: pré-requisitos da Análise 1ª Parte (GPO + CCDP) ── #}
-            {% set _doc_hab = itinerario.get_doc('analise_habilitacao') %}
-            {% set _doc_nr  = itinerario.get_doc('nota_reserva') %}
-            {% set _gpo_ok  = _doc_nr and _doc_nr.codigo
-                              and itinerario.quadro_orcamentario
-                              and itinerario.quadro_orcamentario.ug %}
-            {% set _ccdp_ok = _doc_hab and _doc_hab.sei_id %}
-
-            {% if not (_gpo_ok and _ccdp_ok) %}
-            <div class="alert alert-warning border-0 shadow-sm rounded-3 d-flex gap-3 align-items-start mb-3">
-                <i class="bi bi-lock-fill fs-4 mt-1 text-warning"></i>
-                <div>
-                    <h6 class="fw-bold mb-1">Pré-requisitos não atendidos</h6>
-                    <p class="mb-2 small text-muted">A etapa de Cotações e Escolha do Voo só fica disponível após
-                       a conclusão da <strong>Análise 1ª Parte</strong> (GPO e CCDP).</p>
-                    <ul class="mb-2 small ps-3">
-                        {% if not _gpo_ok %}
-                        <li class="text-danger">
-                            <i class="bi bi-x-circle me-1"></i>
-                            <strong>GPO:</strong> Nota de Reserva e Quadro Orçamentário pendentes.
-                        </li>
-                        {% else %}
-                        <li class="text-success">
-                            <i class="bi bi-check-circle me-1"></i>
-                            <strong>GPO:</strong> Nota de Reserva e Quadro Orçamentário concluídos.
-                        </li>
-                        {% endif %}
-                        {% if not _ccdp_ok %}
-                        <li class="text-danger">
-                            <i class="bi bi-x-circle me-1"></i>
-                            <strong>CCDP:</strong> Análise de Habilitação para receber diárias pendente.
-                        </li>
-                        {% else %}
-                        <li class="text-success">
-                            <i class="bi bi-check-circle me-1"></i>
-                            <strong>CCDP:</strong> Análise de Habilitação concluída.
-                        </li>
-                        {% endif %}
-                    </ul>
-                    <a href="{{ url_for('diarias.administracao_detalhe', id=itinerario.id, aba='fluxo') }}"
-                       class="btn btn-outline-warning btn-sm">
-                        <i class="bi bi-arrow-left me-1"></i>Voltar ao Fluxo
-                    </a>
-                </div>
-            </div>
-            {% else %}
+            {# ===================== ABA PASSAGENS (aba independente — sempre visível para tipos 2/3) ===================== #}
+            {% if aba == 'passagens' and itinerario.tipo_solicitacao_id in [2, 3] %}
 
             {# --- Variaveis de controle --- #}
             {% set count_manual = cotacoes_voos|selectattr('fonte', 'equalto', 'manual')|list|length %}
@@ -700,8 +656,8 @@
 
             {# ── UPLOAD + FORMULARIO + TABELAS DE COTACOES ── #}
 
-            {# --- GERAR DOCUMENTO DE COTACOES NO SEI (só na etapa 2, com cotações cadastradas) --- #}
-            {% if itinerario.sei_protocolo and itinerario.etapa_atual_id == 2 and cotacoes_voos|length > 0 %}
+            {# --- GERAR DOCUMENTO DE COTACOES NO SEI (com cotações cadastradas) --- #}
+            {% if itinerario.sei_protocolo and cotacoes_voos|length > 0 %}
             <section class="mb-4">
                 <form action="{{ url_for('diarias.gerar_cotacoes_sei', id=itinerario.id) }}" method="post"
                       onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').innerHTML='<span class=\'spinner-border spinner-border-sm me-1\'></span> Gerando...';">
@@ -745,8 +701,8 @@
                     </div>
                     <div class="card-body">
 
-                        {# --- FORMULARIO CADASTRAR COTACAO (só na etapa 2) --- #}
-                        {% if itinerario.etapa_atual_id == 2 %}
+                        {# --- FORMULARIO CADASTRAR COTACAO --- #}
+                        {% if not escolha_feita %}
                         <div class="border rounded p-3 mb-4 bg-light" id="form-cotacao-voo">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h6 class="fw-bold mb-0" style="font-size: 0.85rem;">
@@ -1190,8 +1146,8 @@
                         </div>
                         {% endif %}
 
-                        {% elif itinerario.etapa_atual_id == 2 and not itinerario.escolha_via_sei %}
-                        {# === MODO FORMULARIO (só na etapa 2 e se nao tem escolha via SEI) === #}
+                        {% elif not itinerario.escolha_via_sei and cotacoes_voos|length > 0 %}
+                        {# === MODO FORMULARIO (cotações disponíveis, sem escolha via SEI) === #}
                         <form action="{{ url_for('diarias.escolha_passagens', id=itinerario.id) }}"
                               method="post" id="form-escolha-passagens">
 
@@ -1343,8 +1299,6 @@
 
             </div>{# /tab-pane fase2 #}
             </div>{# /tab-content #}
-
-            {% endif %}{# /prereqs ok #}
 
             {% endif %}{# /aba passagens #}
 
@@ -2037,7 +1991,7 @@
 {% endblock %}
 
 {% block diarias_js %}
-{% if itinerario.tipo_itinerario in [2, 3] %}
+{% if itinerario.tipo_solicitacao_id in [2, 3] %}
 <script>
 function toggleConexao() {
     var chk = document.getElementById('chk-conexao');

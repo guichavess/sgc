@@ -246,7 +246,7 @@ NOTIFICACAO_CONFIG = {
     # NOT-05: Escolha de passagem realizada — notifica solicitante e financeiro
     'escolha_passagens': {
         'titulo': 'Passagens Escolhidas',
-        'mensagem': 'As passagens foram escolhidas para o processo {processo}. Processo avancou para Analise.',
+        'mensagem': 'As passagens foram escolhidas para o processo {processo}.',
         'solicitante': True, 'financeiro': True, 'diarias': False, 'admins': False,
         'url_fn': _url_financeiro,
     },

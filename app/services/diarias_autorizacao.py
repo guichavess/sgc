@@ -116,8 +116,9 @@ def get_estado_etapa1(itinerario):
     }
 
 
-# ID da série SEI para "SEAD_REQUISIÇÃO DE DIÁRIAS"
+# IDs de série SEI para requisições
 ID_SERIE_REQUISICAO_DIARIAS = '532'
+ID_SERIE_REQUISICAO_PASSAGENS = '2975'
 
 
 def _so_digitos(valor):
@@ -214,7 +215,14 @@ def verificar_assinatura_superintendente_sei(itinerario, documentos_sei=None):
             break
 
     if not doc_req_sei:
-        return {'assinada': False, 'erro': 'Requisição de Diárias não encontrada no processo SEI'}
+        for sei_doc in documentos_sei:
+            serie = sei_doc.get('Serie') or {}
+            if str(serie.get('IdSerie', '')) == ID_SERIE_REQUISICAO_PASSAGENS:
+                doc_req_sei = sei_doc
+                break
+
+    if not doc_req_sei:
+        return {'assinada': False, 'erro': 'Requisição (Diárias ou Passagens) não encontrada no processo SEI'}
 
     doc_id = doc_req_sei.get('IdDocumento')
     doc_fmt = doc_req_sei.get('DocumentoFormatado')

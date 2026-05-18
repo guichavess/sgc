@@ -160,7 +160,7 @@
                 </thead>
                 <tbody>
                     {% for it in itinerarios %}
-                    <tr class="tr-link" data-href="{{ url_for('diarias.administracao_detalhe', id=it.id) }}">
+                    <tr class="tr-link" data-href="{{ url_for('diarias.administracao_detalhe', id=it.id, aba='passagens') }}">
                         <td class="ps-4">
                             <span class="fw-semibold">{{ it.usuario_gerador.split('@')[0].replace('.', ' ').title() }}</span>
                             <br><small class="text-muted">{{ it.data_solicitacao.strftime('%d/%m/%Y') if it.data_solicitacao else '' }}</small>
