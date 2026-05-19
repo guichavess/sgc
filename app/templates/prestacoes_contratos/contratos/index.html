@@ -2,117 +2,6 @@
 
 {% block title %}Lista de Contratos{% endblock %}
 
-{% block extra_css %}
-<style>
- /* Container arredondado */
- .table-rounded {
- border-radius: 0.5rem;
- overflow: hidden;
- }
- /* Cabeçalho azul */
- .table-contratos thead th {
- background-color: #343990;
- color: #fff;
- font-weight: 600;
- border: none;
- }
- /* Coluna nome do contratado - permitir quebra de linha */
- .table-contratos .col-contratado {
- max-width: 250px;
- word-wrap: break-word;
- white-space: normal;
- }
- /* Badges de natureza */
- .badge-natureza {
- font-size: 0.75em;
- letter-spacing: 0.5px;
- font-family: 'Segoe UI', monospace;
- cursor: default;
- }
- /* Coluna classificadores */
- .table-contratos .col-classificadores {
- max-width: 280px;
- word-wrap: break-word;
- white-space: normal;
- }
- /* Fix: card de filtros acima da tabela para evitar conflito com dropdowns */
- .card-filtros {
- position: relative;
- z-index: 10;
- }
- /* Dropdown checkbox multi-select */
- .cb-dropdown {
- position: relative;
- }
- .cb-dropdown .cb-toggle {
- cursor: pointer;
- background: #fff;
- display: flex;
- justify-content: space-between;
- align-items: center;
- white-space: nowrap;
- overflow: hidden;
- text-overflow: ellipsis;
- }
- .cb-dropdown .cb-toggle .cb-label {
- overflow: hidden;
- text-overflow: ellipsis;
- flex: 1;
- }
- .cb-dropdown .cb-menu {
- display: none;
- position: absolute;
- top: 100%;
- left: 0;
- right: 0;
- background: #fff;
- border: 1px solid #dee2e6;
- border-radius: 0.375rem;
- box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,.15);
- z-index: 1060;
- max-height: 260px;
- overflow-y: auto;
- }
- .cb-dropdown.open .cb-menu {
- display: block;
- }
- .cb-dropdown .cb-search {
- padding: 0.375rem 0.5rem;
- border-bottom: 1px solid #eee;
- position: sticky;
- top: 0;
- background: #fff;
- }
- .cb-dropdown .cb-search input {
- width: 100%;
- border: 1px solid #dee2e6;
- border-radius: 0.25rem;
- padding: 0.2rem 0.4rem;
- font-size: 0.8rem;
- }
- .cb-dropdown .cb-item {
- padding: 0.25rem 0.5rem;
- font-size: 0.8rem;
- cursor: pointer;
- display: flex;
- align-items: center;
- gap: 0.4rem;
- }
- .cb-dropdown .cb-item:hover {
- background-color: #f0f0f0;
- }
- .cb-dropdown .cb-item.d-none {
- display: none !important;
- }
- .cb-dropdown .cb-badge {
- background: #343990;
- color: #fff;
- border-radius: 0.25rem;
- padding: 0 0.35rem;
- font-size: 0.7rem;
- margin-left: 0.3rem;
- }
-</style>
 {% endblock %}
 
 {% block content %}
@@ -352,7 +241,7 @@
  </div>
 
  {# ===== TABELA ===== #}
- <div class="card " style="position: relative; z-index: 1;">
+ <div class="card">
  <div class="card-body p-0">
  <div class="table-responsive table-rounded">
  <table class="table table-striped table-hover table-contratos mb-0">

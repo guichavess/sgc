@@ -1,0 +1,172 @@
+/* ==========================================================================
+   PRESTAÇÕES DE CONTRATOS - Estilos do módulo
+   ========================================================================== */
+
+/* ==========================================================================
+   TABELAS — header neutro (padrão do design system)
+   ========================================================================== */
+
+/* Wrapper com overflow para dropdowns acima da tabela */
+.table-rounded {
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+}
+
+/* Colunas específicas do módulo */
+.table-contratos .col-contratado {
+    max-width: 250px;
+    word-wrap: break-word;
+    white-space: normal;
+}
+
+.table-contratos .col-classificadores {
+    max-width: 280px;
+    word-wrap: break-word;
+    white-space: normal;
+}
+
+/* Badges de natureza de despesa */
+.badge-natureza {
+    font-size: 0.75em;
+    letter-spacing: 0.5px;
+    font-family: 'Segoe UI', monospace;
+    cursor: default;
+}
+
+/* ==========================================================================
+   FILTROS — cb-dropdown (multi-select checkbox)
+   ========================================================================== */
+
+/* Fix: contexto de empilhamento para dropdowns acima da tabela */
+.card-filtros {
+    position: relative;
+    z-index: 10;
+}
+
+.cb-dropdown {
+    position: relative;
+}
+
+.cb-dropdown .cb-toggle {
+    cursor: pointer;
+    background: var(--color-surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cb-dropdown .cb-toggle .cb-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+
+.cb-dropdown .cb-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface);
+    border: 1px solid var(--color-surface-border);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 1060;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.cb-dropdown.open .cb-menu {
+    display: block;
+}
+
+.cb-dropdown .cb-search {
+    padding: 0.375rem 0.5rem;
+    border-bottom: 1px solid var(--color-surface-border);
+    position: sticky;
+    top: 0;
+    background: var(--color-surface);
+}
+
+.cb-dropdown .cb-search input {
+    width: 100%;
+    border: 1px solid var(--color-surface-border);
+    border-radius: var(--border-radius-sm);
+    padding: 0.2rem 0.4rem;
+    font-size: var(--font-size-sm);
+}
+
+.cb-dropdown .cb-item {
+    padding: 0.25rem 0.5rem;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.cb-dropdown .cb-item:hover {
+    background-color: var(--color-gray-100);
+}
+
+.cb-dropdown .cb-item.d-none {
+    display: none !important;
+}
+
+.cb-dropdown .cb-badge {
+    background: var(--color-primary);
+    color: #fff;
+    border-radius: var(--border-radius-sm);
+    padding: 0 0.35rem;
+    font-size: var(--font-size-xs);
+    margin-left: 0.3rem;
+}
+
+/* ==========================================================================
+   STEPPER DE ETAPAS (contratos/gerenciar)
+   ========================================================================== */
+
+.step-item {
+    --step-color: var(--color-primary);
+}
+
+.step-item .step-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--border-radius-circle);
+    background-color: var(--step-color);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   CARDS DE ITEM (gerenciar — itens vinculados)
+   ========================================================================== */
+
+.item-add-check:hover {
+    background-color: var(--color-gray-100);
+}
+
+.item-add-check .form-check-input:checked + .form-check-label {
+    color: var(--color-success);
+}
+
+/* ==========================================================================
+   CARD DETALHE — borda lateral colorida
+   ========================================================================== */
+
+.card-border-primary {
+    border-left: 4px solid var(--color-primary) !important;
+}
+
+.card-border-info {
+    border-left: 4px solid var(--color-info) !important;
+}

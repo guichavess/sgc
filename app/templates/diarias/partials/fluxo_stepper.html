@@ -239,12 +239,12 @@
             {# Assinatura dupla: Superintendente + Secretário #}
             <div class="d-flex align-items-center mb-3" style="gap: 0;">
                 <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
-                     style="width: 28px; height: 28px; {{ 'background: #198754; color: #fff;' if itinerario.superintendente_assinou else 'background: #343990; color: #fff;' }} font-size: 0.75rem; font-weight: 700;">
+                     style="width: 28px; height: 28px; {{ 'background: #198754; color: #fff;' if itinerario.superintendente_assinou else 'background: var(--color-primary); color: #fff;' }} font-size: 0.75rem; font-weight: 700;">
                     {% if itinerario.superintendente_assinou %}<i class="bi bi-check"></i>{% else %}1{% endif %}
                 </div>
                 <div class="flex-grow-1 mx-2" style="height: 3px; {{ 'background: #198754;' if itinerario.superintendente_assinou else 'background: #dee2e6;' }}"></div>
                 <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
-                     style="width: 28px; height: 28px; {{ 'background: #343990; color: #fff;' if itinerario.superintendente_assinou else 'background: #dee2e6; color: #adb5bd;' }} font-size: 0.75rem; font-weight: 700;">
+                     style="width: 28px; height: 28px; {{ 'background: var(--color-primary); color: #fff;' if itinerario.superintendente_assinou else 'background: #dee2e6; color: #adb5bd;' }} font-size: 0.75rem; font-weight: 700;">
                     2
                 </div>
             </div>

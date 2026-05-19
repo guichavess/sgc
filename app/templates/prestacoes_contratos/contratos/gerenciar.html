@@ -1,4 +1,4 @@
-﻿{% extends 'prestacoes_contratos/base_prestacoes.html' %}
+{% extends 'prestacoes_contratos/base_prestacoes.html' %}
 
 {% block title %}Gerenciar Contrato {{ contrato.codigo }}{% endblock %}
 
@@ -262,7 +262,7 @@
  </ul>
 
  {# ===== CONTEÚDO DA ABA ===== #}
- <div class="card border-top-0" style="border-top-left-radius: 0; border-top-right-radius: 0;">
+ <div class="card border-top-0 rounded-top-0">
  <div class="card-body">
 
  {# ----- ABA TIPO-CONTRATO ----- #}
@@ -275,9 +275,9 @@
  href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='tipificacao', sub_aba_tipo='categorizacao') }}">
  <i class="bi bi-tags me-1"></i> Categorização
  {% if contrato.esta_tipificado %}
- <i class="bi bi-check-circle-fill text-success ms-1" style="font-size: 0.7rem;"></i>
+ <i class="bi bi-check-circle-fill text-success ms-1 small"></i>
  {% else %}
- <i class="bi bi-exclamation-circle text-warning ms-1" style="font-size: 0.7rem;"></i>
+ <i class="bi bi-exclamation-circle text-warning ms-1 small"></i>
  {% endif %}
  </a>
  </li>
@@ -286,9 +286,9 @@
  href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='tipificacao', sub_aba_tipo='centro_custo') }}">
  <i class="bi bi-building me-1"></i> Centro de Custo
  {% if contrato.centro_de_custo_id %}
- <i class="bi bi-check-circle-fill text-success ms-1" style="font-size: 0.7rem;"></i>
+ <i class="bi bi-check-circle-fill text-success ms-1 small"></i>
  {% else %}
- <i class="bi bi-exclamation-circle text-warning ms-1" style="font-size: 0.7rem;"></i>
+ <i class="bi bi-exclamation-circle text-warning ms-1 small"></i>
  {% endif %}
  </a>
  </li>
@@ -297,9 +297,9 @@
  href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='tipificacao', sub_aba_tipo='tipo_execucao') }}">
  <i class="bi bi-arrow-repeat me-1"></i> Tipo de Execução
  {% if contrato.tipo_execucao_id %}
- <i class="bi bi-check-circle-fill text-success ms-1" style="font-size: 0.7rem;"></i>
+ <i class="bi bi-check-circle-fill text-success ms-1 small"></i>
  {% else %}
- <i class="bi bi-exclamation-circle text-warning ms-1" style="font-size: 0.7rem;"></i>
+ <i class="bi bi-exclamation-circle text-warning ms-1 small"></i>
  {% endif %}
  </a>
  </li>
@@ -308,9 +308,9 @@
  href="{{ url_for('prestacoes_contratos.contrato_gerenciar', codigo=contrato.codigo, aba='tipificacao', sub_aba_tipo='detalhamento') }}">
  <i class="bi bi-clipboard-data me-1"></i> Detalhamento
  {% if tem_empenhos %}
- <i class="bi bi-check-circle-fill text-success ms-1" style="font-size: 0.7rem;"></i>
+ <i class="bi bi-check-circle-fill text-success ms-1 small"></i>
  {% else %}
- <i class="bi bi-exclamation-circle text-warning ms-1" style="font-size: 0.7rem;"></i>
+ <i class="bi bi-exclamation-circle text-warning ms-1 small"></i>
  {% endif %}
  </a>
  </li>
@@ -362,10 +362,10 @@
  <table class="table table-bordered mb-0">
  <thead class="table-light">
  <tr>
- <th style="width:25%">Seção</th>
- <th style="width:25%">Divisão</th>
- <th style="width:25%">Grupo</th>
- <th style="width:25%">Classe</th>
+ <th>Seção</th>
+ <th>Divisão</th>
+ <th>Grupo</th>
+ <th>Classe</th>
  </tr>
  </thead>
  <tbody>
@@ -401,9 +401,9 @@
  <table class="table table-bordered mb-0">
  <thead class="table-light">
  <tr>
- <th style="width:30%">Grupo</th>
- <th style="width:30%">Classe</th>
- <th style="width:40%">PDM</th>
+ <th>Grupo</th>
+ <th>Classe</th>
+ <th>PDM</th>
  </tr>
  </thead>
  <tbody>
@@ -451,22 +451,22 @@
  <i class="bi bi-box-seam me-1"></i> Hierarquia de Materiais (CATMAT)
  </div>
  <div class="d-flex align-items-center flex-wrap gap-1 help-stepper">
- <span class="help-step help-step-clickable" style="--step-color: #0dcaf0"
+ <span class="help-step help-step-clickable" style="--step-color: var(--color-info)"
  data-help-target="help-mat-grupo" role="button" tabindex="0">
  <span class="help-step-icon">1</span> Grupo
  </span>
  <i class="bi bi-chevron-right text-muted small"></i>
- <span class="help-step help-step-clickable" style="--step-color: #0dcaf0"
+ <span class="help-step help-step-clickable" style="--step-color: var(--color-info)"
  data-help-target="help-mat-classe" role="button" tabindex="0">
  <span class="help-step-icon">2</span> Classe
  </span>
  <i class="bi bi-chevron-right text-muted small"></i>
- <span class="help-step help-step-final help-step-clickable" style="--step-color: #0dcaf0"
+ <span class="help-step help-step-final help-step-clickable" style="--step-color: var(--color-info)"
  data-help-target="help-mat-pdm" role="button" tabindex="0">
  <span class="help-step-icon">3</span> PDM
  </span>
  <i class="bi bi-chevron-right text-muted small opacity-50"></i>
- <span class="help-step help-step-next help-step-clickable" style="--step-color: #adb5bd"
+ <span class="help-step help-step-next help-step-clickable" style="--step-color: var(--color-gray-500)"
  data-help-target="help-mat-item" role="button" tabindex="0">
  <span class="help-step-icon">4</span> Item
  </span>
@@ -505,22 +505,22 @@
  <i class="bi bi-diagram-3 me-1"></i> Hierarquia de Serviços (CATSERV)
  </div>
  <div class="d-flex align-items-center flex-wrap gap-1 help-stepper">
- <span class="help-step help-step-clickable" style="--step-color: #6c757d"
+ <span class="help-step help-step-clickable" style="--step-color: var(--color-text-secondary)"
  data-help-target="help-serv-secao" role="button" tabindex="0">
  <span class="help-step-icon">1</span> Seção
  </span>
  <i class="bi bi-chevron-right text-muted small"></i>
- <span class="help-step help-step-clickable" style="--step-color: #6c757d"
+ <span class="help-step help-step-clickable" style="--step-color: var(--color-text-secondary)"
  data-help-target="help-serv-divisao" role="button" tabindex="0">
  <span class="help-step-icon">2</span> Divisão
  </span>
  <i class="bi bi-chevron-right text-muted small"></i>
- <span class="help-step help-step-clickable" style="--step-color: #198754"
+ <span class="help-step help-step-clickable" style="--step-color: var(--color-success)"
  data-help-target="help-serv-grupo" role="button" tabindex="0">
  <span class="help-step-icon">3</span> Grupo
  </span>
  <i class="bi bi-chevron-right text-muted small"></i>
- <span class="help-step help-step-final help-step-clickable" style="--step-color: #198754"
+ <span class="help-step help-step-final help-step-clickable" style="--step-color: var(--color-success)"
  data-help-target="help-serv-classe" role="button" tabindex="0">
  <span class="help-step-icon">4</span> Classe
  </span>
@@ -682,8 +682,8 @@
  {# Total geral inline #}
  <div class="d-flex justify-content-between align-items-center mb-3">
  <div>
- <span class="text-muted" style="font-size: 0.8rem;">Total Empenhado</span>
- <div class="fs-4 fw-bold" style="color: #343990;">R$ {{ "{:,.2f}".format(detalhamento_financeiro.total_geral)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</div>
+ <span class="text-label">Total Empenhado</span>
+ <div class="text-display text-primary">R$ {{ "{:,.2f}".format(detalhamento_financeiro.total_geral)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</div>
  </div>
  <div class="text-end">
  <span class="text-muted" style="font-size: 0.8rem;">{{ detalhamento_financeiro.qtd_nes }} NEs</span>
@@ -693,7 +693,7 @@
 
  {# Donut + Legenda lateral #}
  <div class="mb-2">
- <span class="fw-semibold" style="font-size: 0.85rem; color: #343990;">Distribuição por Sub-Item da Despesa</span>
+ <span class="fw-semibold" style="font-size: 0.85rem; color: var(--color-primary);">Distribuição por Sub-Item da Despesa</span>
  <span class="text-muted" style="font-size: 0.73rem;"> — top {{ [detalhamento_financeiro.naturezas|map(attribute='subitens')|map('length')|sum, 8]|min }} sub-itens</span>
  </div>
  <div class="row align-items-center">
@@ -711,7 +711,7 @@
 
  {# === CARDS COMPACTOS POR NATUREZA (barra + collapse) === #}
  <div class="d-flex align-items-baseline gap-2 mb-3">
- <span class="fw-semibold" style="font-size: 0.85rem; color: #343990;">
+ <span class="fw-semibold" style="font-size: 0.85rem; color: var(--color-primary);">
  <i class="bi bi-layers me-1" style="font-size: 0.8rem;"></i>Naturezas de Despesa
  </span>
  <span class="text-muted" style="font-size: 0.73rem;">— {{ detalhamento_financeiro.naturezas|length }} natureza{{ 's' if detalhamento_financeiro.naturezas|length > 1 }} encontrada{{ 's' if detalhamento_financeiro.naturezas|length > 1 }}</span>
@@ -724,22 +724,22 @@
  <div class="d-flex justify-content-between align-items-start mb-2">
  <div style="min-width: 0; flex: 1;">
  <div class="d-flex align-items-baseline gap-2">
- <span class="fw-semibold" style="color: #343990; font-size: 0.95rem;">{{ nat.codigo }}</span>
+ <span class="fw-semibold text-primary" style="font-size: 0.95rem;">{{ nat.codigo }}</span>
  <span class="text-truncate" style="font-size: 0.9rem; color: #495057;">{{ nat.nome }}</span>
  </div>
  </div>
  <div class="d-flex align-items-center gap-3 flex-shrink-0 ms-3">
  <span class="text-muted" style="font-size: 0.8rem;">{{ nat.qtd_nes }} NE{{ 's' if nat.qtd_nes > 1 }}</span>
- <span class="fw-bold" style="font-size: 0.95rem; color: #343990;">R$ {{ "{:,.2f}".format(nat.total)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</span>
+ <span class="fw-bold" style="font-size: 0.95rem; color: var(--color-primary);">R$ {{ "{:,.2f}".format(nat.total)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</span>
  </div>
  </div>
 
  {# Barra de progresso + percentual #}
  <div class="d-flex align-items-center gap-2">
  <div style="flex: 1; height: 6px; background: #e9ecef; border-radius: 3px;">
- <div style="height: 100%; width: {{ nat_pct }}%; background: #343990; border-radius: 3px; transition: width 0.4s;"></div>
+ <div style="height: 100%; width: {{ nat_pct }}%; background: var(--color-primary); border-radius: 3px; transition: width 0.4s;"></div>
  </div>
- <span class="fw-semibold" style="font-size: 0.8rem; color: #343990; min-width: 42px; text-align: right;">{{ nat_pct }}%</span>
+ <span class="fw-semibold" style="font-size: 0.8rem; color: var(--color-primary); min-width: 42px; text-align: right;">{{ nat_pct }}%</span>
  </div>
 
  {# Botão de expandir detalhes #}
@@ -753,24 +753,24 @@
 
  {# Conteúdo colapsável: subitens em lista limpa #}
  <div class="collapse mt-3" id="detNat{{ loop.index }}">
- <div style="border-top: 1px solid #e9ecef; padding-top: 12px;">
- <div class="mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #8c8c8c; font-weight: 600;">Sub-Itens da Despesa</div>
+ <div style="border-top: 1px solid var(--color-surface-border); padding-top: 12px;">
+ <div class="text-label mb-2">Sub-Itens da Despesa</div>
  {% for si in nat.subitens %}
  {% set si_pct = "%.1f"|format(si.total / detalhamento_financeiro.total_geral * 100) if detalhamento_financeiro.total_geral > 0 else '0.0' %}
  <div class="d-flex justify-content-between align-items-start{% if not loop.last %} mb-3{% endif %}">
  <div style="min-width: 0; flex: 1;">
- <div style="font-size: 0.82rem; color: #495057;">
- <span style="font-family: monospace; color: #6c757d; font-size: 0.75rem;">{{ si.codigo }}</span>
+ <div class="text-body-secondary small">
+ <span class="text-mono text-hint">{{ si.codigo }}</span>
  <span class="ms-1">{{ si.nome }}</span>
  </div>
- <div class="d-flex gap-3 mt-1" style="font-size: 0.73rem; color: #8c8c8c;">
- <span>Tipo Patr.: <strong style="color: #6c757d;">{{ si.tipo_patrimonial_codigo }} — {{ si.tipo_patrimonial_nome }}</strong></span>
- <span>Fonte: <strong style="color: #6c757d;">{{ si.fontes }}</strong></span>
+ <div class="d-flex gap-3 mt-1 text-hint">
+ <span>Tipo Patr.: <strong class="text-secondary">{{ si.tipo_patrimonial_codigo }} — {{ si.tipo_patrimonial_nome }}</strong></span>
+ <span>Fonte: <strong class="text-secondary">{{ si.fontes }}</strong></span>
  <span>{{ si.qtd_nes }} NE{{ 's' if si.qtd_nes > 1 }}</span>
  </div>
  </div>
  <div class="text-end flex-shrink-0 ms-3">
- <div class="fw-semibold" style="font-size: 0.85rem; color: #343990;">R$ {{ "{:,.2f}".format(si.total)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</div>
+ <div class="fw-semibold" style="font-size: 0.85rem; color: var(--color-primary);">R$ {{ "{:,.2f}".format(si.total)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</div>
  <div style="font-size: 0.73rem; color: #8c8c8c;">{{ si_pct }}%</div>
  </div>
  </div>
@@ -783,7 +783,7 @@
 
  {# === NEs INDIVIDUAIS (colapsável) === #}
  <div class="d-flex align-items-baseline gap-2 mt-4 mb-1">
- <span class="fw-semibold" style="font-size: 0.85rem; color: #343990;">
+ <span class="fw-semibold" style="font-size: 0.85rem; color: var(--color-primary);">
  <i class="bi bi-receipt me-1" style="font-size: 0.8rem;"></i>Notas de Empenho
  </span>
  <span class="text-muted" style="font-size: 0.73rem;">— {{ detalhamento_financeiro.empenhos_detalhe|length }} NE{{ 's' if detalhamento_financeiro.empenhos_detalhe|length > 1 }}</span>
@@ -815,13 +815,13 @@
  <tbody>
  {% for ne in detalhamento_financeiro.empenhos_detalhe %}
  <tr>
- <td class="fw-semibold" style="color: #343990;">{{ ne.codigo_ne or '—' }}</td>
+ <td class="fw-semibold text-primary">{{ ne.codigo_ne or '—' }}</td>
  <td class="text-muted">{{ ne.data_emissao or '—' }}</td>
  <td>{{ ne.natureza }}</td>
- <td><span style="font-family: monospace; color: #6c757d; font-size: 0.75rem;">{{ ne.subitem_codigo }}</span> {{ ne.subitem_nome }}</td>
- <td><span style="font-family: monospace; color: #6c757d; font-size: 0.75rem;">{{ ne.tipo_patrimonial_codigo }}</span> {{ ne.tipo_patrimonial_nome }}</td>
+ <td><span class="text-mono text-hint">{{ ne.subitem_codigo }}</span> {{ ne.subitem_nome }}</td>
+ <td><span class="text-mono text-hint">{{ ne.tipo_patrimonial_codigo }}</span> {{ ne.tipo_patrimonial_nome }}</td>
  <td class="text-center">{{ ne.fonte }}</td>
- <td class="text-end fw-semibold" style="color: #343990;">R$ {{ "{:,.2f}".format(ne.valor)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
+ <td class="text-end fw-semibold text-primary">R$ {{ "{:,.2f}".format(ne.valor)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
  </tr>
  {% endfor %}
  </tbody>
@@ -863,19 +863,9 @@
  </div>
  {% else %}
 
- <style>
- .item-add-check:hover {
- background-color: #f8f9fa;
- }
- .item-add-check .form-check-input:checked + .form-check-label {
- color: #198754;
- font-weight: 600;
- }
- </style>
-
  {# === CARD 1: ITENS VINCULADOS === #}
  <div class="card mb-4">
- <div class="card-header d-flex justify-content-between align-items-center" class="bg-primary text-white">
+ <div class="card-header d-flex justify-content-between align-items-center">
  <h6 class="mb-0"><i class="bi bi-link-45deg me-1"></i> Itens Vinculados</h6>
  <span class="badge bg-light text-dark" id="badge-total-vinculados">
  {{ itens_vinculados|length }}
@@ -1114,13 +1104,13 @@
  {% elif aba == 'saldo' %}
 
  {% if saldo %}
- <div class="card border-0 mb-4" style="background: linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%);">
+ <div class="card mb-4" style="background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.06) 0%, rgba(var(--color-primary-rgb), 0.03) 100%);">
  <div class="card-body d-flex justify-content-between align-items-center py-3 px-4">
  <div class="d-flex align-items-center gap-3">
  <i class="bi bi-wallet2 fs-3 text-primary"></i>
  <div>
  <span class="text-muted small">Saldo Global:</span>
- <span class="fs-4 fw-bold text-primary ms-2">{{ saldo.saldo_formatado }}</span>
+ <span class="text-display text-primary ms-2">{{ saldo.saldo_formatado }}</span>
  </div>
  </div>
  {% if current_user.tem_permissao('prestacoes_contratos', 'editar') %}
@@ -1322,7 +1312,7 @@
  </div>
  <div class="table-responsive">
  <table class="table table-striped table-hover mb-0">
- <thead class="bg-primary text-white">
+ <thead>
  <tr>
  <th>Código</th>
  <th>Credor</th>
@@ -1387,7 +1377,7 @@
  </div>
  <div class="table-responsive">
  <table class="table table-striped table-hover mb-0">
- <thead class="bg-primary text-white">
+ <thead>
  <tr>
  <th>Código</th>
  <th>Credor</th>
@@ -1448,7 +1438,7 @@
  </div>
  <div class="table-responsive">
  <table class="table table-striped table-hover mb-0">
- <thead class="bg-primary text-white">
+ <thead>
  <tr>
  <th>Código</th>
  <th>Credor</th>
@@ -1523,7 +1513,7 @@
  </div>
  <div class="table-responsive">
  <table class="table table-striped table-hover mb-0">
- <thead class="bg-primary text-white">
+ <thead>
  <tr>
  <th>Código</th>
  <th>Credor</th>
@@ -1609,7 +1599,7 @@
  <div class="table-responsive">
  <table class="table table-sm table-hover align-middle mb-1">
  <thead>
- <tr class="bg-primary text-white">
+ <tr class="table-light">
  <th>N° Processo</th>
  <th>Etapa</th>
  <th>N° Empenho</th>
@@ -1674,7 +1664,7 @@
  {% if planejamento_dados %}
  <div class="table-responsive">
  <table class="table table-striped table-hover mb-0">
- <thead class="bg-primary text-white">
+ <thead>
  <tr>
  <th>Competência</th>
  <th class="text-end">Valor Planejado</th>
@@ -1776,22 +1766,22 @@
  <i class="bi bi-box-seam me-1"></i> Materiais (CATMAT)
  </div>
  <div class="d-flex align-items-center flex-wrap gap-1 help-stepper">
- <span class="help-step help-step-clickable" style="--step-color: #0dcaf0"
+ <span class="help-step help-step-clickable" style="--step-color: var(--color-info)"
  data-help-target="help-modal-mat-grupo" role="button" tabindex="0">
  <span class="help-step-icon">1</span> Grupo
  </span>
  <i class="bi bi-chevron-right text-muted small"></i>
- <span class="help-step help-step-clickable" style="--step-color: #0dcaf0"
+ <span class="help-step help-step-clickable" style="--step-color: var(--color-info)"
  data-help-target="help-modal-mat-classe" role="button" tabindex="0">
  <span class="help-step-icon">2</span> Classe
  </span>
  <i class="bi bi-chevron-right text-muted small"></i>
- <span class="help-step help-step-final help-step-clickable" style="--step-color: #0dcaf0"
+ <span class="help-step help-step-final help-step-clickable" style="--step-color: var(--color-info)"
  data-help-target="help-modal-mat-pdm" role="button" tabindex="0">
  <span class="help-step-icon">3</span> PDM
  </span>
  <i class="bi bi-chevron-right text-muted small opacity-50"></i>
- <span class="help-step help-step-next help-step-clickable" style="--step-color: #adb5bd"
+ <span class="help-step help-step-next help-step-clickable" style="--step-color: var(--color-gray-500)"
  data-help-target="help-modal-mat-item" role="button" tabindex="0">
  <span class="help-step-icon">4</span> Item
  </span>
@@ -1830,22 +1820,22 @@
  <i class="bi bi-diagram-3 me-1"></i> Serviços (CATSERV)
  </div>
  <div class="d-flex align-items-center flex-wrap gap-1 help-stepper">
- <span class="help-step help-step-clickable" style="--step-color: #6c757d"
+ <span class="help-step help-step-clickable" style="--step-color: var(--color-text-secondary)"
  data-help-target="help-modal-serv-secao" role="button" tabindex="0">
  <span class="help-step-icon">1</span> Seção
  </span>
  <i class="bi bi-chevron-right text-muted small"></i>
- <span class="help-step help-step-clickable" style="--step-color: #6c757d"
+ <span class="help-step help-step-clickable" style="--step-color: var(--color-text-secondary)"
  data-help-target="help-modal-serv-divisao" role="button" tabindex="0">
  <span class="help-step-icon">2</span> Divisão
  </span>
  <i class="bi bi-chevron-right text-muted small"></i>
- <span class="help-step help-step-clickable" style="--step-color: #198754"
+ <span class="help-step help-step-clickable" style="--step-color: var(--color-success)"
  data-help-target="help-modal-serv-grupo" role="button" tabindex="0">
  <span class="help-step-icon">3</span> Grupo
  </span>
  <i class="bi bi-chevron-right text-muted small"></i>
- <span class="help-step help-step-final help-step-clickable" style="--step-color: #198754"
+ <span class="help-step help-step-final help-step-clickable" style="--step-color: var(--color-success)"
  data-help-target="help-modal-serv-classe" role="button" tabindex="0">
  <span class="help-step-icon">4</span> Classe
  </span>

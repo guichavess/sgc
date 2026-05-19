@@ -63,7 +63,7 @@
  position: relative; z-index: 3; transition: all 0.25s; flex-shrink: 0;
  }
  .sol-step.done .sol-circle { background: #198754; border-color: #198754; color: #fff; box-shadow: 0 2px 8px rgba(25,135,84,0.3); }
- .sol-step.active .sol-circle { background: #343990; border-color: #343990; color: #fff; box-shadow: 0 0 0 4px rgba(52,57,144,0.18); transform: scale(1.1); }
+ .sol-step.active .sol-circle { background: var(--color-primary); border-color: var(--color-primary); color: #fff; box-shadow: 0 0 0 4px rgba(var(--color-primary-rgb),0.18); transform: scale(1.1); }
  .sol-step:not(:first-child)::before {
  content: ''; position: absolute; top: 18px;
  left: calc(-50% + 18px); width: calc(100% - 36px);
@@ -73,7 +73,7 @@
  .sol-step.active:not(:first-child)::before { background: #198754; }
  .sol-label { margin-top: 6px; font-size: 0.65rem; font-weight: 600; color: #6c757d; text-align: center; line-height: 1.2; }
  .sol-step.done .sol-label { color: #198754; }
- .sol-step.active .sol-label { color: #343990; font-weight: 700; }
+ .sol-step.active .sol-label { color: var(--color-primary); font-weight: 700; }
  .sol-panel { display: none; padding: 16px; animation: solFadeIn 0.3s; }
  .sol-panel.active { display: block; }
  @keyframes solFadeIn { from { opacity:0; } to { opacity:1; } }

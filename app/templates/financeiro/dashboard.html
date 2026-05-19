@@ -21,7 +21,7 @@
  <div class="card h-100">
  <div class="card-body text-center">
  <div class="text-muted small mb-1">Total Empenhado</div>
- <div class="fs-5 fw-bold text-primary">
+ <div class="text-display">
  R$ {{ "{:,.2f}".format(totais.empenhado).replace(',', 'X').replace('.', ',').replace('X', '.') }}
  </div>
  </div>
@@ -31,7 +31,7 @@
  <div class="card h-100">
  <div class="card-body text-center">
  <div class="text-muted small mb-1">Total Solicitado</div>
- <div class="fs-5 fw-bold text-info">
+ <div class="text-display text-info">
  R$ {{ "{:,.2f}".format(totais.solicitado).replace(',', 'X').replace('.', ',').replace('X', '.') }}
  </div>
  </div>
@@ -41,7 +41,7 @@
  <div class="card h-100">
  <div class="card-body text-center">
  <div class="text-muted small mb-1">Saldo Disponível</div>
- <div class="fs-5 fw-bold text-success">
+ <div class="text-display text-success">
  R$ {{ "{:,.2f}".format(totais.saldo).replace(',', 'X').replace('.', ',').replace('X', '.') }}
  </div>
  </div>
@@ -51,7 +51,7 @@
  <div class="card h-100">
  <div class="card-body text-center">
  <div class="text-muted small mb-1">NEs Pendentes</div>
- <div class="fs-5 fw-bold {{ 'text-danger' if totais.pendentes_ne > 0 else 'text-success' }}">
+ <div class="text-display {{ 'text-danger' if totais.pendentes_ne > 0 else 'text-success' }}">
  {{ totais.pendentes_ne }}
  </div>
  </div>

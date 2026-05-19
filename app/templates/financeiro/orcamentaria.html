@@ -215,10 +215,10 @@
  }
  .filter-dropdown-toggle::after { display: none; }
  .filter-dropdown-toggle.has-selection {
- border-color: var(--color-primary, #343990);
+ border-color: var(--color-primary, var(--color-primary));
  background: #f0f0ff;
  font-weight: 600;
- color: #343990;
+ color: var(--color-primary);
  }
  .filter-dropdown-menu {
  border: 1px solid #dee2e6;
@@ -243,13 +243,13 @@
  cursor: pointer;
  }
  .filter-dropdown-menu .filter-option .form-check-input:checked {
- background-color: #343990;
- border-color: #343990;
+ background-color: var(--color-primary);
+ border-color: var(--color-primary);
  }
  .filter-badge {
  display: inline-flex;
  align-items: center;
- background: #343990;
+ background: var(--color-primary);
  color: #fff;
  font-size: 0.68rem;
  font-weight: 600;

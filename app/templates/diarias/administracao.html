@@ -272,7 +272,7 @@
  <i class="bi bi-currency-dollar" style="color:#198754;font-size:1.2rem;"></i>
  </div>
  <div>
- <div class="fw-bold fs-5 lh-1">R$ {{ vt_fmt }}</div>
+ <div class="text-display lh-1">R$ {{ vt_fmt }}</div>
  <div class="text-muted small">Valor Total</div>
  </div>
  </div>
@@ -300,19 +300,19 @@
  <div class="card-body py-3">
  <div class="row g-3 text-center">
  <div class="col-4">
- <div class="text-warning fw-bold fs-5">{{ kpis.em_andamento }}</div>
+ <div class="text-display text-warning">{{ kpis.em_andamento }}</div>
  <div class="text-muted small">
  <i class="bi bi-hourglass-split me-1"></i>Em Andamento
  </div>
  </div>
  <div class="col-4">
- <div class="text-success fw-bold fs-5">{{ kpis.concluidas }}</div>
+ <div class="text-display text-success">{{ kpis.concluidas }}</div>
  <div class="text-muted small">
  <i class="bi bi-check-circle me-1"></i>Concluídas
  </div>
  </div>
  <div class="col-4">
- <div class="text-danger fw-bold fs-5">{{ kpis.canceladas }}</div>
+ <div class="text-display text-danger">{{ kpis.canceladas }}</div>
  <div class="text-muted small">
  <i class="bi bi-x-octagon me-1"></i>Negadas
  </div>

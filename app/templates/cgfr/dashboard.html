@@ -225,20 +225,20 @@
 <div class="modal fade" id="modalSyncDataLake" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow-lg border-0" style="overflow: hidden;">
-            <div class="modal-header border-0 text-white" style="background: linear-gradient(135deg, #343990 0%, #5b5fc7 100%);">
+            <div class="modal-header border-0 text-white" style="background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);">
                 <h5 class="modal-title"><i class="bi bi-database-fill-gear me-2"></i>Sincronização — Data Lake</h5>
             </div>
             <div class="modal-body py-4">
                 <div class="text-center mb-3" id="syncDLIconArea">
                     <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-2"
-                         style="width: 56px; height: 56px; background: rgba(52,57,144,0.08);">
+                         style="width: 56px; height: 56px; background: rgba(var(--color-primary-rgb),0.08);">
                         <i class="bi bi-arrow-repeat text-primary" style="font-size: 1.6rem;" id="syncDLIcon"></i>
                     </div>
                 </div>
-                <h6 id="syncDLTitulo" class="fw-bold text-center mb-2" style="color: #343990;">Conectando ao Data Lake...</h6>
+                <h6 id="syncDLTitulo" class="fw-bold text-center mb-2" style="color: var(--color-primary);">Conectando ao Data Lake...</h6>
                 <div class="progress mb-3 mx-4" style="height: 22px; border-radius: 12px;">
                     <div id="syncDLBarra" class="progress-bar progress-bar-striped progress-bar-animated"
-                         role="progressbar" style="width: 5%; background-color: #343990; border-radius: 12px;">
+                         role="progressbar" style="width: 5%; background-color: var(--color-primary); border-radius: 12px;">
                     </div>
                 </div>
                 <p id="syncDLMsg" class="text-center text-muted small mb-3">Iniciando conexão com o servidor Trino...</p>

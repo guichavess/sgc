@@ -47,7 +47,7 @@
  text-transform: uppercase;
  letter-spacing: 0.5px;
  font-weight: 700;
- color: #343990;
+ color: var(--color-primary);
  }
  .voo-rota {
  font-size: 0.78rem;
@@ -230,7 +230,7 @@
  </div>
  </div>
  <div class="col-md-2">
- <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: #343990 !important;">
+ <div class="info-card border border-2 rounded p-2 h-100" style="border-left-color: var(--color-primary) !important;">
  <span class="info-card-label d-block mb-1">Origem / Destino</span>
  <span class="info-card-value" style="font-size: 0.85rem;">
  {% if itinerario.tipo_itinerario == 1 %}
@@ -306,7 +306,7 @@
  {% set doc_autorizacao = itinerario.get_doc('autorizacao') %}
  {% if itinerario.etapa_atual_id == 1 and itinerario.sei_id_procedimento %}
  <div class="card mb-4 overflow-hidden">
- <div class="card-header py-2" style="background: linear-gradient(135deg, #343990 0%, #5b5fc7 100%);">
+ <div class="card-header py-2" style="background: linear-gradient(135deg, var(--color-primary) 0%, #5b5fc7 100%);">
  <h6 class="mb-0 text-white fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">
  <i class="bi bi-shield-check me-1"></i>Autorização da Solicitação
  </h6>
@@ -315,12 +315,12 @@
  {# Barra de progresso visual #}
  <div class="d-flex align-items-center mb-3" style="gap: 0;">
  <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
- style="width: 28px; height: 28px; {{ 'background: #198754; color: #fff;' if itinerario.superintendente_assinou else 'background: #343990; color: #fff;' }} font-size: 0.75rem; font-weight: 700;">
+ style="width: 28px; height: 28px; {{ 'background: #198754; color: #fff;' if itinerario.superintendente_assinou else 'background: var(--color-primary); color: #fff;' }} font-size: 0.75rem; font-weight: 700;">
  {% if itinerario.superintendente_assinou %}<i class="bi bi-check"></i>{% else %}1{% endif %}
  </div>
  <div class="flex-grow-1 mx-2" style="height: 3px; {{ 'background: #198754;' if itinerario.superintendente_assinou else 'background: #dee2e6;' }}"></div>
  <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
- style="width: 28px; height: 28px; {{ 'background: #343990; color: #fff;' if itinerario.superintendente_assinou else 'background: #dee2e6; color: #adb5bd;' }} font-size: 0.75rem; font-weight: 700;">
+ style="width: 28px; height: 28px; {{ 'background: var(--color-primary); color: #fff;' if itinerario.superintendente_assinou else 'background: #dee2e6; color: #adb5bd;' }} font-size: 0.75rem; font-weight: 700;">
  2
  </div>
  </div>
@@ -330,7 +330,7 @@
  <div class="col-md-6">
  <div class="rounded-3 p-3 h-100 text-center position-relative"
  style="{{ 'background: linear-gradient(135deg, #d1e7dd 0%, #f0fdf4 100%); border: 1.5px solid #198754;' if itinerario.superintendente_assinou else 'background: #f8f9fa; border: 1.5px solid #dee2e6;' }}">
- <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; {{ 'color: #0f5132;' if itinerario.superintendente_assinou else 'color: #343990;' }}">
+ <div class="fw-bold text-uppercase mb-2" style="font-size: 0.65rem; letter-spacing: 0.5px; {{ 'color: #0f5132;' if itinerario.superintendente_assinou else 'color: var(--color-primary);' }}">
  Passo 1 — Superintendente
  </div>
  {% if itinerario.superintendente_assinou %}
@@ -360,7 +360,7 @@
  <div class="d-flex flex-column gap-2 align-items-center">
  {% if itinerario.sei_id_procedimento %}
  <button type="button" class="btn btn-sm px-4 text-white fw-semibold"
- style="background: linear-gradient(135deg, #343990, #5b5fc7);"
+ style="background: linear-gradient(135deg, var(--color-primary), #5b5fc7);"
  data-bs-toggle="modal" data-bs-target="#modalAssinarSuperintendente">
  <i class="bi bi-vector-pen me-1"></i> Assinar Requisição
  </button>
@@ -558,7 +558,7 @@
  cursor: pointer; transition: all 0.15s;
  }
  .fase-stepper .fase-btn:hover:not([disabled]) { background: #dee2e6; }
- .fase-stepper .fase-btn.active { background: #343990; color: #fff; }
+ .fase-stepper .fase-btn.active { background: var(--color-primary); color: #fff; }
  .fase-stepper .fase-btn.done:not(.active) { background: #d1e7dd; color: #0f5132; }
  .fase-stepper .fase-conector { width: 40px; height: 2px; background: #dee2e6; transition: background 0.15s; }
  .fase-stepper .fase-conector.done { background: #198754; }
@@ -972,7 +972,7 @@
  {% if itinerario.escolha_via_sei and itinerario.escolha_sei_opcoes %}
  <section class="mb-4">
  <div class="card overflow-hidden">
- <div class="card-header py-2" style="background: linear-gradient(135deg, #343990 0%, #5b5fc7 100%);">
+ <div class="card-header py-2" style="background: linear-gradient(135deg, var(--color-primary) 0%, #5b5fc7 100%);">
  <h6 class="mb-0 text-white fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">
  <i class="bi bi-check2-square me-1"></i>Escolha de Passagens
  {% set doc_escolha_ext = itinerario.get_doc('escolha_passagens') %}
@@ -991,9 +991,9 @@
  {# Opcoes escolhidas #}
  <div class="row g-3 mb-3">
  <div class="col-md-4">
- <div class="rounded-3 p-2 text-center" style="background: #f0f6ff; border: 1.5px solid #343990;">
- <small class="fw-bold text-uppercase d-block mb-1" style="font-size: 0.65rem; color: #343990;">Opções Escolhidas</small>
- <span class="fw-bold" style="font-size: 1.1rem; color: #343990;">
+ <div class="rounded-3 p-2 text-center" style="background: #f0f6ff; border: 1.5px solid var(--color-primary);">
+ <small class="fw-bold text-uppercase d-block mb-1" style="font-size: 0.65rem; color: var(--color-primary);">Opções Escolhidas</small>
+ <span class="fw-bold" style="font-size: 1.1rem; color: var(--color-primary);">
  {% for op in itinerario.escolha_sei_opcoes.split(',') %}
  Opção {{ op }}{{ ', ' if not loop.last else '' }}
  {% endfor %}
@@ -1081,7 +1081,7 @@
  {% if voos_ida_sorted|length > 0 and voos_volta_sorted|length > 0 and not itinerario.escolha_via_sei %}
  <section class="mb-4">
  <div class="card overflow-hidden">
- <div class="card-header py-2" class="bg-primary text-white">
+ <div class="card-header py-2 bg-light text-dark">
  <h6 class="mb-0"><i class="bi bi-check2-square me-1"></i>Escolha de Passagens</h6>
  </div>
  <div class="card-body">
