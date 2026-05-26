@@ -358,6 +358,15 @@ def main():
 
     # codContrato permanece como string para não perder zeros à esquerda
 
+    # Filtro defensivo: garante que só OBs do ano-alvo sejam gravadas.
+    # Anos anteriores ficam intactos no banco (o DELETE também é escopado por YEAR).
+    if "dataEmissao" in final_df.columns:
+        n_total = len(final_df)
+        final_df = final_df[final_df["dataEmissao"].dt.year == YEAR].copy()
+        n_fora = n_total - len(final_df)
+        if n_fora > 0:
+            print(f"[FILTRO ANO] {n_fora} linha(s) com dataEmissao fora de {YEAR} ignorada(s).")
+
     # Inserção no Banco
     try:
         with ENGINE.begin() as conn:

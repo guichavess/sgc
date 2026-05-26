@@ -1,5 +1,7 @@
 # Ambiente
 .env
+.env.*
+!.env.example
 .venv/
 venv/
 
@@ -74,3 +76,10 @@ deploy-prod.bat
 # Gunicorn runtime
 sgc.pid
 nohup.out
+
+# Runtime do botao "Atualizar SIAFE"
+siafe_status.json
+
+# Artefatos avulsos
+*.zip
+dependencias_externas.txt

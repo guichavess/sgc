@@ -589,6 +589,22 @@ def main():
             if col in final_main.columns:
                 final_main[col] = pd.to_datetime(final_main[col], errors="coerce")
 
+        # Filtro defensivo: garante que só empenhos do ano-alvo sejam gravados.
+        # Tabelas filhas (produtos, itens) também são filtradas pelos códigos válidos.
+        # Anos anteriores ficam intactos no banco.
+        if "dataEmissao" in final_main.columns:
+            n_total = len(final_main)
+            final_main = final_main[final_main["dataEmissao"].dt.year == year].copy()
+            n_fora = n_total - len(final_main)
+            if n_fora > 0:
+                print(f"  [FILTRO ANO] {n_fora} empenho(s) com dataEmissao fora de {year} ignorado(s).")
+            ids_validos = set(final_main["id"].dropna().tolist())
+            codigos_validos = set(final_main["codigo"].dropna().tolist())
+            if final_prod is not None and not final_prod.empty and ids_validos:
+                final_prod = final_prod[final_prod["id_empenho"].isin(ids_validos)].copy()
+            if final_itens is not None and not final_itens.empty and codigos_validos:
+                final_itens = final_itens[final_itens["codigo"].isin(codigos_validos)].copy()
+
         # Remover coluna id dos DataFrames de itens (evitar conflito com AUTO_INCREMENT)
         if final_itens is not None and not final_itens.empty and "id" in final_itens.columns:
             final_itens = final_itens.drop(columns=["id"], errors="ignore")

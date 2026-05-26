@@ -405,6 +405,19 @@ def main():
         if "competencia" in final_main.columns:
             final_main["competencia"] = final_main["competencia"].astype("string")
 
+        # Filtro defensivo: garante que só PDs do ano-alvo sejam gravadas.
+        # Tabela filha (pd_itens) também é filtrada pelos ids validos.
+        # Anos anteriores ficam intactos no banco.
+        if "dataEmissao" in final_main.columns:
+            n_total = len(final_main)
+            final_main = final_main[final_main["dataEmissao"].dt.year == year].copy()
+            n_fora = n_total - len(final_main)
+            if n_fora > 0:
+                print(f"  [FILTRO ANO] {n_fora} PD(s) com dataEmissao fora de {year} ignorada(s).")
+            ids_validos = set(final_main["id"].dropna().tolist())
+            if final_items is not None and not final_items.empty and ids_validos:
+                final_items = final_items[final_items["id"].isin(ids_validos)].copy()
+
         # Conversoes tabela itens
         if final_items is not None and not final_items.empty:
             final_items["id"] = (

@@ -84,7 +84,7 @@ def create_app(config_class=None):
         {'id': 'pd',          'arquivo': 'atualizar_pd.py',          'nome': 'PDs',           'grupo': 'siafe', 'args': []},
         {'id': 'ob',          'arquivo': 'atualizar_ob.py',          'nome': 'OBs',           'grupo': 'siafe', 'args': []},
         {'id': 'contratos',   'arquivo': 'atualizar_contratos.py',   'nome': 'Contratos',     'grupo': 'siafe', 'args': []},
-        {'id': 'loa',         'arquivo': 'atualizar_loa.py',         'nome': 'LOA',           'grupo': 'loa',   'args': ['--years', '2026']},
+        {'id': 'loa',         'arquivo': 'atualizar_loa.py',         'nome': 'LOA',           'grupo': 'loa',   'args': []},
         {'id': 'sei',         'arquivo': 'atualizar_etapas_sei.py',  'nome': 'Etapas SEI',    'grupo': 'sei',   'args': []},
     ]
     SIAFE_SCRIPTS_MAP = {s['id']: s for s in SIAFE_SCRIPTS}

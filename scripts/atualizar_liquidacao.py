@@ -305,6 +305,16 @@ def main():
         if col in final_df.columns:
             final_df[col] = pd.to_datetime(final_df[col], errors="coerce")
 
+    # Filtro defensivo: garante que só registros do ano-alvo sejam gravados.
+    # Protege contra a API retornar NLs com dataEmissao fora de YEAR. Anos
+    # anteriores ficam intactos no banco.
+    if "dataEmissao" in final_df.columns:
+        n_total = len(final_df)
+        final_df = final_df[final_df["dataEmissao"].dt.year == YEAR].copy()
+        n_fora = n_total - len(final_df)
+        if n_fora > 0:
+            print(f"[FILTRO ANO] {n_fora} linha(s) com dataEmissao fora de {YEAR} ignorada(s).")
+
     # Inserção no Banco (UPSERT via PK composta codigoUG+codigo — idempotente)
     try:
         with ENGINE.begin() as conn:
