@@ -24,6 +24,11 @@ class Loa(db.Model):
     ano = db.Column(db.Integer)
     id_conta = db.Column('id', db.String(20))
     descricao = db.Column(db.String(200))
+    # Extraídos de classificacaoStr pelo script atualizar_loa.py
+    codAcao = db.Column(db.String(10))
+    codFonte = db.Column(db.String(10))
+    codNatureza = db.Column(db.String(20))
+    codPrograma = db.Column(db.String(10))
 
     def __repr__(self):
         return f'<Loa UG={self.codigoUG} conta={self.id_conta} mes={self.mes}>'

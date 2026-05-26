@@ -47,6 +47,9 @@ from app.models.pd import PD
 # Model de Reserva (Nota de Reserva orçamentária)
 from app.models.reserva import Reserva
 
+# Model de LOA (Lei Orçamentária Anual)
+from app.models.loa import Loa
+
 # Model de Tipo de Pagamento
 from app.models.tipo_pagamento import TipoPagamento
 
@@ -133,6 +136,8 @@ __all__ = [
     'PD',
     # Reserva (Nota de Reserva orçamentária)
     'Reserva',
+    # LOA
+    'Loa',
     # Tipo de Pagamento
     'TipoPagamento',
     # Perfil e Permissões

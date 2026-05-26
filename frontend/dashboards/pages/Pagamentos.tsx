@@ -355,8 +355,14 @@ export default function Pagamentos() {
   const [statusExec, setStatusExec] = useState('');
   const [appliedFilters, setAppliedFilters] = useState<Record<string, string>>({});
 
-  // Opções de filtro
-  const filtros = useApi<FiltrosOrcamentario>('/dashboards/api/filtros-orcamentario', { ano: year });
+  // Opções de filtro — cascata Ação → Fonte → Natureza
+  const filtrosParams = useMemo(() => {
+    const p: Record<string, string | number> = { ano: year };
+    if (acao) p.acao = acao;
+    if (fonte) p.fonte = fonte;
+    return p;
+  }, [year, acao, fonte]);
+  const filtros = useApi<FiltrosOrcamentario>('/dashboards/api/filtros-orcamentario', filtrosParams);
 
   // Montar params com filtros aplicados
   const apiParams = useMemo(() => {
@@ -452,18 +458,18 @@ export default function Pagamentos() {
             </div>
             <div className="col" style={{ minWidth: 200 }}>
               <label className="form-label mb-1" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6c757d' }}>Ação</label>
-              <SearchableSelect value={acao} onChange={setAcao} allLabel="Todas" placeholder="Pesquisar ação..."
+              <SearchableSelect value={acao} onChange={(v) => { setAcao(v); setFonte(''); setNat(''); }} allLabel="Todas" placeholder="Pesquisar ação..."
                 options={(filtros.data?.acoes || []).map((a) => ({ value: String(a.codigo), label: `${a.codigo} - ${a.descricao}` }))} />
+            </div>
+            <div className="col" style={{ minWidth: 180 }}>
+              <label className="form-label mb-1" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6c757d' }}>Fonte</label>
+              <SearchableSelect value={fonte} onChange={(v) => { setFonte(v); setNat(''); }} allLabel="Todas" placeholder="Pesquisar fonte..."
+                options={(filtros.data?.fontes || []).map((f) => ({ value: String(f.codigo), label: `${f.codigo} - ${f.descricao}` }))} />
             </div>
             <div className="col" style={{ minWidth: 200 }}>
               <label className="form-label mb-1" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6c757d' }}>Natureza</label>
               <SearchableSelect value={nat} onChange={setNat} allLabel="Todas" placeholder="Pesquisar natureza..."
                 options={(filtros.data?.naturezas || []).map((n) => ({ value: String(n.codigo), label: `${n.codigo} - ${n.descricao}` }))} />
-            </div>
-            <div className="col" style={{ minWidth: 180 }}>
-              <label className="form-label mb-1" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6c757d' }}>Fonte</label>
-              <SearchableSelect value={fonte} onChange={setFonte} allLabel="Todas" placeholder="Pesquisar fonte..."
-                options={(filtros.data?.fontes || []).map((f) => ({ value: String(f.codigo), label: `${f.codigo} - ${f.descricao}` }))} />
             </div>
             <div className="col" style={{ minWidth: 170 }}>
               <label className="form-label mb-1" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6c757d' }}>Status Execução</label>

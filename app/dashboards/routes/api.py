@@ -676,37 +676,61 @@ def _build_exec_filters(fonte, natureza, acao, for_table=''):
 @login_required
 @requires_permission('dashboards')
 def api_filtros_orcamentario():
-    """Retorna opções de filtro disponíveis para o dashboard orçamentário."""
+    """Opções de filtro do dashboard orçamentário com cascata Ação→Fonte→Natureza.
+
+    Aceita `acao` e `fonte` (csv de códigos) para restringir as listas filhas
+    apenas às combinações que coexistem em `loa`:
+      - Ações: sempre o universo do ano (raiz).
+      - Fontes: filtradas por `acao`, se informada.
+      - Naturezas: filtradas por `acao` e/ou `fonte`, se informados.
+    """
     ano = request.args.get('ano', datetime.now().year, type=int)
+    acao_sel = request.args.get('acao', '')
+    fonte_sel = request.args.get('fonte', '')
     try:
         # Meses
         sql_m = text("SELECT DISTINCT mes FROM loa WHERE ano = :ano ORDER BY mes")
         meses = [{'valor': r[0], 'label': _NOMES_MESES.get(r[0], str(r[0]))}
                  for r in db.session.execute(sql_m, {'ano': ano}) if r[0]]
 
-        # Ações
+        # Ações — universo do ano (raiz da hierarquia, nunca filtrada)
         sql_a = text("SELECT DISTINCT codAcao FROM loa WHERE ano = :ano AND codAcao IS NOT NULL ORDER BY codAcao")
         cod_acoes = [r[0] for r in db.session.execute(sql_a, {'ano': ano}) if r[0]]
         desc_a = {str(r[0]): r[1] for r in db.session.execute(text("SELECT codigo, titulo FROM acao")).fetchall() if r[0] and r[1]}
         acoes = [{'codigo': c, 'descricao': desc_a.get(str(c), '')} for c in cod_acoes]
         acoes.sort(key=lambda x: x['descricao'].lower())
 
-        # Naturezas
-        sql_n = text("SELECT DISTINCT codNatureza FROM loa WHERE ano = :ano AND codNatureza IS NOT NULL ORDER BY codNatureza")
-        cod_nats = [r[0] for r in db.session.execute(sql_n, {'ano': ano}) if r[0]]
-        desc_n = {str(r[0]): r[1] for r in db.session.execute(text("SELECT codigo, titulo FROM natdespesas")).fetchall() if r[0] and r[1]}
-        naturezas = [{'codigo': c, 'descricao': desc_n.get(str(c), '')} for c in cod_nats]
-        naturezas.sort(key=lambda x: x['descricao'].lower())
-
-        # Fontes
-        sql_f = text("SELECT DISTINCT codFonte FROM loa WHERE ano = :ano AND codFonte IS NOT NULL ORDER BY codFonte")
-        cod_fontes = [r[0] for r in db.session.execute(sql_f, {'ano': ano}) if r[0]]
+        # Fontes — restritas pela Ação selecionada (se houver)
+        params_f = {'ano': ano}
+        frag_acao_f = ''
+        if acao_sel:
+            frag_acao_f = _multi_in('codAcao', acao_sel, 'af', params_f)
+        sql_f = text(
+            f"SELECT DISTINCT codFonte FROM loa "
+            f"WHERE ano = :ano AND codFonte IS NOT NULL {frag_acao_f} "
+            f"ORDER BY codFonte"
+        )
+        cod_fontes = [r[0] for r in db.session.execute(sql_f, params_f) if r[0]]
         try:
             desc_f = {str(r[0]): r[1] for r in db.session.execute(text("SELECT codigo, titulo FROM fonterecurso")).fetchall() if r[0] and r[1]}
         except Exception:
             desc_f = {}
         fontes = [{'codigo': c, 'descricao': desc_f.get(str(c), str(c))} for c in cod_fontes]
         fontes.sort(key=lambda x: str(x['codigo']))
+
+        # Naturezas — restritas por Ação e Fonte selecionadas (se houver)
+        params_n = {'ano': ano}
+        frag_acao_n = _multi_in('codAcao', acao_sel, 'an', params_n) if acao_sel else ''
+        frag_fonte_n = _multi_in('codFonte', fonte_sel, 'fn', params_n) if fonte_sel else ''
+        sql_n = text(
+            f"SELECT DISTINCT codNatureza FROM loa "
+            f"WHERE ano = :ano AND codNatureza IS NOT NULL {frag_acao_n} {frag_fonte_n} "
+            f"ORDER BY codNatureza"
+        )
+        cod_nats = [r[0] for r in db.session.execute(sql_n, params_n) if r[0]]
+        desc_n = {str(r[0]): r[1] for r in db.session.execute(text("SELECT codigo, titulo FROM natdespesas")).fetchall() if r[0] and r[1]}
+        naturezas = [{'codigo': c, 'descricao': desc_n.get(str(c), '')} for c in cod_nats]
+        naturezas.sort(key=lambda x: x['descricao'].lower())
     except Exception:
         meses, acoes, naturezas, fontes = [], [], [], []
 
