@@ -118,7 +118,7 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
             'fornecedor', 'objeto_do_pedido', 'necessidade', 'deliberacao',
             'tipo_despesa', 'valor_solicitado', 'valor_aprovado',
             'data_da_reuniao', 'observacao', 'possui_reserva', 'valor_reserva',
-            'nivel_prioridade',
+            'nivel_prioridade', 'tramitado_sead_cgfr',
         ]
 
         from decimal import Decimal, InvalidOperation
@@ -155,6 +155,22 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
             except (ValueError, TypeError):
                 return None
 
+        def _parse_date_string(val):
+            """Converte ISO ou DD/MM/YYYY para string DD/MM/YYYY."""
+            if not val or val == '-':
+                return None
+            s = str(val).strip()
+            if ' ' in s:
+                s = s.split(' ')[0]
+            try:
+                return dt_date.fromisoformat(s).strftime('%d/%m/%Y')
+            except (ValueError, TypeError):
+                pass
+            try:
+                return datetime.strptime(s, '%d/%m/%Y').strftime('%d/%m/%Y')
+            except (ValueError, TypeError):
+                return None
+
         for campo in campos_editaveis:
             if campo in dados:
                 valor = dados[campo]
@@ -165,6 +181,8 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
                     valor = _parse_decimal(valor)
                 elif campo == 'data_da_reuniao':
                     valor = _parse_date(valor)
+                elif campo == 'tramitado_sead_cgfr':
+                    valor = _parse_date_string(valor)
                 elif campo == 'possui_reserva':
                     valor = _parse_int(valor) or 0
                 elif campo == 'valor_reserva':

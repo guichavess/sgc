@@ -64,6 +64,10 @@
                         <label for="modal-data-reuniao" class="form-label form-label-sm mb-1">Data da Reunião</label>
                         <input type="date" class="form-control form-control-sm" id="modal-data-reuniao">
                     </div>
+                    <div class="col-md-3">
+                        <label for="modal-data-envio" class="form-label form-label-sm mb-1">Data do Envio</label>
+                        <input type="date" class="form-control form-control-sm" id="modal-data-envio">
+                    </div>
                 </div>
 
                 {# Linha 3: Objeto + Necessidade lado a lado #}
@@ -185,6 +189,7 @@ function abrirModalEdicao(protocolo) {
     document.getElementById('modal-valor-solicitado').value = formatarMonetarioBR(record.valor_solicitado);
     document.getElementById('modal-valor-aprovado').value = formatarMonetarioBR(record.valor_aprovado);
     document.getElementById('modal-data-reuniao').value = converterDataParaISO(record.data_da_reuniao);
+    document.getElementById('modal-data-envio').value = converterDataParaISO(record.dt_enviado_fmt || record.tramitado_sead_cgfr);
     document.getElementById('modal-prioridade').value = record.nivel_prioridade || '';
     document.getElementById('modal-reserva').value = record.possui_reserva || 0;
     document.getElementById('modal-valor-reserva').value = record.valor_reserva || '';
@@ -258,6 +263,7 @@ function initSalvarClassificacao() {
             valor_solicitado: $('#modal-valor-solicitado').val(),
             valor_aprovado: $('#modal-valor-aprovado').val(),
             data_da_reuniao: $('#modal-data-reuniao').val() || null,
+            tramitado_sead_cgfr: $('#modal-data-envio').val() || null,
             nivel_prioridade: $('#modal-prioridade').val(),
             possui_reserva: $('#modal-reserva').val(),
             valor_reserva: $('#modal-valor-reserva').val(),

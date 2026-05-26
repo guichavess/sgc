@@ -43,6 +43,47 @@ def test_modal_edicao_deliberacao_renderiza_dropdown(app):
         assert f'value="{opcao}"' in html
 
 
+def test_modal_edicao_renderiza_e_envia_data_envio(app):
+    with app.test_request_context('/cgfr/'):
+        html = render_template(
+            'cgfr/partials/modal_edicao.html',
+            cgfr_deliberacao_options=CGFR_DELIBERACAO_OPTIONS,
+        )
+
+    assert 'for="modal-data-envio"' in html
+    assert 'id="modal-data-envio"' in html
+    assert 'type="date"' in html
+    assert "document.getElementById('modal-data-envio').value" in html
+    assert "tramitado_sead_cgfr: $('#modal-data-envio').val() || null" in html
+
+
+def test_api_salvar_atualiza_data_envio(client, app, db_session):
+    protocolo = '00002.000077/2026-77'
+    processo = CgfrProcessoEnviado(
+        processo_formatado=protocolo,
+        tramitado_sead_cgfr='01/05/2026',
+    )
+    db_session.add(processo)
+    db_session.flush()
+
+    with app.app_context():
+        _login_admin_cgfr(client, db_session)
+        resp = client.post(
+            '/cgfr/api/salvar',
+            json={
+                'processo_formatado': protocolo,
+                'tramitado_sead_cgfr': '2026-05-15',
+            },
+        )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['sucesso'] is True
+
+    db_session.refresh(processo)
+    assert processo.tramitado_sead_cgfr == '15/05/2026'
+
+
 def test_constantes_trino_usam_credenciais_atualizadas():
     assert Config.TRINO_USER == 'admin'
     assert Config.TRINO_PASSWORD == 'LOC35q3dgZn'
