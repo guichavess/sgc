@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import json
 import sys
+import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -83,11 +84,6 @@ TOKEN = get_token()
 tabela_destino = "reserva"
 YEAR = 2026
 
-
-# >>> controle fácil do DELETE por ano em campo de data <<<
-DELETE_YEAR = YEAR
-DELETE_DATE_FIELD = "dataEmissao"
-
 # Escolha do modo:
 # - "single"  -> usa só a UG definida em UG_SINGLE
 # - "all"     -> busca todas as UGs do banco (SELECT codigo FROM ug)
@@ -97,7 +93,6 @@ UG_SINGLE = "210101"
 UG_PAD_SIZE = 6
 
 MAX_WORKERS_CAP = 16
-CHUNKSIZE_SQL = 2000
 
 # Diagnóstico
 DEBUG_LOG = True
@@ -165,35 +160,84 @@ def make_session():
 # BANCO DE DADOS
 # =========================
 
-def table_exists_mysql(conn, table_name):
-    query = text("""
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = DATABASE()
-          AND table_name = :table
-        LIMIT 1
-    """)
-    return conn.execute(query, {"table": table_name}).fetchone() is not None
+UPSERT_BATCH_SIZE = 500
 
 
-def delete_year_data(conn):
-    if not table_exists_mysql(conn, tabela_destino):
-        print("Tabela não existe ainda, será criada.")
+def _to_py(value):
+    """Converte tipos do pandas/numpy para tipos nativos do Python aceitos pelo DBAPI."""
+    if value is None:
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, pd.Timestamp):
+        if pd.isna(value):
+            return None
+        return value.to_pydatetime()
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            return value
+    return value
+
+
+def upsert_dataframe(conn, df, table_name, columns, key_columns):
+    """
+    Insere/atualiza registros via INSERT ... ON DUPLICATE KEY UPDATE.
+
+    A chave primária composta (codigoUG, codigo) garante idempotência: linhas já
+    existentes são atualizadas em vez de duplicadas. As colunas que compõem a
+    chave NÃO entram na cláusula UPDATE.
+    """
+    if df is None or df.empty:
+        print("Nenhum registro para upsert.")
         return 0
 
-    start_date = "{}-01-01".format(DELETE_YEAR)
-    end_date = "{}-01-01".format(DELETE_YEAR + 1)
+    cols_sql = ", ".join("`{}`".format(c) for c in columns)
+    placeholders = "(" + ", ".join(["%s"] * len(columns)) + ")"
+    update_cols = [c for c in columns if c not in key_columns]
+    update_clause = ", ".join(
+        "`{c}` = VALUES(`{c}`)".format(c=c) for c in update_cols
+    )
 
-    delete_query = text("""
-        DELETE FROM {table}
-        WHERE {date_field} >= :start_date
-          AND {date_field} <  :end_date
-    """.format(table=tabela_destino, date_field=DELETE_DATE_FIELD))
+    total_rows = len(df)
+    inserted_or_updated = 0
+    raw = conn.connection  # DBAPI connection
+    cursor = raw.cursor()
 
-    result = conn.execute(delete_query, {"start_date": start_date, "end_date": end_date})
-    rows_deleted = result.rowcount or 0
-    print("{} registros de {} deletados com sucesso!".format(rows_deleted, DELETE_YEAR))
-    return rows_deleted
+    try:
+        for start in range(0, total_rows, UPSERT_BATCH_SIZE):
+            batch = df.iloc[start:start + UPSERT_BATCH_SIZE]
+            rows = [
+                tuple(_to_py(v) for v in row)
+                for row in batch[columns].itertuples(index=False, name=None)
+            ]
+            values_sql = ", ".join([placeholders] * len(rows))
+            flat_params = [v for row in rows for v in row]
+
+            sql = (
+                "INSERT INTO `{table}` ({cols}) VALUES {vals} "
+                "ON DUPLICATE KEY UPDATE {upd}"
+            ).format(
+                table=table_name,
+                cols=cols_sql,
+                vals=values_sql,
+                upd=update_clause,
+            )
+            cursor.execute(sql, flat_params)
+            inserted_or_updated += len(rows)
+    finally:
+        cursor.close()
+
+    print("UPSERT concluído: {} linhas processadas em '{}'.".format(
+        inserted_or_updated, table_name
+    ))
+    return inserted_or_updated
 
 
 def normalize_ug(value, size):
@@ -412,15 +456,12 @@ def main_reserva():
 
     try:
         with ENGINE.begin() as conn:
-            delete_year_data(conn)
-
-            final_df.to_sql(
-                name=tabela_destino,
-                con=conn,
-                if_exists="append",
-                index=False,
-                chunksize=CHUNKSIZE_SQL,
-                method="multi",
+            upsert_dataframe(
+                conn,
+                final_df,
+                tabela_destino,
+                COLUMNS,
+                key_columns=("codigoUG", "codigo"),
             )
 
         elapsed_total = time.time() - t0

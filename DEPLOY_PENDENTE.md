@@ -17,6 +17,108 @@
 
 ## Pendências
 
+### Fix duplicação massiva — `reserva` e `liquidacao` (2026-05-26)
+
+- [ ] **Limpar duplicatas e aplicar PK composta `(codigoUG, codigo)`**
+
+  **Contexto**: as tabelas `reserva` e `liquidacao` foram criadas pelo `pandas.to_sql` sem PRIMARY KEY, sem UNIQUE e sem índices. O script de sincronização vinha empilhando duplicatas a cada execução (até 21× a mesma reserva). Em 2025, a soma de `reserva` estava em R$ 5,6 bi quando o BI marcava R$ 265 M — divergência de 21×. Após o fix, o dashboard bate exatamente com o BI.
+
+  **Pré-requisito — backup obrigatório**:
+  ```bash
+  mysqldump --single-transaction --quick sgc reserva liquidacao \
+    > backup_reserva_liquidacao_$(date +%Y%m%d).sql
+  ```
+
+  **Passo 1 — Limpeza de NULLs em `liquidacao`** (linhas-fantasma, todas as colunas significativas vazias):
+  ```sql
+  DELETE FROM liquidacao WHERE codigo IS NULL OR codigo = '';
+  -- Esperado em local: 269 linhas removidas
+  ```
+
+  **Passo 2 — Dedup com tiebreaker** (precisamos de uma coluna `auto_increment` temporária porque a coluna `id` da API tem valores duplicados):
+  ```sql
+  -- reserva
+  ALTER TABLE reserva
+    ADD INDEX idx_tmp_dedup (codigoUG(10), codigo(50)),
+    ADD COLUMN _row_uid BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST;
+
+  DELETE r1 FROM reserva r1
+    INNER JOIN reserva r2
+      ON r1.codigoUG = r2.codigoUG
+     AND r1.codigo   = r2.codigo
+     AND r1._row_uid < r2._row_uid;
+  -- Esperado em local: ~10.073 linhas removidas
+
+  ALTER TABLE reserva
+    DROP PRIMARY KEY,
+    DROP COLUMN _row_uid,
+    DROP INDEX idx_tmp_dedup;
+
+  -- liquidacao (mesma estratégia)
+  ALTER TABLE liquidacao
+    ADD INDEX idx_tmp_dedup (codigoUG(10), codigo(50)),
+    ADD COLUMN _row_uid BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST;
+
+  DELETE l1 FROM liquidacao l1
+    INNER JOIN liquidacao l2
+      ON l1.codigoUG = l2.codigoUG
+     AND l1.codigo   = l2.codigo
+     AND l1._row_uid < l2._row_uid;
+  -- Esperado em local: ~55.192 linhas removidas
+
+  ALTER TABLE liquidacao
+    DROP PRIMARY KEY,
+    DROP COLUMN _row_uid,
+    DROP INDEX idx_tmp_dedup;
+  ```
+
+  **Passo 3 — Aplicar PK composta + índices**:
+  ```sql
+  ALTER TABLE reserva
+    MODIFY COLUMN codigoUG VARCHAR(10) NOT NULL,
+    MODIFY COLUMN codigo   VARCHAR(50) NOT NULL,
+    ADD PRIMARY KEY (codigoUG, codigo),
+    ADD INDEX idx_reserva_data_emissao (dataEmissao),
+    ADD INDEX idx_reserva_cod_contrato (codContrato(50));
+
+  ALTER TABLE liquidacao
+    MODIFY COLUMN codigoUG VARCHAR(10) NOT NULL,
+    MODIFY COLUMN codigo   VARCHAR(50) NOT NULL,
+    ADD PRIMARY KEY (codigoUG, codigo);
+  ```
+
+  **Passo 4 — Deploy do código novo** (scripts refatorados para `INSERT ... ON DUPLICATE KEY UPDATE`):
+  - `scripts/atualizar_reserva.py`
+  - `scripts/atualizar_liquidacao.py`
+  - `app/models/reserva.py` (PK composta no model)
+  - `app/models/__init__.py` (export do `Reserva`)
+
+  **Passo 5 — Validação pós-deploy**:
+  ```sql
+  -- Conferir que não há mais duplicatas
+  SELECT COUNT(*) AS total, COUNT(DISTINCT codigoUG, codigo) AS distintos FROM reserva;
+  -- total deve ser igual a distintos
+
+  -- Conferir valor de Reserva 2025 contra BI SIAFE
+  SELECT COALESCE(SUM(CASE WHEN tipoAlteracao='ANULACAO' THEN -valor ELSE valor END),0) AS reservado
+    FROM reserva
+   WHERE statusDocumento='CONTABILIZADO'
+     AND dataEmissao >= '2025-01-01' AND dataEmissao < '2026-01-01';
+  -- Esperado: R$ 265.068.321,87 (alinhado com BI)
+  ```
+
+  **Rollback** (se algo der errado entre os passos):
+  ```bash
+  mysql sgc < backup_reserva_liquidacao_YYYYMMDD.sql
+  ```
+
+  **Observações**:
+  - Os 5 testes que falham na suite full (`test_bug01_valor_cargo`, `test_bug03_atomicidade`, `test_hierarquia_autorizacao`, `test_vincular_processo`) são pré-existentes (test pollution) e NÃO foram introduzidos por esta correção — confirmado rodando a suite no `main` antes do patch.
+  - Os scripts novos são **idempotentes**: podem ser rodados N vezes sem produzir duplicatas.
+  - As tabelas `empenho`, `pd`, `ob` foram auditadas e estão **limpas** — sem ação necessária nelas.
+
+---
+
 ### Credenciais Trino Data Lake — CGFR (2026-05-12)
 
 - [ ] **Atualizar credenciais do Trino no `.env` de produção**

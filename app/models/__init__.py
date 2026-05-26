@@ -44,6 +44,9 @@ from app.models.class_fonte import ClassFonte
 # Model de PD (Programacao de Desembolso)
 from app.models.pd import PD
 
+# Model de Reserva (Nota de Reserva orçamentária)
+from app.models.reserva import Reserva
+
 # Model de Tipo de Pagamento
 from app.models.tipo_pagamento import TipoPagamento
 
@@ -128,6 +131,8 @@ __all__ = [
     'ClassSubItemDespesa',
     # PD (Programacao de Desembolso)
     'PD',
+    # Reserva (Nota de Reserva orçamentária)
+    'Reserva',
     # Tipo de Pagamento
     'TipoPagamento',
     # Perfil e Permissões

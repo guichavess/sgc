@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import json
 import sys
+import math
 
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -46,16 +47,13 @@ ENGINE = create_engine(DATABASE_URI, echo=False)
 YEAR = datetime.now().year
 tabela_destino = "liquidacao"  # Alterado conforme solicitado
 
-DELETE_YEAR = YEAR
-DELETE_DATE_FIELD = "dataEmissao"
-
 # >>> MODO SINGLE TRAVADO <<<
 UG_MODE = "single"
 UG_SINGLE = "210101"
 UG_PAD_SIZE = 6
 
 MAX_WORKERS_CAP = 16
-CHUNKSIZE_SQL = 100
+UPSERT_BATCH_SIZE = 500
 
 # Colunas que serão gravadas na tabela
 COLUMNS = [
@@ -133,9 +131,73 @@ def resolve_ugs():
         rows = conn.execute(text("SELECT codigo FROM ug")).fetchall()
     return [normalize_ug(r[0], UG_PAD_SIZE) for r in rows if r[0]]
 
-def table_exists_mysql(conn, table_name):
-    q = text("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :t LIMIT 1")
-    return conn.execute(q, {"t": table_name}).fetchone() is not None
+def _to_py(value):
+    """Converte tipos do pandas/numpy para tipos nativos do Python aceitos pelo DBAPI."""
+    if value is None:
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, pd.Timestamp):
+        if pd.isna(value):
+            return None
+        return value.to_pydatetime()
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            return value
+    return value
+
+
+def upsert_dataframe(conn, df, table_name, columns, key_columns):
+    """INSERT ... ON DUPLICATE KEY UPDATE para idempotência via PK composta."""
+    if df is None or df.empty:
+        print("Nenhum registro para upsert.")
+        return 0
+
+    cols_sql = ", ".join("`{}`".format(c) for c in columns)
+    placeholders = "(" + ", ".join(["%s"] * len(columns)) + ")"
+    update_cols = [c for c in columns if c not in key_columns]
+    update_clause = ", ".join(
+        "`{c}` = VALUES(`{c}`)".format(c=c) for c in update_cols
+    )
+
+    total_rows = len(df)
+    processed = 0
+    raw = conn.connection
+    cursor = raw.cursor()
+
+    try:
+        for start in range(0, total_rows, UPSERT_BATCH_SIZE):
+            batch = df.iloc[start:start + UPSERT_BATCH_SIZE]
+            rows = [
+                tuple(_to_py(v) for v in row)
+                for row in batch[columns].itertuples(index=False, name=None)
+            ]
+            values_sql = ", ".join([placeholders] * len(rows))
+            flat_params = [v for row in rows for v in row]
+
+            sql = (
+                "INSERT INTO `{table}` ({cols}) VALUES {vals} "
+                "ON DUPLICATE KEY UPDATE {upd}"
+            ).format(
+                table=table_name,
+                cols=cols_sql,
+                vals=values_sql,
+                upd=update_clause,
+            )
+            cursor.execute(sql, flat_params)
+            processed += len(rows)
+    finally:
+        cursor.close()
+
+    print("UPSERT concluído: {} linhas processadas em '{}'.".format(processed, table_name))
+    return processed
 
 # =============================================================================
 # 5. PARSE DE CLASSIFICADORES (Extração de Contrato e Competência)
@@ -160,46 +222,6 @@ def build_competencia_from_classificadores(classificadores):
     if not mes or not ano: return ""
     # Mês com 2 dígitos
     return f"{mes.zfill(2)}/{ano}"
-
-# =============================================================================
-# 6. FUNÇÕES DE BANCO (DELETE)
-# =============================================================================
-
-def delete_year_data(conn):
-    if not table_exists_mysql(conn, tabela_destino):
-        print(f"Tabela {tabela_destino} não existe ainda, será criada automaticamente.")
-        return 0
-
-    start_date = f"{DELETE_YEAR}-01-01"
-    end_date = f"{DELETE_YEAR + 1}-01-01"
-
-    print(f"Limpando dados de {DELETE_YEAR}...")
-
-    # Se estiver em modo single, deleta APENAS dados dessa UG para esse ano
-    if UG_MODE == "single":
-        delete_query = text(f"""
-            DELETE FROM {tabela_destino}
-            WHERE {DELETE_DATE_FIELD} >= :start_date
-              AND {DELETE_DATE_FIELD} <  :end_date
-              AND codigoUG = :ug
-        """)
-        result = conn.execute(delete_query, {
-            "start_date": start_date, 
-            "end_date": end_date,
-            "ug": UG_SINGLE
-        })
-    else:
-        # Modo legacy (all) - Cuidado: apaga tudo do ano
-        delete_query = text(f"""
-            DELETE FROM {tabela_destino}
-            WHERE {DELETE_DATE_FIELD} >= :start_date
-              AND {DELETE_DATE_FIELD} <  :end_date
-        """)
-        result = conn.execute(delete_query, {"start_date": start_date, "end_date": end_date})
-
-    rows_deleted = result.rowcount or 0
-    print(f"{rows_deleted} registros removidos.")
-    return rows_deleted
 
 # =============================================================================
 # 7. API FETCH
@@ -283,19 +305,16 @@ def main():
         if col in final_df.columns:
             final_df[col] = pd.to_datetime(final_df[col], errors="coerce")
 
-    # Inserção no Banco
+    # Inserção no Banco (UPSERT via PK composta codigoUG+codigo — idempotente)
     try:
         with ENGINE.begin() as conn:
-            delete_year_data(conn)
-            
-            print(f"Inserindo {len(final_df)} registros na tabela {tabela_destino}...")
-            final_df.to_sql(
-                name=tabela_destino,
-                con=conn,
-                if_exists="append",
-                index=False,
-                chunksize=CHUNKSIZE_SQL,
-                method="multi",
+            print(f"Upsert de {len(final_df)} registros na tabela {tabela_destino}...")
+            upsert_dataframe(
+                conn,
+                final_df,
+                tabela_destino,
+                COLUMNS,
+                key_columns=("codigoUG", "codigo"),
             )
 
         elapsed_total = time.time() - t0
