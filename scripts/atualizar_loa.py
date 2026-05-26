@@ -84,8 +84,13 @@ TOKEN = get_token()
 # >>> nome fixo conforme solicitado <<<
 tabela_destino = "loa"
 
-# Anos a buscar (default ou via CLI: --years 2026)
-YEARS = [2023, 2024, 2025, 2026]
+# Anos a buscar — modo incremental (default = ano corrente).
+# - Sem argumentos: atualiza apenas o ano corrente (DELETE + INSERT desse ano);
+#   anos anteriores ficam intactos.
+# - --years 2024            : reimporta só 2024 (DELETE+INSERT).
+# - --years 2025 2026       : reimporta 2025 e 2026.
+# - --years 2023 2024 2025 2026 : bootstrap completo em ambiente novo.
+YEARS = [datetime.now().year]
 if '--years' in sys.argv:
     idx = sys.argv.index('--years')
     YEARS = [int(y) for y in sys.argv[idx+1:] if y.isdigit()]
@@ -298,6 +303,22 @@ def delete_year_data(conn, year):
     return rows_deleted
 
 
+def ensure_index(conn, table_name, index_name, columns_expr):
+    """Cria índice apenas se ainda não existir (idempotente)."""
+    check = text("""
+        SELECT 1 FROM information_schema.statistics
+        WHERE table_schema = DATABASE()
+          AND table_name = :table
+          AND index_name = :index
+        LIMIT 1
+    """)
+    if conn.execute(check, {"table": table_name, "index": index_name}).fetchone():
+        print(f"  Índice '{index_name}' já existe, pulando.")
+        return
+    conn.execute(text(f"CREATE INDEX {index_name} ON {table_name} ({columns_expr})"))
+    print(f"  Índice '{index_name}' criado.")
+
+
 def normalize_ug(value, size):
     if value is None:
         return None
@@ -430,19 +451,14 @@ def main_loa():
     months = list(range(1, 13))
 
     print("=" * 70)
-    print(f"Iniciando atualização de dados de LOA (V2) - Anos {YEARS}")
-    print(f"  Novas colunas: codAcao, codNatureza, codFonte, codPrograma")
+    print(f"Atualização incremental de LOA — Anos: {YEARS}")
+    print(f"  Modo: DELETE + INSERT por ano (anos não listados são preservados)")
     if is_all_mode:
         print(f"  UGs: {len(ugs)} UGs (modo all)")
     else:
         print(f"  UG: {', '.join(ugs)}")
     print(f"  Tabela destino: {tabela_destino}")
     print("=" * 70)
-
-    # === PASSO 0: DROP TABLE para recriar com novas colunas ===
-    print("\n[PASSO 0] Excluindo tabela antiga (DROP TABLE)...")
-    with ENGINE.begin() as conn:
-        drop_table_if_exists(conn, tabela_destino)
 
     session = make_session()
 
@@ -512,7 +528,8 @@ def main_loa():
 
         try:
             with ENGINE.begin() as conn:
-                # No primeiro ano a tabela já foi dropada; nos seguintes, append direto
+                # Modo incremental: apaga só este ano e insere os novos registros.
+                delete_year_data(conn, YEAR)
                 final_df.to_sql(
                     name=tabela_destino,
                     con=conn,
@@ -527,28 +544,30 @@ def main_loa():
         except Exception as e:
             print(f"  [ERRO] {YEAR}: {e}")
 
-    # === PÓS-PROCESSAMENTO: Otimizar colunas e criar índices ===
+    # === PÓS-PROCESSAMENTO: Otimizar colunas e criar índices (idempotente) ===
     print("\n[PÓS] Otimizando colunas e criando índices...")
     try:
         with ENGINE.begin() as conn:
-            conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN codAcao VARCHAR(20)"))
-            conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN codNatureza VARCHAR(20)"))
-            conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN codFonte VARCHAR(20)"))
-            conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN codPrograma VARCHAR(30)"))
-            conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN id VARCHAR(20)"))
-            conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN codigoUG VARCHAR(15)"))
-            print("  Colunas convertidas para VARCHAR")
+            if not table_exists_mysql(conn, tabela_destino):
+                print(f"  Tabela '{tabela_destino}' não existe — nada a otimizar.")
+            else:
+                conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN codAcao VARCHAR(20)"))
+                conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN codNatureza VARCHAR(20)"))
+                conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN codFonte VARCHAR(20)"))
+                conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN codPrograma VARCHAR(30)"))
+                conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN id VARCHAR(20)"))
+                conn.execute(text(f"ALTER TABLE {tabela_destino} MODIFY COLUMN codigoUG VARCHAR(15)"))
+                print("  Colunas convertidas para VARCHAR")
 
-            conn.execute(text(f"CREATE INDEX idx_loa_ano_acao_nat_fonte ON {tabela_destino} (ano, codAcao, codNatureza, codFonte)"))
-            conn.execute(text(f"CREATE INDEX idx_loa_ano_id ON {tabela_destino} (ano, id)"))
-            print("  Índices criados: idx_loa_ano_acao_nat_fonte, idx_loa_ano_id")
+                ensure_index(conn, tabela_destino, "idx_loa_ano_acao_nat_fonte", "ano, codAcao, codNatureza, codFonte")
+                ensure_index(conn, tabela_destino, "idx_loa_ano_id", "ano, id")
     except Exception as e:
         print(f"  [AVISO] Erro ao otimizar: {e}")
 
     wall_elapsed = time.time() - wall_t0
     print(f"\n{'='*70}")
-    print(f"CONCLUÍDO — Todos os anos processados em {wall_elapsed:.1f}s ({wall_elapsed/60:.1f} min)")
-    print(f"Tabela '{tabela_destino}' recriada com colunas de classificação (V2)")
+    print(f"CONCLUÍDO — Anos {YEARS} processados em {wall_elapsed:.1f}s ({wall_elapsed/60:.1f} min)")
+    print(f"Tabela '{tabela_destino}' atualizada (demais anos preservados)")
     print(f"{'='*70}")
 
 
