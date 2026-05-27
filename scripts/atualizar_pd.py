@@ -91,8 +91,9 @@ TOKEN = get_token()
 # 3. CONFIGURAÇÕES
 # =========================
 
-# Anos a processar
-YEARS = [datetime.now().year]
+# Anos a processar — inclui ano anterior para refrescar status de documentos
+# que mudaram após a virada de ano (ex.: PD de 2025 paga em 2026).
+YEARS = [datetime.now().year - 1, datetime.now().year]
 
 # UG
 UG_MODE = "single"      # "single" ou "all"

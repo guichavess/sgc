@@ -47,10 +47,11 @@ ENGINE = create_engine(DATABASE_URI, echo=False)
 # 2. CONFIGURAÇÕES ESPECÍFICAS
 # =============================================================================
 
-YEAR = datetime.now().year
+# Anos a processar — inclui ano anterior para refrescar status de documentos
+# que mudaram após a virada de ano (ex.: OB de 2025 contabilizada em 2026).
+YEARS = [datetime.now().year - 1, datetime.now().year]
 tabela_destino = "ob"
 
-DELETE_YEAR = YEAR
 DELETE_DATE_FIELD = "dataEmissao"
 
 # >>> MODO SINGLE TRAVADO <<<
@@ -218,15 +219,15 @@ def parse_cod_contrato_from_codClassificacao(series: pd.Series) -> pd.Series:
 # 6. FUNÇÕES DE BANCO (DELETE)
 # =============================================================================
 
-def delete_year_data(conn):
+def delete_year_data(conn, year):
     if not table_exists_mysql(conn, tabela_destino):
         print(f"Tabela {tabela_destino} não existe ainda, será criada automaticamente.")
         return 0
 
-    start_date = f"{DELETE_YEAR}-01-01"
-    end_date = f"{DELETE_YEAR + 1}-01-01"
+    start_date = f"{year}-01-01"
+    end_date = f"{year + 1}-01-01"
 
-    print(f"Limpando dados de {DELETE_YEAR}...")
+    print(f"Limpando dados de {year}...")
 
     # Se estiver em modo single, deleta APENAS dados dessa UG para esse ano
     if UG_MODE == "single":
@@ -310,7 +311,7 @@ def main():
     is_all_mode = (UG_MODE or "").lower().strip() == "all"
 
     print("=" * 70)
-    print(f"Iniciando atualização de dados de OB (Pagamento) - Ano {YEAR}")
+    print(f"Iniciando atualização de dados de OB (Pagamento) - Anos {YEARS}")
     if is_all_mode:
         print(f"UGs da SEAD: {len(ugs)} UGs (modo all)")
     else:
@@ -318,95 +319,85 @@ def main():
     print("=" * 70)
 
     session = make_session()
-    dfs = []
-    total_docs = 0
-    total_api_time_sum = 0.0
-    per_ug_summary = []
-    status_counts = {}
-
     max_workers = min(MAX_WORKERS_CAP, max(1, len(ugs)))
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(fetch_data, session, ug, TOKEN, YEAR) for ug in ugs]
-        for fut in as_completed(futures):
-            ug, df, qtd, elapsed, status = fut.result()
-            total_docs += qtd
-            total_api_time_sum += elapsed
-            status_counts[status] = status_counts.get(status, 0) + 1
-            per_ug_summary.append((ug, qtd, elapsed))
-            print(f"UG {ug}: Status {status}, Registros {qtd}")
-            if df is not None and not df.empty:
-                dfs.append(df)
+    for year in YEARS:
+        print(f"\n{'=' * 70}")
+        print(f"Processando ano {year}...")
+        print(f"{'=' * 70}")
 
-    if not dfs:
-        print("Nenhum dado retornado da API.")
-        print(f"Resumo de status/erros: {status_counts}")
-        return
+        dfs = []
+        total_docs = 0
+        total_api_time_sum = 0.0
+        per_ug_summary = []
+        status_counts = {}
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        final_df = pd.concat(dfs, ignore_index=True)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(fetch_data, session, ug, TOKEN, year) for ug in ugs]
+            for fut in as_completed(futures):
+                ug, df, qtd, elapsed, status = fut.result()
+                total_docs += qtd
+                total_api_time_sum += elapsed
+                status_counts[status] = status_counts.get(status, 0) + 1
+                per_ug_summary.append((ug, qtd, elapsed))
+                print(f"UG {ug}: Status {status}, Registros {qtd}")
+                if df is not None and not df.empty:
+                    dfs.append(df)
 
-    # Conversão de Tipos
-    for col in INT_COLUMNS:
-        if col in final_df.columns:
-            final_df[col] = pd.to_numeric(final_df[col], errors="coerce").fillna(0).astype("int64")
+        if not dfs:
+            print(f"Nenhum dado retornado da API para {year}.")
+            print(f"Resumo de status/erros: {status_counts}")
+            continue
 
-    for col in DATE_COLUMNS:
-        if col in final_df.columns:
-            final_df[col] = pd.to_datetime(final_df[col], errors="coerce")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            final_df = pd.concat(dfs, ignore_index=True)
 
-    # codContrato permanece como string para não perder zeros à esquerda
+        # Conversão de Tipos
+        for col in INT_COLUMNS:
+            if col in final_df.columns:
+                final_df[col] = pd.to_numeric(final_df[col], errors="coerce").fillna(0).astype("int64")
 
-    # Filtro defensivo: garante que só OBs do ano-alvo sejam gravadas.
-    # Anos anteriores ficam intactos no banco (o DELETE também é escopado por YEAR).
-    if "dataEmissao" in final_df.columns:
-        n_total = len(final_df)
-        final_df = final_df[final_df["dataEmissao"].dt.year == YEAR].copy()
-        n_fora = n_total - len(final_df)
-        if n_fora > 0:
-            print(f"[FILTRO ANO] {n_fora} linha(s) com dataEmissao fora de {YEAR} ignorada(s).")
+        for col in DATE_COLUMNS:
+            if col in final_df.columns:
+                final_df[col] = pd.to_datetime(final_df[col], errors="coerce")
 
-    # Inserção no Banco
-    try:
-        with ENGINE.begin() as conn:
-            delete_year_data(conn)
+        # codContrato permanece como string para não perder zeros à esquerda
 
-            print(f"Inserindo {len(final_df)} registros na tabela {tabela_destino}...")
-            final_df.to_sql(
-                name=tabela_destino,
-                con=conn,
-                if_exists="append",
-                index=False,
-                chunksize=CHUNKSIZE_SQL,
-                method="multi",
-            )
+        # Filtro defensivo: garante que só OBs do ano-alvo sejam gravadas.
+        # Anos NÃO incluídos em YEARS ficam intactos no banco (DELETE escopado por year).
+        if "dataEmissao" in final_df.columns:
+            n_total = len(final_df)
+            final_df = final_df[final_df["dataEmissao"].dt.year == year].copy()
+            n_fora = n_total - len(final_df)
+            if n_fora > 0:
+                print(f"[FILTRO ANO] {n_fora} linha(s) com dataEmissao fora de {year} ignorada(s).")
 
-        elapsed_total = time.time() - t0
+        # Inserção no Banco
+        try:
+            with ENGINE.begin() as conn:
+                delete_year_data(conn, year)
 
-        print("=" * 70)
-        print("RESUMO DA OPERAÇÃO")
-        print("=" * 70)
+                print(f"Inserindo {len(final_df)} registros na tabela {tabela_destino}...")
+                final_df.to_sql(
+                    name=tabela_destino,
+                    con=conn,
+                    if_exists="append",
+                    index=False,
+                    chunksize=CHUNKSIZE_SQL,
+                    method="multi",
+                )
 
-        if is_all_mode:
-            per_ug_summary.sort(key=lambda x: x[0])
-            print("UG | Quantidade de OB | Tempo de busca (s)")
-            for ug, qtd, elapsed in per_ug_summary:
-                print(f"{ug} | {qtd} | {elapsed:.2f}")
-            print("-" * 70)
-            print(f"UGs buscadas: {len(per_ug_summary)}")
-            print(f"Total de OB: {total_docs}")
-            print(f"Tempo total: {elapsed_total / 60.0:.2f} min")
-        else:
-            print(f"Total de documentos processados: {total_docs}")
-            print(f"Tempo total: {elapsed_total:.2f}s")
+            print(f"Ano {year}: {len(final_df)} OBs inseridas.")
 
-        print(f"Registros inseridos no banco: {len(final_df)}")
-        print(f"Tabela '{tabela_destino}' atualizada com sucesso!")
-        print("=" * 70)
+        except Exception as e:
+            print(f"ERRO ao inserir no banco (ano {year}): {e}")
 
-    except Exception as e:
-        print(f"ERRO FATAL: {e}")
+    elapsed_total = time.time() - t0
+    print("=" * 70)
+    print(f"Concluído em {elapsed_total:.2f}s ({elapsed_total / 60:.2f} min)")
+    print(f"Tabela '{tabela_destino}' atualizada para anos {YEARS}.")
+    print("=" * 70)
 
 if __name__ == "__main__":
     main()

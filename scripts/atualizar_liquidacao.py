@@ -44,7 +44,9 @@ ENGINE = create_engine(DATABASE_URI, echo=False)
 # 2. CONFIGURAÇÕES ESPECÍFICAS
 # =============================================================================
 
-YEAR = datetime.now().year
+# Anos a processar — inclui ano anterior para refrescar status de documentos
+# que mudaram após a virada de ano (ex.: NL de 2025 alterada em 2026).
+YEARS = [datetime.now().year - 1, datetime.now().year]
 tabela_destino = "liquidacao"  # Alterado conforme solicitado
 
 # >>> MODO SINGLE TRAVADO <<<
@@ -273,65 +275,71 @@ def fetch_data(session, ug, token, year):
 def main():
     t0 = time.time()
     ugs = resolve_ugs()
-    
-    print(f"Iniciando LIQUIDAÇÃO - Ano {YEAR} - Modo {UG_MODE}")
+
+    print(f"Iniciando LIQUIDAÇÃO - Anos {YEARS} - Modo {UG_MODE}")
 
     session = make_session()
-    dfs = []
-    
-    # Execução (com ThreadPool mesmo sendo 1 UG, mantém padrão)
-    with ThreadPoolExecutor(max_workers=min(16, len(ugs))) as executor:
-        futures = [executor.submit(fetch_data, session, ug, TOKEN, YEAR) for ug in ugs]
-        for fut in as_completed(futures):
-            ug, df, qtd, _, status = fut.result()
-            print(f"UG {ug}: Status {status}, Registros {qtd}")
-            if not df.empty:
-                dfs.append(df)
 
-    if not dfs:
-        print("Nenhum dado retornado.")
-        return
+    for year in YEARS:
+        print(f"\n{'=' * 70}")
+        print(f"Processando ano {year}...")
+        print(f"{'=' * 70}")
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        final_df = pd.concat(dfs, ignore_index=True)
+        dfs = []
 
-    # Conversão de Tipos
-    for col in INT_COLUMNS:
-        if col in final_df.columns:
-            final_df[col] = pd.to_numeric(final_df[col], errors="coerce").fillna(0).astype("int64")
+        # Execução (com ThreadPool mesmo sendo 1 UG, mantém padrão)
+        with ThreadPoolExecutor(max_workers=min(16, len(ugs))) as executor:
+            futures = [executor.submit(fetch_data, session, ug, TOKEN, year) for ug in ugs]
+            for fut in as_completed(futures):
+                ug, df, qtd, _, status = fut.result()
+                print(f"UG {ug}: Status {status}, Registros {qtd}")
+                if not df.empty:
+                    dfs.append(df)
 
-    for col in DATE_COLUMNS:
-        if col in final_df.columns:
-            final_df[col] = pd.to_datetime(final_df[col], errors="coerce")
+        if not dfs:
+            print(f"Nenhum dado retornado para {year}.")
+            continue
 
-    # Filtro defensivo: garante que só registros do ano-alvo sejam gravados.
-    # Protege contra a API retornar NLs com dataEmissao fora de YEAR. Anos
-    # anteriores ficam intactos no banco.
-    if "dataEmissao" in final_df.columns:
-        n_total = len(final_df)
-        final_df = final_df[final_df["dataEmissao"].dt.year == YEAR].copy()
-        n_fora = n_total - len(final_df)
-        if n_fora > 0:
-            print(f"[FILTRO ANO] {n_fora} linha(s) com dataEmissao fora de {YEAR} ignorada(s).")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            final_df = pd.concat(dfs, ignore_index=True)
 
-    # Inserção no Banco (UPSERT via PK composta codigoUG+codigo — idempotente)
-    try:
-        with ENGINE.begin() as conn:
-            print(f"Upsert de {len(final_df)} registros na tabela {tabela_destino}...")
-            upsert_dataframe(
-                conn,
-                final_df,
-                tabela_destino,
-                COLUMNS,
-                key_columns=("codigoUG", "codigo"),
-            )
+        # Conversão de Tipos
+        for col in INT_COLUMNS:
+            if col in final_df.columns:
+                final_df[col] = pd.to_numeric(final_df[col], errors="coerce").fillna(0).astype("int64")
 
-        elapsed_total = time.time() - t0
-        print(f"SUCESSO TOTAL! Tempo: {elapsed_total:.2f}s")
+        for col in DATE_COLUMNS:
+            if col in final_df.columns:
+                final_df[col] = pd.to_datetime(final_df[col], errors="coerce")
 
-    except Exception as e:
-        print(f"ERRO FATAL: {e}")
+        # Filtro defensivo: garante que só registros do ano-alvo sejam gravados.
+        # Protege contra a API retornar NLs com dataEmissao fora do ano-alvo.
+        if "dataEmissao" in final_df.columns:
+            n_total = len(final_df)
+            final_df = final_df[final_df["dataEmissao"].dt.year == year].copy()
+            n_fora = n_total - len(final_df)
+            if n_fora > 0:
+                print(f"[FILTRO ANO] {n_fora} linha(s) com dataEmissao fora de {year} ignorada(s).")
+
+        # Inserção no Banco (UPSERT via PK composta codigoUG+codigo — idempotente)
+        try:
+            with ENGINE.begin() as conn:
+                print(f"Upsert de {len(final_df)} registros na tabela {tabela_destino}...")
+                upsert_dataframe(
+                    conn,
+                    final_df,
+                    tabela_destino,
+                    COLUMNS,
+                    key_columns=("codigoUG", "codigo"),
+                )
+            print(f"Ano {year}: {len(final_df)} NLs processadas.")
+
+        except Exception as e:
+            print(f"ERRO ao inserir no banco (ano {year}): {e}")
+
+    elapsed_total = time.time() - t0
+    print(f"\nSUCESSO TOTAL! Tempo: {elapsed_total:.2f}s ({elapsed_total / 60:.2f} min)")
 
 if __name__ == "__main__":
     main()
