@@ -87,8 +87,8 @@
 {% include 'diarias/partials/subnav_administracao.html' %}
 
 {# Filtros #}
-<div class="card mb-4 " style="overflow: visible; position: relative; z-index: 10;">
- <div class="card-body p-3" style="overflow: visible;">
+<div class="card mb-4 card-dropdown-host">
+ <div class="card-body p-3">
  <form method="get" action="{{ url_for('diarias.administracao') }}" id="filtro-form">
  <div class="row g-2 align-items-center">
  <div class="col-auto">
@@ -272,7 +272,7 @@
  <i class="bi bi-currency-dollar" style="color:#198754;font-size:1.2rem;"></i>
  </div>
  <div>
- <div class="text-display lh-1">R$ {{ vt_fmt }}</div>
+ <div class="fw-bold fs-4 lh-1">R$ {{ vt_fmt }}</div>
  <div class="text-muted small">Valor Total</div>
  </div>
  </div>

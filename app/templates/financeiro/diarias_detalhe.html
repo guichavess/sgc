@@ -29,8 +29,10 @@
    Nome da variavel mantido para minimo churn, mas a fonte e 'despacho_sga'
    (canonico), que e como SERIE_TIPO_DOCUMENTO_MAP e DIARIAS_SUBITENS esperam. #}
 {% set apoio_ok = itinerario.has_doc('despacho_sga') %}
-{% set diretor_ok = itinerario.has_doc('despacho_diretor') %}
-{% set geo_ok = itinerario.has_doc('despacho_geo') %}
+{% set doc_diretor_obj = itinerario.get_doc('despacho_diretor') %}
+{% set diretor_ok      = doc_diretor_obj and doc_diretor_obj.assinado %}
+{% set doc_geo_obj     = itinerario.get_doc('despacho_geo') %}
+{% set geo_ok          = doc_geo_obj and doc_geo_obj.assinado %}
 {% set prestacao_ok = itinerario.has_doc('despacho_final') %}
 {% set comprovante_ok = itinerario.has_doc('comprovante_viagem') %}
 
@@ -46,9 +48,10 @@
 {% set s5 = s4 and ne_ok %}
 {% set s6 = s5 and dccdp_ok %}
 {% set s7 = s6 and apoio_ok %}
-{% set s8 = s7 and diretor_ok %}
-{% set s9 = s8 and geo_ok and ob_ok %}
-{% set s10 = s9 and prestacao_ok %}
+{% set s8     = s7 and nci_ok %}
+{% set s8_dir = s8 and diretor_ok %}
+{% set s9     = s8_dir and geo_ok and ob_ok %}
+{% set s10    = s9 and prestacao_ok %}
 
 {# Lista dinâmica de todos os passos — usada para stepper E painéis #}
 {% set all_steps = [
@@ -61,9 +64,10 @@
     {'key': 'ne', 'icon': 'bi-file-earmark-text', 'label': 'Nota Empenho', 'done': s5},
     {'key': 'dccdp', 'icon': 'bi-send', 'label': 'Desp. CCDP', 'done': s6},
     {'key': 'apoio', 'icon': 'bi-person-badge', 'label': 'Desp. SGA→NCI', 'done': s7},
-    {'key': 'analise_nci', 'icon': 'bi-clipboard-check', 'label': 'Análise NCI', 'done': s8},
-    {'key': 'geo_ob', 'icon': 'bi-building', 'label': 'Concessão', 'done': s9},
-    {'key': 'prestacao', 'icon': 'bi-clipboard-check', 'label': 'Prest. Contas', 'done': s10},
+    {'key': 'analise_nci', 'icon': 'bi-clipboard-check', 'label': 'Análise NCI',   'done': s8},
+    {'key': 'diretor',     'icon': 'bi-person-check',    'label': 'Desp. Diretor', 'done': s8_dir},
+    {'key': 'geo_ob',      'icon': 'bi-building',        'label': 'Concessão',     'done': s9},
+    {'key': 'prestacao',   'icon': 'bi-clipboard-check', 'label': 'Prest. Contas', 'done': s10},
 ] %}
 
 {# Passo ativo = primeiro passo incompleto (1-indexed) #}
@@ -1275,7 +1279,7 @@
                     </div>
                 </div>
 
-            {% elif dccdp_ok and not itinerario.has_doc('despacho_sga') and current_user.tem_permissao('financeiro', 'criar') %}
+            {% elif doc_dccdp and doc_dccdp.sei_id and not doc_dccdp.assinado and current_user.tem_permissao('financeiro', 'criar') %}
                 <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
                     <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
                     <div>
@@ -1436,6 +1440,109 @@
 </div>{# /panel-analise-nci #}
 
 {# ══════════════════════════════════════════════════════════════ #}
+{# PASSO: Despacho Diretor DFIN                                   #}
+{# ══════════════════════════════════════════════════════════════ #}
+{% set pn.n = pn.n + 1 %}
+<div class="carousel-panel {{ 'active' if passo_ativo == pn.n }}" id="panel-{{ pn.n }}" data-step="{{ pn.n }}">
+    <div class="carousel-panel-header">
+        <div class="panel-icon {{ 'done' if diretor_ok else ('active' if passo_ativo == pn.n else 'locked') }}">
+            <i class="bi bi-person-check"></i>
+        </div>
+        <div>
+            <span class="panel-title">Despacho Diretor DFIN</span>
+            {% if diretor_ok %}
+            <span class="d-block" style="font-size: 0.75rem; color: #198754;"><i class="bi bi-check-circle-fill me-1"></i>Concluído</span>
+            {% elif passo_ativo == pn.n %}
+            <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">Pendente</span>
+            {% endif %}
+        </div>
+    </div>
+
+        {% if not nci_completo %}
+            <div class="alert alert-secondary py-2 mb-0"><i class="bi bi-lock me-1"></i>A Análise NCI deve ser concluída primeiro.</div>
+
+        {% elif diretor_ok %}
+            <div class="alert alert-success d-flex align-items-center mb-0" role="alert">
+                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Despacho do Diretor DFIN gerado e assinado!</strong>
+                    {% if doc_diretor_obj and doc_diretor_obj.sei_formatado %}
+                        <br><small class="text-muted">Documento SEI: {{ doc_diretor_obj.sei_formatado }}</small>
+                    {% endif %}
+                </div>
+            </div>
+
+        {% elif doc_diretor_obj and doc_diretor_obj.sei_id and not doc_diretor_obj.assinado and current_user.tem_permissao('financeiro', 'criar') %}
+            <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+                <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Despacho criado, mas pendente de assinatura.</strong>
+                    <br><small class="text-muted">Documento SEI: {{ doc_diretor_obj.sei_formatado or doc_diretor_obj.sei_id }}</small>
+                </div>
+            </div>
+            <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label for="diretor_retry_sei_usuario" class="form-label fw-bold">Usuário SEI <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="diretor_retry_sei_usuario" placeholder="usuario@sead.pi.gov.br">
+                </div>
+                <div class="col-md-4">
+                    <label for="diretor_retry_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="diretor_retry_sei_senha" placeholder="Sua senha do SEI">
+                </div>
+                <div class="col-md-4">
+                    <label for="diretor_retry_cargo" class="form-label fw-bold">Cargo</label>
+                    <input type="text" class="form-control" id="diretor_retry_cargo" placeholder="Ex: Diretor"
+                           value="{{ session.get('usuario_cargo', '') }}">
+                </div>
+            </div>
+            <button type="button" class="btn btn-warning fw-bold px-4" id="btnRetryAssinaturaDiretor" onclick="retryAssinaturaDiretor()">
+                <i class="bi bi-pen me-1"></i> Realizar Assinatura
+            </button>
+            <div id="diretorRetryResultado" class="mt-3" style="display:none;"></div>
+
+        {% elif current_user.tem_permissao('financeiro', 'criar') and itinerario.sei_id_procedimento %}
+            <p class="text-muted small mb-3">
+                O despacho será gerado pelo Diretor DFIN e encaminhado à GEO para liquidação.
+            </p>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="cienciaDiretor" onchange="toggleBtnDiretor()">
+                <label class="form-check-label fw-bold" for="cienciaDiretor">
+                    Declaro ciência do processo e autorizo a geração do despacho.
+                </label>
+            </div>
+            <hr>
+            <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label for="diretor_sei_usuario" class="form-label fw-bold">Usuário SEI <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="diretor_sei_usuario" placeholder="usuario@sead.pi.gov.br">
+                </div>
+                <div class="col-md-4">
+                    <label for="diretor_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="diretor_sei_senha" placeholder="Sua senha do SEI">
+                </div>
+                <div class="col-md-4">
+                    <label for="diretor_cargo" class="form-label fw-bold">Cargo</label>
+                    <input type="text" class="form-control" id="diretor_cargo" placeholder="Ex: Diretor DFIN"
+                           value="{{ session.get('usuario_cargo', '') }}">
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary fw-bold px-4" id="btnDespachoDiretor" onclick="enviarDespachoDiretor()" disabled>
+                <i class="bi bi-send me-1"></i> Gerar Despacho e Assinar
+            </button>
+            <div id="diretorResultado" class="mt-3" style="display:none;"></div>
+
+        {% else %}
+            <div class="alert alert-info d-flex align-items-center mb-0" role="alert">
+                <i class="bi bi-info-circle fs-4 me-3"></i>
+                <strong>Aguardando Despacho do Diretor DFIN.</strong>
+            </div>
+        {% endif %}
+
+</div>{# /panel-diretor #}
+
+{# ══════════════════════════════════════════════════════════════ #}
 {# PASSO 8: Despacho GEO & Liquidação (NL/PD/OB)                 #}
 {# ══════════════════════════════════════════════════════════════ #}
 {% set pn.n = pn.n + 1 %}
@@ -1457,6 +1564,35 @@
 
         {% if not diretor_ok %}
             <div class="alert alert-secondary py-2 mb-0"><i class="bi bi-lock me-1"></i>O Despacho do Diretor DFIN deve ser gerado primeiro.</div>
+
+        {% elif doc_geo_obj and doc_geo_obj.sei_id and not doc_geo_obj.assinado and current_user.tem_permissao('financeiro', 'criar') %}
+            <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+                <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>Despacho GEO criado, mas pendente de assinatura.</strong>
+                    <br><small class="text-muted">Documento SEI: {{ doc_geo_obj.sei_formatado or doc_geo_obj.sei_id }}</small>
+                </div>
+            </div>
+            <h6 class="fw-bold mb-3"><i class="bi bi-key me-1"></i>Credenciais SEI para Assinar</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label for="geo_retry_sei_usuario" class="form-label fw-bold">Usuário SEI <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="geo_retry_sei_usuario" placeholder="usuario@sead.pi.gov.br">
+                </div>
+                <div class="col-md-4">
+                    <label for="geo_retry_sei_senha" class="form-label fw-bold">Senha SEI <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="geo_retry_sei_senha" placeholder="Sua senha do SEI">
+                </div>
+                <div class="col-md-4">
+                    <label for="geo_retry_cargo" class="form-label fw-bold">Cargo</label>
+                    <input type="text" class="form-control" id="geo_retry_cargo" placeholder="Ex: Gerente"
+                           value="{{ session.get('usuario_cargo', '') }}">
+                </div>
+            </div>
+            <button type="button" class="btn btn-warning fw-bold px-4" id="btnRetryAssinaturaGeo" onclick="retryAssinaturaGeo()">
+                <i class="bi bi-pen me-1"></i> Realizar Assinatura
+            </button>
+            <div id="geoRetryResultado" class="mt-3" style="display:none;"></div>
 
         {% elif geo_ok %}
             {% set doc_geo = itinerario.get_doc('despacho_geo') %}
@@ -2381,6 +2517,24 @@ function abrirModalDocFinanceiro(tipo, itemId, nomeServidor, codigo, valor) {
         _ajaxDespacho("{{ url_for('financeiro.assinar_despacho_ccdp', id=itinerario.id) }}",
             { sei_usuario: cred.usuario, sei_senha: cred.senha, cargo: cred.cargo || 'Auxiliar Técnica' },
             'btnRetryAssinatura', 'retryResultado', '<i class="bi bi-pen me-1"></i> Realizar Assinatura');
+    }
+
+    // Retry Assinatura Diretor
+    function retryAssinaturaDiretor() {
+        const cred = _validaCredenciais('diretor_retry', 'diretorRetryResultado');
+        if (!cred) return;
+        _ajaxDespacho("{{ url_for('financeiro.assinar_despacho_diretor', id=itinerario.id) }}",
+            { sei_usuario: cred.usuario, sei_senha: cred.senha, cargo: cred.cargo || 'Diretor' },
+            'btnRetryAssinaturaDiretor', 'diretorRetryResultado', '<i class="bi bi-pen me-1"></i> Realizar Assinatura');
+    }
+
+    // Retry Assinatura GEO
+    function retryAssinaturaGeo() {
+        const cred = _validaCredenciais('geo_retry', 'geoRetryResultado');
+        if (!cred) return;
+        _ajaxDespacho("{{ url_for('financeiro.assinar_despacho_geo', id=itinerario.id) }}",
+            { sei_usuario: cred.usuario, sei_senha: cred.senha, cargo: cred.cargo || 'Gerência de Execução Orçamentária' },
+            'btnRetryAssinaturaGeo', 'geoRetryResultado', '<i class="bi bi-pen me-1"></i> Realizar Assinatura');
     }
 
     // Despacho APOIO

@@ -11,7 +11,7 @@ from flask_login import login_required, current_user
 from app.financeiro.routes import financeiro_bp
 from app.models.diaria import DiariasItinerario, DiariasItemItinerario, DiariasQuadroOrcamentario, DiariasDocumentoSei
 from app.extensions import db
-from app.constants import DiariasEtapaID
+from app.constants import DiariasEtapaID, etapa_diaria_em_ou_apos
 from app.services.diaria_service import DiariaService
 from app.services.diarias_sei_integration import (
     gerar_token_sei_admin, adicionar_documento_externo, gerar_quadro_orcamentario,
@@ -410,7 +410,9 @@ def diarias_detalhe(id):
         for nr in DiariasNotaReserva.query.filter_by(itinerario_id=itinerario.id).all()
     }
     total_servidores = len(dados['itens'])
-    total_nrs = len(nrs_por_item)
+    total_nrs = DiariasNotaReserva.query.filter_by(itinerario_id=itinerario.id).filter(
+        DiariasNotaReserva.sei_id.isnot(None)
+    ).count()
     todas_nrs_ok = total_servidores > 0 and total_nrs >= total_servidores
 
     # NEs cadastradas por servidor (mesmo padrão da NR: 1 por servidor)
@@ -418,7 +420,9 @@ def diarias_detalhe(id):
         ne.item_itinerario_id: ne
         for ne in DiariasNotaEmpenho.query.filter_by(itinerario_id=itinerario.id).all()
     }
-    total_nes = len(nes_por_item)
+    total_nes = DiariasNotaEmpenho.query.filter_by(itinerario_id=itinerario.id).filter(
+        DiariasNotaEmpenho.sei_id.isnot(None)
+    ).count()
     todas_nes_ok = total_servidores > 0 and total_nes >= total_servidores
 
     # NL/PD/OB cadastrados por servidor (mesmo padrao de NR/NE)
@@ -600,10 +604,11 @@ def inserir_nr(id):
         except Exception as e:
             flash(f'Aviso: NR salva, mas erro ao enviar documento ao SEI: {e}', 'warning')
 
-    # Sincroniza marcador agregado em DiariasDocumentoSei para compat com timeline/auditoria:
-    # só marca 'nota_reserva' como presente se TODOS os servidores têm NR.
+    # Marcador agregado: só dispara quando TODOS os servidores têm NR com sei_id confirmado.
     total_servidores = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario.id).count()
-    total_nrs = DiariasNotaReserva.query.filter_by(itinerario_id=itinerario.id).count()
+    total_nrs = DiariasNotaReserva.query.filter_by(itinerario_id=itinerario.id).filter(
+        DiariasNotaReserva.sei_id.isnot(None)
+    ).count()
     if total_nrs >= total_servidores > 0:
         itinerario.set_doc('nota_reserva', codigo=nr_code)
         db.session.commit()
@@ -1162,6 +1167,23 @@ def inserir_nota_empenho(id):
         flash('Esta solicitação não possui processo SEI vinculado.', 'warning')
         return redirect(url_for('financeiro.diarias_detalhe', id=id))
 
+    # Guard: etapa mínima — NE só pode ser inserida a partir da Análise 2ª Parte.
+    # Usa ordem cronológica real: ANALISE_SOLICITACAO_2(ID=6) tem ordem=3.
+    if not etapa_diaria_em_ou_apos(itinerario.etapa_atual_id, DiariasEtapaID.ANALISE_SOLICITACAO_2):
+        flash(
+            'A Nota de Empenho só pode ser inserida a partir da Análise 2ª Parte (Etapa 6).',
+            'warning',
+        )
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
+    # Guard: despacho_sga deve estar gerado antes da NE
+    if not itinerario.has_doc('despacho_sga'):
+        flash(
+            'O Despacho SGA deve ser gerado antes da Nota de Empenho.',
+            'warning',
+        )
+        return redirect(url_for('financeiro.diarias_detalhe', id=id))
+
     item_id_raw = request.form.get('item_itinerario_id', '').strip()
     codigo_ne = request.form.get('nota_empenho_codigo', '').strip()
     valor_raw = request.form.get('valor_ne', '').strip()
@@ -1267,10 +1289,11 @@ def inserir_nota_empenho(id):
     except Exception as e:
         flash(f'Aviso: NE salva, mas erro ao enviar documento ao SEI: {e}', 'warning')
 
-    # Sincroniza marcador agregado em DiariasDocumentoSei para compat com timeline/auditoria:
-    # só marca 'nota_empenho' como presente se TODOS os servidores têm NE.
+    # Marcador agregado: só dispara quando TODOS os servidores têm NE com sei_id confirmado.
     total_servidores = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario.id).count()
-    total_nes = DiariasNotaEmpenho.query.filter_by(itinerario_id=itinerario.id).count()
+    total_nes = DiariasNotaEmpenho.query.filter_by(itinerario_id=itinerario.id).filter(
+        DiariasNotaEmpenho.sei_id.isnot(None)
+    ).count()
     if total_nes >= total_servidores > 0:
         itinerario.set_doc('nota_empenho', codigo=codigo_ne)
         db.session.commit()
@@ -1302,11 +1325,12 @@ def despacho_ccdp(id):
     """
     itinerario = DiariasItinerario.query.get_or_404(id)
 
-    # Guards — exige 1 NE por servidor (mesma lógica da NR).
-    # Não usa has_doc() porque o marcador agregado só tem `codigo`, sem sei_id.
+    # Guards — exige 1 NE por servidor com upload confirmado no SEI (sei_id preenchido).
     from app.models.diaria import DiariasNotaEmpenho, DiariasItemItinerario
     total_servidores_g = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario.id).count()
-    total_nes_g = DiariasNotaEmpenho.query.filter_by(itinerario_id=itinerario.id).count()
+    total_nes_g = DiariasNotaEmpenho.query.filter_by(itinerario_id=itinerario.id).filter(
+        DiariasNotaEmpenho.sei_id.isnot(None)
+    ).count()
     if total_servidores_g == 0 or total_nes_g < total_servidores_g:
         return jsonify({
             'sucesso': False,
@@ -1575,6 +1599,16 @@ def confirmar_analise_nci(id):
             # Enviar para CCDP
             enviar_procedimento(token, sei_protocolo, [UNIDADE_CCDP], manter_aberto=True)
 
+        # Avançar etapa → Concessão de Diárias (todos os despachos NCI concluídos)
+        if itinerario.etapa_atual_id == DiariasEtapaID.ANALISE_SOLICITACAO_2:
+            DiariaService.registrar_movimentacao(
+                id_itinerario=id,
+                etapa_nova_id=DiariasEtapaID.CONCESSAO_DIARIAS,
+                usuario_id=current_user.id,
+                comentario='Análise NCI concluída e despachos gerados. Etapa avançada para Concessão de Diárias.',
+                auto_commit=False,
+            )
+
         db.session.commit()
 
         try:
@@ -1718,11 +1752,19 @@ def despacho_diretor(id):
         return jsonify({'sucesso': False, 'erro': 'O Despacho SGA ainda nao foi gerado.'}), 400
 
     doc_diretor = itinerario.get_doc('despacho_diretor')
-    if doc_diretor and doc_diretor.sei_id:
+    if doc_diretor and doc_diretor.sei_id and doc_diretor.assinado:
         return jsonify({
             'sucesso': True, 'ja_existe': True,
             'mensagem': 'O Despacho do Diretor já foi gerado.',
             'documento_formatado': doc_diretor.sei_formatado or '',
+        })
+    if doc_diretor and doc_diretor.sei_id and not doc_diretor.assinado:
+        return jsonify({
+            'sucesso': True,
+            'pendente_assinatura': True,
+            'documento_formatado': doc_diretor.sei_formatado or '',
+            'id_documento': doc_diretor.sei_id,
+            'mensagem': 'Despacho já criado mas pendente de assinatura. Use o botão "Realizar Assinatura".',
         })
 
     if not itinerario.sei_id_procedimento:
@@ -1788,9 +1830,19 @@ def despacho_diretor(id):
             }
         )
 
-        aviso = None
-        if not resultado_assinatura.get('sucesso'):
-            aviso = f'Documento gerado mas assinatura falhou: {resultado_assinatura.get("erro", "")}'
+        if not resultado_assinatura or not resultado_assinatura.get('sucesso'):
+            # Doc criado mas não assinado — salvar referência para permitir retry.
+            # ciencia_diretor permanece False até a assinatura ser confirmada.
+            erro_assinatura = resultado_assinatura.get('erro', 'Erro desconhecido') if resultado_assinatura else 'Sem resposta'
+            itinerario.set_doc('despacho_diretor', sei_id=doc_id, sei_formatado=doc_formatado, assinado=False)
+            db.session.commit()
+            return jsonify({
+                'sucesso': True,
+                'pendente_assinatura': True,
+                'documento_formatado': doc_formatado,
+                'id_documento': doc_id,
+                'aviso': f'Documento gerado mas assinatura falhou: {erro_assinatura}. Use o botão "Realizar Assinatura" para completar.',
+            })
 
         # Enviar para GEO
         envio = enviar_procedimento(
@@ -1802,9 +1854,8 @@ def despacho_diretor(id):
 
         # Salvar
         itinerario.ciencia_diretor = True
-
         itinerario.ciencia_diretor_data = datetime.now()
-        itinerario.set_doc('despacho_diretor', sei_id=doc_id, sei_formatado=doc_formatado)
+        itinerario.set_doc('despacho_diretor', sei_id=doc_id, sei_formatado=doc_formatado, assinado=True)
 
         # Despacho Diretor é ação interna — não avança etapa principal
 
@@ -1821,8 +1872,6 @@ def despacho_diretor(id):
             'id_documento': doc_id,
             'envio_procedimento': envio,
         }
-        if aviso:
-            resultado['aviso'] = aviso
         return jsonify(resultado)
 
     except Exception as e:
@@ -1853,11 +1902,19 @@ def despacho_geo(id):
         return jsonify({'sucesso': False, 'erro': 'O Despacho do Diretor ainda nao foi gerado.'}), 400
 
     doc_geo = itinerario.get_doc('despacho_geo')
-    if doc_geo and doc_geo.sei_id:
+    if doc_geo and doc_geo.sei_id and doc_geo.assinado:
         return jsonify({
             'sucesso': True, 'ja_existe': True,
             'mensagem': 'O Despacho GEO já foi gerado.',
             'documento_formatado': doc_geo.sei_formatado or '',
+        })
+    if doc_geo and doc_geo.sei_id and not doc_geo.assinado:
+        return jsonify({
+            'sucesso': True,
+            'pendente_assinatura': True,
+            'documento_formatado': doc_geo.sei_formatado or '',
+            'id_documento': doc_geo.sei_id,
+            'mensagem': 'Despacho já criado mas pendente de assinatura. Use o botão "Realizar Assinatura".',
         })
 
     if not itinerario.sei_id_procedimento:
@@ -1919,9 +1976,19 @@ def despacho_geo(id):
             }
         )
 
-        aviso = None
-        if not resultado_assinatura.get('sucesso'):
-            aviso = f'Documento gerado mas assinatura falhou: {resultado_assinatura.get("erro", "")}'
+        if not resultado_assinatura or not resultado_assinatura.get('sucesso'):
+            # Doc criado mas não assinado — salvar referência para permitir retry.
+            # ciencia_geo permanece False até a assinatura ser confirmada.
+            erro_assinatura = resultado_assinatura.get('erro', 'Erro desconhecido') if resultado_assinatura else 'Sem resposta'
+            itinerario.set_doc('despacho_geo', sei_id=doc_id, sei_formatado=doc_formatado, assinado=False)
+            db.session.commit()
+            return jsonify({
+                'sucesso': True,
+                'pendente_assinatura': True,
+                'documento_formatado': doc_formatado,
+                'id_documento': doc_id,
+                'aviso': f'Documento gerado mas assinatura falhou: {erro_assinatura}. Use o botão "Realizar Assinatura" para completar.',
+            })
 
         # Enviar para CCDP
         envio = enviar_procedimento(
@@ -1933,9 +2000,8 @@ def despacho_geo(id):
 
         # Salvar
         itinerario.ciencia_geo = True
-
         itinerario.ciencia_geo_data = datetime.now()
-        itinerario.set_doc('despacho_geo', sei_id=doc_id, sei_formatado=doc_formatado)
+        itinerario.set_doc('despacho_geo', sei_id=doc_id, sei_formatado=doc_formatado, assinado=True)
 
         # Despacho GEO é ação interna — não avança etapa principal
 
@@ -1952,8 +2018,6 @@ def despacho_geo(id):
             'id_documento': doc_id,
             'envio_procedimento': envio,
         }
-        if aviso:
-            resultado['aviso'] = aviso
         return jsonify(resultado)
 
     except Exception as e:
@@ -2078,7 +2142,9 @@ def _inserir_doc_financeiro_servidor(itinerario, modelo, tipo_agregado, id_serie
 
         # Marcador agregado em DiariasDocumentoSei: so presente quando TODOS servidores OK
         total_serv = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario.id).count()
-        total = modelo.query.filter_by(itinerario_id=itinerario.id).count()
+        total = modelo.query.filter_by(itinerario_id=itinerario.id).filter(
+            modelo.sei_id.isnot(None)
+        ).count()
         if total >= total_serv > 0:
             itinerario.set_doc(tipo_agregado, codigo=codigo)
             if on_completo:
@@ -2116,7 +2182,9 @@ def inserir_nl(id):
     if not itinerario.sei_id_procedimento:
         return jsonify({'sucesso': False, 'erro': 'Esta solicitação não possui processo SEI vinculado.'}), 400
 
-    if itinerario.etapa_atual_id < DiariasEtapaID.CONCESSAO_DIARIAS:
+    # Guard: ordem cronológica real — NL só a partir de CONCESSAO_DIARIAS (ordem=4).
+    # CONCESSAO_DIARIAS(ID=4) vem depois de ANALISE_SOLICITACAO_2(ID=6) na ordem real.
+    if not etapa_diaria_em_ou_apos(itinerario.etapa_atual_id, DiariasEtapaID.CONCESSAO_DIARIAS):
         return jsonify({'sucesso': False, 'erro': 'A solicitação ainda não está na etapa de Concessão de Diárias.'}), 400
 
     if not itinerario.has_doc('despacho_geo'):
@@ -2144,9 +2212,25 @@ def inserir_pd(id):
     if not itinerario.sei_id_procedimento:
         return jsonify({'sucesso': False, 'erro': 'Esta solicitação não possui processo SEI vinculado.'}), 400
 
-    # Gate: todos servidores precisam ter NL antes de qualquer PD
+    # Guard: ordem cronológica real — PD só a partir de CONCESSAO_DIARIAS (ordem=4).
+    if not etapa_diaria_em_ou_apos(itinerario.etapa_atual_id, DiariasEtapaID.CONCESSAO_DIARIAS):
+        return jsonify({
+            'sucesso': False,
+            'erro': 'A PD só pode ser inserida a partir da etapa de Concessão de Diárias.',
+        }), 400
+
+    # Guard: despacho_geo deve estar gerado antes da PD
+    if not itinerario.has_doc('despacho_geo'):
+        return jsonify({
+            'sucesso': False,
+            'erro': 'O Despacho GEO deve ser gerado antes da PD.',
+        }), 400
+
+    # Gate: todos servidores precisam ter NL com upload SEI confirmado (sei_id preenchido)
     total_serv = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario.id).count()
-    total_nl = DiariasNotaLiquidacao.query.filter_by(itinerario_id=itinerario.id).count()
+    total_nl = DiariasNotaLiquidacao.query.filter_by(itinerario_id=itinerario.id).filter(
+        DiariasNotaLiquidacao.sei_id.isnot(None)
+    ).count()
     if total_serv == 0 or total_nl < total_serv:
         return jsonify({
             'sucesso': False,
@@ -2181,9 +2265,25 @@ def inserir_ob(id):
     if not itinerario.sei_id_procedimento:
         return jsonify({'sucesso': False, 'erro': 'Esta solicitação não possui processo SEI vinculado.'}), 400
 
-    # Gate: todos servidores precisam ter PD antes de qualquer OB
+    # Guard: ordem cronológica real — OB só a partir de CONCESSAO_DIARIAS (ordem=4).
+    if not etapa_diaria_em_ou_apos(itinerario.etapa_atual_id, DiariasEtapaID.CONCESSAO_DIARIAS):
+        return jsonify({
+            'sucesso': False,
+            'erro': 'A OB só pode ser inserida a partir da etapa de Concessão de Diárias.',
+        }), 400
+
+    # Guard: despacho_geo deve estar gerado antes da OB
+    if not itinerario.has_doc('despacho_geo'):
+        return jsonify({
+            'sucesso': False,
+            'erro': 'O Despacho GEO deve ser gerado antes da OB.',
+        }), 400
+
+    # Gate: todos servidores precisam ter PD com upload SEI confirmado (sei_id preenchido)
     total_serv = DiariasItemItinerario.query.filter_by(id_itinerario=itinerario.id).count()
-    total_pd = DiariasProgramacaoDesembolso.query.filter_by(itinerario_id=itinerario.id).count()
+    total_pd = DiariasProgramacaoDesembolso.query.filter_by(itinerario_id=itinerario.id).filter(
+        DiariasProgramacaoDesembolso.sei_id.isnot(None)
+    ).count()
     if total_serv == 0 or total_pd < total_serv:
         return jsonify({
             'sucesso': False,
@@ -2520,6 +2620,201 @@ def assinar_despacho_ccdp(id):
 
         try:
             DiariasNotifier.notificar_etapa(itinerario, 'despacho_ccdp', current_user.id)
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
+
+        return jsonify({
+            'sucesso': True,
+            'documento_formatado': doc_formatado,
+            'id_documento': doc_id,
+            'envio_procedimento': envio,
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500
+
+
+# ── Retry de assinatura: Diretor e GEO ───────────────────────────────────────
+
+
+@financeiro_bp.route('/diarias/<int:id>/assinar-despacho-diretor', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def assinar_despacho_diretor(id):
+    """Retry de assinatura do Despacho do Diretor quando o documento já foi criado
+    no SEI mas a assinatura falhou anteriormente."""
+    if not usuario_tem_caixa(CAIXA_DFIN_APOIO):
+        return jsonify({'sucesso': False, 'erro': 'Voce nao tem acesso a caixa APOIO/DFIN.'}), 403
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    doc_retry = itinerario.get_doc('despacho_diretor')
+    if not doc_retry or not doc_retry.sei_id:
+        return jsonify({'sucesso': False, 'erro': 'Nenhum despacho do Diretor encontrado para assinar.'}), 400
+
+    if doc_retry.assinado:
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'O Despacho do Diretor já foi assinado.',
+            'documento_formatado': doc_retry.sei_formatado or '',
+        })
+
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Não há processo SEI vinculado.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados não fornecidos.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip() or 'Diretor de Planejamento e Financas'
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Credenciais SEI são obrigatórias.'}), 400
+
+    protocolo_proc = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+    try:
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha, protocolo_bypass=protocolo_proc)
+        if not auth or not auth.get('token'):
+            return jsonify({'sucesso': False, 'erro': 'Falha na autenticação SEI. Verifique suas credenciais.'}), 401
+
+        doc_id = doc_retry.sei_id
+        doc_formatado = doc_retry.sei_formatado or ''
+
+        resultado_assinatura = assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_DFIN_APOIO,
+            dados_assinatura={
+                'protocolo_doc': doc_id,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': sei_senha,
+            }
+        )
+
+        if not resultado_assinatura or not resultado_assinatura.get('sucesso'):
+            erro_txt = resultado_assinatura.get('erro', 'Erro desconhecido') if resultado_assinatura else 'Sem resposta'
+            return jsonify({'sucesso': False, 'erro': f'Assinatura falhou novamente: {erro_txt}'}), 500
+
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
+
+        envio = enviar_procedimento(
+            token=token_admin,
+            protocolo_procedimento=itinerario.sei_protocolo,
+            unidades_destino=[UNIDADE_GEO],
+            unidade_origem=UNIDADE_DFIN_APOIO,
+        )
+
+        doc_retry.assinado = True
+        itinerario.ciencia_diretor = True
+        itinerario.ciencia_diretor_data = datetime.now()
+        db.session.commit()
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'despacho_diretor', current_user.id)
+        except Exception as exc_notif:
+            current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
+
+        return jsonify({
+            'sucesso': True,
+            'documento_formatado': doc_formatado,
+            'id_documento': doc_id,
+            'envio_procedimento': envio,
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': f'Erro inesperado: {str(e)}'}), 500
+
+
+@financeiro_bp.route('/diarias/<int:id>/assinar-despacho-geo', methods=['POST'])
+@login_required
+@requires_permission('financeiro.criar')
+def assinar_despacho_geo(id):
+    """Retry de assinatura do Despacho GEO quando o documento já foi criado
+    no SEI mas a assinatura falhou anteriormente."""
+    if not usuario_tem_caixa(CAIXA_GEO):
+        return jsonify({'sucesso': False, 'erro': 'Voce nao tem acesso a caixa GEO.'}), 403
+
+    itinerario = DiariasItinerario.query.get_or_404(id)
+
+    doc_retry = itinerario.get_doc('despacho_geo')
+    if not doc_retry or not doc_retry.sei_id:
+        return jsonify({'sucesso': False, 'erro': 'Nenhum despacho GEO encontrado para assinar.'}), 400
+
+    if doc_retry.assinado:
+        return jsonify({
+            'sucesso': True, 'ja_existe': True,
+            'mensagem': 'O Despacho GEO já foi assinado.',
+            'documento_formatado': doc_retry.sei_formatado or '',
+        })
+
+    if not itinerario.sei_id_procedimento:
+        return jsonify({'sucesso': False, 'erro': 'Não há processo SEI vinculado.'}), 400
+
+    dados = request.get_json()
+    if not dados:
+        return jsonify({'sucesso': False, 'erro': 'Dados não fornecidos.'}), 400
+
+    sei_usuario = dados.get('sei_usuario', '').strip()
+    sei_senha = dados.get('sei_senha', '').strip()
+    cargo = dados.get('cargo', '').strip() or 'Gerente de Execucao Orcamentaria'
+
+    if not sei_usuario or not sei_senha:
+        return jsonify({'sucesso': False, 'erro': 'Credenciais SEI são obrigatórias.'}), 400
+
+    protocolo_proc = itinerario.sei_protocolo or itinerario.n_processo or ''
+
+    try:
+        auth = autenticar_usuario_sei(sei_usuario, sei_senha, protocolo_bypass=protocolo_proc)
+        if not auth or not auth.get('token'):
+            return jsonify({'sucesso': False, 'erro': 'Falha na autenticação SEI. Verifique suas credenciais.'}), 401
+
+        doc_id = doc_retry.sei_id
+        doc_formatado = doc_retry.sei_formatado or ''
+
+        resultado_assinatura = assinar_documento(
+            token=auth['token'],
+            unidade_id=UNIDADE_GEO,
+            dados_assinatura={
+                'protocolo_doc': doc_id,
+                'orgao': 'SEAD-PI',
+                'cargo': cargo,
+                'id_login': auth['id_login'],
+                'id_usuario': auth['id_usuario'],
+                'senha': sei_senha,
+            }
+        )
+
+        if not resultado_assinatura or not resultado_assinatura.get('sucesso'):
+            erro_txt = resultado_assinatura.get('erro', 'Erro desconhecido') if resultado_assinatura else 'Sem resposta'
+            return jsonify({'sucesso': False, 'erro': f'Assinatura falhou novamente: {erro_txt}'}), 500
+
+        token_admin = gerar_token_sei_admin()
+        if not token_admin:
+            return jsonify({'sucesso': False, 'erro': 'Falha ao obter token administrativo SEI.'}), 500
+
+        envio = enviar_procedimento(
+            token=token_admin,
+            protocolo_procedimento=itinerario.sei_protocolo,
+            unidades_destino=[UNIDADE_CCDP],
+            unidade_origem=UNIDADE_GEO,
+        )
+
+        doc_retry.assinado = True
+        itinerario.ciencia_geo = True
+        itinerario.ciencia_geo_data = datetime.now()
+        db.session.commit()
+
+        try:
+            DiariasNotifier.notificar_etapa(itinerario, 'despacho_geo', current_user.id)
         except Exception as exc_notif:
             current_app.logger.warning(f'[DIARIAS-FIN] Falha ao enviar notificacao: {exc_notif}')
 

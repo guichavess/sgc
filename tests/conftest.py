@@ -25,9 +25,16 @@ os.environ['FLASK_ENV'] = 'testing'
 # for BigInteger PK columns before each flush in the test session.
 
 def _bigint_pk_autoincrement(session, flush_context, instances):
-    """Auto-assign IDs for BigInteger PKs in SQLite (test environment only)."""
+    """Auto-assign IDs for BigInteger PKs in SQLite (test environment only).
+
+    Tracks next available ID per table within the same flush to avoid duplicate
+    IDs when multiple objects of the same type are added before the first flush.
+    """
     from sqlalchemy import BigInteger, text
     from sqlalchemy import inspect as sa_inspect
+
+    # Per-table counter for this flush — avoids re-querying MAX before inserts land
+    next_id: dict = {}
 
     for obj in list(session.new):
         try:
@@ -42,18 +49,23 @@ def _bigint_pk_autoincrement(session, flush_context, instances):
                 continue
             if getattr(obj, col_attr.key) is not None:
                 continue
-            # Get current max ID via underlying connection (avoids autoflush recursion)
             tname = mapper.local_table.name
-            try:
-                conn = session.connection()
-                val = conn.execute(
-                    text(f'SELECT COALESCE(MAX("{col.name}"), 0) FROM "{tname}"')
-                ).scalar()
-                setattr(obj, col_attr.key, (val or 0) + 1)
-            except Exception:
-                # Last-resort: use a large random-ish integer to avoid collisions
-                import time
-                setattr(obj, col_attr.key, int(time.time() * 1000) % 2_000_000_000)
+            col_name = col.name
+            key = (tname, col_name)
+            if key not in next_id:
+                # Query DB once per table/column per flush
+                try:
+                    conn = session.connection()
+                    val = conn.execute(
+                        text(f'SELECT COALESCE(MAX("{col_name}"), 0) FROM "{tname}"')
+                    ).scalar()
+                    next_id[key] = (val or 0) + 1
+                except Exception:
+                    import time
+                    next_id[key] = int(time.time() * 1000) % 2_000_000_000
+            else:
+                next_id[key] += 1
+            setattr(obj, col_attr.key, next_id[key])
 
 
 @pytest.fixture(scope='session')
@@ -110,24 +122,28 @@ def db(app):
 @pytest.fixture(scope='function')
 def db_session(db, app):
     """
-    Transação isolada por teste.
+    Isolamento por teste via TRUNCATE no teardown.
 
-    Cada teste opera dentro de uma transação que é REVERTIDA no teardown,
-    garantindo isolamento completo sem precisar truncar tabelas.
+    Em Flask-SQLAlchemy 3.x, `db.session` é uma scoped_session que resolve o
+    engine via `current_app` — bind manual em connection externa é ignorado, e
+    o SAVEPOINT pattern clássico do SQLAlchemy não funciona de forma confiável.
+    Como vários endpoints de produção chamam `db.session.commit()` dentro de
+    rotas testadas, esses commits vazam para o banco entre testes (contaminação
+    silenciosa: UNIQUE constraint failures, estado residual de seeders, etc.).
+
+    Solução: deixar o teste rodar livremente (commits inclusive) e, no teardown,
+    DELETE em todas as tabelas na ordem reversa de dependência FK. SQLite
+    in-memory torna isso barato (~5ms por teste).
     """
     with app.app_context():
-        connection = db.engine.connect()
-        transaction = connection.begin()
-
-        # Bind a sessão à conexão com transação aberta
-        db.session.bind = connection
-
         yield db.session
 
-        # Teardown: reverte tudo que o teste fez
-        db.session.close()
-        transaction.rollback()
-        connection.close()
+        # Teardown: rollback de transação aberta + delete em todas as tabelas.
+        db.session.rollback()
+        for table in reversed(db.metadata.sorted_tables):
+            db.session.execute(table.delete())
+        db.session.commit()
+        db.session.remove()
 
 
 @pytest.fixture(scope='function')

@@ -4184,7 +4184,38 @@ def sincronizar_documentos_diaria(itinerario, force_cotacoes=False):
 
     resultado['etapa_nova'] = int(etapa_nova)
 
-    if itinerario.etapa_atual_id != int(etapa_nova):
+    # Guarda monotônico: nunca regredir a etapa com base nos documentos SEI.
+    # SEI pode não retornar todos os docs em uma consulta (cache, timeout, doc removido)
+    # — isso não deve fazer o processo "voltar" de etapa.
+    # IMPORTANTE: comparar pela ORDEM CRONOLÓGICA real, não pelo ID numérico.
+    # O fluxo vai ...→ etapa 6 (ANALISE_2) → etapa 4 (CONCESSAO) →..., então
+    # 6→4 é um AVANÇO (ordem 3→4), não uma regressão numérica.
+    from app.constants import ordem_etapa_diaria
+    etapa_atual_int = int(itinerario.etapa_atual_id or 0)
+    if ordem_etapa_diaria(int(etapa_nova)) < ordem_etapa_diaria(etapa_atual_int):
+        current_app.logger.warning(
+            f'[DIARIAS-SYNC] Regressão bloqueada itin={itinerario.id} '
+            f'{itinerario.etapa_atual_id} → {etapa_nova} ignorada'
+        )
+        resultado['etapa_nova'] = etapa_atual_int
+        resultado['msgs'].append(
+            f'[SYNC SEI] Regressão bloqueada: documentos no SEI sugerem etapa '
+            f'{int(etapa_nova)}, mas processo está em {etapa_atual_int}. Etapa mantida.'
+        )
+        # Registro de auditoria da tentativa de regressão
+        from app.models.diaria import DiariasHistoricoMovimentacao
+        hist_regressao = DiariasHistoricoMovimentacao(
+            id_itinerario=itinerario.id,
+            id_etapa_anterior=etapa_atual_int,
+            id_etapa_nova=etapa_atual_int,
+            id_usuario_responsavel=None,
+            comentario=(
+                f'[SYNC SEI] Regressão bloqueada: documentos no SEI sugerem etapa '
+                f'{int(etapa_nova)}, mas processo está em {etapa_atual_int}. Etapa mantida.'
+            ),
+        )
+        db.session.add(hist_regressao)
+    elif itinerario.etapa_atual_id != int(etapa_nova):
         resultado['msgs'].append(
             f'Etapa atualizada: {itinerario.etapa_atual_id} → {int(etapa_nova)}'
         )

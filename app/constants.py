@@ -156,6 +156,36 @@ class DiariasEtapaID(IntEnum):
     ANALISE_SOLICITACAO_2 = 6    # 2ª Parte: SCDP, NE, SGA, NCI
 
 
+# Ordem cronológica REAL do fluxo de diárias (o ID numérico não reflete a ordem).
+# Fluxo: SOLICITACAO_INICIAL(1) → ANALISE_SOLICITACAO(3) → ANALISE_SOLICITACAO_2(6)
+#         → CONCESSAO_DIARIAS(4) → PRESTACAO_CONTAS(5)
+MAPA_ORDEM_ETAPAS_DIARIAS = {
+    DiariasEtapaID.SOLICITACAO_INICIAL: 1,
+    DiariasEtapaID.ANALISE_SOLICITACAO: 2,
+    DiariasEtapaID.ANALISE_SOLICITACAO_2: 3,
+    DiariasEtapaID.CONCESSAO_DIARIAS: 4,
+    DiariasEtapaID.PRESTACAO_CONTAS: 5,
+    DiariasEtapaID.ESCOLHA_VOO: 0,   # descontinuada
+}
+
+
+def ordem_etapa_diaria(etapa_id):
+    """Posição cronológica da etapa no fluxo de diárias (0 se desconhecida).
+
+    Use esta função — nunca compare IDs numericamente — porque CONCESSAO_DIARIAS(4)
+    vem depois de ANALISE_SOLICITACAO_2(6) no fluxo real.
+    """
+    try:
+        return MAPA_ORDEM_ETAPAS_DIARIAS.get(DiariasEtapaID(int(etapa_id)), 0)
+    except (ValueError, TypeError):
+        return 0
+
+
+def etapa_diaria_em_ou_apos(etapa_atual, etapa_referencia):
+    """True se etapa_atual está em ou após etapa_referencia na ordem cronológica real."""
+    return ordem_etapa_diaria(etapa_atual) >= ordem_etapa_diaria(etapa_referencia)
+
+
 # Configuração dos sub-itens de cada etapa (checklist da Lista de Verificação).
 # Cada sub-item mapeia para um tipo de documento em DiariasDocumentoSei.
 # 'condicional': 'passagens' → só aparece para tipo_solicitacao_id in {2, 3}

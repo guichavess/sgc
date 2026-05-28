@@ -11,6 +11,8 @@
     transition: transform 0.2s, box-shadow 0.2s;
     background: #fff;
     border-left: 5px solid var(--brand-500, #3b82f6);
+    height: 100%;
+    overflow: visible;
 }
 
 .kpi-card:hover {
@@ -25,7 +27,7 @@
 .kpi-card.kpi-orange { border-left-color: #f59e0b; }
 .kpi-card.kpi-red   { border-left-color: #ef4444; }
 
-.kpi-title {
+.kpi-card .kpi-title {
     font-size: 0.72rem;
     font-weight: 600;
     text-transform: uppercase;
@@ -38,22 +40,30 @@
 .kpi-card.kpi-orange .kpi-title { color: #f59e0b; }
 .kpi-card.kpi-red .kpi-title   { color: #ef4444; }
 
-.kpi-value {
+.kpi-card .kpi-value {
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--text-primary, #1e293b);
     line-height: 1.2;
     letter-spacing: -0.02em;
+    margin-bottom: 0;
+    font-variant-numeric: tabular-nums;
 }
 
-.kpi-value.kpi-value-sm { font-size: 1.1rem; }
+.kpi-card .kpi-value.kpi-value-sm { font-size: 1.1rem; }
 
-.kpi-icon {
+.kpi-card .kpi-icon {
     opacity: 0.12;
     font-size: 2.2rem;
     position: absolute;
     right: 18px;
     top: 18px;
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    display: block;
+    color: inherit;
+    flex-shrink: unset;
 }
 
 /* ---------- Filter card overflow fix ---------- */

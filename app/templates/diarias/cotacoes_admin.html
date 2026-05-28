@@ -18,8 +18,8 @@
 {% include 'diarias/partials/subnav_administracao.html' %}
 
 {# Filtros #}
-<div class="card mb-4 " style="overflow: visible; position: relative; z-index: 10;">
- <div class="card-body p-3" style="overflow: visible;">
+<div class="card mb-4 card-dropdown-host">
+ <div class="card-body p-3">
  <form method="get" action="{{ url_for('diarias.administracao_cotacoes') }}" id="filtro-form">
  <div class="row g-2 align-items-center">
  <div class="col-auto">

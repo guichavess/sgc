@@ -1906,9 +1906,13 @@ def autorizar_solicitacao(id):
             )
             if not ret_req or not ret_req.get('sucesso'):
                 erro = ret_req.get('erro', 'Erro desconhecido') if ret_req else 'Sem resposta'
-                current_app.logger.warning(
-                    f"[DIARIAS] Secretário falhou ao assinar requisição: {erro}"
-                )
+                # Para "Apenas Diárias" (tipo 1), a assinatura da Requisição É a
+                # autorização — sem ela o processo não pode avançar.
+                # Mesmo padrão já usado para tipos 2/3 (linhas ~1978-1983).
+                return jsonify({
+                    'sucesso': False,
+                    'erro': f'Falha ao assinar Requisição: {erro}',
+                }), 500
 
     # 2. Obtem token admin para operações SEI
     token_admin = gerar_token_sei_admin()

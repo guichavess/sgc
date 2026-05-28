@@ -117,6 +117,21 @@
 }
 
 /* ==========================================================================
+   DROPDOWN HOST — card que contém dropdowns/selects com z-index
+   Evita clipping de dropdowns por overflow:hidden no card pai
+   ========================================================================== */
+
+.card-dropdown-host {
+    overflow: visible;
+    position: relative;
+    z-index: 10;
+}
+
+.card-dropdown-host .card-body {
+    overflow: visible;
+}
+
+/* ==========================================================================
    RESPONSIVE HELPERS
    ========================================================================== */
 
