@@ -9,6 +9,10 @@
 - Ler os arquivos completos antes de qualquer edição — verificar imports, nomes de campos, existência de funções
 - `DEPLOY_PENDENTE.md`: registrar toda alteração estrutural (nova tabela/coluna/índice/dependência Python)
 
+## DEPLOY
+
+Antes de qualquer deploy do SGC, ler `DEPLOY_CONTEXT.md` (servidor, fluxo, comandos, regras) e `DEPLOY_PENDENTE.md` (pendências de banco a aplicar antes do `git pull`).
+
 ## TESTES
 
 ```bash
