@@ -49,9 +49,9 @@ ENGINE = create_engine(DATABASE_URI, echo=False)
 YEARS = [datetime.now().year - 1, datetime.now().year]
 tabela_destino = "liquidacao"  # Alterado conforme solicitado
 
-# >>> MODO SINGLE TRAVADO <<<
-UG_MODE = "single"
-UG_SINGLE = "210101"
+UG_MODE = "list"        # "single", "list" ou "all"
+UG_SINGLE = "210101"    # usado apenas se UG_MODE="single"
+UG_LIST = ["210101", "210102"]  # usado se UG_MODE="list"
 UG_PAD_SIZE = 6
 
 MAX_WORKERS_CAP = 16
@@ -124,11 +124,14 @@ def normalize_ug(value, size):
     return s.zfill(size) if s else None
 
 def resolve_ugs():
-    if UG_MODE == "single":
+    mode = (UG_MODE or "").lower().strip()
+    if mode == "single":
         ug = normalize_ug(UG_SINGLE, UG_PAD_SIZE)
         return [ug] if ug else []
-    
-    # Fallback
+    if mode == "list":
+        ugs = [normalize_ug(u, UG_PAD_SIZE) for u in UG_LIST]
+        return [u for u in ugs if u]
+    # Fallback: all
     with ENGINE.connect() as conn:
         rows = conn.execute(text("SELECT codigo FROM ug")).fetchall()
     return [normalize_ug(r[0], UG_PAD_SIZE) for r in rows if r[0]]

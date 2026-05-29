@@ -134,8 +134,18 @@
 
  <div class="row g-2 align-items-end mt-1">
 
+ {# Unidade Gestora #}
+ <div class="col-md-2">
+ <label class="form-label small fw-semibold text-muted mb-1">Unidade Gestora</label>
+ <select name="ug" class="form-select">
+ <option value="">Todas</option>
+ <option value="210101" {{ 'selected' if filtro_ug == '210101' }}>210101</option>
+ <option value="210102" {{ 'selected' if filtro_ug == '210102' }}>210102</option>
+ </select>
+ </div>
+
  {# Centro de Custo #}
- <div class="col-md-3">
+ <div class="col-md-2">
  <label class="form-label small fw-semibold text-muted mb-1">Centro de custo</label>
  <div class="cb-dropdown" id="cbCentroCusto">
  <div class="cb-toggle form-select" tabindex="0">
@@ -156,7 +166,7 @@
  </div>
 
  {# PDM (CATMAT) #}
- <div class="col-md-3">
+ <div class="col-md-2">
  <label class="form-label small fw-semibold text-muted mb-1">PDM (Material)</label>
  <div class="cb-dropdown" id="cbPdm">
  <div class="cb-toggle form-select" tabindex="0">

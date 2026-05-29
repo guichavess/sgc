@@ -54,9 +54,9 @@ tabela_destino = "ob"
 
 DELETE_DATE_FIELD = "dataEmissao"
 
-# >>> MODO SINGLE TRAVADO <<<
-UG_MODE = "single"
-UG_SINGLE = "210101"
+UG_MODE = "list"        # "single", "list" ou "all"
+UG_SINGLE = "210101"    # usado apenas se UG_MODE="single"
+UG_LIST = ["210101", "210102"]  # usado se UG_MODE="list"
 UG_PAD_SIZE = 6
 
 MAX_WORKERS_CAP = 16
@@ -171,11 +171,14 @@ def normalize_ug(value, size):
     return s.zfill(size) if s else None
 
 def resolve_ugs():
-    if UG_MODE == "single":
+    mode = (UG_MODE or "").lower().strip()
+    if mode == "single":
         ug = normalize_ug(UG_SINGLE, UG_PAD_SIZE)
         return [ug] if ug else []
-
-    # Fallback: busca todas as UGs do banco
+    if mode == "list":
+        ugs = [normalize_ug(u, UG_PAD_SIZE) for u in UG_LIST]
+        return [u for u in ugs if u]
+    # Fallback: all — busca todas as UGs do banco
     with ENGINE.connect() as conn:
         rows = conn.execute(text("SELECT codigo FROM ug")).fetchall()
     ugs = []
@@ -229,8 +232,8 @@ def delete_year_data(conn, year):
 
     print(f"Limpando dados de {year}...")
 
-    # Se estiver em modo single, deleta APENAS dados dessa UG para esse ano
-    if UG_MODE == "single":
+    mode = (UG_MODE or "").lower().strip()
+    if mode == "single":
         delete_query = text(f"""
             DELETE FROM {tabela_destino}
             WHERE {DELETE_DATE_FIELD} >= :start_date
@@ -242,6 +245,15 @@ def delete_year_data(conn, year):
             "end_date": end_date,
             "ug": UG_SINGLE
         })
+    elif mode == "list":
+        placeholders = ", ".join(f"'{u}'" for u in UG_LIST)
+        delete_query = text(f"""
+            DELETE FROM {tabela_destino}
+            WHERE {DELETE_DATE_FIELD} >= :start_date
+              AND {DELETE_DATE_FIELD} <  :end_date
+              AND codigoUG IN ({placeholders})
+        """)
+        result = conn.execute(delete_query, {"start_date": start_date, "end_date": end_date})
     else:
         delete_query = text(f"""
             DELETE FROM {tabela_destino}

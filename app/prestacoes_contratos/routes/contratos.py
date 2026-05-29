@@ -1,7 +1,7 @@
 """
 Rotas de Contratos - Listagem, detalhes e gerenciamento de contratos.
 """
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 
 from decimal import Decimal
@@ -9,6 +9,7 @@ from decimal import Decimal
 from app.prestacoes_contratos.routes import prestacoes_contratos_bp
 from app.services.prestacao_contrato_service import PrestacaoContratoService
 from app.utils.permissions import requires_permission
+from app.constants import UG_CODE
 
 
 SITUACAO_LABELS = {
@@ -36,7 +37,8 @@ def dashboard():
     filtro_pdm = [int(v) for v in request.args.getlist('pdm') if v.strip()]
     filtro_subitem = [v.strip() for v in request.args.getlist('subitem_despesa') if v.strip()]
     filtro_tipo_patrimonial = [v.strip() for v in request.args.getlist('tipo_patrimonial') if v.strip()]
-    page = request.args.get('page', 1, type=int)
+    filtro_ug = request.args.get('ug', '').strip()
+    page = max(1, request.args.get('page', 1, type=int))
     per_page = 20
 
     # Busca paginada com filtros
@@ -51,6 +53,7 @@ def dashboard():
         pdm_id=filtro_pdm or None,
         subitem_despesa=filtro_subitem or None,
         tipo_patrimonial=filtro_tipo_patrimonial or None,
+        codigoUG=filtro_ug or None,
         page=page,
         per_page=per_page
     )
@@ -95,7 +98,7 @@ def dashboard():
     tem_filtro = any([filtro_codigo, filtro_contratado, filtro_situacao,
                       filtro_natureza, filtro_tipo_execucao, filtro_centro_custo,
                       filtro_tipo_contrato, filtro_pdm, filtro_subitem,
-                      filtro_tipo_patrimonial])
+                      filtro_tipo_patrimonial, filtro_ug])
 
     return render_template(
         'prestacoes_contratos/contratos/index.html',
@@ -119,6 +122,7 @@ def dashboard():
         filtro_pdm=filtro_pdm,
         filtro_subitem=filtro_subitem,
         filtro_tipo_patrimonial=filtro_tipo_patrimonial,
+        filtro_ug=filtro_ug,
         tem_filtro=tem_filtro
     )
 
@@ -246,20 +250,21 @@ def contrato_gerenciar(codigo):
         cod_numerico = str(codigo).replace('.', '').replace('/', '')
         try:
             cod_int = int(cod_numerico)
+            ug_contrato = contrato.codigoUG or UG_CODE
             sql = text("""
                 SELECT MONTH(dataEmissao) AS mes, YEAR(dataEmissao) AS ano,
                        SUM(CASE WHEN tipoAlteracao = 'ANULACAO' THEN -valor ELSE valor END) AS total
                 FROM liquidacao
                 WHERE statusDocumento = 'CONTABILIZADO'
-                  AND codigoUG = '210101'
+                  AND codigoUG = :ug
                   AND codContrato = :cod
                 GROUP BY YEAR(dataEmissao), MONTH(dataEmissao)
             """)
-            for row in db.session.execute(sql, {'cod': cod_int}).fetchall():
+            for row in db.session.execute(sql, {'cod': cod_int, 'ug': ug_contrato}).fetchall():
                 chave = f'{int(row[0]):02d}/{int(row[1])}'
                 planejamento_liquidado_map[chave] = Decimal(str(row[2])) if row[2] else Decimal('0')
         except (ValueError, TypeError):
-            pass
+            current_app.logger.warning('[PRESTACOES] codContrato invalido para liquidacao: %s', codigo)
     else:
         # Check existence for tab icon
         existe = PlanejamentoOrcamentario.query.filter_by(
@@ -391,7 +396,7 @@ def contrato_saldo_dividir(codigo, saldo_id):
                 if valor > 0:
                     itens_valores[item_id] = valor
             except (ValueError, TypeError):
-                pass
+                current_app.logger.warning('[PRESTACOES] Valor invalido no campo %s: %r', key, val)
     PrestacaoContratoService.salvar_divisao_saldo(saldo_id, itens_valores)
     flash('Divisão do saldo salva com sucesso!', 'success')
     return redirect(url_for('prestacoes_contratos.contrato_gerenciar', codigo=codigo, aba='saldo'))

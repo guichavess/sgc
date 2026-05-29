@@ -52,9 +52,9 @@ TBL_ADITIVOS = "contratos_aditivo"
 YEAR_OVERRIDE = None
 YEAR = YEAR_OVERRIDE if YEAR_OVERRIDE else date.today().year
 
-# >>> CONFIGURAÇÃO FIXA PARA O SEU CENÁRIO <<<
-UG_MODE = "single"
+UG_MODE = "list"
 UG_SINGLE = "210101"
+UG_LIST = ["210101", "210102"]
 UG_PAD_SIZE = 6
 
 # Performance
@@ -184,8 +184,9 @@ def resolve_ugs():
     if UG_MODE == "single":
         ug = normalize_ug(UG_SINGLE, UG_PAD_SIZE)
         return [ug] if ug else []
-    
-    # Fallback
+    elif UG_MODE == "list":
+        return [normalize_ug(ug, UG_PAD_SIZE) for ug in UG_LIST if ug]
+    # Fallback ("all")
     with ENGINE.connect() as conn:
         rows = conn.execute(text("SELECT codigo FROM ug")).fetchall()
     return [normalize_ug(r[0], UG_PAD_SIZE) for r in rows if r[0]]
@@ -248,6 +249,7 @@ def ensure_tables(conn):
         "hash_aditivos": "CHAR(40) NULL",
         "last_checked": "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP",
         "updated_at": "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+        "codigoUG": "VARCHAR(10) NULL",
     }
     for col_name, col_def in new_columns.items():
         if not _column_exists(conn, TBL_CONTRATOS, col_name):
@@ -346,12 +348,12 @@ def fetch_contrato(session, cod_contrato: str, token: str, year: int):
 def upsert_contratos_changed(conn, rows):
     if not rows: return 0
     df = pd.DataFrame(rows)
-    for col in COLUMNS_CONTRATO:
+    for col in COLUMNS_CONTRATO + ["codigoUG"]:
         if col not in df.columns: df[col] = None
     for col in DATE_COLUMNS_CONTRATO:
         if col in df.columns: df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
-    
-    cols = COLUMNS_CONTRATO + ["hash_contrato", "hash_fiscais", "hash_aditivos", "last_checked"]
+
+    cols = COLUMNS_CONTRATO + ["codigoUG", "hash_contrato", "hash_fiscais", "hash_aditivos", "last_checked"]
     placeholders = ", ".join([f":{c}" for c in cols])
     # Monta query dinâmica de UPDATE
     updates = ", ".join([f"{c}=VALUES({c})" for c in cols if c != "codigo"])
@@ -430,19 +432,22 @@ def main():
     with ENGINE.begin() as conn:
         ensure_tables(conn)
 
-    # 1. Busca quais contratos a UG tem (olhando na tabela Empenho)
+    # 1. Busca quais contratos cada UG tem (olhando na tabela Empenho)
     # Isso é muito mais rápido que buscar "todos os contratos da API"
+    # cod_to_ug: primeiro UG que referencia o contrato "vence" (ordem de UG_LIST)
     with ENGINE.connect() as conn:
-        cods = []
+        cod_to_ug = {}
         for ug in ugs:
             print(f"Buscando códigos de contrato para UG {ug} na tabela empenho...")
-            cods.extend(fetch_cod_contratos_from_empenho(conn, ug))
-    
-    cods = sorted(set(cods))
+            for cod in fetch_cod_contratos_from_empenho(conn, ug):
+                if cod not in cod_to_ug:
+                    cod_to_ug[cod] = ug
+
+    cods = sorted(set(cod_to_ug.keys()))
     print(f"Total de contratos únicos encontrados: {len(cods)}")
-    
+
     if not cods:
-        print("Nenhum contrato vinculado a empenhos desta UG.")
+        print("Nenhum contrato vinculado a empenhos das UGs configuradas.")
         return
 
     # 2. Carrega hashes atuais (para não atualizar o que não mudou)
@@ -471,6 +476,7 @@ def main():
             if (h_contrato != old_hc) or (h_fiscais != old_hf) or (h_aditivos != old_ha):
                 row = {k: data.get(k) for k in COLUMNS_CONTRATO}
                 row["codigo"] = str(row.get("codigo") or cod)
+                row["codigoUG"] = cod_to_ug.get(str(cod))
                 row["hash_contrato"] = h_contrato
                 row["hash_fiscais"] = h_fiscais
                 row["hash_aditivos"] = h_aditivos

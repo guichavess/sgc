@@ -34,6 +34,7 @@ class InfoContratoRepository(BaseRepository[Contrato]):
         pdm_id: Optional[int] = None,
         subitem_despesa: Optional[str] = None,
         tipo_patrimonial: Optional[str] = None,
+        codigoUG: Optional[str] = None,
         page: int = 1,
         per_page: int = 20
     ):
@@ -42,6 +43,10 @@ class InfoContratoRepository(BaseRepository[Contrato]):
             joinedload(Contrato.centro_de_custo),
             joinedload(Contrato.nat_despesa),
         )
+
+        # Filtro por UG
+        if codigoUG:
+            query = query.filter(Contrato.codigoUG == codigoUG)
 
         # Filtro por código do contrato
         if codigo:
@@ -157,10 +162,14 @@ class InfoContratoRepository(BaseRepository[Contrato]):
         natureza_codigo=None, tipo_execucao_id=None,
         centro_de_custo_id=None, tipo_contrato=None,
         pdm_id=None, subitem_despesa=None, tipo_patrimonial=None,
+        codigoUG=None,
         **kwargs
     ):
         """Retorna apenas os códigos dos contratos filtrados (query leve, sem carregar objetos)."""
         query = db.session.query(Contrato.codigo)
+
+        if codigoUG:
+            query = query.filter(Contrato.codigoUG == codigoUG)
 
         if codigo:
             query = query.filter(Contrato.codigo.ilike(f'%{codigo}%'))

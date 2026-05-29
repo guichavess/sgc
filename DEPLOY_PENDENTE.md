@@ -17,6 +17,19 @@
 
 ## Pendências
 
+### Suporte à UG 210102 — Contratos (2026-05-29)
+
+- [ ] **Adicionar coluna `codigoUG` na tabela `contratos`**
+  - Contexto: `atualizar_contratos.py` agora busca contratos das UGs 210101 e 210102. A coluna `codigoUG` identifica qual UG cada contrato pertence e habilita o filtro de UG no módulo Execução de Contratos.
+  - SQL:
+    ```sql
+    ALTER TABLE contratos ADD COLUMN codigoUG VARCHAR(10) NULL AFTER codigo;
+    CREATE INDEX idx_contratos_codigoUG ON contratos (codigoUG);
+    ```
+  - Observação: O script `atualizar_contratos.py` também faz essa migração automaticamente via `ensure_tables()` — mas rodar o SQL manual garante o índice e evita depender da próxima atualização SIAFE.
+
+---
+
 ### Hierarquia de Autorização — Diárias (2026-05-05)
 
 - [ ] **Definir `cargo_gestao = 'secretario_exercicio'` para Bruno Gomes** ⚠️ BLOQUEADO

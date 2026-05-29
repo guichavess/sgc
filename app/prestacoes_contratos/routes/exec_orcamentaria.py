@@ -2,7 +2,7 @@
 Rotas de Execução Orçamentária (Fornecedores + Execuções) — módulo Contratos.
 Migrado do módulo Financeiro para agrupar sob "Exec Orçamentária" com sub-abas.
 """
-from flask import render_template, request, flash, redirect, url_for, jsonify
+from flask import render_template, request, flash, redirect, url_for, jsonify, current_app
 from flask_login import login_required, current_user
 from sqlalchemy import text
 
@@ -48,7 +48,7 @@ def exec_orcamentaria():
     aba = request.args.get('aba', 'fornecedores')
 
     # --- Dados da aba Fornecedores ---
-    page_f = request.args.get('page_f', 1, type=int)
+    page_f = max(1, request.args.get('page_f', 1, type=int))
     busca_f = request.args.get('busca_f', '').strip()
     query_f = FornecedorSemContrato.query
     if busca_f:
@@ -63,7 +63,7 @@ def exec_orcamentaria():
     pag_fornecedores = query_f.paginate(page=page_f, per_page=20, error_out=False)
 
     # --- Dados da aba Execucoes ---
-    page_e = request.args.get('page_e', 1, type=int)
+    page_e = max(1, request.args.get('page_e', 1, type=int))
     busca_e = request.args.get('busca_e', '').strip()
     filtro_contrato = request.args.get('filtro_contrato', '').strip()
     filtro_competencia = request.args.get('filtro_competencia', '').strip()
@@ -375,6 +375,7 @@ def api_naturezas_por_acao(acao):
             for r in rows if r[0]
         ])
     except Exception:
+        current_app.logger.exception('[PRESTACOES] Erro ao listar naturezas por acao %s', acao)
         return jsonify([])
 
 
@@ -399,6 +400,7 @@ def api_fontes_por_acao_natureza(acao, natureza):
             for r in rows if r[0]
         ])
     except Exception:
+        current_app.logger.exception('[PRESTACOES] Erro ao listar fontes para acao=%s natureza=%s', acao, natureza)
         return jsonify([])
 
 
@@ -411,6 +413,7 @@ def _listar_acoes_select():
         rows = db.session.execute(text("SELECT codigo, titulo FROM acao WHERE codigo IS NOT NULL ORDER BY titulo")).fetchall()
         return [type('Obj', (), {'codigo': r[0], 'descricao': r[1] or ''})() for r in rows if r[0]]
     except Exception:
+        current_app.logger.exception('[PRESTACOES] Erro ao listar acoes para select')
         return []
 
 
@@ -420,6 +423,7 @@ def _listar_naturezas_select():
         rows = db.session.execute(text("SELECT codigo, titulo FROM natdespesas WHERE codigo IS NOT NULL ORDER BY titulo")).fetchall()
         return [type('Obj', (), {'codigo': r[0], 'descricao': r[1] or ''})() for r in rows if r[0]]
     except Exception:
+        current_app.logger.exception('[PRESTACOES] Erro ao listar naturezas para select')
         return []
 
 
@@ -429,6 +433,7 @@ def _listar_fontes_select():
         rows = db.session.execute(text("SELECT codigo, descricao FROM class_fonte WHERE codigo IS NOT NULL ORDER BY descricao")).fetchall()
         return [type('Obj', (), {'codigo': r[0], 'descricao': r[1] or ''})() for r in rows if r[0]]
     except Exception:
+        current_app.logger.exception('[PRESTACOES] Erro ao listar fontes para select')
         return []
 
 

@@ -87,9 +87,11 @@ YEAR = datetime.now().year
 
 # Escolha do modo:
 # - "single"  -> usa só a UG definida em UG_SINGLE
+# - "list"    -> usa a lista fixa definida em UG_LIST
 # - "all"     -> busca todas as UGs do banco (SELECT codigo FROM ug)
-UG_MODE = "single"
-UG_SINGLE = "210101"
+UG_MODE = "list"
+UG_SINGLE = "210101"    # usado apenas se UG_MODE="single"
+UG_LIST = ["210101", "210102"]  # usado se UG_MODE="list"
 
 UG_PAD_SIZE = 6
 
@@ -290,13 +292,20 @@ def resolve_ugs():
             raise ValueError("UG_SINGLE está vazio/inválido, mas UG_MODE='single'.")
         return [ug]
 
+    if mode == "list":
+        ugs = [normalize_ug(u, UG_PAD_SIZE) for u in UG_LIST]
+        ugs = [u for u in ugs if u]
+        if not ugs:
+            raise ValueError("UG_LIST está vazia ou inválida.")
+        return ugs
+
     if mode == "all":
         ugs = load_ugs_from_db()
         if not ugs:
             raise ValueError("Nenhuma UG encontrada na tabela 'ug'.")
         return ugs
 
-    raise ValueError("UG_MODE inválido. Use 'single' ou 'all'.")
+    raise ValueError("UG_MODE inválido. Use 'single', 'list' ou 'all'.")
 
 # =========================
 # UTILITÁRIOS (CLASSIFICADORES)
@@ -396,14 +405,15 @@ def main_reserva():
     t0 = time.time()
 
     ugs = resolve_ugs()
-    is_all_mode = (UG_MODE or "").lower().strip() == "all"
+    mode = (UG_MODE or "").lower().strip()
+    is_all_mode = mode == "all"
 
     print("=" * 70)
     print("Iniciando atualização de dados de RESERVA - Ano {}".format(YEAR))
     if is_all_mode:
         print("UGs: {} UGs (modo all)".format(len(ugs)))
     else:
-        print("UG: {}".format(", ".join(ugs)))
+        print("UGs: {} (modo {})".format(", ".join(ugs), mode))
     print("=" * 70)
 
     print("Buscando dados da API...")

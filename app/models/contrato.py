@@ -10,6 +10,7 @@ class Contrato(db.Model):
     __tablename__ = 'contratos'
 
     codigo = db.Column(db.String(20), primary_key=True)
+    codigoUG = db.Column(db.String(10), index=True, nullable=True)
     situacao = db.Column(db.String(50))
     numeroOriginal = db.Column(db.String(50))
     numProcesso = db.Column(db.String(50))

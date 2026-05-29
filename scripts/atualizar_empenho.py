@@ -86,8 +86,9 @@ TOKEN = get_token()
 YEARS = [datetime.now().year - 1, datetime.now().year]
 
 # UG
-UG_MODE = "single"      # "single" ou "all"
-UG_SINGLE = "210101"
+UG_MODE = "list"        # "single", "list" ou "all"
+UG_SINGLE = "210101"    # usado apenas se UG_MODE="single"
+UG_LIST = ["210101", "210102"]  # usado se UG_MODE="list"
 UG_PAD_SIZE = 6
 
 # Tabelas destino
@@ -188,12 +189,19 @@ def resolve_ugs():
             raise ValueError("UG_SINGLE está vazio/inválido, mas UG_MODE='single'.")
         print(f"Modo SINGLE selecionado. UG alvo: {ug}")
         return [ug]
+    if mode == "list":
+        ugs = [normalize_ug(u, UG_PAD_SIZE) for u in UG_LIST]
+        ugs = [u for u in ugs if u]
+        if not ugs:
+            raise ValueError("UG_LIST está vazia ou inválida.")
+        print(f"Modo LIST selecionado. UGs alvo: {', '.join(ugs)}")
+        return ugs
     if mode == "all":
         ugs = load_ugs_from_db()
         if not ugs:
             raise ValueError("Nenhuma UG encontrada na tabela 'ug'.")
         return ugs
-    raise ValueError("UG_MODE inválido. Use 'single' ou 'all'.")
+    raise ValueError("UG_MODE inválido. Use 'single', 'list' ou 'all'.")
 
 
 def table_exists_mysql(conn, table_name):
@@ -258,10 +266,17 @@ def _safe_str(v):
 # =========================
 
 def delete_year_data(conn, year):
-    """Deleta registros do ano nas 3 tabelas, filtrando por UG no modo single."""
+    """Deleta registros do ano nas 3 tabelas, filtrando por UG no modo single/list."""
     start_date = f"{year}-01-01"
     end_date = f"{year + 1}-01-01"
-    where_ug = f"AND codigoUG = '{UG_SINGLE}'" if UG_MODE == "single" else ""
+    mode = (UG_MODE or "").lower().strip()
+    if mode == "single":
+        where_ug = f"AND codigoUG = '{UG_SINGLE}'"
+    elif mode == "list":
+        placeholders = ", ".join(f"'{u}'" for u in UG_LIST)
+        where_ug = f"AND codigoUG IN ({placeholders})"
+    else:
+        where_ug = ""
 
     print(f"  Limpando dados de {year}...")
 

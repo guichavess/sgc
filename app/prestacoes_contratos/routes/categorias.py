@@ -14,7 +14,7 @@ from app.utils.permissions import requires_permission
 @requires_permission('prestacoes_contratos.visualizar')
 def categorias_index():
     """Lista todas as categorias com paginação."""
-    page = request.args.get('page', 1, type=int)
+    page = max(1, request.args.get('page', 1, type=int))
     per_page = 20
 
     pagination = PrestacaoContratoService.listar_categorias_paginado(

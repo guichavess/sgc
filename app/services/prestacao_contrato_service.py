@@ -69,7 +69,8 @@ class PrestacaoContratoService:
                                    natureza_codigo=None, tipo_execucao_id=None,
                                    centro_de_custo_id=None, tipo_contrato=None,
                                    pdm_id=None, subitem_despesa=None,
-                                   tipo_patrimonial=None, page=1, per_page=20):
+                                   tipo_patrimonial=None, codigoUG=None,
+                                   page=1, per_page=20):
         """Lista contratos paginados com filtros."""
         return InfoContratoRepository.listar_com_filtros(
             codigo=codigo,
@@ -82,6 +83,7 @@ class PrestacaoContratoService:
             pdm_id=pdm_id,
             subitem_despesa=subitem_despesa,
             tipo_patrimonial=tipo_patrimonial,
+            codigoUG=codigoUG,
             page=page,
             per_page=per_page
         )
@@ -537,105 +539,21 @@ class PrestacaoContratoService:
 
     @staticmethod
     def listar_itens_para_execucao(contrato):
-        """Lista itens vinculados filtrados pela tipificação do contrato.
+        """Lista itens vinculados ao contrato para o fluxo de execucoes.
 
-        Somente retorna itens cujo tipo e classificação CATSERV/CATMAT
-        correspondam à tipificação configurada no contrato.
-
-        - SERVIÇO (S): serviços da classe (ou grupo) tipificada.
-        - MATERIAL (M): materiais do PDM (ou classe) tipificado.
-        - MISTO (SM): ambos filtrados por seus respectivos catálogos.
+        Retorna TODOS os itens vinculados, separados por tipo (S/M).
+        O filtro de tipificacao e aplicado em listar_catalogo_para_vincular()
+        na hora de VINCULAR — re-filtrar aqui ocultaria itens validos sempre
+        que a tipificacao mudasse apos a vinculacao ou houvesse drift de dados.
 
         Returns:
             tuple (itens_servicos, itens_materiais, total_ocultados)
+            total_ocultados e sempre 0 (mantido para compatibilidade).
         """
-        from app.models.catserv import CatservServico
-        from app.models.catmat import CatmatItem as CatmatItemModel, CatmatPdm
-
-        tipo = contrato.tipo_contrato  # 'S', 'M', 'SM'
-        if not tipo:
-            # Sem tipo definido — fallback: retorna tudo
-            todos = PrestacaoContratoService.listar_itens_vinculados(contrato.codigo)
-            return (
-                [i for i in todos if i['tipo'] == 'S'],
-                [i for i in todos if i['tipo'] == 'M'],
-                0
-            )
-
-        itens_servicos = []
-        itens_materiais = []
-        total_ocultados = 0
-
-        # ── SERVIÇO: filtrar pela classe/grupo do contrato ──────────────
-        if tipo in ('S', 'SM'):
-            todos_servicos = PrestacaoContratoService.listar_itens_vinculados(
-                contrato.codigo, tipo='S'
-            )
-
-            # Determinar serviços permitidos pela tipificação
-            servicos_permitidos = None  # None = sem filtro
-            if contrato.catserv_classe_id:
-                rows = CatservServico.query.filter_by(
-                    codigo_classe=contrato.catserv_classe_id
-                ).with_entities(CatservServico.codigo_servico).all()
-                servicos_permitidos = {r[0] for r in rows}
-            elif contrato.catserv_grupo_id:
-                rows = CatservServico.query.filter_by(
-                    codigo_grupo=contrato.catserv_grupo_id
-                ).with_entities(CatservServico.codigo_servico).all()
-                servicos_permitidos = {r[0] for r in rows}
-
-            for item in todos_servicos:
-                srv_id = item.get('catserv_servico_id')
-                if not srv_id:
-                    total_ocultados += 1
-                    continue  # Sem de-para → ocultar
-                if servicos_permitidos is not None and srv_id not in servicos_permitidos:
-                    total_ocultados += 1
-                    continue  # Não pertence à tipificação
-                itens_servicos.append(item)
-
-        # ── MATERIAL: filtrar pelo PDM/classe do contrato ───────────────
-        if tipo in ('M', 'SM'):
-            todos_materiais = PrestacaoContratoService.listar_itens_vinculados(
-                contrato.codigo, tipo='M'
-            )
-
-            # Determinar itens CATMAT permitidos pela tipificação
-            itens_permitidos = None  # None = sem filtro
-            if contrato.catmat_pdm_id:
-                # catmat_pdm_id armazena CatmatPdm.id (autoincrement)
-                pdm = db.session.get(CatmatPdm, contrato.catmat_pdm_id)
-                if pdm:
-                    rows = CatmatItemModel.query.filter_by(
-                        codigo_pdm=pdm.codigo
-                    ).with_entities(CatmatItemModel.id).all()
-                    itens_permitidos = {r[0] for r in rows}
-            elif contrato.catmat_classe_id:
-                from app.models.catmat import CatmatClasse
-                classe = db.session.query(CatmatClasse).filter_by(
-                    id=contrato.catmat_classe_id
-                ).first()
-                if classe:
-                    pdm_codigos = {p[0] for p in CatmatPdm.query.filter_by(
-                        codigo_classe=classe.codigo
-                    ).with_entities(CatmatPdm.codigo).all()}
-                    rows = CatmatItemModel.query.filter(
-                        CatmatItemModel.codigo_pdm.in_(pdm_codigos)
-                    ).with_entities(CatmatItemModel.id).all()
-                    itens_permitidos = {r[0] for r in rows}
-
-            for item in todos_materiais:
-                mat_id = item.get('catmat_item_id')
-                if not mat_id:
-                    total_ocultados += 1
-                    continue  # Sem de-para → ocultar
-                if itens_permitidos is not None and mat_id not in itens_permitidos:
-                    total_ocultados += 1
-                    continue  # Não pertence à tipificação
-                itens_materiais.append(item)
-
-        return itens_servicos, itens_materiais, total_ocultados
+        todos = PrestacaoContratoService.listar_itens_vinculados(contrato.codigo)
+        itens_servicos = [i for i in todos if i['tipo'] == 'S']
+        itens_materiais = [i for i in todos if i['tipo'] == 'M']
+        return itens_servicos, itens_materiais, 0
 
     @staticmethod
     def listar_catalogo_para_vincular(contrato):

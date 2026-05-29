@@ -10,6 +10,7 @@ from app.prestacoes_contratos.routes import prestacoes_contratos_bp
 from app.extensions import db
 from app.services.prestacao_contrato_service import PrestacaoContratoService
 from app.utils.permissions import requires_permission
+from app.constants import UG_CODE
 
 
 # ========================================================
@@ -78,8 +79,8 @@ def api_catserv_servicos():
 
     classe_id = request.args.get('classe_id', type=int)
     search = request.args.get('search', '').strip()
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = min(request.args.get('per_page', 50, type=int), 200)
 
     if not classe_id:
         return jsonify({'success': False, 'error': 'classe_id é obrigatório'}), 400
@@ -159,8 +160,8 @@ def api_catmat_itens():
     pdm_id = request.args.get('pdm_id', type=int)
     classe_id = request.args.get('classe_id', type=int)
     search = request.args.get('search', '').strip()
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = min(request.args.get('per_page', 50, type=int), 200)
 
     if pdm_id:
         # Filtro direto pelo PDM tipificado
@@ -241,7 +242,7 @@ def api_itens_contrato_buscar():
     from sqlalchemy import or_
 
     search = request.args.get('search', '').strip()
-    per_page = request.args.get('per_page', 20, type=int)
+    per_page = min(request.args.get('per_page', 20, type=int), 200)
 
     # Parâmetros de tipificação do contrato (para filtragem)
     catserv_classe_id = request.args.get('catserv_classe_id', type=int)
@@ -707,10 +708,13 @@ def api_relatorio_contratos():
                 for val in r.subitens_raw.split('||'):
                     todos_cod_sub.add(val.strip())
 
-        # Resolver nomes
+        # Resolver nomes — filtrar apenas os classificadores 1 presentes nos dados
         mapa_subitem_nome = {}
         if todos_cod_sub:
-            for s in ClassSubItemDespesa.query.all():
+            cod1_values = {code.split('.')[0] for code in todos_cod_sub}
+            for s in ClassSubItemDespesa.query.filter(
+                ClassSubItemDespesa.valoresClassificador1.in_(cod1_values)
+            ).all():
                 cod1 = str(s.valoresClassificador1 or '').strip()
                 cod2 = str(s.valoresClassificador2 or '').strip()
                 cod_completo = f"{cod1}.{cod2}" if cod2 else cod1
@@ -853,20 +857,23 @@ def api_planejamento_excel(codigo):
     from app.extensions import db
     from sqlalchemy import text as sa_text
     from decimal import Decimal
+    from app.models.contrato import Contrato as ContratoModel
     liq_map = {}
     cod_numerico = str(codigo).replace('.', '').replace('/', '')
     try:
         cod_int = int(cod_numerico)
+        _contrato_obj = ContratoModel.query.filter_by(codigo=str(codigo)).first()
+        ug_contrato = (_contrato_obj.codigoUG if _contrato_obj and _contrato_obj.codigoUG else UG_CODE)
         sql = sa_text("""
             SELECT MONTH(dataEmissao) AS mes, YEAR(dataEmissao) AS ano,
                    SUM(CASE WHEN tipoAlteracao = 'ANULACAO' THEN -valor ELSE valor END) AS total
             FROM liquidacao
             WHERE statusDocumento = 'CONTABILIZADO'
-              AND codigoUG = '210101'
+              AND codigoUG = :ug
               AND codContrato = :cod
             GROUP BY YEAR(dataEmissao), MONTH(dataEmissao)
         """)
-        for row in db.session.execute(sql, {'cod': cod_int}).fetchall():
+        for row in db.session.execute(sql, {'cod': cod_int, 'ug': ug_contrato}).fetchall():
             chave = f'{int(row[0]):02d}/{int(row[1])}'
             liq_map[chave] = float(row[2]) if row[2] else 0.0
     except (ValueError, TypeError):

@@ -15,7 +15,7 @@ from app.utils.permissions import requires_permission
 @requires_permission('prestacoes_contratos.visualizar')
 def prestacoes_index():
     """Lista todas as execuções realizadas com paginação e filtros."""
-    page = request.args.get('page', 1, type=int)
+    page = max(1, request.args.get('page', 1, type=int))
     per_page = 20
     filtro_contrato = request.args.get('filtro_contrato', '').strip()
     filtro_competencia = request.args.get('filtro_competencia', '').strip()
@@ -82,9 +82,9 @@ def execucoes_selecionar_itens(codigo):
     itens_servicos, itens_materiais, itens_ocultados = \
         PrestacaoContratoService.listar_itens_para_execucao(contrato)
 
-    # Se não há itens vinculados compatíveis, redirecionar para aba itens
+    # Se não há itens vinculados, redirecionar para aba itens
     if not itens_servicos and not itens_materiais:
-        flash('Nenhum item vinculado compatível com a tipificação deste contrato. '
+        flash('Este contrato não possui itens vinculados. '
               'Vincule itens na aba Itens antes de criar execuções.', 'warning')
         return redirect(url_for('prestacoes_contratos.contrato_gerenciar',
                                 codigo=codigo, aba='itens'))
