@@ -32,3 +32,4 @@ from app.financeiro.routes import orcamentaria
 from app.financeiro.routes import fornecedores
 from app.financeiro.routes import execucoes
 from app.financeiro.routes import planejamento
+from app.financeiro.routes import fundo_rotativo

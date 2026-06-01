@@ -1,0 +1,556 @@
+{% extends "financeiro/base_financeiro.html" %}
+
+{% block extra_css %}
+<style>
+    .fr-kpi-card {
+        background: #fff;
+        border: 1px solid #e7e9f2;
+        border-radius: 8px;
+        border-left: 5px solid #343990;
+        height: 100%;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+    .fr-kpi-card .card-body {
+        padding: 16px 18px;
+    }
+    .fr-kpi-label {
+        color: #6c757d;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+    }
+    .fr-kpi-value {
+        color: #1f2937;
+        font-size: 1.35rem;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+    .fr-kpi-saldo { border-left-color: #343990; }
+    .fr-kpi-reservado { border-left-color: #2563eb; }
+    .fr-kpi-liquidado { border-left-color: #16a34a; }
+    .fr-kpi-pago { border-left-color: #dc2626; }
+    .fr-table-card {
+        border: 0;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+        overflow: visible;
+    }
+    .fr-table-header {
+        background: #fff;
+        border-bottom: 2px solid #343990;
+        border-radius: 8px 8px 0 0;
+        padding: 14px 20px;
+    }
+    .fr-table {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .fr-table thead th {
+        background: #343990;
+        border-bottom: 0;
+        color: #fff;
+        cursor: pointer;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        padding: 14px 18px;
+        white-space: nowrap;
+    }
+    .fr-table tbody td {
+        border-bottom: 1px solid #e9ecef;
+        font-size: 0.85rem;
+        padding: 14px 18px;
+        vertical-align: top;
+    }
+    .fr-table tbody tr:hover {
+        background: #f8f9fc;
+    }
+    .fr-valor {
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .fr-valor.positivo {
+        color: #198754;
+    }
+    .fr-valor.zero {
+        color: #adb5bd;
+    }
+    .fr-contrato-link {
+        color: #343990;
+        font-weight: 700;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .fr-contrato-link:hover {
+        text-decoration: underline;
+    }
+    .fr-credor-cell {
+        color: #495057;
+        line-height: 1.4;
+        max-width: 320px;
+        min-width: 220px;
+    }
+    .fr-tooltip {
+        background: #fff;
+        border: 1px solid #e2e5ea;
+        border-radius: 8px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+        color: #212529;
+        font-size: 0.78rem;
+        line-height: 1.4;
+        max-width: 360px;
+        padding: 10px 12px;
+        position: fixed;
+        white-space: normal;
+        z-index: 99999;
+    }
+    .fr-tooltip.dark {
+        background: #212529;
+        border: 0;
+        color: #fff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Fundo Rotativo — Dashboard</h3>
+        <p class="text-muted mb-0">Visão consolidada da UG 210102.</p>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body py-3">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-4 col-lg-2">
+                <label class="form-label small fw-semibold text-muted mb-1">Ano</label>
+                <select class="form-select" name="ano">
+                    <option value="">Todos</option>
+                    {% for a in anos %}
+                    <option value="{{ a }}" {% if (ano_filtro|string) == (a|string) %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 col-lg-3">
+                <label class="form-label small fw-semibold text-muted mb-1">Fonte</label>
+                <select class="form-select" name="fonte_codigo">
+                    <option value="">Todas</option>
+                    {% for f in fontes %}
+                    <option value="{{ f.codigo }}" {% if f.codigo|string == fonte_codigo_filtro|string %}selected{% endif %}>
+                        {{ f.codigo }} - {{ f.descricao }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 col-lg-4">
+                <label class="form-label small fw-semibold text-muted mb-1">Natureza</label>
+                <select class="form-select" name="natureza">
+                    <option value="">Todas</option>
+                    {% for n in naturezas %}
+                    <option value="{{ n.codigo }}" {% if n.codigo|string == natureza_filtro|string %}selected{% endif %}>
+                        {{ n.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-12 col-lg-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-funnel me-1"></i> Filtrar
+                </button>
+                <a href="{{ url_for('financeiro.fundo_rotativo_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-x-circle me-1"></i> Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="fr-kpi-card fr-kpi-saldo">
+            <div class="card-body">
+                <div class="fr-kpi-label">Saldo Total</div>
+                <div class="fr-kpi-value" data-money="{{ kpis.saldo_total }}"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="fr-kpi-card fr-kpi-reservado">
+            <div class="card-body">
+                <div class="fr-kpi-label">Reservado</div>
+                <div class="fr-kpi-value" data-money="{{ kpis.reservado }}"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="fr-kpi-card fr-kpi-liquidado">
+            <div class="card-body">
+                <div class="fr-kpi-label">Liquidado</div>
+                <div class="fr-kpi-value" data-money="{{ kpis.liquidado }}"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="fr-kpi-card fr-kpi-pago">
+            <div class="card-body">
+                <div class="fr-kpi-label">Pago</div>
+                <div class="fr-kpi-value" data-money="{{ kpis.pago }}"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="fr-table-card card mb-4">
+    <div class="fr-table-header d-flex flex-wrap gap-3 justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold" style="color: #343990;">Execução por Contrato</h5>
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <div class="input-group input-group-sm" style="width: min(280px, 70vw);">
+                <span class="input-group-text bg-white">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input type="text" class="form-control" id="frBuscaContrato" placeholder="Buscar credor ou contrato...">
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-success d-flex align-items-center gap-1" id="frExportExcel">
+                <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+            </button>
+            <span class="badge rounded-pill" id="frContratoBadge"
+                  style="background-color: #343990; font-size: 0.78rem; padding: 6px 14px;">
+                0 contratos
+            </span>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table fr-table mb-0">
+            <thead>
+                <tr>
+                    <th class="text-start" data-sort="contrato">Contrato <i class="bi bi-arrow-down-up ms-1 opacity-25"></i></th>
+                    <th class="text-start" data-sort="credor">Nome do Credor <i class="bi bi-arrow-down-up ms-1 opacity-25"></i></th>
+                    <th class="text-end" data-sort="reserva">Reserva <i class="bi bi-arrow-down-up ms-1 opacity-25"></i></th>
+                    <th class="text-end" data-sort="empenho">Empenho <i class="bi bi-sort-down ms-1"></i></th>
+                    <th class="text-end" data-sort="liquidacao">Liquidação <i class="bi bi-arrow-down-up ms-1 opacity-25"></i></th>
+                    <th class="text-end" data-sort="pd">PD <i class="bi bi-arrow-down-up ms-1 opacity-25"></i></th>
+                    <th class="text-end" data-sort="pd_aberto">PD (em aberto) <i class="bi bi-arrow-down-up ms-1 opacity-25"></i></th>
+                    <th class="text-end" data-sort="ob">Pago <i class="bi bi-arrow-down-up ms-1 opacity-25"></i></th>
+                </tr>
+            </thead>
+            <tbody id="frTabelaContratosBody"></tbody>
+        </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center px-4 py-3"
+         style="border-top: 1px solid #e9ecef; background-color: #fafbfc;">
+        <small class="text-muted" id="frPaginacaoInfo"></small>
+        <nav>
+            <ul class="pagination pagination-sm mb-0" id="frPaginacao"></ul>
+        </nav>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const FR_ROWS = {{ rows|tojson }};
+const FR_PAGE_SIZE = 10;
+let frSortKey = 'empenho';
+let frSortDir = 'desc';
+let frPage = 1;
+let frBusca = '';
+let frCurrentPageRows = [];
+let frSortedRows = [];
+
+function frEscape(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function frFormatBRL(value) {
+    const n = Number(value || 0);
+    return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function frValorCell(value, key, index) {
+    const n = Number(value || 0);
+    const cls = n > 0 ? 'positivo' : 'zero';
+    const extra = key === 'pd_aberto' && n > 0 ? ` data-pd-index="${index}" role="button"` : '';
+    return `<td class="text-end fr-valor ${cls}"${extra}>${n > 0 ? frFormatBRL(n) : '—'}</td>`;
+}
+
+function frSortRows(rows) {
+    return [...rows].sort((a, b) => {
+        const av = a[frSortKey];
+        const bv = b[frSortKey];
+        if (typeof av === 'number' && typeof bv === 'number') {
+            return frSortDir === 'asc' ? av - bv : bv - av;
+        }
+        return frSortDir === 'asc'
+            ? String(av ?? '').localeCompare(String(bv ?? ''), 'pt-BR')
+            : String(bv ?? '').localeCompare(String(av ?? ''), 'pt-BR');
+    });
+}
+
+function frGetFilteredRows() {
+    const q = frBusca.trim().toLowerCase();
+    const rows = q
+        ? FR_ROWS.filter((row) =>
+            String(row.credor || '').toLowerCase().includes(q) ||
+            String(row.contrato || '').toLowerCase().includes(q)
+        )
+        : FR_ROWS;
+    return frSortRows(rows);
+}
+
+function frUpdateSortIcons() {
+    document.querySelectorAll('.fr-table thead th[data-sort]').forEach((th) => {
+        const icon = th.querySelector('i');
+        if (!icon) return;
+        if (th.dataset.sort !== frSortKey) {
+            icon.className = 'bi bi-arrow-down-up ms-1 opacity-25';
+            return;
+        }
+        icon.className = frSortDir === 'asc' ? 'bi bi-sort-up ms-1' : 'bi bi-sort-down ms-1';
+    });
+}
+
+function frPaginationItems(totalPages) {
+    const pages = [];
+    for (let p = 1; p <= totalPages; p += 1) {
+        if (p === 1 || p === totalPages || Math.abs(p - frPage) <= 2) {
+            if (pages.length && p - pages[pages.length - 1] > 1) pages.push('...');
+            pages.push(p);
+        }
+    }
+    return pages;
+}
+
+function frRenderPagination(totalRows) {
+    const totalPages = Math.max(1, Math.ceil(totalRows / FR_PAGE_SIZE));
+    const pagination = document.getElementById('frPaginacao');
+    const info = document.getElementById('frPaginacaoInfo');
+    pagination.innerHTML = '';
+
+    if (!totalRows) {
+        info.textContent = 'Sem dados disponíveis';
+        return;
+    }
+
+    const start = (frPage - 1) * FR_PAGE_SIZE + 1;
+    const end = Math.min(frPage * FR_PAGE_SIZE, totalRows);
+    info.textContent = `Mostrando ${start}-${end} de ${totalRows}`;
+
+    const prevDisabled = frPage <= 1 ? ' disabled' : '';
+    pagination.insertAdjacentHTML('beforeend', `
+        <li class="page-item${prevDisabled}">
+            <button class="page-link" data-page="${frPage - 1}" ${frPage <= 1 ? 'disabled' : ''}>
+                <i class="bi bi-chevron-left"></i>
+            </button>
+        </li>
+    `);
+
+    frPaginationItems(totalPages).forEach((page) => {
+        if (page === '...') {
+            pagination.insertAdjacentHTML('beforeend', '<li class="page-item disabled"><span class="page-link">...</span></li>');
+            return;
+        }
+        const active = page === frPage ? ' active' : '';
+        const style = page === frPage ? ' style="background-color:#343990;border-color:#343990;"' : '';
+        pagination.insertAdjacentHTML('beforeend', `
+            <li class="page-item${active}">
+                <button class="page-link" data-page="${page}"${style}>${page}</button>
+            </li>
+        `);
+    });
+
+    const nextDisabled = frPage >= totalPages ? ' disabled' : '';
+    pagination.insertAdjacentHTML('beforeend', `
+        <li class="page-item${nextDisabled}">
+            <button class="page-link" data-page="${frPage + 1}" ${frPage >= totalPages ? 'disabled' : ''}>
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </li>
+    `);
+}
+
+function frRenderTable() {
+    frSortedRows = frGetFilteredRows();
+    const totalPages = Math.max(1, Math.ceil(frSortedRows.length / FR_PAGE_SIZE));
+    if (frPage > totalPages) frPage = totalPages;
+
+    const start = (frPage - 1) * FR_PAGE_SIZE;
+    frCurrentPageRows = frSortedRows.slice(start, start + FR_PAGE_SIZE);
+
+    document.getElementById('frContratoBadge').textContent =
+        `${frSortedRows.length} contrato${frSortedRows.length === 1 ? '' : 's'}`;
+    document.getElementById('frExportExcel').disabled = frSortedRows.length === 0;
+
+    const tbody = document.getElementById('frTabelaContratosBody');
+    if (!frCurrentPageRows.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5">Sem dados disponíveis</td></tr>';
+        frRenderPagination(0);
+        frUpdateSortIcons();
+        return;
+    }
+
+    tbody.innerHTML = frCurrentPageRows.map((row, index) => `
+        <tr>
+            <td>
+                <a class="fr-contrato-link" data-row-index="${index}"
+                   href="/prestacoes-contratos/contratos/${encodeURIComponent(row.contrato)}/gerenciar">
+                    ${frEscape(row.contrato)}
+                </a>
+            </td>
+            <td class="fr-credor-cell">${frEscape(row.credor)}</td>
+            ${frValorCell(row.reserva, 'reserva', index)}
+            ${frValorCell(row.empenho, 'empenho', index)}
+            ${frValorCell(row.liquidacao, 'liquidacao', index)}
+            ${frValorCell(row.pd, 'pd', index)}
+            ${frValorCell(row.pd_aberto, 'pd_aberto', index)}
+            ${frValorCell(row.ob, 'ob', index)}
+        </tr>
+    `).join('');
+
+    frRenderPagination(frSortedRows.length);
+    frUpdateSortIcons();
+}
+
+function frRemoveTooltip() {
+    document.querySelectorAll('.fr-tooltip').forEach((el) => el.remove());
+}
+
+function frShowTooltip(anchor, html, dark = false, width = 360) {
+    frRemoveTooltip();
+    const tip = document.createElement('div');
+    tip.className = `fr-tooltip${dark ? ' dark' : ''}`;
+    tip.style.minWidth = `${Math.min(width, window.innerWidth - 24)}px`;
+    tip.innerHTML = html;
+
+    const rect = anchor.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < 160) {
+        tip.style.bottom = `${window.innerHeight - rect.top + 8}px`;
+    } else {
+        tip.style.top = `${rect.bottom + 8}px`;
+    }
+    tip.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - width - 12))}px`;
+    document.body.appendChild(tip);
+}
+
+function frPdTooltipHtml(row) {
+    const pds = row.pd_aberto_pds || [];
+    if (!pds.length) {
+        return '<div class="text-muted">Nenhuma PD em aberto.</div>';
+    }
+    const linhas = pds.map((pd) => `
+        <tr>
+            <td style="padding:4px 6px;font-weight:600;">${frEscape(pd.codigo || '—')}</td>
+            <td style="padding:4px 6px;text-align:right;color:#198754;font-weight:600;">${frFormatBRL(pd.valor || 0)}</td>
+        </tr>
+    `).join('');
+    return `
+        <div style="font-weight:700;margin-bottom:8px;color:#343990;border-bottom:1px solid #e9ecef;padding-bottom:6px;">
+            PDs em Aberto (${pds.length})
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead>
+                <tr style="border-bottom:1px solid #e9ecef;">
+                    <th style="text-align:left;padding:4px 6px;color:#6c757d;">PD</th>
+                    <th style="text-align:right;padding:4px 6px;color:#6c757d;">Valor</th>
+                </tr>
+            </thead>
+            <tbody>${linhas}</tbody>
+        </table>
+    `;
+}
+
+function frExportToExcel() {
+    const header = ['Contrato', 'Credor', 'Reserva', 'Empenho', 'Liquidação', 'PD', 'PD (em aberto)', 'Pago'];
+    const numCell = (value) => `<td style="mso-number-format:'#.##0\\,00';text-align:right">${Number(value || 0).toFixed(2).replace('.', ',')}</td>`;
+    let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8">
+<style>
+table{border-collapse:collapse}th{background-color:#343990;color:#fff;font-weight:bold;padding:8px 12px;border:1px solid #ccc;text-align:center}td{padding:6px 12px;border:1px solid #ddd;vertical-align:top}
+</style></head><body><table><thead><tr>${header.map((h) => `<th>${frEscape(h)}</th>`).join('')}</tr></thead><tbody>`;
+
+    frSortedRows.forEach((row) => {
+        html += `<tr>
+            <td>${frEscape(row.contrato)}</td>
+            <td>${frEscape(row.credor)}</td>
+            ${numCell(row.reserva)}
+            ${numCell(row.empenho)}
+            ${numCell(row.liquidacao)}
+            ${numCell(row.pd)}
+            ${numCell(row.pd_aberto)}
+            ${numCell(row.ob)}
+        </tr>`;
+    });
+    html += '</tbody></table></body></html>';
+
+    const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'fundo_rotativo_execucao_por_contrato.xls';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-money]').forEach((el) => {
+        el.textContent = frFormatBRL(el.dataset.money || 0);
+    });
+
+    document.getElementById('frBuscaContrato').addEventListener('input', (event) => {
+        frBusca = event.target.value;
+        frPage = 1;
+        frRenderTable();
+    });
+
+    document.querySelectorAll('.fr-table thead th[data-sort]').forEach((th) => {
+        th.addEventListener('click', () => {
+            const key = th.dataset.sort;
+            if (frSortKey === key) {
+                frSortDir = frSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                frSortKey = key;
+                frSortDir = 'desc';
+            }
+            frPage = 1;
+            frRenderTable();
+        });
+    });
+
+    document.getElementById('frPaginacao').addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-page]');
+        if (!button || button.disabled) return;
+        frPage = Number(button.dataset.page || 1);
+        frRenderTable();
+    });
+
+    const tbody = document.getElementById('frTabelaContratosBody');
+    tbody.addEventListener('mouseover', (event) => {
+        const contratoLink = event.target.closest('.fr-contrato-link');
+        if (contratoLink) {
+            const row = frCurrentPageRows[Number(contratoLink.dataset.rowIndex)];
+            if (row?.objeto) frShowTooltip(contratoLink, frEscape(row.objeto), true);
+            return;
+        }
+        const pdCell = event.target.closest('[data-pd-index]');
+        if (pdCell) {
+            const row = frCurrentPageRows[Number(pdCell.dataset.pdIndex)];
+            if (row?.pd_aberto > 0) frShowTooltip(pdCell, frPdTooltipHtml(row), false, 340);
+        }
+    });
+    tbody.addEventListener('mouseout', frRemoveTooltip);
+
+    document.getElementById('frExportExcel').addEventListener('click', frExportToExcel);
+    frRenderTable();
+});
+</script>
+{% endblock %}

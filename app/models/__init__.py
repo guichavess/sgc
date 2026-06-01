@@ -79,6 +79,9 @@ from app.models.diaria import (
 # Planejamento Orçamentário
 from app.models.planejamento_orcamentario import PlanejamentoOrcamentario
 
+# Gestão do Fundo Rotativo
+from app.models.fundo_rotativo import FundoRotativoSaldo
+
 # CGFR (Consultoria de Gestão Financeira)
 from app.cgfr.models import CgfrProcessoEnviado, Acao
 
@@ -180,6 +183,8 @@ __all__ = [
     'PlanejamentoOrcamentario',
     # Classificador de Fonte
     'ClassFonte',
+    # Fundo Rotativo
+    'FundoRotativoSaldo',
     # CGFR
     'CgfrProcessoEnviado',
     'Acao',

@@ -76,6 +76,7 @@ MODULOS = [
     ('prestacoes_contratos', 'Execuções de Contratos'),
     ('diarias', 'Diárias'),
     ('cgfr', 'CGFR'),
+    ('fundo_rotativo', 'Fundo Rotativo'),
 ]
 
 ACOES = [

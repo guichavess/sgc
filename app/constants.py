@@ -257,6 +257,20 @@ class StatusEmpenhoID(IntEnum):
 # UNIDADE GESTORA
 # =============================================================================
 UG_CODE = '210101'  # Código da Unidade Gestora padrão
+UG_FUNDO_ROTATIVO = '210102'  # UG dos contratos do Fundo Rotativo
+
+
+# =============================================================================
+# FUNDO ROTATIVO — EXERCÍCIOS
+# =============================================================================
+FUNDO_ROTATIVO_EXERCICIOS = [
+    ('01', 'Reserva Exercício Corrente'),
+    ('02', 'Reserva Exercício Anterior'),
+]
+FUNDO_ROTATIVO_EXERCICIOS_MAP = dict(FUNDO_ROTATIVO_EXERCICIOS)
+
+# Fontes permitidas no dropdown da aba "Saldo" do Fundo Rotativo.
+FUNDO_ROTATIVO_FONTES_PERMITIDAS = ('755', '759')
 
 
 # =============================================================================

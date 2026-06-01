@@ -1,0 +1,272 @@
+{% extends "financeiro/base_financeiro.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-1">Fundo Rotativo — Saldo</h3>
+        <p class="text-muted mb-0">Registros de saldo do Fundo Rotativo (UG 210102).</p>
+    </div>
+    <div>
+        {% if current_user.is_admin or current_user.tem_permissao('fundo_rotativo', 'criar') %}
+        <button class="btn btn-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCadastro">
+            <i class="bi bi-plus-lg me-1"></i> Novo Saldo
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+{# Filtros #}
+<div class="card mb-4">
+    <div class="card-body py-3">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-12 col-lg-4">
+                <label class="form-label small fw-semibold text-muted mb-1">Busca</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" class="form-control border-start-0 ps-0" name="busca"
+                           value="{{ busca }}" placeholder="Buscar por fonte, descrição ou natureza...">
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-2">
+                <label class="form-label small fw-semibold text-muted mb-1">Fonte</label>
+                <select class="form-select" name="fonte_codigo">
+                    <option value="">Todas</option>
+                    {% for f in fontes %}
+                    <option value="{{ f.codigo }}" {% if f.codigo == fonte_codigo_filtro %}selected{% endif %}>
+                        {{ f.codigo }} - {{ f.descricao }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6 col-lg-2">
+                <label class="form-label small fw-semibold text-muted mb-1">Natureza</label>
+                <select class="form-select" name="natureza">
+                    <option value="">Todas</option>
+                    {% for n in naturezas %}
+                    <option value="{{ n.codigo }}" {% if n.codigo|string == natureza_filtro|string %}selected{% endif %}>
+                        {{ n.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 col-lg-1">
+                <label class="form-label small fw-semibold text-muted mb-1">Ano</label>
+                <select class="form-select" name="ano">
+                    <option value="">Todos</option>
+                    {% for a in anos %}
+                    <option value="{{ a }}" {% if (ano_filtro|string) == (a|string) %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 col-lg-2">
+                <label class="form-label small fw-semibold text-muted mb-1">Exercício</label>
+                <select class="form-select" name="id_exercicio">
+                    <option value="">Todos</option>
+                    {% for eid, titulo in exercicios %}
+                    <option value="{{ eid }}" {% if eid == id_exercicio_filtro %}selected{% endif %}>
+                        {{ eid }} - {{ titulo }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 col-lg-1 d-flex flex-column gap-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-funnel me-1"></i> Filtrar
+                </button>
+                <a href="{{ url_for('financeiro.fundo_rotativo_saldo_lista') }}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="bi bi-x-circle me-1"></i> Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# Tabela #}
+<div class="card">
+    <div class="card-header bg-white border-bottom py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Saldos Registrados</h5>
+            <span class="badge bg-secondary">{{ pagination.total }} registro{{ 's' if pagination.total != 1 else '' }}</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-custom table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Data</th>
+                        <th class="text-end">Valor (R$)</th>
+                        <th>Fonte</th>
+                        <th>Natureza</th>
+                        <th>Exercício</th>
+                        {% if current_user.is_admin or current_user.tem_permissao('fundo_rotativo', 'criar') %}
+                        <th class="text-center">Ações</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in saldos %}
+                    <tr>
+                        <td class="ps-4">{{ s.data.strftime('%d/%m/%Y %H:%M') }}</td>
+                        <td class="text-end fw-semibold">{{ '%.2f'|format(s.valor)|replace('.', ',') }}</td>
+                        <td>
+                            <code>{{ s.fonte_codigo }}</code>
+                            {% if s.fonte %}<span class="text-muted ms-1">- {{ s.fonte.descricao }}</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if s.natureza %}
+                                <code>{{ s.natureza }}</code>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">
+                                {{ s.id_exercicio }} - {{ s.exercicio_titulo }}
+                            </span>
+                        </td>
+                        {% if current_user.is_admin or current_user.tem_permissao('fundo_rotativo', 'criar') %}
+                        <td class="text-center">
+                            <button class="btn btn-outline-primary btn-sm me-1"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#modalEditar{{ s.id }}"
+                                    title="Editar">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#modalExcluir{{ s.id }}"
+                                    title="Excluir">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            Nenhum saldo registrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if pagination.pages > 1 %}
+    <div class="card-footer bg-white border-top py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="text-muted small">
+                Mostrando <strong>{{ saldos|length }}</strong> de <strong>{{ pagination.total }}</strong>
+            </div>
+            <nav aria-label="Navegação">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.prev_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro, natureza=natureza_filtro) if pagination.has_prev else '#' }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                        {% if page_num %}
+                            <li class="page-item {{ 'active' if page_num == pagination.page }}">
+                                <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=page_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro, natureza=natureza_filtro) }}">{{ page_num }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.next_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro, natureza=natureza_filtro) if pagination.has_next else '#' }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{# ===== Modal: Cadastrar ===== #}
+<div class="modal fade" id="modalCadastro" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" action="{{ url_for('financeiro.fundo_rotativo_saldo_cadastrar') }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Novo Saldo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    {% with prefix='novo', saldo=None, fontes=fontes, exercicios=exercicios, naturezas=naturezas %}
+                        {% include 'financeiro/fundo_rotativo/_form_fields.html' %}
+                    {% endwith %}
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Cadastrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# ===== Modais por linha: Editar + Excluir ===== #}
+{% for s in saldos %}
+<div class="modal fade" id="modalEditar{{ s.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" action="{{ url_for('financeiro.fundo_rotativo_saldo_editar', saldo_id=s.id) }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">Editar Saldo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    {% with prefix='edit' ~ s.id, saldo=s, fontes=fontes, exercicios=exercicios, naturezas=naturezas %}
+                        {% include 'financeiro/fundo_rotativo/_form_fields.html' %}
+                    {% endwith %}
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalExcluir{{ s.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <form method="post" action="{{ url_for('financeiro.fundo_rotativo_saldo_excluir', saldo_id=s.id) }}">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold text-danger">Excluir Saldo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Confirma a exclusão do registro abaixo?</p>
+                    <ul class="list-unstyled small text-muted">
+                        <li><strong>Data:</strong> {{ s.data.strftime('%d/%m/%Y %H:%M') }}</li>
+                        <li><strong>Valor:</strong> R$ {{ '%.2f'|format(s.valor)|replace('.', ',') }}</li>
+                        <li><strong>Fonte:</strong> {{ s.fonte_label }}</li>
+                        <li><strong>Exercício:</strong> {{ s.exercicio_label }}</li>
+                    </ul>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i> Excluir
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
