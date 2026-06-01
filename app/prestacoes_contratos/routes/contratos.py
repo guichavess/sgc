@@ -93,6 +93,7 @@ def dashboard():
     todas_naturezas = PrestacaoContratoService.listar_naturezas_utilizadas()
     todos_subitens = PrestacaoContratoService.listar_subitens_utilizados()
     todos_tipos_patrimoniais = PrestacaoContratoService.listar_tipos_patrimoniais_utilizados()
+    todas_ugs = PrestacaoContratoService.listar_ugs()
 
     # Verifica se algum filtro está ativo
     tem_filtro = any([filtro_codigo, filtro_contratado, filtro_situacao,
@@ -111,6 +112,7 @@ def dashboard():
         todas_naturezas=todas_naturezas,
         todos_subitens=todos_subitens,
         todos_tipos_patrimoniais=todos_tipos_patrimoniais,
+        todas_ugs=todas_ugs,
         situacao_labels=SITUACAO_LABELS,
         filtro_codigo=filtro_codigo,
         filtro_contratado=filtro_contratado,

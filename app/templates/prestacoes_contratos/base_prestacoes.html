@@ -1,7 +1,7 @@
 {% extends "base_layout.html" %}
 
-{% block title %}SGC - Execucoes de Contratos{% endblock %}
-{% block module_name %}Execucoes de Contratos{% endblock %}
+{% block title %}SGC - Execuções de Contratos{% endblock %}
+{% block module_name %}Execuções de Contratos{% endblock %}
 
 {% block sidebar_links %}
 <div class="sidebar-section-label">Contratos</div>
@@ -15,7 +15,7 @@
     <li>
         <a class="sidebar-link {{ 'active' if request.endpoint and request.endpoint.startswith('prestacoes_contratos.prestacoes') }}"
            href="{{ url_for('prestacoes_contratos.prestacoes_index') }}">
-            <i class="bi bi-journal-check"></i> Execucoes
+            <i class="bi bi-journal-check"></i> Execuções
         </a>
     </li>
 </ul>

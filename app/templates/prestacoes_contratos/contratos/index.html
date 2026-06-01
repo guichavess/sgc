@@ -139,8 +139,9 @@
  <label class="form-label small fw-semibold text-muted mb-1">Unidade Gestora</label>
  <select name="ug" class="form-select">
  <option value="">Todas</option>
- <option value="210101" {{ 'selected' if filtro_ug == '210101' }}>210101</option>
- <option value="210102" {{ 'selected' if filtro_ug == '210102' }}>210102</option>
+ {% for ug in todas_ugs %}
+ <option value="{{ ug.codigo }}" {{ 'selected' if filtro_ug == ug.codigo }}>{{ ug.codigo }} - {{ ug.titulo }}</option>
+ {% endfor %}
  </select>
  </div>
 

@@ -598,6 +598,7 @@ def api_kpis_contratos():
 # ---------------------------------------------------------------------------
 
 _UG = '210101'
+_UGS_PADRAO = ('210101', '210102')
 
 _NOMES_MESES = {
     1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
@@ -631,12 +632,32 @@ def _exec_sum(sql_str, params):
 
 
 def _get_filtros():
-    """Extrai filtros de mes, acao, natureza, fonte do request. Suporta múltiplos valores separados por vírgula."""
+    """Extrai filtros de mes, acao, natureza, fonte, ug do request. Suporta múltiplos valores separados por vírgula."""
     mes = request.args.get('mes', type=int)
     acao = request.args.get('acao', '')
     natureza = request.args.get('natureza', '')
     fonte = request.args.get('fonte', '')
-    return mes, acao, natureza, fonte
+    ug = request.args.get('ug', '')
+    return mes, acao, natureza, fonte, ug
+
+
+def _build_ug_filter(ug, col='codigoUG', prefix='ug'):
+    """Gera (frag_sql, params) para filtrar por codigoUG.
+
+    - ug vazio: filtra pelas UGs padrão (210101, 210102).
+    - ug com csv (ex: '210101' ou '210101,210102'): filtra pelas selecionadas.
+    Aceita `col` com alias (ex: 'e.codigoUG').
+    """
+    params = {}
+    if not ug:
+        placeholders = []
+        for i, u in enumerate(_UGS_PADRAO):
+            key = f"{prefix}_def_{i}"
+            params[key] = u
+            placeholders.append(f":{key}")
+        return f"AND {col} IN ({','.join(placeholders)})", params
+    frag = _multi_in(col, ug, prefix, params)
+    return frag, params
 
 
 def _multi_in(col, values_str, param_prefix, params_dict):
@@ -687,27 +708,40 @@ def api_filtros_orcamentario():
     ano = request.args.get('ano', datetime.now().year, type=int)
     acao_sel = request.args.get('acao', '')
     fonte_sel = request.args.get('fonte', '')
+    ug_sel = request.args.get('ug', '')
     try:
-        # Meses
-        sql_m = text("SELECT DISTINCT mes FROM loa WHERE ano = :ano ORDER BY mes")
-        meses = [{'valor': r[0], 'label': _NOMES_MESES.get(r[0], str(r[0]))}
-                 for r in db.session.execute(sql_m, {'ano': ano}) if r[0]]
+        # UGs — apenas 210101 e 210102 com codigo + titulo da tabela `ug`
+        ugs_rows = db.session.execute(text(
+            "SELECT codigo, titulo FROM ug WHERE codigo IN ('210101', '210102') ORDER BY codigo"
+        )).fetchall()
+        ugs = [{'codigo': str(r[0]), 'descricao': r[1] or ''} for r in ugs_rows]
 
-        # Ações — universo do ano (raiz da hierarquia, nunca filtrada)
-        sql_a = text("SELECT DISTINCT codAcao FROM loa WHERE ano = :ano AND codAcao IS NOT NULL ORDER BY codAcao")
-        cod_acoes = [r[0] for r in db.session.execute(sql_a, {'ano': ano}) if r[0]]
+        # Filtro UG comum para queries em loa
+        ug_frag_m, ug_params_m = _build_ug_filter(ug_sel, prefix='ugm')
+
+        # Meses
+        sql_m = text(f"SELECT DISTINCT mes FROM loa WHERE ano = :ano {ug_frag_m} ORDER BY mes")
+        meses = [{'valor': r[0], 'label': _NOMES_MESES.get(r[0], str(r[0]))}
+                 for r in db.session.execute(sql_m, {'ano': ano, **ug_params_m}) if r[0]]
+
+        # Ações — universo do ano (raiz da hierarquia, nunca filtrada por ação/fonte/natureza, mas pode ser por UG)
+        ug_frag_a, ug_params_a = _build_ug_filter(ug_sel, prefix='uga')
+        sql_a = text(f"SELECT DISTINCT codAcao FROM loa WHERE ano = :ano AND codAcao IS NOT NULL {ug_frag_a} ORDER BY codAcao")
+        cod_acoes = [r[0] for r in db.session.execute(sql_a, {'ano': ano, **ug_params_a}) if r[0]]
         desc_a = {str(r[0]): r[1] for r in db.session.execute(text("SELECT codigo, titulo FROM acao")).fetchall() if r[0] and r[1]}
         acoes = [{'codigo': c, 'descricao': desc_a.get(str(c), '')} for c in cod_acoes]
         acoes.sort(key=lambda x: x['descricao'].lower())
 
-        # Fontes — restritas pela Ação selecionada (se houver)
+        # Fontes — restritas pela Ação selecionada (se houver) e UG
         params_f = {'ano': ano}
         frag_acao_f = ''
         if acao_sel:
             frag_acao_f = _multi_in('codAcao', acao_sel, 'af', params_f)
+        ug_frag_f, ug_params_f = _build_ug_filter(ug_sel, prefix='ugf')
+        params_f.update(ug_params_f)
         sql_f = text(
             f"SELECT DISTINCT codFonte FROM loa "
-            f"WHERE ano = :ano AND codFonte IS NOT NULL {frag_acao_f} "
+            f"WHERE ano = :ano AND codFonte IS NOT NULL {frag_acao_f} {ug_frag_f} "
             f"ORDER BY codFonte"
         )
         cod_fontes = [r[0] for r in db.session.execute(sql_f, params_f) if r[0]]
@@ -718,13 +752,15 @@ def api_filtros_orcamentario():
         fontes = [{'codigo': c, 'descricao': desc_f.get(str(c), str(c))} for c in cod_fontes]
         fontes.sort(key=lambda x: str(x['codigo']))
 
-        # Naturezas — restritas por Ação e Fonte selecionadas (se houver)
+        # Naturezas — restritas por Ação, Fonte e UG selecionadas (se houver)
         params_n = {'ano': ano}
         frag_acao_n = _multi_in('codAcao', acao_sel, 'an', params_n) if acao_sel else ''
         frag_fonte_n = _multi_in('codFonte', fonte_sel, 'fn', params_n) if fonte_sel else ''
+        ug_frag_n, ug_params_n = _build_ug_filter(ug_sel, prefix='ugn')
+        params_n.update(ug_params_n)
         sql_n = text(
             f"SELECT DISTINCT codNatureza FROM loa "
-            f"WHERE ano = :ano AND codNatureza IS NOT NULL {frag_acao_n} {frag_fonte_n} "
+            f"WHERE ano = :ano AND codNatureza IS NOT NULL {frag_acao_n} {frag_fonte_n} {ug_frag_n} "
             f"ORDER BY codNatureza"
         )
         cod_nats = [r[0] for r in db.session.execute(sql_n, params_n) if r[0]]
@@ -732,18 +768,18 @@ def api_filtros_orcamentario():
         naturezas = [{'codigo': c, 'descricao': desc_n.get(str(c), '')} for c in cod_nats]
         naturezas.sort(key=lambda x: x['descricao'].lower())
     except Exception:
-        meses, acoes, naturezas, fontes = [], [], [], []
+        meses, acoes, naturezas, fontes, ugs = [], [], [], [], []
 
-    return jsonify({'meses': meses, 'acoes': acoes, 'naturezas': naturezas, 'fontes': fontes})
+    return jsonify({'meses': meses, 'acoes': acoes, 'naturezas': naturezas, 'fontes': fontes, 'ugs': ugs})
 
 
 @dashboards_bp.route('/api/kpis-orcamentario')
 @login_required
 @requires_permission('dashboards')
 def api_kpis_orcamentario():
-    """KPIs orçamentários com filtros: mes, acao, natureza, fonte."""
+    """KPIs orçamentários com filtros: mes, acao, natureza, fonte, ug."""
     ano = request.args.get('ano', datetime.now().year, type=int)
-    mes, acao, natureza, fonte = _get_filtros()
+    mes, acao, natureza, fonte, ug = _get_filtros()
     dt_ini, dt_fim = _build_date_range(ano, mes)
     p = {'dt_ini': dt_ini, 'dt_fim': dt_fim}
 
@@ -751,41 +787,48 @@ def api_kpis_orcamentario():
     f_emp, fp_emp = _build_exec_filters(fonte, natureza, acao, 'empenho')
     f_cls, fp_cls = _build_exec_filters(fonte, natureza, acao, 'class')
 
+    ug_res, ugp_res = _build_ug_filter(ug, prefix='ugres')
+    ug_emp, ugp_emp = _build_ug_filter(ug, prefix='ugemp')
+    ug_liq, ugp_liq = _build_ug_filter(ug, prefix='ugliq')
+    ug_pd, ugp_pd = _build_ug_filter(ug, prefix='ugpd')
+    ug_pda, ugp_pda = _build_ug_filter(ug, prefix='ugpda')
+    ug_ob, ugp_ob = _build_ug_filter(ug, prefix='ugob')
+
     reservado = _exec_sum(f"""
         SELECT COALESCE(SUM(CASE WHEN tipoAlteracao='ANULACAO' THEN -valor ELSE valor END),0)
         FROM reserva WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {f_res}
-    """, {**p, **fp_res})
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_res} {f_res}
+    """, {**p, **ugp_res, **fp_res})
 
     empenhado = _exec_sum(f"""
         SELECT COALESCE(SUM(CASE WHEN tipoAlteracaoNE='ANULACAO' THEN -valor ELSE valor END),0)
         FROM empenho WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}' {f_emp}
-    """, {**p, **fp_emp})
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_emp} {f_emp}
+    """, {**p, **ugp_emp, **fp_emp})
 
     liquidado = _exec_sum(f"""
         SELECT COALESCE(SUM(CASE WHEN tipoAlteracao='ANULACAO' THEN -valor ELSE valor END),0)
         FROM liquidacao WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}' {f_cls}
-    """, {**p, **fp_cls})
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_liq} {f_cls}
+    """, {**p, **ugp_liq, **fp_cls})
 
     pd_val = _exec_sum(f"""
         SELECT COALESCE(SUM(valor),0) FROM pd
         WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}' {f_cls}
-    """, {**p, **fp_cls})
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_pd} {f_cls}
+    """, {**p, **ugp_pd, **fp_cls})
 
     pd_aberto = _exec_sum(f"""
         SELECT COALESCE(SUM(valor),0) FROM pd
         WHERE statusDocumento='CONTABILIZADO' AND statusExecucao='STATUS_DISPONIVEL'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}' {f_cls}
-    """, {**p, **fp_cls})
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_pda} {f_cls}
+    """, {**p, **ugp_pda, **fp_cls})
 
     pago = _exec_sum(f"""
         SELECT COALESCE(SUM(valor),0) FROM ob
         WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}' {f_cls}
-    """, {**p, **fp_cls})
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_ob} {f_cls}
+    """, {**p, **ugp_ob, **fp_cls})
 
     dotacao = 0.0
     try:
@@ -798,10 +841,15 @@ def api_kpis_orcamentario():
         if acao:
             f_loa.append(_multi_in('codAcao', acao, 'la', p_loa))
         filt_loa = ' '.join(f_loa)
+        ug_loa, ugp_loa = _build_ug_filter(ug, prefix='ugloa')
+        ug_loa_sub, ugp_loa_sub = _build_ug_filter(ug, prefix='ugloasub')
+        p_loa.update(ugp_loa)
+        p_loa.update(ugp_loa_sub)
         r = db.session.execute(text(f"""
             SELECT COALESCE(SUM(saldo),0) FROM loa
             WHERE ano = :ano AND id = '622110101'
-              AND mes = (SELECT MAX(mes) FROM loa WHERE ano = :ano)
+              AND mes = (SELECT MAX(mes) FROM loa WHERE ano = :ano {ug_loa_sub})
+              {ug_loa}
               {filt_loa}
         """), p_loa).scalar()
         cred_disp = float(r or 0)
@@ -828,23 +876,23 @@ def api_kpis_orcamentario():
 def api_evolucao_orcamentaria():
     """Evolução mensal com filtros."""
     ano = request.args.get('ano', datetime.now().year, type=int)
-    _, acao, natureza, fonte = _get_filtros()
+    _, acao, natureza, fonte, ug = _get_filtros()
     meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
              'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
-    def _mensal(tabela, campo_anulacao, for_table, ug_filter=False):
-        ug = f"AND codigoUG='{_UG}'" if ug_filter else ''
+    def _mensal(tabela, campo_anulacao, for_table, prefix):
+        ug_frag, ug_params = _build_ug_filter(ug, prefix=prefix)
         filt, fp = _build_exec_filters(fonte, natureza, acao, for_table)
         sql = f"""
             SELECT MONTH(dataEmissao) as m,
                    COALESCE(SUM(CASE WHEN {campo_anulacao} THEN -valor ELSE valor END),0) as v
             FROM {tabela}
             WHERE statusDocumento='CONTABILIZADO'
-              AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug} {filt}
+              AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_frag} {filt}
             GROUP BY MONTH(dataEmissao)
         """
         rows = db.session.execute(text(sql), {
-            'dt_ini': f'{ano}-01-01', 'dt_fim': f'{ano + 1}-01-01', **fp
+            'dt_ini': f'{ano}-01-01', 'dt_fim': f'{ano + 1}-01-01', **ug_params, **fp
         }).fetchall()
         data = [0.0] * 12
         for m, v in rows:
@@ -852,18 +900,18 @@ def api_evolucao_orcamentaria():
                 data[int(m) - 1] = round(float(v or 0), 2)
         return data
 
-    def _mensal_simples(tabela, for_table, ug_filter=False):
-        ug = f"AND codigoUG='{_UG}'" if ug_filter else ''
+    def _mensal_simples(tabela, for_table, prefix):
+        ug_frag, ug_params = _build_ug_filter(ug, prefix=prefix)
         filt, fp = _build_exec_filters(fonte, natureza, acao, for_table)
         sql = f"""
             SELECT MONTH(dataEmissao) as m, COALESCE(SUM(valor),0) as v
             FROM {tabela}
             WHERE statusDocumento='CONTABILIZADO'
-              AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug} {filt}
+              AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_frag} {filt}
             GROUP BY MONTH(dataEmissao)
         """
         rows = db.session.execute(text(sql), {
-            'dt_ini': f'{ano}-01-01', 'dt_fim': f'{ano + 1}-01-01', **fp
+            'dt_ini': f'{ano}-01-01', 'dt_fim': f'{ano + 1}-01-01', **ug_params, **fp
         }).fetchall()
         data = [0.0] * 12
         for m, v in rows:
@@ -874,11 +922,11 @@ def api_evolucao_orcamentaria():
     return jsonify({
         'categories': meses,
         'series': [
-            {'name': 'Reserva', 'data': _mensal('reserva', "tipoAlteracao='ANULACAO'", 'reserva')},
-            {'name': 'Empenho', 'data': _mensal('empenho', "tipoAlteracaoNE='ANULACAO'", 'empenho', ug_filter=True)},
-            {'name': 'Liquidação', 'data': _mensal('liquidacao', "tipoAlteracao='ANULACAO'", 'class', ug_filter=True)},
-            {'name': 'PD', 'data': _mensal_simples('pd', 'class', ug_filter=True)},
-            {'name': 'OB', 'data': _mensal_simples('ob', 'class', ug_filter=True)},
+            {'name': 'Reserva', 'data': _mensal('reserva', "tipoAlteracao='ANULACAO'", 'reserva', 'ugevr')},
+            {'name': 'Empenho', 'data': _mensal('empenho', "tipoAlteracaoNE='ANULACAO'", 'empenho', 'ugeve')},
+            {'name': 'Liquidação', 'data': _mensal('liquidacao', "tipoAlteracao='ANULACAO'", 'class', 'ugevl')},
+            {'name': 'PD', 'data': _mensal_simples('pd', 'class', 'ugevpd')},
+            {'name': 'OB', 'data': _mensal_simples('ob', 'class', 'ugevob')},
         ]
     })
 
@@ -889,11 +937,12 @@ def api_evolucao_orcamentaria():
 def api_pd_por_status():
     """PD agrupado por statusExecucao (para gráfico de pizza)."""
     ano = request.args.get('ano', datetime.now().year, type=int)
-    mes, acao, natureza, fonte = _get_filtros()
+    mes, acao, natureza, fonte, ug = _get_filtros()
     dt_ini, dt_fim = _build_date_range(ano, mes)
     p = {'dt_ini': dt_ini, 'dt_fim': dt_fim}
 
     f_cls, fp_cls = _build_exec_filters(fonte, natureza, acao, 'class')
+    ug_frag, ug_params = _build_ug_filter(ug, prefix='ugpst')
 
     sql = text(f"""
         SELECT statusExecucao,
@@ -901,11 +950,11 @@ def api_pd_por_status():
                COUNT(*) as qtd_pds,
                COUNT(DISTINCT codigoCredor) as qtd_credores
         FROM pd WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_frag}
           {f_cls}
         GROUP BY statusExecucao ORDER BY total DESC
     """)
-    rows = db.session.execute(sql, {**p, **fp_cls}).fetchall()
+    rows = db.session.execute(sql, {**p, **ug_params, **fp_cls}).fetchall()
 
     # Mapear nomes amigáveis
     label_map = {
@@ -949,11 +998,12 @@ def api_pd_por_status():
 def api_listagem_pd():
     """Listagem de PDs com filtros."""
     ano = request.args.get('ano', datetime.now().year, type=int)
-    mes, acao, natureza, fonte = _get_filtros()
+    mes, acao, natureza, fonte, ug = _get_filtros()
     dt_ini, dt_fim = _build_date_range(ano, mes)
     p = {'dt_ini': dt_ini, 'dt_fim': dt_fim}
 
     f_cls, fp_cls = _build_exec_filters(fonte, natureza, acao, 'class')
+    ug_frag, ug_params = _build_ug_filter(ug, col='p.codigoUG', prefix='uglst')
 
     status_execucao = request.args.get('status_execucao', '')
     f_status = ''
@@ -966,11 +1016,11 @@ def api_listagem_pd():
                p.nomeCredor, p.valor, p.statusExecucao, p.competencia
         FROM pd p
         WHERE p.statusDocumento='CONTABILIZADO'
-          AND p.dataEmissao >= :dt_ini AND p.dataEmissao < :dt_fim AND p.codigoUG='{_UG}'
+          AND p.dataEmissao >= :dt_ini AND p.dataEmissao < :dt_fim {ug_frag}
           {f_cls} {f_status}
         ORDER BY p.valor DESC
     """)
-    rows = db.session.execute(sql, {**p, **fp_cls}).fetchall()
+    rows = db.session.execute(sql, {**p, **ug_params, **fp_cls}).fetchall()
 
     status_label = {
         'STATUS_EXECUTADA': 'Executada',
@@ -1001,11 +1051,13 @@ def api_listagem_pd():
 def api_pd_por_natureza():
     """PD total e PD em aberto agrupados por natureza de despesa."""
     ano = request.args.get('ano', datetime.now().year, type=int)
-    mes, acao, natureza, fonte = _get_filtros()
+    mes, acao, natureza, fonte, ug = _get_filtros()
     dt_ini, dt_fim = _build_date_range(ano, mes)
     p = {'dt_ini': dt_ini, 'dt_fim': dt_fim}
 
     f_cls, fp_cls = _build_exec_filters(fonte, natureza, acao, 'class')
+    ug_t, ugp_t = _build_ug_filter(ug, col='p.codigoUG', prefix='ugpnt')
+    ug_a, ugp_a = _build_ug_filter(ug, col='p.codigoUG', prefix='ugpna')
 
     # PD executada por natureza (apenas STATUS_EXECUTADA)
     sql_total = text(f"""
@@ -1013,22 +1065,22 @@ def api_pd_por_natureza():
         FROM pd p
         LEFT JOIN natdespesas n ON n.codigo = p.codNatureza
         WHERE p.statusDocumento='CONTABILIZADO' AND p.statusExecucao='STATUS_EXECUTADA'
-          AND p.dataEmissao >= :dt_ini AND p.dataEmissao < :dt_fim AND p.codigoUG='{_UG}'
+          AND p.dataEmissao >= :dt_ini AND p.dataEmissao < :dt_fim {ug_t}
           {f_cls}
         GROUP BY p.codNatureza, n.titulo HAVING total > 0 ORDER BY total DESC LIMIT 15
     """)
-    rows_total = db.session.execute(sql_total, {**p, **fp_cls}).fetchall()
+    rows_total = db.session.execute(sql_total, {**p, **ugp_t, **fp_cls}).fetchall()
 
     # PD em aberto por natureza
     sql_aberto = text(f"""
         SELECT p.codNatureza, COALESCE(SUM(p.valor),0) as total
         FROM pd p
         WHERE p.statusDocumento='CONTABILIZADO' AND p.statusExecucao='STATUS_DISPONIVEL'
-          AND p.dataEmissao >= :dt_ini AND p.dataEmissao < :dt_fim AND p.codigoUG='{_UG}'
+          AND p.dataEmissao >= :dt_ini AND p.dataEmissao < :dt_fim {ug_a}
           {f_cls}
         GROUP BY p.codNatureza
     """)
-    aberto_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(sql_aberto, {**p, **fp_cls})}
+    aberto_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(sql_aberto, {**p, **ugp_a, **fp_cls})}
 
     codes = []
     labels = []
@@ -1058,7 +1110,7 @@ def api_execucao_por_natureza():
     """Barras por natureza de despesa com filtros."""
     ano = request.args.get('ano', datetime.now().year, type=int)
     metrica = request.args.get('metrica', 'empenho')
-    mes, acao, natureza, fonte = _get_filtros()
+    mes, acao, natureza, fonte, ug = _get_filtros()
     dt_ini, dt_fim = _build_date_range(ano, mes)
 
     # Filtros de fonte e natureza
@@ -1082,13 +1134,21 @@ def api_execucao_por_natureza():
     else:
         f_nat = f_nat_e = f_nat_l = f_nat_p = f_nat_o = ""
 
+    # Filtro UG por alias
+    ug_r, ugp_r = _build_ug_filter(ug, col='r.codigoUG', prefix='ugenr')
+    ug_e, ugp_e = _build_ug_filter(ug, col='e.codigoUG', prefix='ugene')
+    ug_l, ugp_l = _build_ug_filter(ug, col='l.codigoUG', prefix='ugenl')
+    ug_p, ugp_p = _build_ug_filter(ug, col='p.codigoUG', prefix='ugenp')
+    ug_o, ugp_o = _build_ug_filter(ug, col='o.codigoUG', prefix='ugeno')
+    fp.update(ugp_r); fp.update(ugp_e); fp.update(ugp_l); fp.update(ugp_p); fp.update(ugp_o)
+
     # Todas as queries retornam: codNatureza, titulo, total
     tbl_map = {
-        'reserva': ('reserva r', 'r', "CASE WHEN r.tipoAlteracao='ANULACAO' THEN -r.valor ELSE r.valor END", '', f_fonte, f_nat),
-        'liquidacao': ('liquidacao l', 'l', "CASE WHEN l.tipoAlteracao='ANULACAO' THEN -l.valor ELSE l.valor END", f"AND l.codigoUG='{_UG}'", f_fonte_l, f_nat_l),
-        'pd': ('pd p', 'p', 'p.valor', f"AND p.codigoUG='{_UG}'", f_fonte_p, f_nat_p),
-        'ob': ('ob o', 'o', 'o.valor', f"AND o.codigoUG='{_UG}'", f_fonte_o, f_nat_o),
-        'empenho': ('empenho e', 'e', "CASE WHEN e.tipoAlteracaoNE='ANULACAO' THEN -e.valor ELSE e.valor END", f"AND e.codigoUG='{_UG}'", f_fonte_e, f_nat_e),
+        'reserva': ('reserva r', 'r', "CASE WHEN r.tipoAlteracao='ANULACAO' THEN -r.valor ELSE r.valor END", ug_r, f_fonte, f_nat),
+        'liquidacao': ('liquidacao l', 'l', "CASE WHEN l.tipoAlteracao='ANULACAO' THEN -l.valor ELSE l.valor END", ug_l, f_fonte_l, f_nat_l),
+        'pd': ('pd p', 'p', 'p.valor', ug_p, f_fonte_p, f_nat_p),
+        'ob': ('ob o', 'o', 'o.valor', ug_o, f_fonte_o, f_nat_o),
+        'empenho': ('empenho e', 'e', "CASE WHEN e.tipoAlteracaoNE='ANULACAO' THEN -e.valor ELSE e.valor END", ug_e, f_fonte_e, f_nat_e),
     }
     tbl, alias, val_expr, ug_filt, flt_fonte, flt_nat = tbl_map.get(metrica, tbl_map['empenho'])
 
@@ -1118,9 +1178,9 @@ def api_execucao_por_natureza():
 @login_required
 @requires_permission('dashboards')
 def api_tabela_contratos_orcamentario():
-    """Tabela com filtros: mes, acao, natureza, fonte."""
+    """Tabela com filtros: mes, acao, natureza, fonte, ug."""
     ano = request.args.get('ano', datetime.now().year, type=int)
-    mes, acao, natureza, fonte = _get_filtros()
+    mes, acao, natureza, fonte, ug = _get_filtros()
     dt_ini, dt_fim = _build_date_range(ano, mes)
     p = {'dt_ini': dt_ini, 'dt_fim': dt_fim}
 
@@ -1128,61 +1188,69 @@ def api_tabela_contratos_orcamentario():
     f_res, fp_res = _build_exec_filters(fonte, natureza, acao, 'reserva')
     f_cls, fp_cls = _build_exec_filters(fonte, natureza, acao, 'class')
 
+    ug_e, ugp_e = _build_ug_filter(ug, prefix='ugtbe')
+    ug_l, ugp_l = _build_ug_filter(ug, prefix='ugtbl')
+    ug_r, ugp_r = _build_ug_filter(ug, prefix='ugtbr')
+    ug_pd, ugp_pd = _build_ug_filter(ug, prefix='ugtbpd')
+    ug_pda, ugp_pda = _build_ug_filter(ug, prefix='ugtbpda')
+    ug_pdad, ugp_pdad = _build_ug_filter(ug, prefix='ugtbpdad')
+    ug_ob, ugp_ob = _build_ug_filter(ug, prefix='ugtbob')
+
     emp_sql = text(f"""
         SELECT codContrato, SUM(CASE WHEN tipoAlteracaoNE='ANULACAO' THEN -valor ELSE valor END) as total
         FROM empenho WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_e}
           AND codContrato IS NOT NULL {f_emp}
         GROUP BY codContrato
     """)
-    emp_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(emp_sql, {**p, **fp_emp})}
+    emp_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(emp_sql, {**p, **ugp_e, **fp_emp})}
 
     liq_sql = text(f"""
         SELECT codContrato, SUM(CASE WHEN tipoAlteracao='ANULACAO' THEN -valor ELSE valor END) as total
         FROM liquidacao WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_l}
           AND codContrato IS NOT NULL {f_cls}
         GROUP BY codContrato
     """)
-    liq_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(liq_sql, {**p, **fp_cls})}
+    liq_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(liq_sql, {**p, **ugp_l, **fp_cls})}
 
     res_sql = text(f"""
         SELECT codContrato, SUM(CASE WHEN tipoAlteracao='ANULACAO' THEN -valor ELSE valor END) as total
         FROM reserva WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_r}
           AND codContrato IS NOT NULL {f_res}
         GROUP BY codContrato
     """)
-    res_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(res_sql, {**p, **fp_res})}
+    res_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(res_sql, {**p, **ugp_r, **fp_res})}
 
     pd_sql = text(f"""
         SELECT codContrato, SUM(valor) as total
         FROM pd WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_pd}
           AND codContrato IS NOT NULL {f_cls}
         GROUP BY codContrato
     """)
-    pd_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(pd_sql, {**p, **fp_cls})}
+    pd_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(pd_sql, {**p, **ugp_pd, **fp_cls})}
 
     pd_aberto_sql = text(f"""
         SELECT codContrato, SUM(valor) as total
         FROM pd WHERE statusDocumento='CONTABILIZADO' AND statusExecucao='STATUS_DISPONIVEL'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_pda}
           AND codContrato IS NOT NULL {f_cls}
         GROUP BY codContrato
     """)
-    pd_aberto_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(pd_aberto_sql, {**p, **fp_cls})}
+    pd_aberto_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(pd_aberto_sql, {**p, **ugp_pda, **fp_cls})}
 
     # Detalhe PDs em aberto por contrato (codigo, competencia, valor)
     pd_aberto_detail_sql = text(f"""
         SELECT codContrato, codigo, competencia, valor
         FROM pd WHERE statusDocumento='CONTABILIZADO' AND statusExecucao='STATUS_DISPONIVEL'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_pdad}
           AND codContrato IS NOT NULL {f_cls}
         ORDER BY codContrato, valor DESC
     """)
     pd_aberto_detail = {}  # codContrato -> [{codigo, competencia, valor}]
-    for r in db.session.execute(pd_aberto_detail_sql, {**p, **fp_cls}):
+    for r in db.session.execute(pd_aberto_detail_sql, {**p, **ugp_pdad, **fp_cls}):
         key = str(r[0])
         if key not in pd_aberto_detail:
             pd_aberto_detail[key] = []
@@ -1195,11 +1263,11 @@ def api_tabela_contratos_orcamentario():
     ob_sql = text(f"""
         SELECT codContrato, SUM(valor) as total
         FROM ob WHERE statusDocumento='CONTABILIZADO'
-          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim AND codigoUG='{_UG}'
+          AND dataEmissao >= :dt_ini AND dataEmissao < :dt_fim {ug_ob}
           AND codContrato IS NOT NULL {f_cls}
         GROUP BY codContrato
     """)
-    ob_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(ob_sql, {**p, **fp_cls})}
+    ob_map = {str(r[0]): float(r[1] or 0) for r in db.session.execute(ob_sql, {**p, **ugp_ob, **fp_cls})}
 
     # Union de todos os códigos de contrato
     all_cods = set()

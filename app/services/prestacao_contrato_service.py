@@ -948,6 +948,15 @@ class PrestacaoContratoService:
         return TipoExecucao.query.order_by(TipoExecucao.descricao).all()
 
     @staticmethod
+    def listar_ugs():
+        """Lista as UGs do módulo (210101 e 210102) com codigo e titulo da tabela `ug`."""
+        from sqlalchemy import text
+        rows = db.session.execute(
+            text("SELECT codigo, titulo FROM ug WHERE codigo IN ('210101', '210102') ORDER BY codigo")
+        ).fetchall()
+        return [{'codigo': str(r[0]), 'titulo': r[1] or ''} for r in rows]
+
+    @staticmethod
     def salvar_tipo_execucao(codigo_contrato, tipo_execucao_id):
         """Salva o tipo de execução do contrato."""
         from app.models.contrato import Contrato

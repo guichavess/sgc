@@ -79,6 +79,7 @@ export interface FiltrosOrcamentario {
   acoes: FiltroOption[];
   naturezas: FiltroOption[];
   fontes: FiltroOption[];
+  ugs?: FiltroOption[];
 }
 
 export interface OrcamentarioKpis {
@@ -86,6 +87,7 @@ export interface OrcamentarioKpis {
   empenhado: number;
   liquidado: number;
   pd: number;
+  pd_aberto: number;
   pago: number;
   dotacao: number;
 }

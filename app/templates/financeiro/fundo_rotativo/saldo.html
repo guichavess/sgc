@@ -40,17 +40,6 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-6 col-lg-2">
-                <label class="form-label small fw-semibold text-muted mb-1">Natureza</label>
-                <select class="form-select" name="natureza">
-                    <option value="">Todas</option>
-                    {% for n in naturezas %}
-                    <option value="{{ n.codigo }}" {% if n.codigo|string == natureza_filtro|string %}selected{% endif %}>
-                        {{ n.label }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
             <div class="col-md-4 col-lg-1">
                 <label class="form-label small fw-semibold text-muted mb-1">Ano</label>
                 <select class="form-select" name="ano">
@@ -88,7 +77,10 @@
     <div class="card-header bg-white border-bottom py-3">
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold">Saldos Registrados</h5>
-            <span class="badge bg-secondary">{{ pagination.total }} registro{{ 's' if pagination.total != 1 else '' }}</span>
+            <div>
+                <span class="badge bg-secondary">{{ pagination.total }} registro{{ 's' if pagination.total != 1 else '' }}</span>
+                <span class="badge bg-success ms-2">Total: R$ {{ "{:,.2f}".format(soma_total or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</span>
+            </div>
         </div>
     </div>
     <div class="card-body p-0">
@@ -97,9 +89,8 @@
                 <thead>
                     <tr>
                         <th class="ps-4">Data</th>
-                        <th class="text-end">Valor (R$)</th>
+                        <th class="text-end">Valor</th>
                         <th>Fonte</th>
-                        <th>Natureza</th>
                         <th>Exercício</th>
                         {% if current_user.is_admin or current_user.tem_permissao('fundo_rotativo', 'criar') %}
                         <th class="text-center">Ações</th>
@@ -110,17 +101,10 @@
                     {% for s in saldos %}
                     <tr>
                         <td class="ps-4">{{ s.data.strftime('%d/%m/%Y %H:%M') }}</td>
-                        <td class="text-end fw-semibold">{{ '%.2f'|format(s.valor)|replace('.', ',') }}</td>
+                        <td class="text-end fw-semibold">R$ {{ "{:,.2f}".format(s.valor|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
                         <td>
                             <code>{{ s.fonte_codigo }}</code>
                             {% if s.fonte %}<span class="text-muted ms-1">- {{ s.fonte.descricao }}</span>{% endif %}
-                        </td>
-                        <td>
-                            {% if s.natureza %}
-                                <code>{{ s.natureza }}</code>
-                            {% else %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
                         </td>
                         <td>
                             <span class="badge bg-light text-dark border">
@@ -146,7 +130,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6" class="text-center py-5 text-muted">
+                        <td colspan="5" class="text-center py-5 text-muted">
                             Nenhum saldo registrado.
                         </td>
                     </tr>
@@ -165,21 +149,21 @@
             <nav aria-label="Navegação">
                 <ul class="pagination pagination-sm mb-0">
                     <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.prev_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro, natureza=natureza_filtro) if pagination.has_prev else '#' }}">
+                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.prev_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro) if pagination.has_prev else '#' }}">
                             <i class="bi bi-chevron-left"></i>
                         </a>
                     </li>
                     {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                         {% if page_num %}
                             <li class="page-item {{ 'active' if page_num == pagination.page }}">
-                                <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=page_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro, natureza=natureza_filtro) }}">{{ page_num }}</a>
+                                <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=page_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro) }}">{{ page_num }}</a>
                             </li>
                         {% else %}
                             <li class="page-item disabled"><span class="page-link">...</span></li>
                         {% endif %}
                     {% endfor %}
                     <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.next_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro, natureza=natureza_filtro) if pagination.has_next else '#' }}">
+                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.next_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro) if pagination.has_next else '#' }}">
                             <i class="bi bi-chevron-right"></i>
                         </a>
                     </li>
@@ -200,7 +184,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    {% with prefix='novo', saldo=None, fontes=fontes, exercicios=exercicios, naturezas=naturezas %}
+                    {% with prefix='novo', saldo=None, fontes=fontes, exercicios=exercicios %}
                         {% include 'financeiro/fundo_rotativo/_form_fields.html' %}
                     {% endwith %}
                 </div>
@@ -226,7 +210,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    {% with prefix='edit' ~ s.id, saldo=s, fontes=fontes, exercicios=exercicios, naturezas=naturezas %}
+                    {% with prefix='edit' ~ s.id, saldo=s, fontes=fontes, exercicios=exercicios %}
                         {% include 'financeiro/fundo_rotativo/_form_fields.html' %}
                     {% endwith %}
                 </div>
@@ -253,7 +237,7 @@
                     <p>Confirma a exclusão do registro abaixo?</p>
                     <ul class="list-unstyled small text-muted">
                         <li><strong>Data:</strong> {{ s.data.strftime('%d/%m/%Y %H:%M') }}</li>
-                        <li><strong>Valor:</strong> R$ {{ '%.2f'|format(s.valor)|replace('.', ',') }}</li>
+                        <li><strong>Valor:</strong> R$ {{ "{:,.2f}".format(s.valor|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</li>
                         <li><strong>Fonte:</strong> {{ s.fonte_label }}</li>
                         <li><strong>Exercício:</strong> {{ s.exercicio_label }}</li>
                     </ul>
@@ -269,4 +253,14 @@
     </div>
 </div>
 {% endfor %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.SGC && SGC.maskMoneyAll) {
+        SGC.maskMoneyAll('.mask-money');
+    }
+});
+</script>
 {% endblock %}

@@ -29,8 +29,10 @@
     }
     .fr-kpi-saldo { border-left-color: #343990; }
     .fr-kpi-reservado { border-left-color: #2563eb; }
+    .fr-kpi-disponivel { border-left-color: #0d9488; }
     .fr-kpi-liquidado { border-left-color: #16a34a; }
     .fr-kpi-pago { border-left-color: #dc2626; }
+    .fr-kpi-value.negativo { color: #dc2626; }
     .fr-table-card {
         border: 0;
         border-radius: 8px;
@@ -169,7 +171,7 @@
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-12 col-md-6 col-xl-3">
+    <div class="col-12 col-md-6 col-xl">
         <div class="fr-kpi-card fr-kpi-saldo">
             <div class="card-body">
                 <div class="fr-kpi-label">Saldo Total</div>
@@ -177,7 +179,7 @@
             </div>
         </div>
     </div>
-    <div class="col-12 col-md-6 col-xl-3">
+    <div class="col-12 col-md-6 col-xl">
         <div class="fr-kpi-card fr-kpi-reservado">
             <div class="card-body">
                 <div class="fr-kpi-label">Reservado</div>
@@ -185,7 +187,15 @@
             </div>
         </div>
     </div>
-    <div class="col-12 col-md-6 col-xl-3">
+    <div class="col-12 col-md-6 col-xl">
+        <div class="fr-kpi-card fr-kpi-disponivel">
+            <div class="card-body">
+                <div class="fr-kpi-label">Saldo Disponível</div>
+                <div class="fr-kpi-value" data-money="{{ kpis.disponivel }}" data-money-signed="true"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6 col-xl">
         <div class="fr-kpi-card fr-kpi-liquidado">
             <div class="card-body">
                 <div class="fr-kpi-label">Liquidado</div>
@@ -193,7 +203,7 @@
             </div>
         </div>
     </div>
-    <div class="col-12 col-md-6 col-xl-3">
+    <div class="col-12 col-md-6 col-xl">
         <div class="fr-kpi-card fr-kpi-pago">
             <div class="card-body">
                 <div class="fr-kpi-label">Pago</div>
@@ -503,7 +513,11 @@ table{border-collapse:collapse}th{background-color:#343990;color:#fff;font-weigh
 
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-money]').forEach((el) => {
-        el.textContent = frFormatBRL(el.dataset.money || 0);
+        const raw = Number(el.dataset.money || 0);
+        el.textContent = frFormatBRL(raw);
+        if (el.dataset.moneySigned === 'true' && raw < 0) {
+            el.classList.add('negativo');
+        }
     });
 
     document.getElementById('frBuscaContrato').addEventListener('input', (event) => {

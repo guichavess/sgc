@@ -1,12 +1,11 @@
 {# Campos compartilhados pelos modais de Cadastrar/Editar Saldo do Fundo Rotativo.
    Variáveis esperadas: prefix (string única para ids), saldo (FundoRotativoSaldo ou None),
-   fontes (list[ClassFonte]), exercicios (list[(id, titulo)]),
-   naturezas (list[str] — códigos distintos da LOA). #}
+   fontes (list[ClassFonte]), exercicios (list[(id, titulo)]). #}
 <div class="mb-3">
     <label for="valor_{{ prefix }}" class="form-label fw-semibold">Valor (R$) <span class="text-danger">*</span></label>
-    <input type="number" step="0.01" min="0.01" class="form-control"
+    <input type="text" inputmode="decimal" class="form-control mask-money"
            id="valor_{{ prefix }}" name="valor" required
-           value="{{ saldo.valor if saldo else '' }}"
+           value="{{ ('%.2f'|format(saldo.valor)).replace('.', ',') if saldo else '' }}"
            placeholder="0,00">
 </div>
 <div class="mb-3">
@@ -23,18 +22,6 @@
         <option value="{{ f.codigo }}"
                 {% if saldo and saldo.fonte_codigo == f.codigo %}selected{% endif %}>
             {{ f.codigo }} - {{ f.descricao }}
-        </option>
-        {% endfor %}
-    </select>
-</div>
-<div class="mb-3">
-    <label for="natureza_{{ prefix }}" class="form-label fw-semibold">Natureza</label>
-    <select class="form-select" id="natureza_{{ prefix }}" name="natureza">
-        <option value="">-- (sem natureza)</option>
-        {% for n in naturezas %}
-        <option value="{{ n.codigo }}"
-                {% if saldo and saldo.natureza|string == n.codigo|string %}selected{% endif %}>
-            {{ n.label }}
         </option>
         {% endfor %}
     </select>

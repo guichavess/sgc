@@ -50,7 +50,7 @@ def fundo_rotativo_saldo_lista():
     ano = request.args.get('ano', '').strip()
     natureza = request.args.get('natureza', '').strip()
 
-    pagination = listar_saldos(
+    pagination, soma_total = listar_saldos(
         page=page,
         busca=busca or None,
         fonte_codigo=fonte_codigo or None,
@@ -72,6 +72,7 @@ def fundo_rotativo_saldo_lista():
         'financeiro/fundo_rotativo/saldo.html',
         saldos=pagination.items,
         pagination=pagination,
+        soma_total=soma_total,
         busca=busca,
         fonte_codigo_filtro=fonte_codigo,
         id_exercicio_filtro=id_exercicio,
@@ -133,7 +134,6 @@ def fundo_rotativo_saldo_cadastrar():
     data_str = request.form.get('data', '').strip()
     fonte_codigo = request.form.get('fonte_codigo', '').strip()
     id_exercicio = request.form.get('id_exercicio', '').strip()
-    natureza = request.form.get('natureza', '').strip()
 
     data = _parse_data(data_str)
 
@@ -144,7 +144,6 @@ def fundo_rotativo_saldo_cadastrar():
             fonte_codigo=fonte_codigo,
             id_exercicio=id_exercicio,
             usuario_id=current_user.id,
-            natureza=natureza or None,
         )
         flash('Saldo cadastrado com sucesso!', 'success')
     except ValueError as e:
@@ -168,7 +167,6 @@ def fundo_rotativo_saldo_editar(saldo_id):
     data_str = request.form.get('data', '').strip()
     fonte_codigo = request.form.get('fonte_codigo', '').strip()
     id_exercicio = request.form.get('id_exercicio', '').strip()
-    natureza = request.form.get('natureza', '').strip()
 
     data = _parse_data(data_str)
 
@@ -179,7 +177,6 @@ def fundo_rotativo_saldo_editar(saldo_id):
             data=data,
             fonte_codigo=fonte_codigo,
             id_exercicio=id_exercicio,
-            natureza=natureza or None,
         )
         flash('Saldo atualizado com sucesso!', 'success')
     except ValueError as e:

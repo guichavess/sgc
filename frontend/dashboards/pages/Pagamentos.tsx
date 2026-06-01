@@ -16,6 +16,7 @@ import type {
   TabelaContratosResponse,
   TabelaContratoRow,
   FiltrosOrcamentario,
+  RechartsDataPoint,
 } from '../types/api';
 
 /* =====================================================================
@@ -294,7 +295,7 @@ interface CustomTooltipProps {
   active?: boolean;
   payload?: Array<{ name: string; value: number; dataKey: string }>;
   label?: string;
-  data?: Record<string, number>[];
+  data?: RechartsDataPoint[];
   formatValue: (v: number) => string;
 }
 
@@ -342,7 +343,7 @@ export default function Pagamentos() {
   const { format } = useCurrency();
 
   // Estados
-  const [sortKey, setSortKey] = useState<SortKey>('pd');
+  const [sortKey, setSortKey] = useState<SortKey>('valor');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);
 
@@ -351,17 +352,19 @@ export default function Pagamentos() {
   const [acao, setAcao] = useState('');
   const [nat, setNat] = useState('');
   const [fonte, setFonte] = useState('');
+  const [ug, setUg] = useState('');
   const [busca, setBusca] = useState('');
   const [statusExec, setStatusExec] = useState('');
   const [appliedFilters, setAppliedFilters] = useState<Record<string, string>>({});
 
-  // Opções de filtro — cascata Ação → Fonte → Natureza
+  // Opções de filtro — cascata Ação → Fonte → Natureza (também respeitam UG)
   const filtrosParams = useMemo(() => {
     const p: Record<string, string | number> = { ano: year };
     if (acao) p.acao = acao;
     if (fonte) p.fonte = fonte;
+    if (ug) p.ug = ug;
     return p;
-  }, [year, acao, fonte]);
+  }, [year, acao, fonte, ug]);
   const filtros = useApi<FiltrosOrcamentario>('/dashboards/api/filtros-orcamentario', filtrosParams);
 
   // Montar params com filtros aplicados
@@ -371,12 +374,13 @@ export default function Pagamentos() {
     if (appliedFilters.acao) p.acao = appliedFilters.acao;
     if (appliedFilters.natureza) p.natureza = appliedFilters.natureza;
     if (appliedFilters.fonte) p.fonte = appliedFilters.fonte;
+    if (appliedFilters.ug) p.ug = appliedFilters.ug;
     if (appliedFilters.statusExec) p.status_execucao = appliedFilters.statusExec;
     return p;
   }, [year, appliedFilters]);
 
-  const handleFiltrar = () => { setAppliedFilters({ mes, acao, natureza: nat, fonte, statusExec }); setPage(1); };
-  const handleLimpar = () => { setMes(''); setAcao(''); setNat(''); setFonte(''); setBusca(''); setStatusExec(''); setAppliedFilters({}); setPage(1); };
+  const handleFiltrar = () => { setAppliedFilters({ mes, acao, natureza: nat, fonte, ug, statusExec }); setPage(1); };
+  const handleLimpar = () => { setMes(''); setAcao(''); setNat(''); setFonte(''); setUg(''); setBusca(''); setStatusExec(''); setAppliedFilters({}); setPage(1); };
 
   // API calls
   const kpis = useApi<OrcamentarioKpis>('/dashboards/api/kpis-orcamentario', apiParams);
@@ -449,7 +453,18 @@ export default function Pagamentos() {
           <div className="row g-3 align-items-end">
             <div className="col-auto" style={{ minWidth: 100 }}>
               <label className="form-label mb-1" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6c757d' }}>Ano</label>
-              <YearSelector value={year} onChange={(y) => { setYear(y); setAppliedFilters({}); setMes(''); setAcao(''); setNat(''); setFonte(''); }} />
+              <YearSelector value={year} onChange={(y) => { setYear(y); setAppliedFilters({}); setMes(''); setAcao(''); setNat(''); setFonte(''); setUg(''); }} />
+            </div>
+            <div className="col-auto" style={{ minWidth: 220 }}>
+              <label className="form-label mb-1" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6c757d' }}>Unidade Gestora</label>
+              <select className="form-select form-select-sm" value={ug} onChange={(e) => setUg(e.target.value)}>
+                <option value="">Todas</option>
+                {(filtros.data?.ugs || []).map((u) => (
+                  <option key={String(u.codigo)} value={String(u.codigo)}>
+                    {u.codigo} - {u.descricao}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="col" style={{ minWidth: 150 }}>
               <label className="form-label mb-1" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6c757d' }}>Mês</label>

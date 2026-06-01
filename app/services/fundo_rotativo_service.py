@@ -32,8 +32,11 @@ def _parse_valor(valor):
         return valor
     if valor is None or valor == '':
         raise ValueError('Valor é obrigatório.')
+    s = str(valor).strip().replace('R$', '').replace(' ', '')
+    if ',' in s:
+        s = s.replace('.', '').replace(',', '.')
     try:
-        return Decimal(str(valor).replace(',', '.'))
+        return Decimal(s)
     except (InvalidOperation, ValueError):
         raise ValueError('Valor inválido.')
 
@@ -57,7 +60,7 @@ def _validar(valor, data, fonte_codigo, id_exercicio):
     return valor_decimal
 
 
-def criar_saldo(valor, data, fonte_codigo, id_exercicio, usuario_id, natureza=None):
+def criar_saldo(valor, data, fonte_codigo, id_exercicio, usuario_id):
     """Cria um novo registro de saldo do Fundo Rotativo."""
     valor_decimal = _validar(valor, data, fonte_codigo, id_exercicio)
 
@@ -65,7 +68,6 @@ def criar_saldo(valor, data, fonte_codigo, id_exercicio, usuario_id, natureza=No
         valor=valor_decimal,
         data=data,
         fonte_codigo=fonte_codigo,
-        natureza=(natureza or None),
         id_exercicio=id_exercicio,
         criado_por=usuario_id,
     )
@@ -73,7 +75,7 @@ def criar_saldo(valor, data, fonte_codigo, id_exercicio, usuario_id, natureza=No
     db.session.commit()
     current_app.logger.info(
         f'[FUNDO_ROTATIVO] Saldo criado id={saldo.id} valor={valor_decimal} '
-        f'fonte={fonte_codigo} natureza={natureza} exerc={id_exercicio}'
+        f'fonte={fonte_codigo} exerc={id_exercicio}'
     )
     return saldo
 
@@ -114,14 +116,19 @@ def listar_saldos(
             )
         )
 
+    soma_total = _as_float(
+        query.with_entities(func.coalesce(func.sum(FundoRotativoSaldo.valor), 0)).scalar()
+    )
+
     query = query.order_by(
         FundoRotativoSaldo.data.desc(),
         FundoRotativoSaldo.id.desc(),
     )
-    return query.paginate(page=page, per_page=per_page, error_out=False)
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    return pagination, soma_total
 
 
-def atualizar_saldo(saldo_id, valor, data, fonte_codigo, id_exercicio, natureza=None):
+def atualizar_saldo(saldo_id, valor, data, fonte_codigo, id_exercicio):
     """Atualiza um saldo existente."""
     saldo = FundoRotativoSaldo.query.get(saldo_id)
     if not saldo:
@@ -132,12 +139,11 @@ def atualizar_saldo(saldo_id, valor, data, fonte_codigo, id_exercicio, natureza=
     saldo.valor = valor_decimal
     saldo.data = data
     saldo.fonte_codigo = fonte_codigo
-    saldo.natureza = (natureza or None)
     saldo.id_exercicio = id_exercicio
     db.session.commit()
     current_app.logger.info(
         f'[FUNDO_ROTATIVO] Saldo atualizado id={saldo.id} valor={valor_decimal} '
-        f'fonte={fonte_codigo} natureza={natureza} exerc={id_exercicio}'
+        f'fonte={fonte_codigo} exerc={id_exercicio}'
     )
     return saldo
 
@@ -228,12 +234,6 @@ def _normalizar_filtros_dashboard(ano=None, fonte_codigo=None, natureza=None):
     }
 
 
-def _id_exercicio_por_ano(ano):
-    if not ano:
-        return None
-    return '02' if ano < datetime.now().year else '01'
-
-
 def _aplicar_filtros_execucao(query, model, filtros):
     if not filtros:
         return query
@@ -256,10 +256,8 @@ def _saldo_total_dashboard(filtros):
         query = query.filter(FundoRotativoSaldo.fonte_codigo == filtros['fonte_codigo'])
     if filtros.get('natureza'):
         query = query.filter(FundoRotativoSaldo.natureza == filtros['natureza'])
-
-    id_exercicio = _id_exercicio_por_ano(filtros.get('ano'))
-    if id_exercicio:
-        query = query.filter(FundoRotativoSaldo.id_exercicio == id_exercicio)
+    if filtros.get('ano'):
+        query = query.filter(extract('year', FundoRotativoSaldo.data) == filtros['ano'])
 
     return _as_float(query.scalar())
 
@@ -269,11 +267,13 @@ def listar_anos_dashboard_disponiveis():
     ano_atual = datetime.now().year
     anos = {ano_atual}
 
-    possui_exercicio_anterior = db.session.query(
-        db.exists().where(FundoRotativoSaldo.id_exercicio == '02')
-    ).scalar()
-    if possui_exercicio_anterior:
-        anos.add(ano_atual - 1)
+    rows = (
+        db.session.query(extract('year', FundoRotativoSaldo.data))
+        .filter(FundoRotativoSaldo.data.isnot(None))
+        .distinct()
+        .all()
+    )
+    anos.update(int(r[0]) for r in rows if r[0] is not None)
 
     for model in (Reserva, Empenho, Liquidacao, PD, OB):
         rows = (
@@ -450,13 +450,13 @@ def obter_dashboard_fundo_rotativo(ano=None, fonte_codigo=None, natureza=None):
 
     rows.sort(key=lambda row: row['empenho'], reverse=True)
 
+    reservado = _soma_ug(Reserva, sinalizado_por='tipoAlteracao', filtros=filtros)
+
     return {
         'kpis': {
             'saldo_total': round(saldo_total, 2),
-            'reservado': round(
-                _soma_ug(Reserva, sinalizado_por='tipoAlteracao', filtros=filtros),
-                2,
-            ),
+            'reservado': round(reservado, 2),
+            'disponivel': round(saldo_total - reservado, 2),
             'liquidado': round(
                 _soma_ug(Liquidacao, sinalizado_por='tipoAlteracao', filtros=filtros),
                 2,
