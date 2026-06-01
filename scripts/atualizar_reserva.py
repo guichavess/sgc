@@ -83,7 +83,9 @@ TOKEN = get_token()
 # =========================
 
 tabela_destino = "reserva"
-YEAR = datetime.now().year
+# Inclui ano anterior para capturar reforços/anulações tardios e preencher
+# lacunas de NRs emitidas em anos anteriores mas não sincronizadas.
+YEARS = [datetime.now().year - 1, datetime.now().year]
 
 # Escolha do modo:
 # - "single"  -> usa só a UG definida em UG_SINGLE
@@ -409,108 +411,112 @@ def main_reserva():
     is_all_mode = mode == "all"
 
     print("=" * 70)
-    print("Iniciando atualização de dados de RESERVA - Ano {}".format(YEAR))
+    print("Iniciando atualização de dados de RESERVA - Anos {}".format(YEARS))
     if is_all_mode:
         print("UGs: {} UGs (modo all)".format(len(ugs)))
     else:
         print("UGs: {} (modo {})".format(", ".join(ugs), mode))
     print("=" * 70)
 
-    print("Buscando dados da API...")
-
     session = make_session()
 
-    dfs = []
-    total_docs = 0
-
-    total_api_time_sum = 0.0
-    per_ug_summary = []
-    status_counts = {}
-
-    max_workers = min(MAX_WORKERS_CAP, max(1, len(ugs)))
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(fetch_data, session, ug, TOKEN, YEAR) for ug in ugs]
-
-        for future in as_completed(futures):
-            ug, df, qtd, elapsed, status = future.result()
-
-            total_docs += qtd
-            total_api_time_sum += elapsed
-
-            status_counts[status] = status_counts.get(status, 0) + 1
-            per_ug_summary.append((ug, qtd, elapsed))
-
-            if df is not None and not df.empty:
-                dfs.append(df)
-
-    if not dfs:
-        print("Nenhum dado foi retornado da API.")
-        print("Resumo de status/erros da API: {}".format(status_counts))
-        print("Exemplo de UGs usadas: {}".format(ugs[:10]))
-        return
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        final_df = pd.concat(dfs, ignore_index=True)
-
-    if DEBUG_LOG:
-        log_diagnostico_reserva(final_df, max_examples=DEBUG_MAX_EXAMPLES)
-
-    for col in INT_COLUMNS:
-        if col in final_df.columns:
-            final_df[col] = pd.to_numeric(final_df[col], errors="coerce").fillna(0).astype("int64")
-
-    for col in DATE_COLUMNS:
-        if col in final_df.columns:
-            final_df[col] = pd.to_datetime(final_df[col], errors="coerce")
-
-    # Filtro defensivo: garante que só registros do ano-alvo sejam gravados.
-    # Protege contra a API retornar NRs com dataEmissao fora de YEAR (REFORCO/ANULACAO
-    # de anos anteriores, por exemplo). Anos anteriores ficam intactos no banco.
-    if "dataEmissao" in final_df.columns:
-        n_total = len(final_df)
-        final_df = final_df[final_df["dataEmissao"].dt.year == YEAR].copy()
-        n_fora = n_total - len(final_df)
-        if n_fora > 0:
-            print(f"[FILTRO ANO] {n_fora} linha(s) com dataEmissao fora de {YEAR} ignorada(s).")
-
-    try:
-        with ENGINE.begin() as conn:
-            upsert_dataframe(
-                conn,
-                final_df,
-                tabela_destino,
-                COLUMNS,
-                key_columns=("codigoUG", "codigo"),
-            )
-
-        elapsed_total = time.time() - t0
-
+    for year in YEARS:
+        print("\n{}".format("=" * 70))
+        print("PROCESSANDO ANO {}".format(year))
         print("=" * 70)
-        print("RESUMO DA OPERAÇÃO")
-        print("=" * 70)
+        print("Buscando dados da API...")
 
-        if is_all_mode:
-            per_ug_summary.sort(key=lambda x: x[0])
-            print("UG | Quantidade de NR | Tempo de busca (s)")
-            for ug, qtd, elapsed in per_ug_summary:
-                print("{} | {} | {:.2f}".format(ug, qtd, elapsed))
+        dfs = []
+        total_docs = 0
+        total_api_time_sum = 0.0
+        per_ug_summary = []
+        status_counts = {}
 
-            print("-" * 70)
-            print("UGs buscadas: {}".format(len(per_ug_summary)))
-            print("Total de NR: {}".format(total_docs))
-            print("Tempo total do procedimento: {:.2f} min".format(elapsed_total / 60.0))
-        else:
-            print("Total de documentos processados: {}".format(total_docs))
-            print("Tempo total do procedimento: {:.2f}s".format(elapsed_total))
+        max_workers = min(MAX_WORKERS_CAP, max(1, len(ugs)))
 
-        print("Registros inseridos no banco: {}".format(len(final_df)))
-        print("Tabela '{}' atualizada com sucesso!".format(tabela_destino))
-        print("=" * 70)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(fetch_data, session, ug, TOKEN, year) for ug in ugs]
 
-    except Exception as e:
-        print("Erro ao inserir no banco (rollback automático): {}".format(e))
+            for future in as_completed(futures):
+                ug, df, qtd, elapsed, status = future.result()
+
+                total_docs += qtd
+                total_api_time_sum += elapsed
+
+                status_counts[status] = status_counts.get(status, 0) + 1
+                per_ug_summary.append((ug, qtd, elapsed))
+
+                if df is not None and not df.empty:
+                    dfs.append(df)
+
+        if not dfs:
+            print("Nenhum dado foi retornado da API para {}.".format(year))
+            print("Resumo de status/erros da API: {}".format(status_counts))
+            print("Exemplo de UGs usadas: {}".format(ugs[:10]))
+            continue
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            final_df = pd.concat(dfs, ignore_index=True)
+
+        if DEBUG_LOG:
+            log_diagnostico_reserva(final_df, max_examples=DEBUG_MAX_EXAMPLES)
+
+        for col in INT_COLUMNS:
+            if col in final_df.columns:
+                final_df[col] = pd.to_numeric(final_df[col], errors="coerce").fillna(0).astype("int64")
+
+        for col in DATE_COLUMNS:
+            if col in final_df.columns:
+                final_df[col] = pd.to_datetime(final_df[col], errors="coerce")
+
+        # Filtro defensivo: garante que só registros do ano-alvo sejam gravados.
+        # Protege contra a API retornar NRs com dataEmissao fora do ano processado
+        # (reforços/anulações de outros anos). Anos não processados ficam intactos.
+        if "dataEmissao" in final_df.columns:
+            n_total = len(final_df)
+            final_df = final_df[final_df["dataEmissao"].dt.year == year].copy()
+            n_fora = n_total - len(final_df)
+            if n_fora > 0:
+                print("[FILTRO ANO] {} linha(s) com dataEmissao fora de {} ignorada(s).".format(n_fora, year))
+
+        try:
+            with ENGINE.begin() as conn:
+                upsert_dataframe(
+                    conn,
+                    final_df,
+                    tabela_destino,
+                    COLUMNS,
+                    key_columns=("codigoUG", "codigo"),
+                )
+
+            print("=" * 70)
+            print("RESUMO DO ANO {}".format(year))
+            print("=" * 70)
+
+            if is_all_mode:
+                per_ug_summary.sort(key=lambda x: x[0])
+                print("UG | Quantidade de NR | Tempo de busca (s)")
+                for ug, qtd, elapsed in per_ug_summary:
+                    print("{} | {} | {:.2f}".format(ug, qtd, elapsed))
+
+                print("-" * 70)
+                print("UGs buscadas: {}".format(len(per_ug_summary)))
+                print("Total de NR: {}".format(total_docs))
+            else:
+                print("Total de documentos processados: {}".format(total_docs))
+
+            print("Registros inseridos no banco: {}".format(len(final_df)))
+            print("Tabela '{}' atualizada com sucesso!".format(tabela_destino))
+            print("=" * 70)
+
+        except Exception as e:
+            print("Erro ao inserir no banco ano {} (rollback automático): {}".format(year, e))
+
+    elapsed_total = time.time() - t0
+    print("\n{}".format("=" * 70))
+    print("FINALIZADO! Tempo total: {:.2f}s ({:.1f} min)".format(elapsed_total, elapsed_total / 60.0))
+    print("=" * 70)
 
 
 if __name__ == "__main__":

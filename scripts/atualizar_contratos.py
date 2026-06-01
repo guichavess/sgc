@@ -296,7 +296,6 @@ def ensure_tables(conn):
 # =============================================================================
 
 def fetch_cod_contratos_from_empenho(conn, ug: str):
-    # Busca códigos de contratos presentes na tabela EMPENHO (dependência lógica)
     q = text("""
         SELECT DISTINCT l.codContrato AS codContrato
         FROM empenho l
@@ -304,6 +303,19 @@ def fetch_cod_contratos_from_empenho(conn, ug: str):
     """)
     rows = conn.execute(q, {"ug": ug}).fetchall()
     return [str(r[0]) for r in rows if r and r[0] not in (None, 0, "0", 0.0)]
+
+
+def fetch_cod_contratos_from_table(conn, ug: str, table_name: str):
+    q = text(f"""
+        SELECT DISTINCT codContrato
+        FROM `{table_name}`
+        WHERE codigoUG = :ug
+          AND codContrato IS NOT NULL
+          AND codContrato <> ''
+          AND codContrato <> '0'
+    """)
+    rows = conn.execute(q, {"ug": ug}).fetchall()
+    return [str(r[0]).strip() for r in rows if r and r[0] not in (None, 0, "0", 0.0, "")]
 
 def load_existing_hashes(conn, cods):
     if not cods: return {}
@@ -408,6 +420,11 @@ def sync_aditivos_changed(conn, codContrato, aditivos):
     for col in ADITIVO_DATE_COLS:
         if col in df.columns: df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
 
+    # API pode retornar o mesmo codAditivo duplicado; manter apenas a primeira ocorrência
+    df = df.drop_duplicates(subset=["codigo_contrato", "codAditivo"], keep="first")
+
+    if df.empty: return 0
+
     placeholders = ", ".join([f":{c}" for c in ADITIVO_COLS])
     sql = text(f"""
         INSERT INTO {TBL_ADITIVOS} ({", ".join(ADITIVO_COLS)}) VALUES ({placeholders})
@@ -432,16 +449,22 @@ def main():
     with ENGINE.begin() as conn:
         ensure_tables(conn)
 
-    # 1. Busca quais contratos cada UG tem (olhando na tabela Empenho)
+    # 1. Busca quais contratos cada UG tem (empenho + liquidacao + reserva)
     # Isso é muito mais rápido que buscar "todos os contratos da API"
     # cod_to_ug: primeiro UG que referencia o contrato "vence" (ordem de UG_LIST)
+    SOURCES = [
+        ("empenho",    fetch_cod_contratos_from_empenho),
+        ("liquidacao", lambda conn, ug: fetch_cod_contratos_from_table(conn, ug, "liquidacao")),
+        ("reserva",    lambda conn, ug: fetch_cod_contratos_from_table(conn, ug, "reserva")),
+    ]
     with ENGINE.connect() as conn:
         cod_to_ug = {}
         for ug in ugs:
-            print(f"Buscando códigos de contrato para UG {ug} na tabela empenho...")
-            for cod in fetch_cod_contratos_from_empenho(conn, ug):
-                if cod not in cod_to_ug:
-                    cod_to_ug[cod] = ug
+            for table_label, fetch_fn in SOURCES:
+                print(f"Buscando códigos de contrato para UG {ug} na tabela {table_label}...")
+                for cod in fetch_fn(conn, ug):
+                    if cod not in cod_to_ug:
+                        cod_to_ug[cod] = ug
 
     cods = sorted(set(cod_to_ug.keys()))
     print(f"Total de contratos únicos encontrados: {len(cods)}")
