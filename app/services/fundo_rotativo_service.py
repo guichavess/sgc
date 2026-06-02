@@ -227,8 +227,9 @@ def normalizar_linha_saldo_siafe(row, ano, mes, conta_contabil):
     conta_bancaria = domicilio_partes[2] if len(domicilio_partes) > 2 else None
 
     identificador_exercicio = _nome_classificador(classificacoes, 23)
-    ano_int = _parse_int(row.get('ano'), _parse_int(ano))
-    mes_int = _parse_int(row.get('mes'), _parse_int(mes))
+    # O endpoint ja e consultado por periodo; alguns payloads retornam mes=12 no corpo.
+    ano_int = _parse_int(ano, _parse_int(row.get('ano')))
+    mes_int = _parse_int(mes, _parse_int(row.get('mes')))
 
     valor = _parse_decimal(row.get('saldo')) or Decimal('0')
 

@@ -41,30 +41,52 @@
 
     /* --- Estética de extrato bancário --- */
     .fr-extrato-card {
-        border: 0;
-        border-radius: 12px;
-        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
         overflow: hidden;
     }
     .fr-extrato-header {
-        background: linear-gradient(135deg, #1e3a8a 0%, #343990 100%);
-        color: #fff;
-        padding: 18px 24px;
+        background: #ffffff;
+        color: #0f172a;
+        padding: 18px 24px 16px;
         display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
         justify-content: space-between;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .fr-balance-block { display: flex; align-items: center; gap: 14px; min-width: 280px; }
+    .fr-balance-icon {
+        width: 42px; height: 42px; border-radius: 8px;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: #eef2ff; color: #343990; font-size: 1.1rem;
+        border: 1px solid #dbe4ff;
     }
     .fr-extrato-title { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase;
-        opacity: 0.85; font-weight: 600; margin-bottom: 2px; }
+        color: #64748b; font-weight: 800; margin-bottom: 4px; }
     .fr-extrato-saldo {
-        font-size: 1.65rem; font-weight: 800; line-height: 1.1;
+        font-size: 1.8rem; font-weight: 850; line-height: 1.05;
         font-variant-numeric: tabular-nums;
+        color: #111827;
     }
+    .fr-extrato-subtitle { color: #64748b; font-size: 0.78rem; margin-top: 5px; }
     .fr-extrato-meta {
-        text-align: right; font-size: 0.78rem; line-height: 1.5; opacity: 0.92;
+        display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;
+        max-width: 650px;
     }
-    .fr-extrato-meta strong { font-size: 0.95rem; }
+    .fr-meta-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        min-height: 30px; padding: 5px 10px; border-radius: 6px;
+        border: 1px solid #e2e8f0; background: #f8fafc;
+        color: #334155; font-size: 0.78rem; font-weight: 650;
+    }
+    .fr-meta-pill.primary {
+        border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8;
+    }
+    .fr-meta-pill.success {
+        border-color: #bbf7d0; background: #f0fdf4; color: #166534;
+    }
 
-    .fr-table-wrapper { max-height: calc(100vh - 380px); overflow-y: auto; }
+    .fr-table-wrapper { max-height: calc(100vh - 360px); overflow: auto; }
     .fr-table { margin-bottom: 0; }
     .fr-table thead th {
         background: #f8fafc; color: #475569;
@@ -122,14 +144,56 @@
     .fr-credito { color: #16a34a; font-weight: 600; }
     .fr-debito { color: #dc2626; font-weight: 600; }
     .fr-anterior { color: #64748b; }
-    .fr-saldo-atual {
-        background: linear-gradient(180deg, #f0fdf4 0%, #ecfccb 100%);
-        color: #14532d; font-weight: 800;
-        border-left: 3px solid #22c55e;
+    .fr-saldo-col {
+        min-width: 168px;
+        position: sticky;
+        right: 50px;
+        z-index: 1;
     }
-    .fr-saldo-atual.negativo {
-        background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
-        color: #7f1d1d; border-left-color: #ef4444;
+    .fr-action-col {
+        width: 50px;
+        position: sticky;
+        right: 0;
+        z-index: 1;
+        background: #fff;
+    }
+    .fr-table thead .fr-saldo-col,
+    .fr-table thead .fr-action-col {
+        z-index: 4;
+    }
+    .fr-table thead .fr-saldo-col { background: #f8fafc; }
+    .fr-table tbody td.fr-action-col {
+        --bs-table-bg: #fff;
+        background-color: #fff;
+    }
+    .fr-table tbody tr:hover td.fr-action-col {
+        --bs-table-bg: #f8fafc;
+        background-color: #f8fafc;
+    }
+    .fr-table tbody td.fr-saldo-atual {
+        --bs-table-bg: #fbfff4;
+        --bs-table-color: #14532d;
+        background-color: #fbfff4;
+        color: #14532d; font-weight: 850;
+        box-shadow: inset 4px 0 0 #22c55e, -8px 0 14px rgba(15, 23, 42, 0.04);
+        border-left: 1px solid #bbf7d0;
+    }
+    .fr-saldo-current {
+        display: inline-flex; align-items: baseline; gap: 2px;
+        padding: 5px 8px; border-radius: 6px;
+        background: rgba(220, 252, 231, 0.7);
+        border: 1px solid rgba(34, 197, 94, 0.22);
+    }
+    .fr-table tbody td.fr-saldo-atual.negativo {
+        --bs-table-bg: #fff7f7;
+        --bs-table-color: #7f1d1d;
+        background-color: #fff7f7;
+        color: #7f1d1d; border-left-color: #fecaca;
+        box-shadow: inset 4px 0 0 #ef4444, -8px 0 14px rgba(15, 23, 42, 0.04);
+    }
+    .fr-saldo-atual.negativo .fr-saldo-current {
+        background: rgba(254, 226, 226, 0.65);
+        border-color: rgba(239, 68, 68, 0.2);
     }
 
     .fr-class-btn {
@@ -256,25 +320,42 @@
 
 <div class="card fr-extrato-card">
     <div class="fr-extrato-header">
-        <div>
-            <div class="fr-extrato-title">
-                <i class="bi bi-bank2 me-1"></i> Saldo Atual
+        <div class="fr-balance-block">
+            <div class="fr-balance-icon" aria-hidden="true">
+                <i class="bi bi-bank2"></i>
             </div>
-            <div class="fr-extrato-saldo">
-                R$ {{ "{:,.2f}".format(soma_total or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+            <div>
+                <div class="fr-extrato-title">Saldo Atual da Conta</div>
+                <div class="fr-extrato-saldo">
+                    R$ {{ "{:,.2f}".format(soma_filtrada or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                </div>
+                <div class="fr-extrato-subtitle">
+                    {% if tem_filtro_ativo %}
+                    Valor da visualiza&ccedil;&atilde;o filtrada
+                    {% else %}
+                    Valor dos lan&ccedil;amentos exibidos
+                    {% endif %}
+                </div>
             </div>
-            {% if tem_filtro_ativo %}
-            <div style="font-size:0.78rem; opacity:0.85; margin-top:4px;">
-                Filtrado: <strong>R$ {{ "{:,.2f}".format(soma_filtrada or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</strong>
-                ({{ pagination.total }} lançamento{{ 's' if pagination.total != 1 else '' }})
-            </div>
-            {% endif %}
         </div>
         <div class="fr-extrato-meta">
-            {% if not tem_filtro_ativo %}
-            <div><strong>{{ pagination.total }}</strong> lançamento{{ 's' if pagination.total != 1 else '' }}</div>
+            <span class="fr-meta-pill success">
+                <i class="bi bi-check2-circle"></i>
+                {{ pagination.total }} lan&ccedil;amento{{ 's' if pagination.total != 1 else '' }}
+            </span>
+            {% if tem_filtro_ativo %}
+            <span class="fr-meta-pill primary">
+                <i class="bi bi-funnel"></i>
+                Filtros aplicados
+            </span>
+            {% else %}
+            <span class="fr-meta-pill">
+                <i class="bi bi-layers"></i>
+                Sem filtros
+            </span>
             {% endif %}
-            <div>UG <strong>210102</strong> · Conta contábil <strong>111111901</strong></div>
+            <span class="fr-meta-pill">UG <strong>210102</strong></span>
+            <span class="fr-meta-pill">Conta cont&aacute;bil <strong>111111901</strong></span>
         </div>
     </div>
 
@@ -288,8 +369,8 @@
                     <th class="text-end">Saldo Anterior</th>
                     <th class="text-end">Crédito</th>
                     <th class="text-end">Débito</th>
-                    <th class="text-end">Saldo Atual</th>
-                    <th class="text-center" style="width: 50px;">&nbsp;</th>
+                    <th class="text-end fr-saldo-col">Saldo Atual</th>
+                    <th class="text-center fr-action-col">&nbsp;</th>
                 </tr>
             </thead>
             <tbody>
@@ -340,10 +421,12 @@
                         {% if debito > 0 %}<i class="bi bi-arrow-down-short"></i>{% endif %}
                         <span class="currency">R$</span>{{ "{:,.2f}".format(debito).replace(",", "X").replace(".", ",").replace("X", ".") }}
                     </td>
-                    <td class="text-end fr-money fr-saldo-atual {{ 'negativo' if saldo_val < 0 else '' }}">
-                        <span class="currency">R$</span>{{ "{:,.2f}".format(saldo_val).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                    <td class="text-end fr-money fr-saldo-col fr-saldo-atual {{ 'negativo' if saldo_val < 0 else '' }}">
+                        <span class="fr-saldo-current">
+                            <span class="currency">R$</span>{{ "{:,.2f}".format(saldo_val).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                        </span>
                     </td>
-                    <td class="text-center">
+                    <td class="text-center fr-action-col">
                         {% set tem_class = s.identificador_exercicio_fonte or s.marcador_fonte or s.tipo_detalhamento_fonte or s.detalhamento_fonte or s.fonte_formatada %}
                         {% if tem_class %}
                         <button type="button" class="fr-class-btn"

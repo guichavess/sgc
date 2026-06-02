@@ -3,6 +3,7 @@ Testes da aba Saldo do Fundo Rotativo via API SIAFE.
 """
 from datetime import datetime
 from decimal import Decimal
+import re
 import uuid
 
 import pytest
@@ -156,6 +157,19 @@ def test_normaliza_linha_api_para_colunas_planilha(app):
     assert parsed['agencia'] == '3791'
     assert parsed['conta_bancaria'] == '95192'
     assert isinstance(parsed['classificacao_json'], str)
+
+
+def test_normaliza_usa_periodo_consultado_quando_payload_retorna_mes_contabil(app):
+    from app.services.fundo_rotativo_service import normalizar_linha_saldo_siafe
+
+    row = _sample_api_row(ano='2026', mes='12')
+
+    with app.app_context():
+        parsed = normalizar_linha_saldo_siafe(row, 2026, 6, '111111901')
+
+    assert parsed['ano'] == 2026
+    assert parsed['mes'] == 6
+    assert parsed['data'] == datetime(2026, 6, 1)
 
 
 def test_sincronizacao_inicial_busca_17_periodos_e_grava_todas_fontes(app, db_session):
@@ -398,6 +412,40 @@ class TestFundoRotativoRotas:
         assert 'Editar Saldo' not in html
         assert 'Excluir Saldo' not in html
         assert 'name="natureza"' not in html
+
+    def test_get_lista_mostra_saldo_filtrado_como_saldo_principal(self, app, client, db_session):
+        from app.services.fundo_rotativo_service import sincronizar_saldos_periodos
+
+        _login_admin(client, db_session)
+        siafe_client = FakeSiafeClient(responses={
+            (2026, 6): [
+                _sample_api_row(saldo='2270492.88', ano='2026', mes='06', fonte='7.55', exercicio='1'),
+                _sample_api_row(saldo='135660.50', ano='2026', mes='06', fonte='7.59', exercicio='1'),
+                _sample_api_row(saldo='673046.30', ano='2026', mes='06', fonte='7.59', exercicio='2'),
+                _sample_api_row(saldo='1598971.32', ano='2026', mes='06', fonte='7.55', exercicio='2'),
+                _sample_api_row(saldo='109529.23', ano='2026', mes='06', fonte='5.00', exercicio='1'),
+            ],
+            (2026, 5): [
+                _sample_api_row(saldo='999999.00', ano='2026', mes='05', fonte='7.55', exercicio='1'),
+            ],
+        })
+
+        with app.app_context():
+            sincronizar_saldos_periodos(
+                [(2026, 6), (2026, 5)],
+                usuario_id=None,
+                siafe_client=siafe_client,
+            )
+
+        resp = client.get('/financeiro/fundo-rotativo/saldo?ano=2026&mes=6')
+
+        assert resp.status_code == 200
+        html = resp.data.decode('utf-8', errors='replace')
+        match = re.search(r'<div class="fr-extrato-saldo"[^>]*>(.*?)</div>', html, re.S)
+        assert match is not None
+        saldo_principal = re.sub(r'\s+', ' ', match.group(1)).strip()
+        assert 'R$ 4.787.700,23' in saldo_principal
+        assert 'R$ 5.787.699,23' not in saldo_principal
 
     def test_get_lista_redireciona_se_nao_logado(self, client):
         resp = client.get('/financeiro/fundo-rotativo/saldo', follow_redirects=False)
