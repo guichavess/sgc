@@ -17,52 +17,6 @@
 
 ## Pendências
 
-### Módulo Gestão do Fundo Rotativo — Tabela de Saldos (2026-06-01)
-
-> Local (`localhost/sgc`): **aplicado em 2026-06-01** (CREATE TABLE + coluna `natureza`). Restam apenas as ações em produção.
-
-- [ ] **Criar tabela `fundo_rotativo_saldos` em produção**
-  - Contexto: 1ª aba ("Saldo") do novo módulo "Gestão do Fundo Rotativo" (sub-seção do Financeiro). CRUD para registrar saldos por fonte, natureza e exercício; filtros por ano (derivado da data) e natureza na listagem.
-  - SQL (aplicado em local — usar este exato em produção; já inclui a coluna `natureza`):
-    ```sql
-    CREATE TABLE fundo_rotativo_saldos (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        valor DECIMAL(15, 2) NOT NULL,
-        data DATETIME NOT NULL,
-        fonte_codigo VARCHAR(10) NOT NULL,
-        natureza VARCHAR(20) NULL,
-        id_exercicio VARCHAR(2) NOT NULL,
-        criado_por BIGINT UNSIGNED NULL,
-        data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
-        data_atualizacao DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        CONSTRAINT fk_fr_saldo_fonte FOREIGN KEY (fonte_codigo) REFERENCES class_fonte(codigo),
-        CONSTRAINT fk_fr_saldo_user  FOREIGN KEY (criado_por)   REFERENCES sis_usuarios(id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    CREATE INDEX idx_fr_saldo_data      ON fundo_rotativo_saldos (data);
-    CREATE INDEX idx_fr_saldo_fonte     ON fundo_rotativo_saldos (fonte_codigo);
-    CREATE INDEX idx_fr_saldo_natureza  ON fundo_rotativo_saldos (natureza);
-    CREATE INDEX idx_fr_saldo_exercicio ON fundo_rotativo_saldos (id_exercicio);
-    ```
-  - Observação: `criado_por` é `BIGINT UNSIGNED` para combinar com `sis_usuarios.id` (que é `BIGINT UNSIGNED AUTO_INCREMENT`). Usar `INT` falha com erro 3780 "Referencing column ... are incompatible". A tabela `class_fonte` e a tabela `loa` (origem do dropdown de natureza) já devem estar populadas via SIAFE.
-
-- [ ] **Conceder permissão `fundo_rotativo` aos perfis necessários em produção**
-  - Contexto: novo módulo aparece na tela de Perfis em `/usuarios/perfis`. Marcar as ações `visualizar` e `criar` nos perfis que devem ter acesso (admins já têm acesso automaticamente via `is_admin`).
-
----
-
-### Suporte à UG 210102 — Contratos (2026-05-29)
-
-- [ ] **Adicionar coluna `codigoUG` na tabela `contratos`**
-  - Contexto: `atualizar_contratos.py` agora busca contratos das UGs 210101 e 210102. A coluna `codigoUG` identifica qual UG cada contrato pertence e habilita o filtro de UG no módulo Execução de Contratos.
-  - SQL:
-    ```sql
-    ALTER TABLE contratos ADD COLUMN codigoUG VARCHAR(10) NULL AFTER codigo;
-    CREATE INDEX idx_contratos_codigoUG ON contratos (codigoUG);
-    ```
-  - Observação: O script `atualizar_contratos.py` também faz essa migração automaticamente via `ensure_tables()` — mas rodar o SQL manual garante o índice e evita depender da próxima atualização SIAFE.
-
----
-
 ### Hierarquia de Autorização — Diárias (2026-05-05)
 
 - [ ] **Definir `cargo_gestao = 'secretario_exercicio'` para Bruno Gomes** ⚠️ BLOQUEADO
