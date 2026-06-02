@@ -35,7 +35,7 @@ def fundo_rotativo_saldo_lista():
     meses_filtro = [v for v in request.args.getlist('mes') if v]
     contas_filtro = [v for v in request.args.getlist('conta_bancaria') if v]
 
-    pagination, soma_total = listar_saldos(
+    pagination, soma_total, soma_filtrada = listar_saldos(
         page=page,
         busca=busca or None,
         fonte_codigo=fontes_codigo or None,
@@ -45,11 +45,15 @@ def fundo_rotativo_saldo_lista():
         conta_bancaria=contas_filtro or None,
     )
 
+    tem_filtro_ativo = bool(busca or fontes_codigo or ids_exercicio or anos_filtro or meses_filtro or contas_filtro)
+
     return render_template(
         'financeiro/fundo_rotativo/saldo.html',
         saldos=pagination.items,
         pagination=pagination,
         soma_total=soma_total,
+        soma_filtrada=soma_filtrada,
+        tem_filtro_ativo=tem_filtro_ativo,
         busca=busca,
         fontes_codigo_filtro=fontes_codigo,
         ids_exercicio_filtro=ids_exercicio,

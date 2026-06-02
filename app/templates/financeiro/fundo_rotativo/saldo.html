@@ -258,14 +258,22 @@
     <div class="fr-extrato-header">
         <div>
             <div class="fr-extrato-title">
-                <i class="bi bi-bank2 me-1"></i> Saldo Consolidado (filtros atuais)
+                <i class="bi bi-bank2 me-1"></i> Saldo Atual
             </div>
             <div class="fr-extrato-saldo">
                 R$ {{ "{:,.2f}".format(soma_total or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
             </div>
+            {% if tem_filtro_ativo %}
+            <div style="font-size:0.78rem; opacity:0.85; margin-top:4px;">
+                Filtrado: <strong>R$ {{ "{:,.2f}".format(soma_filtrada or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</strong>
+                ({{ pagination.total }} lançamento{{ 's' if pagination.total != 1 else '' }})
+            </div>
+            {% endif %}
         </div>
         <div class="fr-extrato-meta">
+            {% if not tem_filtro_ativo %}
             <div><strong>{{ pagination.total }}</strong> lançamento{{ 's' if pagination.total != 1 else '' }}</div>
+            {% endif %}
             <div>UG <strong>210102</strong> · Conta contábil <strong>111111901</strong></div>
         </div>
     </div>

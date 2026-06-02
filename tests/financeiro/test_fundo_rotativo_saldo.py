@@ -259,11 +259,11 @@ def test_listar_saldos_filtra_e_soma_por_ano_fonte(app, db_session):
 
     with app.app_context():
         sincronizar_saldos_periodos([(2026, 12), (2025, 12)], usuario_id=None, siafe_client=client)
-        pagination, soma_total = listar_saldos(ano='2026', fonte_codigo='755')
+        pagination, soma_total, soma_filtrada = listar_saldos(ano='2026', fonte_codigo='755')
 
     assert pagination.total == 1
     assert pagination.items[0].valor == Decimal('100.00')
-    assert soma_total == pytest.approx(100.0)
+    assert soma_filtrada == pytest.approx(100.0)
 
 
 def test_listar_saldos_filtra_por_mes(app, db_session):
@@ -282,18 +282,18 @@ def test_listar_saldos_filtra_por_mes(app, db_session):
             siafe_client=client,
         )
         # filtro só por mes=6 deve retornar 2 (2026/6 + 2025/6)
-        pagination, soma_total = listar_saldos(mes='6')
+        pagination, soma_total, soma_filtrada = listar_saldos(mes='6')
 
     assert pagination.total == 2
-    assert soma_total == pytest.approx(600.0)
+    assert soma_filtrada == pytest.approx(600.0)
 
     with app.app_context():
         # combinacao ano=2026 + mes=6
-        pagination, soma_total = listar_saldos(ano='2026', mes='6')
+        pagination, soma_total, soma_filtrada = listar_saldos(ano='2026', mes='6')
 
     assert pagination.total == 1
     assert pagination.items[0].valor == Decimal('200.00')
-    assert soma_total == pytest.approx(200.0)
+    assert soma_filtrada == pytest.approx(200.0)
 
 
 def test_listar_saldos_filtra_por_conta_bancaria(app, db_session):
@@ -316,17 +316,17 @@ def test_listar_saldos_filtra_por_conta_bancaria(app, db_session):
 
     with app.app_context():
         sincronizar_saldos_periodos([(2026, 5)], usuario_id=None, siafe_client=client)
-        pagination, soma_total = listar_saldos(conta_bancaria='95192')
+        pagination, soma_total, soma_filtrada = listar_saldos(conta_bancaria='95192')
 
     assert pagination.total == 2
-    assert soma_total == pytest.approx(150.0)
+    assert soma_filtrada == pytest.approx(150.0)
 
     with app.app_context():
-        pagination, soma_total = listar_saldos(conta_bancaria='88888')
+        pagination, soma_total, soma_filtrada = listar_saldos(conta_bancaria='88888')
 
     assert pagination.total == 1
     assert pagination.items[0].valor == Decimal('999.00')
-    assert soma_total == pytest.approx(999.0)
+    assert soma_filtrada == pytest.approx(999.0)
 
 
 def test_listar_contas_disponiveis(app, db_session):

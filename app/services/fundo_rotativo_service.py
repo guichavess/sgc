@@ -505,8 +505,15 @@ def listar_saldos(
             )
         )
 
-    soma_total = _as_float(
+    soma_filtrada = _as_float(
         query.with_entities(func.coalesce(func.sum(FundoRotativoSaldo.valor), 0)).scalar()
+    )
+
+    soma_total = _as_float(
+        FundoRotativoSaldo.query.filter(
+            FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
+            FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
+        ).with_entities(func.coalesce(func.sum(FundoRotativoSaldo.valor), 0)).scalar()
     )
 
     query = query.order_by(
@@ -517,7 +524,7 @@ def listar_saldos(
         FundoRotativoSaldo.id.desc(),
     )
     pagination = query.paginate(page=max(1, page or 1), per_page=per_page, error_out=False)
-    return pagination, soma_total
+    return pagination, soma_total, soma_filtrada
 
 
 def listar_fontes_saldo_disponiveis():
