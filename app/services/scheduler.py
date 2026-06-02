@@ -7,9 +7,12 @@ Jobs:
     1. verificar_vigencias_contratos - diario 08:00
     2. lembrete_ne_pendentes - diario 09:00
     3. limpar_notificacoes_expiradas - semanal (domingo 03:00)
+    4. sincronizar_saldos_fundo_rotativo - 4x ao dia (00, 06, 12, 18)
 """
 from datetime import datetime, timedelta
 from flask import Flask
+
+from app.services.fundo_rotativo_service import sincronizar_saldos_mes_atual
 
 
 def init_scheduler(app: Flask):
@@ -69,8 +72,19 @@ def init_scheduler(app: Flask):
         misfire_grace_time=7200,
     )
 
+    # Job 4: Sincronizar saldos do Fundo Rotativo - 4x ao dia (00, 06, 12, 18)
+    scheduler.add_job(
+        func=_job_sincronizar_saldos,
+        trigger=CronTrigger(hour='0,6,12,18', minute=0),
+        id='sincronizar_saldos_fundo_rotativo',
+        name='Sincronizar saldos do Fundo Rotativo (SIAFE)',
+        kwargs={'app': app},
+        replace_existing=True,
+        misfire_grace_time=1800,
+    )
+
     scheduler.start()
-    app.logger.info('Scheduler inicializado com 3 jobs.')
+    app.logger.info('Scheduler inicializado com 4 jobs.')
 
 
 # =============================================================================
@@ -268,3 +282,25 @@ def _job_limpar_expiradas(app: Flask):
 
         except Exception as e:
             app.logger.error(f'Erro no job limpar_expiradas: {e}')
+
+
+# =============================================================================
+# JOB 4: SINCRONIZAR SALDOS DO FUNDO ROTATIVO
+# =============================================================================
+
+def _job_sincronizar_saldos(app: Flask):
+    """
+    Sincroniza snapshots de saldo contabil do Fundo Rotativo (UG 210102) via SIAFE.
+
+    Roda 4x ao dia (00, 06, 12, 18) e substitui o snapshot do mes corrente.
+    usuario_id=None indica execucao automatica (sem autor humano).
+    """
+    with app.app_context():
+        try:
+            resultado = sincronizar_saldos_mes_atual(usuario_id=None)
+            app.logger.info(
+                f'Job sincronizar_saldos: {resultado["registros"]} registros '
+                f'em {resultado["periodos"]} periodo.'
+            )
+        except Exception as e:
+            app.logger.error(f'Erro no job sincronizar_saldos: {e}')

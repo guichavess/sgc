@@ -34,11 +34,34 @@ def _login_admin(client, db_session):
     return usuario
 
 
+def _make_saldo_siafe(valor, data, fonte_codigo, natureza=None, id_exercicio='01'):
+    from app.models.fundo_rotativo import FundoRotativoSaldo
+
+    fonte_formatada = {
+        '755': '7.55',
+        '759': '7.59',
+        '500': '5.00',
+    }.get(str(fonte_codigo), str(fonte_codigo))
+    return FundoRotativoSaldo(
+        valor=Decimal(valor),
+        data=data,
+        codigoUG='210102',
+        conta_contabil='111111901',
+        ano=data.year,
+        mes=data.month,
+        conta_corrente=f'001.3791.95192.{id_exercicio}.{fonte_formatada}.0000.0.000000',
+        classificacaoStr=f'001.3791.95192.{id_exercicio}.{fonte_formatada}.0000.0.000000',
+        fonte_codigo=str(fonte_codigo),
+        fonte_formatada=fonte_formatada,
+        natureza=natureza,
+        id_exercicio=id_exercicio,
+    )
+
+
 def _seed_dashboard_data(db_session):
     from app.models.class_fonte import ClassFonte
     from app.models.contrato import Contrato
     from app.models.empenho import Empenho
-    from app.models.fundo_rotativo import FundoRotativoSaldo
     from app.models.liquidacao import Liquidacao
     from app.models.loa import Loa
     from app.models.nat_despesa import NatDespesa
@@ -78,20 +101,8 @@ def _seed_dashboard_data(db_session):
         contrato_ug_fundo,
         contrato_ug_fundo_sem_exec,
         contrato_outra_ug,
-        FundoRotativoSaldo(
-            valor=Decimal('1000.00'),
-            data=datetime(ano_atual, 1, 10),
-            fonte_codigo='755',
-            natureza='339030',
-            id_exercicio='01',
-        ),
-        FundoRotativoSaldo(
-            valor=Decimal('500.00'),
-            data=datetime(ano_atual, 1, 11),
-            fonte_codigo='759',
-            natureza='339039',
-            id_exercicio='02',
-        ),
+        _make_saldo_siafe('1000.00', datetime(ano_atual, 1, 10), '755', '339030', '01'),
+        _make_saldo_siafe('500.00', datetime(ano_atual, 1, 11), '759', '339039', '02'),
         Reserva(
             codigoUG='210102',
             codigo='NR001',
@@ -229,8 +240,7 @@ class TestFundoRotativoDashboardService:
         assert rows['123']['ob'] == pytest.approx(200.0)
         assert rows['456']['reserva'] == 0
 
-    def test_obter_dashboard_filtra_por_ano_fonte_natureza_e_exercicio_do_saldo(self, app, db_session):
-        from app.models.fundo_rotativo import FundoRotativoSaldo
+    def test_obter_dashboard_filtra_saldo_por_ano_fonte_e_natureza_so_nas_execucoes(self, app, db_session):
         from app.models.liquidacao import Liquidacao
         from app.models.ob import OB
         from app.models.reserva import Reserva
@@ -241,13 +251,7 @@ class TestFundoRotativoDashboardService:
         ano_anterior = ano_atual - 1
 
         db_session.add_all([
-            FundoRotativoSaldo(
-                valor=Decimal('350.00'),
-                data=datetime(ano_atual, 2, 1),
-                fonte_codigo='755',
-                natureza='339030',
-                id_exercicio='02',
-            ),
+            _make_saldo_siafe('350.00', datetime(ano_atual, 2, 1), '755', '339030', '02'),
             Reserva(
                 codigoUG='210102',
                 codigo='NR900',
@@ -293,44 +297,32 @@ class TestFundoRotativoDashboardService:
                 natureza='339030',
             )
 
-        assert dashboard_atual['kpis']['saldo_total'] == pytest.approx(1000.0)
+        assert dashboard_atual['kpis']['saldo_total'] == pytest.approx(1350.0)
         assert dashboard_atual['kpis']['reservado'] == pytest.approx(900.0)
         assert dashboard_atual['kpis']['liquidado'] == pytest.approx(250.0)
         assert dashboard_atual['kpis']['pago'] == pytest.approx(200.0)
 
-        assert dashboard_anterior['kpis']['saldo_total'] == pytest.approx(350.0)
+        assert dashboard_anterior['kpis']['saldo_total'] == pytest.approx(0.0)
         assert dashboard_anterior['kpis']['reservado'] == pytest.approx(400.0)
         assert dashboard_anterior['kpis']['liquidado'] == pytest.approx(120.0)
         assert dashboard_anterior['kpis']['pago'] == pytest.approx(70.0)
 
-    def test_dashboard_muda_exercicio_do_saldo_quando_vira_o_ano(self, app, db_session, monkeypatch):
-        import app.services.fundo_rotativo_service as service
-        from app.models.fundo_rotativo import FundoRotativoSaldo
-
-        class FakeDatetime(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return cls(2027, 1, 1)
+    def test_dashboard_nao_filtra_saldo_por_natureza(self, app, db_session):
+        from app.services.fundo_rotativo_service import obter_dashboard_fundo_rotativo
 
         _seed_dashboard_data(db_session)
-        db_session.add(FundoRotativoSaldo(
-            valor=Decimal('350.00'),
-            data=datetime(2026, 12, 31),
-            fonte_codigo='755',
-            natureza='339030',
-            id_exercicio='02',
-        ))
+        ano_atual = datetime.now().year
+        db_session.add(_make_saldo_siafe('350.00', datetime(ano_atual, 2, 1), '755', '449052', '01'))
         db_session.flush()
-        monkeypatch.setattr(service, 'datetime', FakeDatetime)
 
         with app.app_context():
-            dashboard = service.obter_dashboard_fundo_rotativo(
-                ano='2026',
+            dashboard = obter_dashboard_fundo_rotativo(
+                ano=str(ano_atual),
                 fonte_codigo='755',
                 natureza='339030',
             )
 
-        assert dashboard['kpis']['saldo_total'] == pytest.approx(350.0)
+        assert dashboard['kpis']['saldo_total'] == pytest.approx(1350.0)
 
 
 class TestFundoRotativoDashboardRotas:
@@ -370,15 +362,8 @@ class TestFundoRotativoDashboardRotas:
         assert 'name="ano"' in html
         assert 'name="fonte_codigo"' in html
         assert 'name="natureza"' in html
-        assert re.search(
-            rf'<option value="{ano_atual}"[^>]*selected[^>]*>\s*{ano_atual}\s*</option>',
-            html,
-        )
-        assert re.search(
-            r'<option value="755"[^>]*selected[^>]*>\s*755 - Recursos do Fundo Rotativo\s*</option>',
-            html,
-        )
-        assert re.search(
-            r'<option value="339030"[^>]*selected[^>]*>\s*339030 - Material de Consumo\s*</option>',
-            html,
-        )
+        assert re.search(rf'name="ano"\s+value="{ano_atual}"[\s\S]{{0,120}}checked', html)
+        assert re.search(r'name="fonte_codigo"\s+value="755"[\s\S]{0,120}checked', html)
+        assert '755 - Recursos do Fundo Rotativo' in html
+        assert re.search(r'name="natureza"\s+value="339030"[\s\S]{0,120}checked', html)
+        assert '339030 - Material de Consumo' in html

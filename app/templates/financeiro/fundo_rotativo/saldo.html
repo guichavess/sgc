@@ -18,7 +18,7 @@
         font-size: 0.7rem; padding: 1px 7px; margin-left: 4px; font-weight: 700;
     }
     .column-filter-menu {
-        min-width: 260px; max-width: 360px; padding: 10px !important;
+        min-width: 240px; max-width: 360px; padding: 10px !important;
         border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.15); z-index: 1050;
     }
     .column-filter-search { font-size: 0.82rem; border-radius: 6px; }
@@ -37,25 +37,150 @@
         border-bottom: 1px solid #e9ecef; margin-bottom: 4px;
         padding-bottom: 6px; font-weight: 600;
     }
+    .fr-sync-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+    /* --- Estética de extrato bancário --- */
+    .fr-extrato-card {
+        border: 0;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+        overflow: hidden;
+    }
+    .fr-extrato-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #343990 100%);
+        color: #fff;
+        padding: 18px 24px;
+        display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+        justify-content: space-between;
+    }
+    .fr-extrato-title { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase;
+        opacity: 0.85; font-weight: 600; margin-bottom: 2px; }
+    .fr-extrato-saldo {
+        font-size: 1.65rem; font-weight: 800; line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+    }
+    .fr-extrato-meta {
+        text-align: right; font-size: 0.78rem; line-height: 1.5; opacity: 0.92;
+    }
+    .fr-extrato-meta strong { font-size: 0.95rem; }
+
+    .fr-table-wrapper { max-height: calc(100vh - 380px); overflow-y: auto; }
+    .fr-table { margin-bottom: 0; }
+    .fr-table thead th {
+        background: #f8fafc; color: #475569;
+        font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 12px 14px; white-space: nowrap;
+        border-bottom: 2px solid #e2e8f0;
+        position: sticky; top: 0; z-index: 2;
+    }
+    .fr-table tbody td {
+        font-size: 0.84rem; vertical-align: middle;
+        padding: 12px 14px; border-bottom: 1px solid #f1f5f9;
+    }
+    .fr-table tbody tr:hover { background: #f8fafc; }
+
+    .fr-periodo {
+        display: inline-flex; flex-direction: column; align-items: flex-start;
+        line-height: 1.2;
+    }
+    .fr-periodo .mes { font-weight: 700; color: #1e293b; font-size: 0.92rem;
+        font-variant-numeric: tabular-nums; }
+    .fr-periodo .sync { color: #94a3b8; font-size: 0.7rem; margin-top: 2px; }
+
+    .fr-conta { min-width: 200px; }
+    .fr-conta .domicilio {
+        font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+        font-size: 0.84rem; color: #0f172a; font-weight: 600;
+        background: #f1f5f9; padding: 3px 8px; border-radius: 4px;
+        display: inline-block;
+    }
+    .fr-conta .breakdown {
+        color: #64748b; font-size: 0.72rem; margin-top: 4px;
+        display: flex; gap: 10px; flex-wrap: wrap;
+    }
+    .fr-conta .breakdown span { white-space: nowrap; }
+    .fr-conta .breakdown b { color: #475569; font-weight: 600; }
+
+    .fr-fonte { min-width: 170px; }
+    .fr-fonte .codigo {
+        font-weight: 700; color: #1e293b; font-size: 0.86rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .fr-fonte .descricao { color: #64748b; font-size: 0.72rem; line-height: 1.3;
+        margin-top: 2px; }
+    .fr-exerc-badge {
+        background: #eff6ff; color: #1d4ed8;
+        border: 1px solid #bfdbfe; border-radius: 4px;
+        font-size: 0.7rem; padding: 1px 6px; font-weight: 600;
+        margin-left: 4px; white-space: nowrap;
+    }
+
+    .fr-money { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .fr-money .currency { color: #94a3b8; font-size: 0.7rem; margin-right: 2px; }
+    .fr-money.zero { color: #cbd5e1; }
+    .fr-credito { color: #16a34a; font-weight: 600; }
+    .fr-debito { color: #dc2626; font-weight: 600; }
+    .fr-anterior { color: #64748b; }
+    .fr-saldo-atual {
+        background: linear-gradient(180deg, #f0fdf4 0%, #ecfccb 100%);
+        color: #14532d; font-weight: 800;
+        border-left: 3px solid #22c55e;
+    }
+    .fr-saldo-atual.negativo {
+        background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
+        color: #7f1d1d; border-left-color: #ef4444;
+    }
+
+    .fr-class-btn {
+        background: transparent; border: 1px solid #e2e8f0;
+        color: #64748b; border-radius: 4px; padding: 2px 6px;
+        font-size: 0.72rem; cursor: pointer; line-height: 1;
+    }
+    .fr-class-btn:hover { background: #f1f5f9; color: #1e293b; }
+    .fr-class-tooltip {
+        position: fixed; background: #0f172a; color: #f8fafc;
+        font-size: 0.76rem; line-height: 1.5; padding: 10px 12px;
+        border-radius: 8px; max-width: 320px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        z-index: 99999;
+    }
+    .fr-class-tooltip strong { color: #93c5fd; font-weight: 700; }
+
+    .fr-extrato-footer {
+        background: #f8fafc; padding: 12px 18px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .fr-empty {
+        padding: 56px 24px; text-align: center; color: #64748b;
+    }
+    .fr-empty .icon {
+        font-size: 2.4rem; color: #cbd5e1; margin-bottom: 12px;
+    }
+    .fr-empty .title { font-weight: 700; color: #475569; margin-bottom: 4px; }
+    .fr-empty .hint { font-size: 0.82rem; color: #94a3b8; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+{% set tem_filtro = busca or fontes_codigo_filtro or ids_exercicio_filtro or anos_filtro or meses_filtro or contas_filtro %}
+<div class="d-flex justify-content-between align-items-start mb-4 gap-3 flex-wrap">
     <div>
-        <h3 class="fw-bold text-dark mb-1">Fundo Rotativo — Saldo</h3>
-        <p class="text-muted mb-0">Registros de saldo do Fundo Rotativo (UG 210102).</p>
+        <h3 class="fw-bold text-dark mb-1">Fundo Rotativo — Extrato de Saldos</h3>
+        <p class="text-muted mb-0">Snapshots contábeis do SIAFE para a UG 210102.</p>
     </div>
-    <div>
-        {% if current_user.is_admin or current_user.tem_permissao('fundo_rotativo', 'criar') %}
-        <button class="btn btn-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCadastro">
-            <i class="bi bi-plus-lg me-1"></i> Novo Saldo
-        </button>
-        {% endif %}
+    {% if current_user.is_admin or current_user.tem_permissao('fundo_rotativo', 'criar') %}
+    <div class="fr-sync-actions">
+        <form method="post" action="{{ url_for('financeiro.fundo_rotativo_saldo_sincronizar') }}">
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-arrow-clockwise me-1"></i> Sincronizar Saldos
+            </button>
+        </form>
     </div>
+    {% endif %}
 </div>
 
-{# Filtros — estilo CGFR (busca + multi-select com checkboxes) #}
 <div class="card mb-4">
     <div class="card-body py-3 px-4">
         <form method="get" id="frSaldoFiltrosForm">
@@ -65,7 +190,7 @@
                         <i class="bi bi-search text-muted"></i>
                     </span>
                     <input type="text" name="busca" class="form-control border-start-0"
-                           value="{{ busca }}" placeholder="Buscar por fonte ou descrição..."
+                           value="{{ busca }}" placeholder="Buscar fonte, domicílio ou conta..."
                            style="font-size: 0.84rem;" autocomplete="off">
                 </div>
                 <span class="total-records ms-auto" style="color: #1e293b; font-weight: 700;">
@@ -74,16 +199,25 @@
                 <button type="submit" class="btn btn-primary btn-sm">
                     <i class="bi bi-funnel me-1"></i> Aplicar Filtros
                 </button>
+                {% if tem_filtro %}
                 <a href="{{ url_for('financeiro.fundo_rotativo_saldo_lista') }}"
                    class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-x-circle me-1"></i> Limpar
                 </a>
+                {% endif %}
             </div>
 
             <div class="filters-bar">
                 <div class="d-flex flex-wrap gap-2">
+                    {% set opcoes_conta = [] %}
+                    {% for c in contas %}{% set _ = opcoes_conta.append((c.codigo, c.label)) %}{% endfor %}
+                    {% with rotulo='Conta Corrente', icone='bi-bank', nome='conta_bancaria',
+                            opcoes=opcoes_conta, selecionados=contas_filtro %}
+                        {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
+                    {% endwith %}
+
                     {% set opcoes_fonte = [] %}
-                    {% for f in fontes %}{% set _ = opcoes_fonte.append((f.codigo, f.codigo ~ ' - ' ~ f.descricao)) %}{% endfor %}
+                    {% for f in fontes %}{% set _ = opcoes_fonte.append((f.codigo, f.label)) %}{% endfor %}
                     {% with rotulo='Fonte', icone='bi-cash-coin', nome='fonte_codigo',
                             opcoes=opcoes_fonte, selecionados=fontes_codigo_filtro %}
                         {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
@@ -93,6 +227,18 @@
                     {% for a in anos %}{% set _ = opcoes_ano.append((a, a|string)) %}{% endfor %}
                     {% with rotulo='Ano', icone='bi-calendar3', nome='ano',
                             opcoes=opcoes_ano, selecionados=anos_filtro %}
+                        {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
+                    {% endwith %}
+
+                    {% set nomes_meses = {
+                        1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril',
+                        5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto',
+                        9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'
+                    } %}
+                    {% set opcoes_mes = [] %}
+                    {% for m in meses %}{% set _ = opcoes_mes.append((m, '%02d - %s'|format(m, nomes_meses[m]))) %}{% endfor %}
+                    {% with rotulo='Mês', icone='bi-calendar-month', nome='mes',
+                            opcoes=opcoes_mes, selecionados=meses_filtro %}
                         {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
                     {% endwith %}
 
@@ -108,76 +254,127 @@
     </div>
 </div>
 
-{# Tabela #}
-<div class="card">
-    <div class="card-header bg-white border-bottom py-3">
-        <div class="d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 fw-bold">Saldos Registrados</h5>
-            <div>
-                <span class="badge bg-secondary">{{ pagination.total }} registro{{ 's' if pagination.total != 1 else '' }}</span>
-                <span class="badge bg-success ms-2">Total: R$ {{ "{:,.2f}".format(soma_total or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</span>
+<div class="card fr-extrato-card">
+    <div class="fr-extrato-header">
+        <div>
+            <div class="fr-extrato-title">
+                <i class="bi bi-bank2 me-1"></i> Saldo Consolidado (filtros atuais)
+            </div>
+            <div class="fr-extrato-saldo">
+                R$ {{ "{:,.2f}".format(soma_total or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
             </div>
         </div>
-    </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-custom table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th class="ps-4">Data</th>
-                        <th class="text-end">Valor</th>
-                        <th>Fonte</th>
-                        <th>Exercício</th>
-                        {% if current_user.is_admin or current_user.tem_permissao('fundo_rotativo', 'criar') %}
-                        <th class="text-center">Ações</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for s in saldos %}
-                    <tr>
-                        <td class="ps-4">{{ s.data.strftime('%d/%m/%Y %H:%M') }}</td>
-                        <td class="text-end fw-semibold">R$ {{ "{:,.2f}".format(s.valor|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-                        <td>
-                            <code>{{ s.fonte_codigo }}</code>
-                            {% if s.fonte %}<span class="text-muted ms-1">- {{ s.fonte.descricao }}</span>{% endif %}
-                        </td>
-                        <td>
-                            <span class="badge bg-light text-dark border">
-                                {{ s.id_exercicio }} - {{ s.exercicio_titulo }}
-                            </span>
-                        </td>
-                        {% if current_user.is_admin or current_user.tem_permissao('fundo_rotativo', 'criar') %}
-                        <td class="text-center">
-                            <button class="btn btn-outline-primary btn-sm me-1"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#modalEditar{{ s.id }}"
-                                    title="Editar">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn btn-outline-danger btn-sm"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#modalExcluir{{ s.id }}"
-                                    title="Excluir">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
-                        {% endif %}
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="5" class="text-center py-5 text-muted">
-                            Nenhum saldo registrado.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="fr-extrato-meta">
+            <div><strong>{{ pagination.total }}</strong> lançamento{{ 's' if pagination.total != 1 else '' }}</div>
+            <div>UG <strong>210102</strong> · Conta contábil <strong>111111901</strong></div>
         </div>
     </div>
 
+    <div class="fr-table-wrapper">
+        <table class="table fr-table align-middle">
+            <thead>
+                <tr>
+                    <th>Período</th>
+                    <th>Conta</th>
+                    <th>Fonte</th>
+                    <th class="text-end">Saldo Anterior</th>
+                    <th class="text-end">Crédito</th>
+                    <th class="text-end">Débito</th>
+                    <th class="text-end">Saldo Atual</th>
+                    <th class="text-center" style="width: 50px;">&nbsp;</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in saldos %}
+                {% set saldo_val = s.valor|float %}
+                <tr>
+                    <td>
+                        <div class="fr-periodo">
+                            <span class="mes">{{ s.mes_ano_label or s.data.strftime('%m/%Y') }}</span>
+                            {% if s.data_sincronizacao %}
+                            <span class="sync" title="Sincronizado em">
+                                <i class="bi bi-arrow-clockwise"></i>
+                                {{ s.data_sincronizacao.strftime('%d/%m %H:%M') }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="fr-conta">
+                        <span class="domicilio">{{ s.domicilio_bancario or '—' }}</span>
+                        {% if s.banco or s.agencia or s.conta_bancaria %}
+                        <div class="breakdown">
+                            {% if s.banco %}<span><b>Banco</b> {{ s.banco }}</span>{% endif %}
+                            {% if s.agencia %}<span><b>Ag.</b> {{ s.agencia }}</span>{% endif %}
+                            {% if s.conta_bancaria %}<span><b>CC</b> {{ s.conta_bancaria }}</span>{% endif %}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td class="fr-fonte">
+                        <div>
+                            <span class="codigo">{{ s.fonte_codigo or '—' }}</span>
+                            <span class="fr-exerc-badge" title="Exercício">{{ s.exercicio_label or '—' }}</span>
+                        </div>
+                        {% if s.fonte and s.fonte.descricao %}
+                        <div class="descricao">{{ s.fonte.descricao }}</div>
+                        {% endif %}
+                    </td>
+                    {% set anterior = (s.saldoAnterior or 0)|float %}
+                    {% set credito = (s.valorCredito or 0)|float %}
+                    {% set debito = (s.valorDebito or 0)|float %}
+                    <td class="text-end fr-money fr-anterior {{ 'zero' if anterior == 0 else '' }}">
+                        <span class="currency">R$</span>{{ "{:,.2f}".format(anterior).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                    </td>
+                    <td class="text-end fr-money {{ 'fr-credito' if credito > 0 else 'zero' }}">
+                        {% if credito > 0 %}<i class="bi bi-arrow-up-short"></i>{% endif %}
+                        <span class="currency">R$</span>{{ "{:,.2f}".format(credito).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                    </td>
+                    <td class="text-end fr-money {{ 'fr-debito' if debito > 0 else 'zero' }}">
+                        {% if debito > 0 %}<i class="bi bi-arrow-down-short"></i>{% endif %}
+                        <span class="currency">R$</span>{{ "{:,.2f}".format(debito).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                    </td>
+                    <td class="text-end fr-money fr-saldo-atual {{ 'negativo' if saldo_val < 0 else '' }}">
+                        <span class="currency">R$</span>{{ "{:,.2f}".format(saldo_val).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                    </td>
+                    <td class="text-center">
+                        {% set tem_class = s.identificador_exercicio_fonte or s.marcador_fonte or s.tipo_detalhamento_fonte or s.detalhamento_fonte or s.fonte_formatada %}
+                        {% if tem_class %}
+                        <button type="button" class="fr-class-btn"
+                                data-fr-class
+                                data-exerc="{{ s.identificador_exercicio_fonte or '' }}"
+                                data-fonte="{{ s.fonte_formatada or '' }}"
+                                data-marc="{{ s.marcador_fonte or '' }}"
+                                data-tipo-det="{{ s.tipo_detalhamento_fonte or '' }}"
+                                data-det="{{ s.detalhamento_fonte or '' }}"
+                                title="Classificadores"
+                                aria-label="Ver classificadores">
+                            <i class="bi bi-info-circle"></i>
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8">
+                        <div class="fr-empty">
+                            <div class="icon"><i class="bi bi-inbox"></i></div>
+                            <div class="title">Nenhum lançamento encontrado</div>
+                            <div class="hint">
+                                {% if tem_filtro %}
+                                Ajuste os filtros ou <a href="{{ url_for('financeiro.fundo_rotativo_saldo_lista') }}">limpe-os</a> para ver todos os snapshots.
+                                {% else %}
+                                Use "Sincronizar Saldos" para importar dados do SIAFE.
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
     {% if pagination.pages > 1 %}
-    <div class="card-footer bg-white border-top py-3">
+    <div class="fr-extrato-footer">
         <div class="d-flex justify-content-between align-items-center">
             <div class="text-muted small">
                 Mostrando <strong>{{ saldos|length }}</strong> de <strong>{{ pagination.total }}</strong>
@@ -185,21 +382,21 @@
             <nav aria-label="Navegação">
                 <ul class="pagination pagination-sm mb-0">
                     <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.prev_num, busca=busca, fonte_codigo=fontes_codigo_filtro, id_exercicio=ids_exercicio_filtro, ano=anos_filtro) if pagination.has_prev else '#' }}">
+                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.prev_num, busca=busca, fonte_codigo=fontes_codigo_filtro, id_exercicio=ids_exercicio_filtro, ano=anos_filtro, mes=meses_filtro, conta_bancaria=contas_filtro) if pagination.has_prev else '#' }}">
                             <i class="bi bi-chevron-left"></i>
                         </a>
                     </li>
                     {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                         {% if page_num %}
                             <li class="page-item {{ 'active' if page_num == pagination.page }}">
-                                <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=page_num, busca=busca, fonte_codigo=fontes_codigo_filtro, id_exercicio=ids_exercicio_filtro, ano=anos_filtro) }}">{{ page_num }}</a>
+                                <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=page_num, busca=busca, fonte_codigo=fontes_codigo_filtro, id_exercicio=ids_exercicio_filtro, ano=anos_filtro, mes=meses_filtro, conta_bancaria=contas_filtro) }}">{{ page_num }}</a>
                             </li>
                         {% else %}
                             <li class="page-item disabled"><span class="page-link">...</span></li>
                         {% endif %}
                     {% endfor %}
                     <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.next_num, busca=busca, fonte_codigo=fontes_codigo_filtro, id_exercicio=ids_exercicio_filtro, ano=anos_filtro) if pagination.has_next else '#' }}">
+                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.next_num, busca=busca, fonte_codigo=fontes_codigo_filtro, id_exercicio=ids_exercicio_filtro, ano=anos_filtro, mes=meses_filtro, conta_bancaria=contas_filtro) if pagination.has_next else '#' }}">
                             <i class="bi bi-chevron-right"></i>
                         </a>
                     </li>
@@ -209,86 +406,6 @@
     </div>
     {% endif %}
 </div>
-
-{# ===== Modal: Cadastrar ===== #}
-<div class="modal fade" id="modalCadastro" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content shadow-lg border-0">
-            <form method="post" action="{{ url_for('financeiro.fundo_rotativo_saldo_cadastrar') }}">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title fw-bold">Novo Saldo</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    {% with prefix='novo', saldo=None, fontes=fontes, exercicios=exercicios %}
-                        {% include 'financeiro/fundo_rotativo/_form_fields.html' %}
-                    {% endwith %}
-                </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-lg me-1"></i> Cadastrar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-{# ===== Modais por linha: Editar + Excluir ===== #}
-{% for s in saldos %}
-<div class="modal fade" id="modalEditar{{ s.id }}" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content shadow-lg border-0">
-            <form method="post" action="{{ url_for('financeiro.fundo_rotativo_saldo_editar', saldo_id=s.id) }}">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title fw-bold">Editar Saldo</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    {% with prefix='edit' ~ s.id, saldo=s, fontes=fontes, exercicios=exercicios %}
-                        {% include 'financeiro/fundo_rotativo/_form_fields.html' %}
-                    {% endwith %}
-                </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-lg me-1"></i> Salvar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="modalExcluir{{ s.id }}" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content shadow-lg border-0">
-            <form method="post" action="{{ url_for('financeiro.fundo_rotativo_saldo_excluir', saldo_id=s.id) }}">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title fw-bold text-danger">Excluir Saldo</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Confirma a exclusão do registro abaixo?</p>
-                    <ul class="list-unstyled small text-muted">
-                        <li><strong>Data:</strong> {{ s.data.strftime('%d/%m/%Y %H:%M') }}</li>
-                        <li><strong>Valor:</strong> R$ {{ "{:,.2f}".format(s.valor|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</li>
-                        <li><strong>Fonte:</strong> {{ s.fonte_label }}</li>
-                        <li><strong>Exercício:</strong> {{ s.exercicio_label }}</li>
-                    </ul>
-                </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash me-1"></i> Excluir
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-{% endfor %}
 {% endblock %}
 
 {% block extra_js %}
@@ -326,11 +443,66 @@ function frSaldoInitFilters() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    if (window.SGC && SGC.maskMoneyAll) {
-        SGC.maskMoneyAll('.mask-money');
+function frSaldoInitClassTooltip() {
+    var tip = null;
+
+    function removeTip() {
+        if (tip) { tip.remove(); tip = null; }
     }
+
+    function showTip(btn) {
+        removeTip();
+        tip = document.createElement('div');
+        tip.className = 'fr-class-tooltip';
+
+        function addRow(label, value) {
+            if (!value) return;
+            var row = document.createElement('div');
+            var strong = document.createElement('strong');
+            strong.textContent = label;
+            row.appendChild(strong);
+            row.appendChild(document.createTextNode(' ' + value));
+            tip.appendChild(row);
+        }
+
+        addRow('Exercício Fonte:', btn.dataset.exerc);
+        addRow('Fonte:', btn.dataset.fonte);
+        addRow('Marcador:', btn.dataset.marc);
+        addRow('Tipo de Detalhamento:', btn.dataset.tipoDet);
+        addRow('Detalhamento:', btn.dataset.det);
+
+        if (!tip.childNodes.length) {
+            tip = null;
+            return;
+        }
+
+        document.body.appendChild(tip);
+
+        var rect = btn.getBoundingClientRect();
+        var tipRect = tip.getBoundingClientRect();
+        var top = rect.bottom + 6;
+        if (top + tipRect.height > window.innerHeight - 12) {
+            top = rect.top - tipRect.height - 6;
+        }
+        var left = rect.right - tipRect.width;
+        if (left < 12) left = 12;
+        tip.style.top = top + 'px';
+        tip.style.left = left + 'px';
+    }
+
+    document.querySelectorAll('[data-fr-class]').forEach(function(btn) {
+        btn.addEventListener('mouseenter', function() { showTip(btn); });
+        btn.addEventListener('mouseleave', removeTip);
+        btn.addEventListener('click', function(e) { e.preventDefault(); showTip(btn); });
+    });
+
+    document.addEventListener('scroll', removeTip, true);
+    window.addEventListener('resize', removeTip);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
     frSaldoInitFilters();
+    frSaldoInitClassTooltip();
 });
 </script>
 {% endblock %}

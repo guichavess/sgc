@@ -1,12 +1,11 @@
 """
-Testes do CRUD de Saldo do Fundo Rotativo (módulo financeiro).
+Testes da aba Saldo do Fundo Rotativo via API SIAFE.
 """
 from datetime import datetime
 from decimal import Decimal
 import uuid
 
 import pytest
-from sqlalchemy import text
 
 
 def _uid():
@@ -55,354 +54,421 @@ def _login_sem_permissao(client, db_session):
     return usuario
 
 
-def _make_fonte(db_session, codigo=None, descricao='FONTE TESTE'):
-    from app.models.class_fonte import ClassFonte
+def _sample_api_row(
+    *,
+    saldo='2270492.88',
+    saldo_anterior='2270492.88',
+    credito='0.00',
+    debito='0.00',
+    ano='2026',
+    mes='12',
+    fonte='7.55',
+    exercicio='1',
+):
+    return {
+        'codigoUG': '210102',
+        'saldo': saldo,
+        'contaCorrente': f'001.      3791.        95192.{exercicio}.{fonte}.0000.0.000000',
+        'saldoAnterior': saldo_anterior,
+        'valorCredito': credito,
+        'valorDebito': debito,
+        'mes': mes,
+        'ano': ano,
+        'classificacao': [
+            {
+                'codigoTipoClassificador': 23,
+                'nomeTipoClassificador': 'Identificador Exercício Fonte',
+                'nomeClassificador': exercicio,
+                'valoresClassificador': [exercicio],
+            },
+            {
+                'codigoTipoClassificador': 24,
+                'nomeTipoClassificador': 'Marcador de Fonte',
+                'nomeClassificador': f'{fonte}.0000',
+                'valoresClassificador': fonte.split('.') + ['0000'],
+            },
+            {
+                'codigoTipoClassificador': 28,
+                'nomeTipoClassificador': 'Fonte',
+                'nomeClassificador': fonte,
+                'valoresClassificador': fonte.split('.'),
+            },
+            {
+                'codigoTipoClassificador': 101,
+                'nomeTipoClassificador': 'Domicílio bancário UG',
+                'nomeClassificador': '001.3791.95192',
+                'valoresClassificador': ['001', '3791', '95192'],
+            },
+            {
+                'codigoTipoClassificador': 159,
+                'nomeTipoClassificador': 'Detalhamento de Fonte',
+                'nomeClassificador': f'{fonte}.0000.000000',
+                'valoresClassificador': fonte.split('.') + ['0000', '000000'],
+            },
+            {
+                'codigoTipoClassificador': 186,
+                'nomeTipoClassificador': 'Tipo de Detalhamento de Fonte',
+                'nomeClassificador': '0',
+                'valoresClassificador': ['0'],
+            },
+        ],
+        'classificacaoStr': f'001.      3791.        95192.{exercicio}.{fonte}.0000.0.000000',
+    }
 
-    fonte = ClassFonte(codigo=codigo or f'F{_uid()[:5]}', descricao=descricao)
-    db_session.add(fonte)
-    db_session.flush()
-    return fonte
+
+class FakeSiafeClient:
+    def __init__(self, responses=None, fail_periods=None):
+        self.responses = responses or {}
+        self.fail_periods = set(fail_periods or [])
+        self.calls = []
+
+    def consultar_saldo_contabil(self, ano, mes, conta_contabil, codigo_ug):
+        key = (int(ano), int(mes))
+        self.calls.append((int(ano), int(mes), conta_contabil, codigo_ug))
+        if key in self.fail_periods:
+            raise RuntimeError(f'falha periodo {ano}/{mes}')
+        return self.responses.get(
+            key,
+            [_sample_api_row(ano=str(ano), mes=str(mes).zfill(2))],
+        )
 
 
-def _seed_natureza_disponivel(db_session, codigo='339030', titulo='Material de Consumo'):
-    db_session.execute(
-        text("INSERT INTO natdespesas (codigo, titulo) VALUES (:codigo, :titulo)"),
-        {'codigo': int(codigo), 'titulo': titulo},
+def test_normaliza_linha_api_para_colunas_planilha(app):
+    from app.services.fundo_rotativo_service import normalizar_linha_saldo_siafe
+
+    row = _sample_api_row(fonte='7.55', exercicio='2')
+
+    with app.app_context():
+        parsed = normalizar_linha_saldo_siafe(row, 2026, 12, '111111901')
+
+    assert parsed['valor'] == Decimal('2270492.88')
+    assert parsed['ano'] == 2026
+    assert parsed['mes'] == 12
+    assert parsed['fonte_codigo'] == '755'
+    assert parsed['fonte_formatada'] == '7.55'
+    assert parsed['id_exercicio'] == '02'
+    assert parsed['identificador_exercicio_fonte'] == '2'
+    assert parsed['marcador_fonte'] == '7.55.0000'
+    assert parsed['detalhamento_fonte'] == '7.55.0000.000000'
+    assert parsed['tipo_detalhamento_fonte'] == '0'
+    assert parsed['domicilio_bancario'] == '001.3791.95192'
+    assert parsed['banco'] == '001'
+    assert parsed['agencia'] == '3791'
+    assert parsed['conta_bancaria'] == '95192'
+    assert isinstance(parsed['classificacao_json'], str)
+
+
+def test_sincronizacao_inicial_busca_17_periodos_e_grava_todas_fontes(app, db_session):
+    from app.models.fundo_rotativo import FundoRotativoSaldo
+    from app.services.fundo_rotativo_service import sincronizar_saldos_inicial
+
+    client = FakeSiafeClient(responses={
+        (2026, 5): [
+            _sample_api_row(saldo='100.00', ano='2026', mes='05', fonte='7.55'),
+            _sample_api_row(saldo='50.00', ano='2026', mes='05', fonte='5.00'),
+        ],
+    })
+
+    with app.app_context():
+        resultado = sincronizar_saldos_inicial(usuario_id=123, siafe_client=client)
+
+    assert len(client.calls) == 17
+    assert client.calls[0] == (2025, 1, '111111901', '210102')
+    assert client.calls[-1] == (2026, 5, '111111901', '210102')
+    assert resultado['periodos'] == 17
+    assert resultado['registros'] == 18
+
+    maio = (
+        FundoRotativoSaldo.query
+        .filter_by(ano=2026, mes=5)
+        .order_by(FundoRotativoSaldo.fonte_codigo.asc())
+        .all()
     )
-    db_session.execute(
-        text(
-            "INSERT INTO loa (row_id, codigoUG, ano, mes, id, codNatureza) "
-            "VALUES (:row_id, '210102', 2026, 1, '622110101', :codigo)"
-        ),
-        {'row_id': int(f'9{codigo[-5:]}'), 'codigo': codigo},
+    assert [s.fonte_codigo for s in maio] == ['500', '755']
+    assert [s.sincronizado_por for s in maio] == [123, 123]
+
+
+def test_sincronizacao_futura_busca_mes_atual_do_ano(app, db_session, monkeypatch):
+    import app.services.fundo_rotativo_service as service
+
+    class FakeDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 6, 2)
+
+    client = FakeSiafeClient()
+    monkeypatch.setattr(service, 'datetime', FakeDatetime)
+
+    with app.app_context():
+        resultado = service.sincronizar_saldos_mes_atual(usuario_id=None, siafe_client=client)
+
+    assert client.calls == [(2026, 6, '111111901', '210102')]
+    assert resultado['periodos'] == 1
+    assert resultado['registros'] == 1
+
+
+def test_sincronizacao_idempotente_substitui_snapshot_do_periodo(app, db_session):
+    from app.models.fundo_rotativo import FundoRotativoSaldo
+    from app.services.fundo_rotativo_service import sincronizar_saldos_periodos
+
+    client_1 = FakeSiafeClient(responses={
+        (2026, 12): [_sample_api_row(saldo='100.00', ano='2026', mes='12', fonte='7.55')]
+    })
+    client_2 = FakeSiafeClient(responses={
+        (2026, 12): [_sample_api_row(saldo='200.00', ano='2026', mes='12', fonte='7.55')]
+    })
+
+    with app.app_context():
+        sincronizar_saldos_periodos([(2026, 12)], usuario_id=None, siafe_client=client_1)
+        sincronizar_saldos_periodos([(2026, 12)], usuario_id=None, siafe_client=client_2)
+
+    registros = FundoRotativoSaldo.query.filter_by(ano=2026, mes=12).all()
+    assert len(registros) == 1
+    assert registros[0].valor == Decimal('200.00')
+
+
+def test_sincronizacao_com_falha_preserva_dados_existentes(app, db_session):
+    from app.models.fundo_rotativo import FundoRotativoSaldo
+    from app.services.fundo_rotativo_service import sincronizar_saldos_periodos
+
+    ok_client = FakeSiafeClient(responses={
+        (2026, 12): [_sample_api_row(saldo='100.00', ano='2026', mes='12')]
+    })
+    fail_client = FakeSiafeClient(fail_periods={(2026, 12)})
+
+    with app.app_context():
+        sincronizar_saldos_periodos([(2026, 12)], usuario_id=None, siafe_client=ok_client)
+        with pytest.raises(RuntimeError):
+            sincronizar_saldos_periodos([(2026, 12)], usuario_id=None, siafe_client=fail_client)
+
+    registros = FundoRotativoSaldo.query.filter_by(ano=2026, mes=12).all()
+    assert len(registros) == 1
+    assert registros[0].valor == Decimal('100.00')
+
+
+def test_listar_saldos_filtra_e_soma_por_ano_fonte(app, db_session):
+    from app.services.fundo_rotativo_service import sincronizar_saldos_periodos, listar_saldos
+
+    client = FakeSiafeClient(responses={
+        (2026, 12): [
+            _sample_api_row(saldo='100.00', ano='2026', mes='12', fonte='7.55'),
+            _sample_api_row(saldo='50.00', ano='2026', mes='12', fonte='5.00'),
+        ],
+        (2025, 12): [_sample_api_row(saldo='25.00', ano='2025', mes='12', fonte='7.55')],
+    })
+
+    with app.app_context():
+        sincronizar_saldos_periodos([(2026, 12), (2025, 12)], usuario_id=None, siafe_client=client)
+        pagination, soma_total = listar_saldos(ano='2026', fonte_codigo='755')
+
+    assert pagination.total == 1
+    assert pagination.items[0].valor == Decimal('100.00')
+    assert soma_total == pytest.approx(100.0)
+
+
+def test_listar_saldos_filtra_por_mes(app, db_session):
+    from app.services.fundo_rotativo_service import sincronizar_saldos_periodos, listar_saldos
+
+    client = FakeSiafeClient(responses={
+        (2026, 5): [_sample_api_row(saldo='100.00', ano='2026', mes='05', fonte='7.55')],
+        (2026, 6): [_sample_api_row(saldo='200.00', ano='2026', mes='06', fonte='7.55')],
+        (2025, 6): [_sample_api_row(saldo='400.00', ano='2025', mes='06', fonte='7.55')],
+    })
+
+    with app.app_context():
+        sincronizar_saldos_periodos(
+            [(2026, 5), (2026, 6), (2025, 6)],
+            usuario_id=None,
+            siafe_client=client,
+        )
+        # filtro só por mes=6 deve retornar 2 (2026/6 + 2025/6)
+        pagination, soma_total = listar_saldos(mes='6')
+
+    assert pagination.total == 2
+    assert soma_total == pytest.approx(600.0)
+
+    with app.app_context():
+        # combinacao ano=2026 + mes=6
+        pagination, soma_total = listar_saldos(ano='2026', mes='6')
+
+    assert pagination.total == 1
+    assert pagination.items[0].valor == Decimal('200.00')
+    assert soma_total == pytest.approx(200.0)
+
+
+def test_listar_saldos_filtra_por_conta_bancaria(app, db_session):
+    from app.services.fundo_rotativo_service import sincronizar_saldos_periodos, listar_saldos
+
+    # Linha customizada com numero de conta diferente
+    row_outra_conta = _sample_api_row(saldo='999.00', ano='2026', mes='05', fonte='1.00')
+    for c in row_outra_conta['classificacao']:
+        if c['codigoTipoClassificador'] == 101:
+            c['nomeClassificador'] = '001.9999.88888'
+            c['valoresClassificador'] = ['001', '9999', '88888']
+
+    client = FakeSiafeClient(responses={
+        (2026, 5): [
+            _sample_api_row(saldo='100.00', ano='2026', mes='05', fonte='7.55'),
+            _sample_api_row(saldo='50.00', ano='2026', mes='05', fonte='5.00'),
+            row_outra_conta,
+        ],
+    })
+
+    with app.app_context():
+        sincronizar_saldos_periodos([(2026, 5)], usuario_id=None, siafe_client=client)
+        pagination, soma_total = listar_saldos(conta_bancaria='95192')
+
+    assert pagination.total == 2
+    assert soma_total == pytest.approx(150.0)
+
+    with app.app_context():
+        pagination, soma_total = listar_saldos(conta_bancaria='88888')
+
+    assert pagination.total == 1
+    assert pagination.items[0].valor == Decimal('999.00')
+    assert soma_total == pytest.approx(999.0)
+
+
+def test_listar_contas_disponiveis(app, db_session):
+    from app.services.fundo_rotativo_service import (
+        listar_contas_disponiveis,
+        sincronizar_saldos_periodos,
     )
-    db_session.flush()
+
+    row_outra_conta = _sample_api_row(saldo='30.00', ano='2026', mes='05', fonte='1.00')
+    for c in row_outra_conta['classificacao']:
+        if c['codigoTipoClassificador'] == 101:
+            c['nomeClassificador'] = '001.9999.88888'
+            c['valoresClassificador'] = ['001', '9999', '88888']
+
+    client = FakeSiafeClient(responses={
+        (2026, 5): [
+            _sample_api_row(saldo='10.00', ano='2026', mes='05', fonte='7.55'),
+            _sample_api_row(saldo='20.00', ano='2026', mes='05', fonte='5.00'),
+            row_outra_conta,
+        ],
+    })
+
+    with app.app_context():
+        sincronizar_saldos_periodos([(2026, 5)], usuario_id=None, siafe_client=client)
+        contas = listar_contas_disponiveis()
+
+    # Apenas o numero da conta, sem banco/agencia
+    assert contas == [
+        {'codigo': '88888', 'label': '88888'},
+        {'codigo': '95192', 'label': '95192'},
+    ]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Service Layer
-# ─────────────────────────────────────────────────────────────────────────────
-class TestFundoRotativoService:
-    def test_criar_saldo_com_dados_validos(self, app, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo
-        from app.models.fundo_rotativo import FundoRotativoSaldo
+def test_listar_meses_disponiveis(app, db_session):
+    from app.services.fundo_rotativo_service import (
+        listar_meses_disponiveis,
+        sincronizar_saldos_periodos,
+    )
 
-        fonte = _make_fonte(db_session, codigo='100')
+    client = FakeSiafeClient(responses={
+        (2026, 5): [_sample_api_row(saldo='100.00', ano='2026', mes='05', fonte='7.55')],
+        (2026, 6): [_sample_api_row(saldo='200.00', ano='2026', mes='06', fonte='7.55')],
+        (2025, 1): [_sample_api_row(saldo='10.00', ano='2025', mes='01', fonte='7.55')],
+    })
 
-        with app.app_context():
-            saldo = criar_saldo(
-                valor=Decimal('1500.50'),
-                data=datetime(2026, 5, 1, 10, 0),
-                fonte_codigo=fonte.codigo,
-                id_exercicio='01',
-                usuario_id=None,
-            )
+    with app.app_context():
+        sincronizar_saldos_periodos(
+            [(2026, 5), (2026, 6), (2025, 1)],
+            usuario_id=None,
+            siafe_client=client,
+        )
+        meses = listar_meses_disponiveis()
 
-            assert saldo.id is not None
-            assert saldo.valor == Decimal('1500.50')
-            assert saldo.fonte_codigo == fonte.codigo
-            assert saldo.id_exercicio == '01'
-            assert FundoRotativoSaldo.query.count() == 1
-
-    def test_criar_saldo_rejeita_exercicio_invalido(self, app, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo
-
-        fonte = _make_fonte(db_session)
-
-        with app.app_context():
-            with pytest.raises(ValueError, match='[Ee]xerc'):
-                criar_saldo(
-                    valor=Decimal('100'),
-                    data=datetime(2026, 5, 1),
-                    fonte_codigo=fonte.codigo,
-                    id_exercicio='99',
-                    usuario_id=None,
-                )
-
-    def test_criar_saldo_rejeita_fonte_inexistente(self, app, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo
-
-        with app.app_context():
-            with pytest.raises(ValueError, match='[Ff]onte'):
-                criar_saldo(
-                    valor=Decimal('100'),
-                    data=datetime(2026, 5, 1),
-                    fonte_codigo='INEXISTENTE',
-                    id_exercicio='01',
-                    usuario_id=None,
-                )
-
-    def test_criar_saldo_rejeita_valor_zero_ou_negativo(self, app, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo
-
-        fonte = _make_fonte(db_session)
-
-        with app.app_context():
-            with pytest.raises(ValueError, match='[Vv]alor'):
-                criar_saldo(
-                    valor=Decimal('0'),
-                    data=datetime(2026, 5, 1),
-                    fonte_codigo=fonte.codigo,
-                    id_exercicio='01',
-                    usuario_id=None,
-                )
-
-    def test_atualizar_saldo(self, app, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo, atualizar_saldo
-
-        fonte = _make_fonte(db_session, codigo='200')
-
-        with app.app_context():
-            saldo = criar_saldo(
-                valor=Decimal('100'),
-                data=datetime(2026, 5, 1),
-                fonte_codigo=fonte.codigo,
-                id_exercicio='01',
-                usuario_id=None,
-            )
-
-            atualizado = atualizar_saldo(
-                saldo.id,
-                valor=Decimal('999.99'),
-                data=datetime(2026, 6, 1),
-                fonte_codigo=fonte.codigo,
-                id_exercicio='02',
-            )
-
-            assert atualizado.valor == Decimal('999.99')
-            assert atualizado.id_exercicio == '02'
-            assert atualizado.data == datetime(2026, 6, 1)
-
-    def test_excluir_saldo(self, app, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo, excluir_saldo
-        from app.models.fundo_rotativo import FundoRotativoSaldo
-
-        fonte = _make_fonte(db_session)
-
-        with app.app_context():
-            saldo = criar_saldo(
-                valor=Decimal('100'),
-                data=datetime(2026, 5, 1),
-                fonte_codigo=fonte.codigo,
-                id_exercicio='01',
-                usuario_id=None,
-            )
-            saldo_id = saldo.id
-
-            excluir_saldo(saldo_id)
-
-            assert FundoRotativoSaldo.query.get(saldo_id) is None
-
-    def test_listar_saldos_pagina_e_ordena_por_data_desc(self, app, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo, listar_saldos
-
-        fonte = _make_fonte(db_session)
-
-        with app.app_context():
-            criar_saldo(Decimal('100'), datetime(2026, 5, 1), fonte.codigo, '01', None)
-            criar_saldo(Decimal('200'), datetime(2026, 5, 3), fonte.codigo, '01', None)
-            criar_saldo(Decimal('300'), datetime(2026, 5, 2), fonte.codigo, '02', None)
-
-            pagination = listar_saldos(page=1)
-
-            assert pagination.total == 3
-            datas = [s.data for s in pagination.items]
-            assert datas == sorted(datas, reverse=True)
-
-    def test_criar_saldo_com_natureza(self, app, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo
-
-        fonte = _make_fonte(db_session, codigo='770')
-
-        with app.app_context():
-            saldo = criar_saldo(
-                valor=Decimal('500'),
-                data=datetime(2026, 5, 1),
-                fonte_codigo=fonte.codigo,
-                id_exercicio='01',
-                usuario_id=None,
-                natureza='339030',
-            )
-            assert saldo.natureza == '339030'
-
-    def test_filtrar_por_ano(self, app, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo, listar_saldos
-
-        fonte = _make_fonte(db_session, codigo='780')
-
-        with app.app_context():
-            criar_saldo(Decimal('100'), datetime(2024, 5, 1), fonte.codigo, '01', None)
-            criar_saldo(Decimal('200'), datetime(2025, 5, 1), fonte.codigo, '01', None)
-            criar_saldo(Decimal('300'), datetime(2026, 5, 1), fonte.codigo, '01', None)
-
-            pagination = listar_saldos(ano=2025)
-
-            assert pagination.total == 1
-            assert pagination.items[0].valor == Decimal('200')
-
-    def test_filtrar_por_natureza(self, app, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo, listar_saldos
-
-        fonte = _make_fonte(db_session, codigo='790')
-
-        with app.app_context():
-            criar_saldo(Decimal('100'), datetime(2026, 5, 1), fonte.codigo, '01', None, natureza='339030')
-            criar_saldo(Decimal('200'), datetime(2026, 5, 2), fonte.codigo, '01', None, natureza='449052')
-            criar_saldo(Decimal('300'), datetime(2026, 5, 3), fonte.codigo, '01', None, natureza=None)
-
-            pagination = listar_saldos(natureza='339030')
-
-            assert pagination.total == 1
-            assert pagination.items[0].valor == Decimal('100')
-
-    def test_listar_naturezas_disponiveis_com_codigo_titulo_e_label(self, app, db_session):
-        from app.services.fundo_rotativo_service import listar_naturezas_disponiveis
-
-        _seed_natureza_disponivel(db_session, codigo='339030', titulo='Material de Consumo')
-
-        with app.app_context():
-            naturezas = listar_naturezas_disponiveis()
-
-            assert naturezas == [{
-                'codigo': '339030',
-                'titulo': 'Material de Consumo',
-                'label': '339030 - Material de Consumo',
-            }]
+    assert meses == [1, 5, 6]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Rotas HTTP
-# ─────────────────────────────────────────────────────────────────────────────
 class TestFundoRotativoRotas:
-    def test_get_lista_retorna_200_para_admin(self, client, db_session):
+    def test_get_lista_retorna_200_sem_crud_para_admin(self, client, db_session):
         _login_admin(client, db_session)
-        _make_fonte(db_session)
 
         resp = client.get('/financeiro/fundo-rotativo/saldo')
 
         assert resp.status_code == 200
         html = resp.data.decode('utf-8', errors='replace')
-        assert 'Saldo' in html or 'Fundo Rotativo' in html
-
-    def test_get_lista_formata_filtro_natureza_com_codigo_e_titulo(self, client, db_session):
-        _login_admin(client, db_session)
-        _seed_natureza_disponivel(db_session, codigo='339030', titulo='Material de Consumo')
-
-        resp = client.get('/financeiro/fundo-rotativo/saldo')
-
-        assert resp.status_code == 200
-        html = resp.data.decode('utf-8', errors='replace')
-        assert 'value="339030"' in html
-        assert '339030 - Material de Consumo' in html
+        assert 'Fundo Rotativo' in html
+        assert 'Sincronizar Saldos' in html
+        assert 'Carga Inicial' not in html
+        assert 'Novo Saldo' not in html
+        assert 'Editar Saldo' not in html
+        assert 'Excluir Saldo' not in html
+        assert 'name="natureza"' not in html
 
     def test_get_lista_redireciona_se_nao_logado(self, client):
         resp = client.get('/financeiro/fundo-rotativo/saldo', follow_redirects=False)
         assert resp.status_code in (302, 401)
 
-    def test_post_cadastrar_cria_registro(self, client, db_session):
-        from app.models.fundo_rotativo import FundoRotativoSaldo
-
+    def test_post_crud_nao_existe_mais(self, client, db_session):
         _login_admin(client, db_session)
-        fonte = _make_fonte(db_session, codigo='300')
+
+        resp = client.post('/financeiro/fundo-rotativo/saldo/cadastrar')
+
+        assert resp.status_code == 404
+
+    def test_post_sincronizar_chama_servico(self, client, db_session, monkeypatch):
+        import app.financeiro.routes.fundo_rotativo as routes
+
+        usuario = _login_admin(client, db_session)
+        chamadas = []
+
+        def fake_sync(usuario_id):
+            chamadas.append(usuario_id)
+            return {'periodos': 1, 'registros': 5}
+
+        monkeypatch.setattr(routes, 'sincronizar_saldos_mes_atual', fake_sync)
 
         resp = client.post(
-            '/financeiro/fundo-rotativo/saldo/cadastrar',
-            data={
-                'valor': '1234.56',
-                'data': '2026-05-15T10:30',
-                'fonte_codigo': fonte.codigo,
-                'natureza': '339030',
-                'id_exercicio': '01',
-            },
+            '/financeiro/fundo-rotativo/saldo/sincronizar',
             follow_redirects=False,
         )
 
         assert resp.status_code == 302
-        registros = FundoRotativoSaldo.query.all()
-        assert len(registros) == 1
-        assert registros[0].valor == Decimal('1234.56')
-        assert registros[0].fonte_codigo == '300'
-        assert registros[0].id_exercicio == '01'
-        assert registros[0].natureza == '339030'
-
-    def test_post_cadastrar_recusa_dados_invalidos(self, client, db_session):
-        from app.models.fundo_rotativo import FundoRotativoSaldo
-
-        _login_admin(client, db_session)
-        _make_fonte(db_session, codigo='400')
-
-        resp = client.post(
-            '/financeiro/fundo-rotativo/saldo/cadastrar',
-            data={
-                'valor': '',
-                'data': '',
-                'fonte_codigo': '',
-                'id_exercicio': '',
-            },
-            follow_redirects=False,
-        )
-
-        assert resp.status_code == 302
-        assert FundoRotativoSaldo.query.count() == 0
-
-    def test_post_editar_atualiza_registro(self, client, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo
-        from app.models.fundo_rotativo import FundoRotativoSaldo
-
-        _login_admin(client, db_session)
-        fonte = _make_fonte(db_session, codigo='500')
-
-        saldo = criar_saldo(
-            valor=Decimal('100'),
-            data=datetime(2026, 5, 1),
-            fonte_codigo=fonte.codigo,
-            id_exercicio='01',
-            usuario_id=None,
-        )
-
-        resp = client.post(
-            f'/financeiro/fundo-rotativo/saldo/{saldo.id}/editar',
-            data={
-                'valor': '2000.00',
-                'data': '2026-06-10T14:00',
-                'fonte_codigo': fonte.codigo,
-                'id_exercicio': '02',
-            },
-            follow_redirects=False,
-        )
-
-        assert resp.status_code == 302
-        registro = FundoRotativoSaldo.query.get(saldo.id)
-        assert registro.valor == Decimal('2000.00')
-        assert registro.id_exercicio == '02'
-
-    def test_post_excluir_remove_registro(self, client, db_session):
-        from app.services.fundo_rotativo_service import criar_saldo
-        from app.models.fundo_rotativo import FundoRotativoSaldo
-
-        _login_admin(client, db_session)
-        fonte = _make_fonte(db_session, codigo='600')
-
-        saldo = criar_saldo(
-            valor=Decimal('100'),
-            data=datetime(2026, 5, 1),
-            fonte_codigo=fonte.codigo,
-            id_exercicio='01',
-            usuario_id=None,
-        )
-
-        resp = client.post(
-            f'/financeiro/fundo-rotativo/saldo/{saldo.id}/excluir',
-            follow_redirects=False,
-        )
-
-        assert resp.status_code == 302
-        assert FundoRotativoSaldo.query.get(saldo.id) is None
+        assert chamadas == [usuario.id]
 
     def test_usuario_sem_permissao_nao_acessa_lista(self, client, db_session):
         _login_sem_permissao(client, db_session)
 
         resp = client.get('/financeiro/fundo-rotativo/saldo', follow_redirects=False)
 
-        # Sem permissão: redireciona (302) para hub ou login
         assert resp.status_code == 302
+
+
+class TestJobSincronizacaoAutomatica:
+    def test_job_chama_sincronizar_saldos_mes_atual(self, app, monkeypatch):
+        import app.services.scheduler as scheduler_mod
+
+        chamadas = []
+
+        def fake_sync(usuario_id, siafe_client=None):
+            chamadas.append(usuario_id)
+            return {'periodos': 1, 'registros': 3}
+
+        monkeypatch.setattr(
+            scheduler_mod,
+            'sincronizar_saldos_mes_atual',
+            fake_sync,
+        )
+
+        scheduler_mod._job_sincronizar_saldos(app)
+
+        assert chamadas == [None]
+
+    def test_job_engole_excecoes_e_loga(self, app, monkeypatch, caplog):
+        import app.services.scheduler as scheduler_mod
+
+        def fake_sync(usuario_id, siafe_client=None):
+            raise RuntimeError('siafe fora do ar')
+
+        monkeypatch.setattr(
+            scheduler_mod,
+            'sincronizar_saldos_mes_atual',
+            fake_sync,
+        )
+
+        # nao deve propagar a excecao
+        scheduler_mod._job_sincronizar_saldos(app)

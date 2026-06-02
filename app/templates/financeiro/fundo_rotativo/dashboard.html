@@ -243,7 +243,7 @@
                     {% endwith %}
 
                     {% set opcoes_fonte = [] %}
-                    {% for f in fontes %}{% set _ = opcoes_fonte.append((f.codigo, f.codigo ~ ' - ' ~ f.descricao)) %}{% endfor %}
+                    {% for f in fontes %}{% set _ = opcoes_fonte.append((f.codigo, f.label)) %}{% endfor %}
                     {% with rotulo='Fonte', icone='bi-cash-coin', nome='fonte_codigo',
                             opcoes=opcoes_fonte, selecionados=fontes_filtro %}
                         {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
