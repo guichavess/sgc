@@ -92,17 +92,26 @@ def listar_saldos(
     """Lista saldos paginados, ordenados por data desc + id desc."""
     query = FundoRotativoSaldo.query
 
-    if fonte_codigo:
-        query = query.filter(FundoRotativoSaldo.fonte_codigo == fonte_codigo)
-    if id_exercicio:
-        query = query.filter(FundoRotativoSaldo.id_exercicio == id_exercicio)
-    if ano:
+    fontes = [str(v).strip() for v in _as_list(fonte_codigo) if str(v).strip()]
+    if fontes:
+        query = query.filter(FundoRotativoSaldo.fonte_codigo.in_(fontes))
+
+    exercicios = [str(v).strip() for v in _as_list(id_exercicio) if str(v).strip()]
+    if exercicios:
+        query = query.filter(FundoRotativoSaldo.id_exercicio.in_(exercicios))
+
+    anos = []
+    for v in _as_list(ano):
         try:
-            query = query.filter(extract('year', FundoRotativoSaldo.data) == int(ano))
+            anos.append(int(str(v)))
         except (TypeError, ValueError):
             pass
-    if natureza:
-        query = query.filter(FundoRotativoSaldo.natureza == natureza)
+    if anos:
+        query = query.filter(extract('year', FundoRotativoSaldo.data).in_(anos))
+
+    naturezas = [str(v).strip() for v in _as_list(natureza) if str(v).strip()]
+    if naturezas:
+        query = query.filter(FundoRotativoSaldo.natureza.in_(naturezas))
     if busca:
         filtro = f'%{busca}%'
         query = query.outerjoin(
@@ -224,13 +233,53 @@ def _parse_int_filter(valor):
         return valor
 
 
+def _as_list(valor):
+    if valor is None or valor == '':
+        return []
+    if isinstance(valor, (list, tuple, set)):
+        return [v for v in valor if v not in (None, '')]
+    return [valor]
+
+
 def _normalizar_filtros_dashboard(ano=None, fonte_codigo=None, natureza=None):
+    anos = []
+    for v in _as_list(ano):
+        parsed = _parse_ano(v)
+        if parsed:
+            anos.append(parsed)
+
+    fontes = []
+    for v in _as_list(fonte_codigo):
+        s = str(v).strip()
+        if s:
+            fontes.append(s)
+
+    naturezas = []
+    for v in _as_list(natureza):
+        s = str(v).strip()
+        if s:
+            naturezas.append(s)
+
+    fontes_int = []
+    for v in fontes:
+        try:
+            fontes_int.append(int(v))
+        except (TypeError, ValueError):
+            pass
+
+    naturezas_int = []
+    for v in naturezas:
+        try:
+            naturezas_int.append(int(v))
+        except (TypeError, ValueError):
+            pass
+
     return {
-        'ano': _parse_ano(ano),
-        'fonte_codigo': str(fonte_codigo).strip() if fonte_codigo else None,
-        'fonte_codigo_int': _parse_int_filter(fonte_codigo),
-        'natureza': str(natureza).strip() if natureza else None,
-        'natureza_int': _parse_int_filter(natureza),
+        'anos': anos,
+        'fontes': fontes,
+        'fontes_int': fontes_int,
+        'naturezas': naturezas,
+        'naturezas_int': naturezas_int,
     }
 
 
@@ -238,26 +287,24 @@ def _aplicar_filtros_execucao(query, model, filtros):
     if not filtros:
         return query
 
-    if filtros.get('ano'):
-        inicio = datetime(filtros['ano'], 1, 1)
-        fim = datetime(filtros['ano'] + 1, 1, 1)
-        query = query.filter(model.dataEmissao >= inicio, model.dataEmissao < fim)
-    if filtros.get('fonte_codigo_int') is not None:
-        query = query.filter(model.codFonte == filtros['fonte_codigo_int'])
-    if filtros.get('natureza_int') is not None:
-        query = query.filter(model.codNatureza == filtros['natureza_int'])
+    if filtros.get('anos'):
+        query = query.filter(extract('year', model.dataEmissao).in_(filtros['anos']))
+    if filtros.get('fontes_int'):
+        query = query.filter(model.codFonte.in_(filtros['fontes_int']))
+    if filtros.get('naturezas_int'):
+        query = query.filter(model.codNatureza.in_(filtros['naturezas_int']))
     return query
 
 
 def _saldo_total_dashboard(filtros):
     query = db.session.query(func.coalesce(func.sum(FundoRotativoSaldo.valor), 0))
 
-    if filtros.get('fonte_codigo'):
-        query = query.filter(FundoRotativoSaldo.fonte_codigo == filtros['fonte_codigo'])
-    if filtros.get('natureza'):
-        query = query.filter(FundoRotativoSaldo.natureza == filtros['natureza'])
-    if filtros.get('ano'):
-        query = query.filter(extract('year', FundoRotativoSaldo.data) == filtros['ano'])
+    if filtros.get('fontes'):
+        query = query.filter(FundoRotativoSaldo.fonte_codigo.in_(filtros['fontes']))
+    if filtros.get('naturezas'):
+        query = query.filter(FundoRotativoSaldo.natureza.in_(filtros['naturezas']))
+    if filtros.get('anos'):
+        query = query.filter(extract('year', FundoRotativoSaldo.data).in_(filtros['anos']))
 
     return _as_float(query.scalar())
 

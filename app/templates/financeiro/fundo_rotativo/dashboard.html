@@ -33,6 +33,17 @@
     .fr-kpi-liquidado { border-left-color: #16a34a; }
     .fr-kpi-pago { border-left-color: #dc2626; }
     .fr-kpi-value.negativo { color: #dc2626; }
+
+    /* Filtros padrão CGFR (espelha .filters-top-bar de cgfr.css) */
+    .fr-filters-card { border-radius: 12px; }
+    .fr-filters-top-bar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+    .fr-filters-top-bar .form-select { min-width: 160px; padding-right: 2rem; }
+    .fr-filters-top-bar .input-group { max-width: 320px; }
     .fr-table-card {
         border: 0;
         border-radius: 8px;
@@ -113,6 +124,78 @@
         border: 0;
         color: #fff;
     }
+    /* ---------- Filtros estilo CGFR ---------- */
+    .filters-top-bar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+    .filters-top-bar .total-records { font-size: 0.84rem; }
+    .filters-bar { position: relative; z-index: 10; }
+    .filters-bar .dropdown .btn {
+        font-size: 0.82rem;
+        font-weight: 500;
+        padding: 5px 12px;
+        border-color: #dee2e6;
+        color: #64748b;
+    }
+    .filters-bar .dropdown .btn:hover { background: #f8f9fa; }
+    .filters-bar .dropdown .btn.has-filter {
+        border-color: #3b82f6;
+        color: #2563eb;
+        background: #eff6ff;
+        font-weight: 600;
+    }
+    .fr-filter-count {
+        background: #2563eb;
+        color: #fff;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        padding: 1px 7px;
+        margin-left: 4px;
+        font-weight: 700;
+    }
+    .column-filter-menu {
+        min-width: 260px;
+        max-width: 360px;
+        padding: 10px !important;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,.15);
+        z-index: 1050;
+    }
+    .column-filter-search {
+        font-size: 0.82rem;
+        border-radius: 6px;
+    }
+    .column-filter-options {
+        max-height: 250px;
+        overflow-y: auto;
+        margin-top: 4px;
+    }
+    .column-filter-options .form-check {
+        padding: 4px 8px 4px 28px;
+        font-size: 0.82rem;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-bottom: 1px;
+    }
+    .column-filter-options .form-check:hover { background: #f8f9fa; }
+    .column-filter-options .form-check-label {
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 280px;
+        display: block;
+    }
+    .column-filter-options .form-check-input { cursor: pointer; }
+    .column-filter-options .filter-select-all {
+        border-bottom: 1px solid #e9ecef;
+        margin-bottom: 4px;
+        padding-bottom: 6px;
+        font-weight: 600;
+    }
 </style>
 {% endblock %}
 
@@ -124,47 +207,55 @@
     </div>
 </div>
 
-<div class="card mb-4">
-    <div class="card-body py-3">
-        <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-4 col-lg-2">
-                <label class="form-label small fw-semibold text-muted mb-1">Ano</label>
-                <select class="form-select" name="ano">
-                    <option value="">Todos</option>
-                    {% for a in anos %}
-                    <option value="{{ a }}" {% if (ano_filtro|string) == (a|string) %}selected{% endif %}>{{ a }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-4 col-lg-3">
-                <label class="form-label small fw-semibold text-muted mb-1">Fonte</label>
-                <select class="form-select" name="fonte_codigo">
-                    <option value="">Todas</option>
-                    {% for f in fontes %}
-                    <option value="{{ f.codigo }}" {% if f.codigo|string == fonte_codigo_filtro|string %}selected{% endif %}>
-                        {{ f.codigo }} - {{ f.descricao }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-4 col-lg-4">
-                <label class="form-label small fw-semibold text-muted mb-1">Natureza</label>
-                <select class="form-select" name="natureza">
-                    <option value="">Todas</option>
-                    {% for n in naturezas %}
-                    <option value="{{ n.codigo }}" {% if n.codigo|string == natureza_filtro|string %}selected{% endif %}>
-                        {{ n.label }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-12 col-lg-3 d-flex gap-2">
+<div class="card mb-3 fr-filters-card">
+    <div class="card-body py-3 px-4">
+        <form method="get" id="frFiltrosForm">
+            {# Linha 1: busca client-side + ações #}
+            <div class="filters-top-bar mb-3">
+                <div class="input-group input-group-sm" style="max-width: 420px;">
+                    <span class="input-group-text bg-transparent border-end-0">
+                        <i class="bi bi-search text-muted"></i>
+                    </span>
+                    <input type="text" id="frBuscaContrato" class="form-control border-start-0"
+                           placeholder="Buscar credor ou contrato..." style="font-size: 0.84rem;"
+                           autocomplete="off">
+                </div>
+                <span class="total-records ms-auto" style="color: #1e293b; font-weight: 700;">
+                    Contratos exibidos: <strong id="frTotalRecords">0</strong>
+                </span>
                 <button type="submit" class="btn btn-primary btn-sm">
-                    <i class="bi bi-funnel me-1"></i> Filtrar
+                    <i class="bi bi-funnel me-1"></i> Aplicar Filtros
                 </button>
-                <a href="{{ url_for('financeiro.fundo_rotativo_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                <a href="{{ url_for('financeiro.fundo_rotativo_dashboard') }}"
+                   class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-x-circle me-1"></i> Limpar
                 </a>
+            </div>
+
+            {# Linha 2: dropdowns multi-select (Ano, Fonte, Natureza) #}
+            <div class="filters-bar">
+                <div class="d-flex flex-wrap gap-2">
+                    {% set opcoes_ano = [] %}
+                    {% for a in anos %}{% set _ = opcoes_ano.append((a, a|string)) %}{% endfor %}
+                    {% with rotulo='Ano', icone='bi-calendar3', nome='ano',
+                            opcoes=opcoes_ano, selecionados=anos_filtro %}
+                        {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
+                    {% endwith %}
+
+                    {% set opcoes_fonte = [] %}
+                    {% for f in fontes %}{% set _ = opcoes_fonte.append((f.codigo, f.codigo ~ ' - ' ~ f.descricao)) %}{% endfor %}
+                    {% with rotulo='Fonte', icone='bi-cash-coin', nome='fonte_codigo',
+                            opcoes=opcoes_fonte, selecionados=fontes_filtro %}
+                        {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
+                    {% endwith %}
+
+                    {% set opcoes_natureza = [] %}
+                    {% for n in naturezas %}{% set _ = opcoes_natureza.append((n.codigo, n.label)) %}{% endfor %}
+                    {% with rotulo='Natureza', icone='bi-tags', nome='natureza',
+                            opcoes=opcoes_natureza, selecionados=naturezas_filtro %}
+                        {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
+                    {% endwith %}
+                </div>
             </div>
         </form>
     </div>
@@ -217,12 +308,6 @@
     <div class="fr-table-header d-flex flex-wrap gap-3 justify-content-between align-items-center">
         <h5 class="mb-0 fw-bold" style="color: #343990;">Execução por Contrato</h5>
         <div class="d-flex flex-wrap align-items-center gap-3">
-            <div class="input-group input-group-sm" style="width: min(280px, 70vw);">
-                <span class="input-group-text bg-white">
-                    <i class="bi bi-search"></i>
-                </span>
-                <input type="text" class="form-control" id="frBuscaContrato" placeholder="Buscar credor ou contrato...">
-            </div>
             <button type="button" class="btn btn-sm btn-outline-success d-flex align-items-center gap-1" id="frExportExcel">
                 <i class="bi bi-file-earmark-excel"></i> Exportar Excel
             </button>
@@ -399,6 +484,8 @@ function frRenderTable() {
     document.getElementById('frContratoBadge').textContent =
         `${frSortedRows.length} contrato${frSortedRows.length === 1 ? '' : 's'}`;
     document.getElementById('frExportExcel').disabled = frSortedRows.length === 0;
+    const totalEl = document.getElementById('frTotalRecords');
+    if (totalEl) totalEl.textContent = frSortedRows.length;
 
     const tbody = document.getElementById('frTabelaContratosBody');
     if (!frCurrentPageRows.length) {
@@ -511,6 +598,45 @@ table{border-collapse:collapse}th{background-color:#343990;color:#fff;font-weigh
     URL.revokeObjectURL(url);
 }
 
+function frInitFilterDropdowns() {
+    // Busca interna em cada dropdown
+    document.querySelectorAll('.column-filter-search').forEach((input) => {
+        input.addEventListener('input', () => {
+            const q = input.value.toLowerCase();
+            const menu = input.closest('.column-filter-menu');
+            menu.querySelectorAll('.column-filter-options .form-check:not(.filter-select-all)').forEach((row) => {
+                const label = row.querySelector('.form-check-label').textContent.toLowerCase();
+                row.style.display = label.indexOf(q) === -1 ? 'none' : '';
+            });
+        });
+    });
+
+    // Sincronização "Todos" ↔ checkboxes individuais (sem submeter — usuário clica em Aplicar Filtros)
+    document.querySelectorAll('.column-filter-options').forEach((box) => {
+        const all = box.querySelector('[data-select-all]');
+        const items = box.querySelectorAll('input[type="checkbox"]:not([data-select-all])');
+
+        if (all) {
+            all.addEventListener('change', () => {
+                if (all.checked) {
+                    // "Todos" = nenhum filtro específico → desmarcar individuais
+                    items.forEach((cb) => { cb.checked = false; });
+                } else {
+                    // Recheca para evitar estado vazio
+                    all.checked = true;
+                }
+            });
+        }
+
+        items.forEach((cb) => {
+            cb.addEventListener('change', () => {
+                const anyChecked = Array.from(items).some((i) => i.checked);
+                if (all) all.checked = !anyChecked;
+            });
+        });
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-money]').forEach((el) => {
         const raw = Number(el.dataset.money || 0);
@@ -519,6 +645,8 @@ document.addEventListener('DOMContentLoaded', () => {
             el.classList.add('negativo');
         }
     });
+
+    frInitFilterDropdowns();
 
     document.getElementById('frBuscaContrato').addEventListener('input', (event) => {
         frBusca = event.target.value;

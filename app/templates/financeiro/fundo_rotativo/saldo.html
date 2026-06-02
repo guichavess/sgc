@@ -1,5 +1,45 @@
 {% extends "financeiro/base_financeiro.html" %}
 
+{% block extra_css %}
+<style>
+    .filters-top-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .filters-top-bar .total-records { font-size: 0.84rem; }
+    .filters-bar { position: relative; z-index: 10; }
+    .filters-bar .dropdown .btn {
+        font-size: 0.82rem; font-weight: 500; padding: 5px 12px;
+        border-color: #dee2e6; color: #64748b;
+    }
+    .filters-bar .dropdown .btn:hover { background: #f8f9fa; }
+    .filters-bar .dropdown .btn.has-filter {
+        border-color: #3b82f6; color: #2563eb; background: #eff6ff; font-weight: 600;
+    }
+    .fr-filter-count {
+        background: #2563eb; color: #fff; border-radius: 999px;
+        font-size: 0.7rem; padding: 1px 7px; margin-left: 4px; font-weight: 700;
+    }
+    .column-filter-menu {
+        min-width: 260px; max-width: 360px; padding: 10px !important;
+        border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.15); z-index: 1050;
+    }
+    .column-filter-search { font-size: 0.82rem; border-radius: 6px; }
+    .column-filter-options { max-height: 250px; overflow-y: auto; margin-top: 4px; }
+    .column-filter-options .form-check {
+        padding: 4px 8px 4px 28px; font-size: 0.82rem; border-radius: 4px;
+        cursor: pointer; margin-bottom: 1px;
+    }
+    .column-filter-options .form-check:hover { background: #f8f9fa; }
+    .column-filter-options .form-check-label {
+        cursor: pointer; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap; max-width: 280px; display: block;
+    }
+    .column-filter-options .form-check-input { cursor: pointer; }
+    .column-filter-options .filter-select-all {
+        border-bottom: 1px solid #e9ecef; margin-bottom: 4px;
+        padding-bottom: 6px; font-weight: 600;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
@@ -15,58 +55,54 @@
     </div>
 </div>
 
-{# Filtros #}
+{# Filtros — estilo CGFR (busca + multi-select com checkboxes) #}
 <div class="card mb-4">
-    <div class="card-body py-3">
-        <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-12 col-lg-4">
-                <label class="form-label small fw-semibold text-muted mb-1">Busca</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-white border-end-0 text-muted">
-                        <i class="bi bi-search"></i>
+    <div class="card-body py-3 px-4">
+        <form method="get" id="frSaldoFiltrosForm">
+            <div class="filters-top-bar mb-3">
+                <div class="input-group input-group-sm" style="max-width: 420px;">
+                    <span class="input-group-text bg-transparent border-end-0">
+                        <i class="bi bi-search text-muted"></i>
                     </span>
-                    <input type="text" class="form-control border-start-0 ps-0" name="busca"
-                           value="{{ busca }}" placeholder="Buscar por fonte, descrição ou natureza...">
+                    <input type="text" name="busca" class="form-control border-start-0"
+                           value="{{ busca }}" placeholder="Buscar por fonte ou descrição..."
+                           style="font-size: 0.84rem;" autocomplete="off">
                 </div>
-            </div>
-            <div class="col-md-6 col-lg-2">
-                <label class="form-label small fw-semibold text-muted mb-1">Fonte</label>
-                <select class="form-select" name="fonte_codigo">
-                    <option value="">Todas</option>
-                    {% for f in fontes %}
-                    <option value="{{ f.codigo }}" {% if f.codigo == fonte_codigo_filtro %}selected{% endif %}>
-                        {{ f.codigo }} - {{ f.descricao }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-4 col-lg-1">
-                <label class="form-label small fw-semibold text-muted mb-1">Ano</label>
-                <select class="form-select" name="ano">
-                    <option value="">Todos</option>
-                    {% for a in anos %}
-                    <option value="{{ a }}" {% if (ano_filtro|string) == (a|string) %}selected{% endif %}>{{ a }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-4 col-lg-2">
-                <label class="form-label small fw-semibold text-muted mb-1">Exercício</label>
-                <select class="form-select" name="id_exercicio">
-                    <option value="">Todos</option>
-                    {% for eid, titulo in exercicios %}
-                    <option value="{{ eid }}" {% if eid == id_exercicio_filtro %}selected{% endif %}>
-                        {{ eid }} - {{ titulo }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-4 col-lg-1 d-flex flex-column gap-2">
-                <button type="submit" class="btn btn-primary btn-sm w-100">
-                    <i class="bi bi-funnel me-1"></i> Filtrar
+                <span class="total-records ms-auto" style="color: #1e293b; font-weight: 700;">
+                    Registros: <strong>{{ pagination.total }}</strong>
+                </span>
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-funnel me-1"></i> Aplicar Filtros
                 </button>
-                <a href="{{ url_for('financeiro.fundo_rotativo_saldo_lista') }}" class="btn btn-outline-secondary btn-sm w-100">
+                <a href="{{ url_for('financeiro.fundo_rotativo_saldo_lista') }}"
+                   class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-x-circle me-1"></i> Limpar
                 </a>
+            </div>
+
+            <div class="filters-bar">
+                <div class="d-flex flex-wrap gap-2">
+                    {% set opcoes_fonte = [] %}
+                    {% for f in fontes %}{% set _ = opcoes_fonte.append((f.codigo, f.codigo ~ ' - ' ~ f.descricao)) %}{% endfor %}
+                    {% with rotulo='Fonte', icone='bi-cash-coin', nome='fonte_codigo',
+                            opcoes=opcoes_fonte, selecionados=fontes_codigo_filtro %}
+                        {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
+                    {% endwith %}
+
+                    {% set opcoes_ano = [] %}
+                    {% for a in anos %}{% set _ = opcoes_ano.append((a, a|string)) %}{% endfor %}
+                    {% with rotulo='Ano', icone='bi-calendar3', nome='ano',
+                            opcoes=opcoes_ano, selecionados=anos_filtro %}
+                        {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
+                    {% endwith %}
+
+                    {% set opcoes_exerc = [] %}
+                    {% for eid, titulo in exercicios %}{% set _ = opcoes_exerc.append((eid, eid ~ ' - ' ~ titulo)) %}{% endfor %}
+                    {% with rotulo='Exercício', icone='bi-bookmark', nome='id_exercicio',
+                            opcoes=opcoes_exerc, selecionados=ids_exercicio_filtro %}
+                        {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
+                    {% endwith %}
+                </div>
             </div>
         </form>
     </div>
@@ -149,21 +185,21 @@
             <nav aria-label="Navegação">
                 <ul class="pagination pagination-sm mb-0">
                     <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
-                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.prev_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro) if pagination.has_prev else '#' }}">
+                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.prev_num, busca=busca, fonte_codigo=fontes_codigo_filtro, id_exercicio=ids_exercicio_filtro, ano=anos_filtro) if pagination.has_prev else '#' }}">
                             <i class="bi bi-chevron-left"></i>
                         </a>
                     </li>
                     {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                         {% if page_num %}
                             <li class="page-item {{ 'active' if page_num == pagination.page }}">
-                                <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=page_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro) }}">{{ page_num }}</a>
+                                <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=page_num, busca=busca, fonte_codigo=fontes_codigo_filtro, id_exercicio=ids_exercicio_filtro, ano=anos_filtro) }}">{{ page_num }}</a>
                             </li>
                         {% else %}
                             <li class="page-item disabled"><span class="page-link">...</span></li>
                         {% endif %}
                     {% endfor %}
                     <li class="page-item {{ 'disabled' if not pagination.has_next }}">
-                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.next_num, busca=busca, fonte_codigo=fonte_codigo_filtro, id_exercicio=id_exercicio_filtro, ano=ano_filtro) if pagination.has_next else '#' }}">
+                        <a class="page-link" href="{{ url_for('financeiro.fundo_rotativo_saldo_lista', page=pagination.next_num, busca=busca, fonte_codigo=fontes_codigo_filtro, id_exercicio=ids_exercicio_filtro, ano=anos_filtro) if pagination.has_next else '#' }}">
                             <i class="bi bi-chevron-right"></i>
                         </a>
                     </li>
@@ -257,10 +293,44 @@
 
 {% block extra_js %}
 <script>
+function frSaldoInitFilters() {
+    document.querySelectorAll('.column-filter-search').forEach(function(input) {
+        input.addEventListener('input', function() {
+            var q = input.value.toLowerCase();
+            var menu = input.closest('.column-filter-menu');
+            menu.querySelectorAll('.column-filter-options .form-check:not(.filter-select-all)').forEach(function(row) {
+                var label = row.querySelector('.form-check-label').textContent.toLowerCase();
+                row.style.display = label.indexOf(q) === -1 ? 'none' : '';
+            });
+        });
+    });
+
+    document.querySelectorAll('.column-filter-options').forEach(function(box) {
+        var all = box.querySelector('[data-select-all]');
+        var items = box.querySelectorAll('input[type="checkbox"]:not([data-select-all])');
+        if (all) {
+            all.addEventListener('change', function() {
+                if (all.checked) {
+                    items.forEach(function(cb) { cb.checked = false; });
+                } else {
+                    all.checked = true;
+                }
+            });
+        }
+        items.forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                var anyChecked = Array.from(items).some(function(i) { return i.checked; });
+                if (all) all.checked = !anyChecked;
+            });
+        });
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     if (window.SGC && SGC.maskMoneyAll) {
         SGC.maskMoneyAll('.mask-money');
     }
+    frSaldoInitFilters();
 });
 </script>
 {% endblock %}

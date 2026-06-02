@@ -1,0 +1,37 @@
+{# Widget de filtro multi-select estilo CGFR (busca + checkboxes).
+   Variáveis esperadas:
+     - rotulo: texto do botão (ex: "Ano", "Fonte", "Natureza")
+     - icone: classe Bootstrap Icons (ex: "bi-calendar3")
+     - nome: name do checkbox (ex: "ano", "fonte_codigo")
+     - opcoes: list de tuplas (valor, label) — valor é o que será submetido
+     - selecionados: list (strings) dos valores atualmente marcados
+#}
+<div class="dropdown fr-filter-dd">
+    <button class="btn btn-outline-secondary btn-sm dropdown-toggle{% if selecionados %} has-filter{% endif %}"
+            type="button"
+            data-bs-toggle="dropdown"
+            data-bs-auto-close="outside">
+        <i class="bi {{ icone }} me-1"></i>
+        {{ rotulo }}{% if selecionados %} <span class="fr-filter-count">{{ selecionados|length }}</span>{% endif %}
+    </button>
+    <div class="dropdown-menu p-2 column-filter-menu">
+        <input type="text" class="form-control form-control-sm column-filter-search mb-2"
+               placeholder="Buscar...">
+        <div class="column-filter-options" data-column="{{ nome }}">
+            <div class="form-check filter-select-all">
+                <input class="form-check-input" type="checkbox" data-select-all="true"
+                       {% if not selecionados %}checked{% endif %}>
+                <label class="form-check-label fw-semibold">Todos</label>
+            </div>
+            {% for valor, label in opcoes %}
+            {% set v = valor|string %}
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox"
+                       name="{{ nome }}" value="{{ v }}"
+                       {% if v in (selecionados|map('string')|list) %}checked{% endif %}>
+                <label class="form-check-label" title="{{ label }}">{{ label }}</label>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>

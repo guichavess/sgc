@@ -45,18 +45,18 @@ def _parse_data(valor):
 def fundo_rotativo_saldo_lista():
     page = max(1, request.args.get('page', 1, type=int) or 1)
     busca = request.args.get('busca', '').strip()
-    fonte_codigo = request.args.get('fonte_codigo', '').strip()
-    id_exercicio = request.args.get('id_exercicio', '').strip()
-    ano = request.args.get('ano', '').strip()
-    natureza = request.args.get('natureza', '').strip()
+    fontes_codigo = [v for v in request.args.getlist('fonte_codigo') if v]
+    ids_exercicio = [v for v in request.args.getlist('id_exercicio') if v]
+    anos_filtro = [v for v in request.args.getlist('ano') if v]
+    naturezas_filtro = [v for v in request.args.getlist('natureza') if v]
 
     pagination, soma_total = listar_saldos(
         page=page,
         busca=busca or None,
-        fonte_codigo=fonte_codigo or None,
-        id_exercicio=id_exercicio or None,
-        ano=ano or None,
-        natureza=natureza or None,
+        fonte_codigo=fontes_codigo or None,
+        id_exercicio=ids_exercicio or None,
+        ano=anos_filtro or None,
+        natureza=naturezas_filtro or None,
     )
 
     fontes = (
@@ -74,10 +74,10 @@ def fundo_rotativo_saldo_lista():
         pagination=pagination,
         soma_total=soma_total,
         busca=busca,
-        fonte_codigo_filtro=fonte_codigo,
-        id_exercicio_filtro=id_exercicio,
-        ano_filtro=ano,
-        natureza_filtro=natureza,
+        fontes_codigo_filtro=fontes_codigo,
+        ids_exercicio_filtro=ids_exercicio,
+        anos_filtro=anos_filtro,
+        naturezas_filtro=naturezas_filtro,
         fontes=fontes,
         exercicios=FUNDO_ROTATIVO_EXERCICIOS,
         naturezas=naturezas,
@@ -92,14 +92,14 @@ def fundo_rotativo_saldo_lista():
 @login_required
 @requires_permission('fundo_rotativo.visualizar')
 def fundo_rotativo_dashboard():
-    ano = request.args.get('ano', '').strip()
-    fonte_codigo = request.args.get('fonte_codigo', '').strip()
-    natureza = request.args.get('natureza', '').strip()
+    anos_filtro = [v for v in request.args.getlist('ano') if v]
+    fontes_filtro = [v for v in request.args.getlist('fonte_codigo') if v]
+    naturezas_filtro = [v for v in request.args.getlist('natureza') if v]
 
     dashboard = obter_dashboard_fundo_rotativo(
-        ano=ano or None,
-        fonte_codigo=fonte_codigo or None,
-        natureza=natureza or None,
+        ano=anos_filtro or None,
+        fonte_codigo=fontes_filtro or None,
+        natureza=naturezas_filtro or None,
     )
     fontes = (
         ClassFonte.query
@@ -117,9 +117,9 @@ def fundo_rotativo_dashboard():
         anos=anos,
         fontes=fontes,
         naturezas=naturezas,
-        ano_filtro=ano,
-        fonte_codigo_filtro=fonte_codigo,
-        natureza_filtro=natureza,
+        anos_filtro=anos_filtro,
+        fontes_filtro=fontes_filtro,
+        naturezas_filtro=naturezas_filtro,
     )
 
 
