@@ -107,6 +107,66 @@ def test_classificacao_rejeita_deliberacao_fora_do_dropdown(db_session):
     assert processo.deliberacao == 'Aprovado'
 
 
+def test_opcoes_deliberacao_nao_expoem_aliases_antigos():
+    assert 'Aprovado, com redução.' not in CGFR_DELIBERACAO_OPTIONS
+    assert 'Retirado de pauta' not in CGFR_DELIBERACAO_OPTIONS
+    assert 'Aprovado com redução' in CGFR_DELIBERACAO_OPTIONS
+    assert 'Retirado' in CGFR_DELIBERACAO_OPTIONS
+
+
+@pytest.mark.parametrize(
+    ('entrada', 'esperado'),
+    [
+        ('Aprovado, com redução.', 'Aprovado com redução'),
+        ('Retirado de pauta', 'Retirado'),
+        ('Retirado de Pauta', 'Retirado'),
+    ],
+)
+def test_classificacao_normaliza_aliases_antigos_de_deliberacao(db_session, entrada, esperado):
+    processo = CgfrProcessoEnviado(processo_formatado=f'00002.0000{len(entrada)}/2026-01')
+    db_session.add(processo)
+    db_session.commit()
+
+    ProcessoService.classificar_processo(
+        processo.processo_formatado,
+        {'deliberacao': entrada},
+    )
+
+    db_session.refresh(processo)
+    assert processo.deliberacao == esperado
+
+
+def test_api_data_normaliza_deliberacoes_antigas_para_filtro(client, app, db_session):
+    processos = [
+        CgfrProcessoEnviado(
+            processo_formatado='00002.000201/2026-01',
+            deliberacao='Aprovado, com redução.',
+        ),
+        CgfrProcessoEnviado(
+            processo_formatado='00002.000202/2026-02',
+            deliberacao='Aprovado com redução',
+        ),
+        CgfrProcessoEnviado(
+            processo_formatado='00002.000203/2026-03',
+            deliberacao='Retirado de pauta',
+        ),
+    ]
+    db_session.add_all(processos)
+    db_session.flush()
+
+    with app.app_context():
+        _login_admin_cgfr(client, db_session)
+        resp = client.post('/cgfr/api/data', json={})
+
+    assert resp.status_code == 200
+    deliberacoes = {
+        record['deliberacao']
+        for record in resp.get_json()['records']
+        if record.get('deliberacao')
+    }
+    assert deliberacoes == {'Aprovado com redução', 'Retirado'}
+
+
 def test_modal_edicao_nao_mantem_campo_aberto_para_deliberacao():
     template_path = Path('app/templates/cgfr/partials/modal_edicao.html')
     html = template_path.read_text(encoding='utf-8')

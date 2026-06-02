@@ -16,6 +16,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from app.cgfr.routes import cgfr_bp
 from app.cgfr.models import CgfrProcessoEnviado
 from app.cgfr.routes.acompanhar import _fetch_and_save_docs
+from app.constants import normalizar_cgfr_deliberacao
 from app.extensions import db
 from app.services.sei_auth import gerar_token_sei_admin
 from app.utils.permissions import requires_permission
@@ -282,7 +283,7 @@ def vincular_processo_post():
             fornecedor=request.form.get('fornecedor', '').strip() or None,
             objeto_do_pedido=request.form.get('objeto_do_pedido', '').strip() or None,
             necessidade=request.form.get('necessidade', '').strip() or None,
-            deliberacao=request.form.get('deliberacao', '').strip() or None,
+            deliberacao=normalizar_cgfr_deliberacao(request.form.get('deliberacao', '')) or None,
             tipo_despesa=request.form.get('tipo_despesa', '').strip() or None,
             valor_solicitado=parse_valor(request.form.get('valor_solicitado', '')),
             valor_aprovado=parse_valor(request.form.get('valor_aprovado', '')),

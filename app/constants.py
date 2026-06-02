@@ -38,12 +38,29 @@ CGFR_DELIBERACAO_OPTIONS = [
     'Aguardando Aprovação',
     'Aprovado',
     'Aprovado com redução',
-    'Aprovado, com redução.',
     'Indeferido',
     'Negado',
     'Retirado',
-    'Retirado de pauta',
 ]
+
+CGFR_DELIBERACAO_DE_PARA = {
+    'Aprovado, com redução.': 'Aprovado com redução',
+    'Retirado de pauta': 'Retirado',
+    'Retirado de Pauta': 'Retirado',
+}
+
+_CGFR_DELIBERACAO_DE_PARA_CASEFOLD = {
+    origem.casefold(): destino
+    for origem, destino in CGFR_DELIBERACAO_DE_PARA.items()
+}
+
+
+def normalizar_cgfr_deliberacao(valor):
+    """Aplica o De-Para oficial de deliberações do CGFR."""
+    texto = str(valor or '').strip()
+    if not texto:
+        return ''
+    return _CGFR_DELIBERACAO_DE_PARA_CASEFOLD.get(texto.casefold(), texto)
 
 
 # =============================================================================

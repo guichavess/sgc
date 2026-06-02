@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from sqlalchemy import or_
 
+from app.constants import normalizar_cgfr_deliberacao
 from app.extensions import db
 
 
@@ -114,12 +115,19 @@ class CgfrProcessoEnviado(db.Model):
         """Retorna string de status para exibição."""
         return 'Classificado' if self.classificado else 'Pendente'
 
+    @property
+    def deliberacao_normalizada(self):
+        """Deliberação com o De-Para oficial aplicado para exibição."""
+        return normalizar_cgfr_deliberacao(self.deliberacao)
+
     def to_dict(self) -> dict:
         """Serializa todas as colunas para JSON."""
         result = {}
         for c in self.__table__.columns:
             value = getattr(self, c.name)
-            if isinstance(value, datetime):
+            if c.name == 'deliberacao':
+                result[c.name] = normalizar_cgfr_deliberacao(value)
+            elif isinstance(value, datetime):
                 result[c.name] = value.strftime('%d/%m/%Y')
             elif isinstance(value, date):
                 result[c.name] = value.strftime('%d/%m/%Y')

@@ -110,7 +110,7 @@
  </tr>
  <tr>
  <td class="text-muted">Deliberacao</td>
- <td>{{ processo.deliberacao or '-' }}</td>
+ <td>{{ processo.deliberacao_normalizada or '-' }}</td>
  </tr>
  <tr>
  <td class="text-muted">Tipo Despesa</td>
@@ -189,7 +189,7 @@ $(document).ready(function() {
  fornecedor: {{ processo.fornecedor | tojson if processo.fornecedor else '""' }},
  objeto_do_pedido: {{ processo.objeto_do_pedido | tojson if processo.objeto_do_pedido else '""' }},
  necessidade: {{ processo.necessidade | tojson if processo.necessidade else '""' }},
- deliberacao: {{ processo.deliberacao | tojson if processo.deliberacao else '""' }},
+ deliberacao: {{ processo.deliberacao_normalizada | tojson if processo.deliberacao_normalizada else '""' }},
  tipo_despesa: '{{ processo.tipo_despesa or '' }}',
  valor_solicitado: '{{ processo.valor_solicitado or '' }}',
  valor_aprovado: '{{ processo.valor_aprovado or '' }}',

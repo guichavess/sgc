@@ -10,6 +10,7 @@ from sqlalchemy.orm import joinedload
 
 from app.repositories.base import BaseRepository
 from app.cgfr.models import CgfrProcessoEnviado
+from app.constants import normalizar_cgfr_deliberacao
 from app.extensions import db
 
 
@@ -193,6 +194,8 @@ class ProcessoLocalRepository(BaseRepository[CgfrProcessoEnviado]):
                     valor = str(valor).strip()[:10] if valor else ''
                 elif campo == 'tipo_despesa':
                     valor = str(valor).strip()[:50] if valor else ''
+                elif campo == 'deliberacao':
+                    valor = normalizar_cgfr_deliberacao(valor)
                 else:
                     # Campos texto livres: converter None para ''
                     valor = str(valor).strip() if valor else ''

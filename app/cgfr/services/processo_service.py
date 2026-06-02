@@ -14,7 +14,7 @@ from sqlalchemy.orm import joinedload
 from app.extensions import db
 from app.cgfr.models import CgfrProcessoEnviado, Acao
 from app.cgfr.repositories.processo_local_repo import ProcessoLocalRepository
-from app.constants import CGFR_DELIBERACAO_OPTIONS
+from app.constants import CGFR_DELIBERACAO_OPTIONS, normalizar_cgfr_deliberacao
 from app.models.nat_despesa import NatDespesa
 from app.models.class_fonte import ClassFonte
 
@@ -217,7 +217,7 @@ class ProcessoService:
     @staticmethod
     def classificar_processo(protocolo, dados, usuario_id=None):
         if 'deliberacao' in dados:
-            deliberacao = str(dados.get('deliberacao') or '').strip()
+            deliberacao = normalizar_cgfr_deliberacao(dados.get('deliberacao'))
             if deliberacao and deliberacao not in CGFR_DELIBERACAO_OPTIONS:
                 raise ValueError('Deliberação inválida')
             dados = {**dados, 'deliberacao': deliberacao}
