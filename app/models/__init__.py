@@ -82,7 +82,7 @@ from app.models.planejamento_orcamentario import PlanejamentoOrcamentario
 # Gestão do Fundo Rotativo
 from app.models.fundo_rotativo import FundoRotativoSaldo
 
-# CGFR (Consultoria de Gestão Financeira)
+# CGFR (Comissão de Gestão Financeira e Gestão Por Resultados)
 from app.cgfr.models import CgfrProcessoEnviado, Acao
 
 # Exporta db para manter compatibilidade com imports existentes

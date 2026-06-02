@@ -242,6 +242,18 @@
                         {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
                     {% endwith %}
 
+                    {% set nomes_meses = {
+                        1:'Janeiro', 2:'Fevereiro', 3:'MarÃ§o', 4:'Abril',
+                        5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto',
+                        9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'
+                    } %}
+                    {% set opcoes_mes = [] %}
+                    {% for m in meses %}{% set _ = opcoes_mes.append((m, '%02d - %s'|format(m, nomes_meses[m]))) %}{% endfor %}
+                    {% with rotulo='MÃªs', icone='bi-calendar-month', nome='mes',
+                            opcoes=opcoes_mes, selecionados=meses_filtro %}
+                        {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
+                    {% endwith %}
+
                     {% set opcoes_fonte = [] %}
                     {% for f in fontes %}{% set _ = opcoes_fonte.append((f.codigo, f.label)) %}{% endfor %}
                     {% with rotulo='Fonte', icone='bi-cash-coin', nome='fonte_codigo',
@@ -615,6 +627,16 @@ function frInitFilterDropdowns() {
     document.querySelectorAll('.column-filter-options').forEach((box) => {
         const all = box.querySelector('[data-select-all]');
         const items = box.querySelectorAll('input[type="checkbox"]:not([data-select-all])');
+
+        box.querySelectorAll('[data-filter-option-row]').forEach((row) => {
+            row.addEventListener('click', (event) => {
+                if (event.target.matches('input[type="checkbox"]')) return;
+                const checkbox = row.querySelector('input[type="checkbox"]');
+                if (!checkbox) return;
+                checkbox.checked = checkbox.hasAttribute('data-select-all') ? true : !checkbox.checked;
+                checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        });
 
         if (all) {
             all.addEventListener('change', () => {

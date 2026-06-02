@@ -297,7 +297,7 @@ class TestFundoRotativoDashboardService:
                 natureza='339030',
             )
 
-        assert dashboard_atual['kpis']['saldo_total'] == pytest.approx(1350.0)
+        assert dashboard_atual['kpis']['saldo_total'] == pytest.approx(350.0)
         assert dashboard_atual['kpis']['reservado'] == pytest.approx(900.0)
         assert dashboard_atual['kpis']['liquidado'] == pytest.approx(250.0)
         assert dashboard_atual['kpis']['pago'] == pytest.approx(200.0)
@@ -322,7 +322,41 @@ class TestFundoRotativoDashboardService:
                 natureza='339030',
             )
 
-        assert dashboard['kpis']['saldo_total'] == pytest.approx(1350.0)
+        assert dashboard['kpis']['saldo_total'] == pytest.approx(350.0)
+
+    def test_obter_dashboard_filtra_saldo_e_execucao_por_mes(self, app, db_session):
+        from app.models.reserva import Reserva
+        from app.services.fundo_rotativo_service import obter_dashboard_fundo_rotativo
+
+        _seed_dashboard_data(db_session)
+        ano_atual = datetime.now().year
+        db_session.add_all([
+            _make_saldo_siafe('350.00', datetime(ano_atual, 2, 1), '755', '339030', '01'),
+            Reserva(
+                codigoUG='210102',
+                codigo='NR-FEV',
+                statusDocumento='CONTABILIZADO',
+                valor=Decimal('300.00'),
+                tipoAlteracao=None,
+                codContrato='123',
+                codFonte=755,
+                codNatureza=339030,
+                dataEmissao=datetime(ano_atual, 2, 10),
+            ),
+        ])
+        db_session.flush()
+
+        with app.app_context():
+            dashboard = obter_dashboard_fundo_rotativo(
+                ano=str(ano_atual),
+                mes='2',
+                fonte_codigo='755',
+                natureza='339030',
+            )
+
+        assert dashboard['kpis']['saldo_total'] == pytest.approx(350.0)
+        assert dashboard['kpis']['reservado'] == pytest.approx(300.0)
+        assert dashboard['kpis']['disponivel'] == pytest.approx(50.0)
 
 
 class TestFundoRotativoDashboardRotas:
@@ -352,6 +386,7 @@ class TestFundoRotativoDashboardRotas:
             '/financeiro/fundo-rotativo/dashboard',
             query_string={
                 'ano': str(ano_atual),
+                'mes': '1',
                 'fonte_codigo': '755',
                 'natureza': '339030',
             },
@@ -360,10 +395,43 @@ class TestFundoRotativoDashboardRotas:
         assert resp.status_code == 200
         html = resp.data.decode('utf-8', errors='replace')
         assert 'name="ano"' in html
+        assert 'name="mes"' in html
         assert 'name="fonte_codigo"' in html
         assert 'name="natureza"' in html
         assert re.search(rf'name="ano"\s+value="{ano_atual}"[\s\S]{{0,120}}checked', html)
+        assert re.search(r'name="mes"\s+value="1"[\s\S]{0,120}checked', html)
         assert re.search(r'name="fonte_codigo"\s+value="755"[\s\S]{0,120}checked', html)
         assert '755 - Recursos do Fundo Rotativo' in html
         assert re.search(r'name="natureza"\s+value="339030"[\s\S]{0,120}checked', html)
         assert '339030 - Material de Consumo' in html
+
+    def test_get_dashboard_opcoes_dependem_dos_filtros_ativos(self, client, db_session):
+        from app.models.reserva import Reserva
+
+        _login_admin(client, db_session)
+        _seed_dashboard_data(db_session)
+        ano_atual = datetime.now().year
+        db_session.add(Reserva(
+            codigoUG='210102',
+            codigo='NR-FEV-759',
+            statusDocumento='CONTABILIZADO',
+            valor=Decimal('80.00'),
+            tipoAlteracao=None,
+            codContrato='123',
+            codFonte=759,
+            codNatureza=339039,
+            dataEmissao=datetime(ano_atual, 2, 10),
+        ))
+        db_session.flush()
+
+        resp = client.get(
+            '/financeiro/fundo-rotativo/dashboard',
+            query_string={'ano': str(ano_atual), 'fonte_codigo': '755'},
+        )
+
+        assert resp.status_code == 200
+        html = resp.data.decode('utf-8', errors='replace')
+        assert re.search(r'name="mes"\s+value="1"', html)
+        assert not re.search(r'name="mes"\s+value="2"', html)
+        assert re.search(r'name="natureza"\s+value="339030"', html)
+        assert not re.search(r'name="natureza"\s+value="339039"', html)

@@ -13,14 +13,13 @@ from requests.adapters import HTTPAdapter
 from sqlalchemy import case, extract, func
 from urllib3.util.retry import Retry
 
-from app.constants import UG_FUNDO_ROTATIVO
+from app.constants import FUNDO_ROTATIVO_EXERCICIOS_MAP, UG_FUNDO_ROTATIVO
 from app.extensions import db
 from app.models.class_fonte import ClassFonte
 from app.models.contrato import Contrato
 from app.models.empenho import Empenho
 from app.models.fundo_rotativo import FundoRotativoSaldo
 from app.models.liquidacao import Liquidacao
-from app.models.loa import Loa
 from app.models.nat_despesa import NatDespesa
 from app.models.ob import OB
 from app.models.pd import PD
@@ -31,6 +30,7 @@ STATUS_CONTABILIZADO = 'CONTABILIZADO'
 STATUS_PD_ABERTO = 'STATUS_DISPONIVEL'
 CONTA_CONTABIL_FUNDO_ROTATIVO = '111111901'
 SIAFE_BASE_URL_DEFAULT = 'https://tesouro.sefaz.pi.gov.br/siafe-api'
+MODELOS_EXECUCAO_FUNDO_ROTATIVO = (Reserva, Empenho, Liquidacao, PD, OB)
 
 
 def _parse_decimal(valor):
@@ -382,7 +382,43 @@ def _parse_ano(ano):
     return ano_int if ano_int > 0 else None
 
 
-def _normalizar_filtros_dashboard(ano=None, fonte_codigo=None, natureza=None):
+def _normalizar_meses(mes):
+    meses = []
+    for v in _as_list(mes):
+        try:
+            m = int(str(v))
+        except (TypeError, ValueError):
+            continue
+        if 1 <= m <= 12:
+            meses.append(m)
+    return meses
+
+
+def _normalizar_filtros_saldo(
+    busca=None,
+    fonte_codigo=None,
+    id_exercicio=None,
+    ano=None,
+    mes=None,
+    conta_bancaria=None,
+):
+    anos = []
+    for v in _as_list(ano):
+        parsed = _parse_ano(v)
+        if parsed:
+            anos.append(parsed)
+
+    return {
+        'busca': str(busca).strip() if busca else None,
+        'fontes': [str(v).strip() for v in _as_list(fonte_codigo) if str(v).strip()],
+        'exercicios': [str(v).strip() for v in _as_list(id_exercicio) if str(v).strip()],
+        'anos': anos,
+        'meses': _normalizar_meses(mes),
+        'contas': [str(v).strip() for v in _as_list(conta_bancaria) if str(v).strip()],
+    }
+
+
+def _normalizar_filtros_dashboard(ano=None, mes=None, fonte_codigo=None, natureza=None):
     anos = []
     for v in _as_list(ano):
         parsed = _parse_ano(v)
@@ -417,6 +453,7 @@ def _normalizar_filtros_dashboard(ano=None, fonte_codigo=None, natureza=None):
 
     return {
         'anos': anos,
+        'meses': _normalizar_meses(mes),
         'fontes': fontes,
         'fontes_int': fontes_int,
         'naturezas': naturezas,
@@ -435,60 +472,38 @@ def _filtro_ano_saldo(query, anos):
     )
 
 
-def listar_saldos(
-    page=1,
-    busca=None,
-    fonte_codigo=None,
-    id_exercicio=None,
-    ano=None,
-    mes=None,
-    conta_bancaria=None,
-    natureza=None,
-    per_page=20,
-):
-    """Lista snapshots paginados, ordenados por periodo desc."""
-    query = FundoRotativoSaldo.query.filter(
+def _query_saldos_base():
+    return FundoRotativoSaldo.query.filter(
         FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
         FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
     )
 
-    fontes = [str(v).strip() for v in _as_list(fonte_codigo) if str(v).strip()]
-    if fontes:
-        query = query.filter(FundoRotativoSaldo.fonte_codigo.in_(fontes))
 
-    exercicios = [str(v).strip() for v in _as_list(id_exercicio) if str(v).strip()]
-    if exercicios:
-        query = query.filter(FundoRotativoSaldo.id_exercicio.in_(exercicios))
+def _aplicar_filtros_saldo(query, filtros, excluir=None):
+    excluir = set(excluir or [])
 
-    anos = []
-    for v in _as_list(ano):
-        parsed = _parse_ano(v)
-        if parsed:
-            anos.append(parsed)
-    query = _filtro_ano_saldo(query, anos)
+    if filtros.get('fontes') and 'fonte_codigo' not in excluir:
+        query = query.filter(FundoRotativoSaldo.fonte_codigo.in_(filtros['fontes']))
 
-    meses = []
-    for v in _as_list(mes):
-        try:
-            m = int(str(v))
-        except (TypeError, ValueError):
-            continue
-        if 1 <= m <= 12:
-            meses.append(m)
-    if meses:
+    if filtros.get('exercicios') and 'id_exercicio' not in excluir:
+        query = query.filter(FundoRotativoSaldo.id_exercicio.in_(filtros['exercicios']))
+
+    if 'ano' not in excluir:
+        query = _filtro_ano_saldo(query, filtros.get('anos'))
+
+    if filtros.get('meses') and 'mes' not in excluir:
         query = query.filter(
             db.or_(
-                FundoRotativoSaldo.mes.in_(meses),
-                extract('month', FundoRotativoSaldo.data).in_(meses),
+                FundoRotativoSaldo.mes.in_(filtros['meses']),
+                extract('month', FundoRotativoSaldo.data).in_(filtros['meses']),
             )
         )
 
-    contas = [str(v).strip() for v in _as_list(conta_bancaria) if str(v).strip()]
-    if contas:
-        query = query.filter(FundoRotativoSaldo.conta_bancaria.in_(contas))
+    if filtros.get('contas') and 'conta_bancaria' not in excluir:
+        query = query.filter(FundoRotativoSaldo.conta_bancaria.in_(filtros['contas']))
 
-    if busca:
-        filtro = f'%{busca}%'
+    if filtros.get('busca') and 'busca' not in excluir:
+        filtro = f'%{filtros["busca"]}%'
         query = query.outerjoin(
             ClassFonte,
             FundoRotativoSaldo.fonte_codigo == ClassFonte.codigo,
@@ -506,16 +521,63 @@ def listar_saldos(
             )
         )
 
-    soma_filtrada = _as_float(
-        query.with_entities(func.coalesce(func.sum(FundoRotativoSaldo.valor), 0)).scalar()
+    return query
+
+
+def _somar_saldo_periodo_mais_recente(query):
+    periodo = (
+        query
+        .with_entities(FundoRotativoSaldo.ano, FundoRotativoSaldo.mes)
+        .filter(
+            FundoRotativoSaldo.ano.isnot(None),
+            FundoRotativoSaldo.mes.isnot(None),
+        )
+        .order_by(
+            FundoRotativoSaldo.ano.desc(),
+            FundoRotativoSaldo.mes.desc(),
+        )
+        .first()
+    )
+    if not periodo:
+        return 0.0
+
+    ano_ref, mes_ref = periodo
+    return _as_float(
+        query
+        .filter(
+            FundoRotativoSaldo.ano == ano_ref,
+            FundoRotativoSaldo.mes == mes_ref,
+        )
+        .with_entities(func.coalesce(func.sum(FundoRotativoSaldo.valor), 0))
+        .scalar()
     )
 
-    soma_total = _as_float(
-        FundoRotativoSaldo.query.filter(
-            FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
-            FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
-        ).with_entities(func.coalesce(func.sum(FundoRotativoSaldo.valor), 0)).scalar()
+
+def listar_saldos(
+    page=1,
+    busca=None,
+    fonte_codigo=None,
+    id_exercicio=None,
+    ano=None,
+    mes=None,
+    conta_bancaria=None,
+    natureza=None,
+    per_page=20,
+):
+    """Lista snapshots paginados, ordenados por periodo desc."""
+    filtros = _normalizar_filtros_saldo(
+        busca=busca,
+        fonte_codigo=fonte_codigo,
+        id_exercicio=id_exercicio,
+        ano=ano,
+        mes=mes,
+        conta_bancaria=conta_bancaria,
     )
+    query = _aplicar_filtros_saldo(_query_saldos_base(), filtros)
+
+    soma_filtrada = _somar_saldo_periodo_mais_recente(query)
+
+    soma_total = _somar_saldo_periodo_mais_recente(_query_saldos_base())
 
     query = query.order_by(
         FundoRotativoSaldo.ano.desc(),
@@ -528,13 +590,11 @@ def listar_saldos(
     return pagination, soma_total, soma_filtrada
 
 
-def listar_fontes_saldo_disponiveis():
-    """Fontes presentes nos saldos, enriquecidas com class_fonte quando houver."""
+def _listar_fontes_saldo_query(query):
     rows = (
-        db.session.query(FundoRotativoSaldo.fonte_codigo, FundoRotativoSaldo.fonte_formatada)
+        query
+        .with_entities(FundoRotativoSaldo.fonte_codigo, FundoRotativoSaldo.fonte_formatada)
         .filter(
-            FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
-            FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
             FundoRotativoSaldo.fonte_codigo.isnot(None),
             FundoRotativoSaldo.fonte_codigo != '',
         )
@@ -566,14 +626,12 @@ def listar_fontes_saldo_disponiveis():
     ]
 
 
-def listar_anos_disponiveis():
-    """Anos distintos presentes nos registros de saldo (desc)."""
+def _listar_anos_saldo_query(query):
     anos = set()
     rows = (
-        db.session.query(FundoRotativoSaldo.ano)
+        query
+        .with_entities(FundoRotativoSaldo.ano)
         .filter(
-            FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
-            FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
             FundoRotativoSaldo.ano.isnot(None),
         )
         .distinct()
@@ -582,10 +640,9 @@ def listar_anos_disponiveis():
     anos.update(int(r[0]) for r in rows if r[0] is not None)
 
     legacy_rows = (
-        db.session.query(extract('year', FundoRotativoSaldo.data))
+        query
+        .with_entities(extract('year', FundoRotativoSaldo.data))
         .filter(
-            FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
-            FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
             FundoRotativoSaldo.data.isnot(None),
         )
         .distinct()
@@ -595,13 +652,11 @@ def listar_anos_disponiveis():
     return sorted(anos, reverse=True)
 
 
-def listar_contas_disponiveis():
-    """Numeros de conta bancaria distintos presentes nos saldos (asc)."""
+def _listar_contas_saldo_query(query):
     rows = (
-        db.session.query(FundoRotativoSaldo.conta_bancaria)
+        query
+        .with_entities(FundoRotativoSaldo.conta_bancaria)
         .filter(
-            FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
-            FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
             FundoRotativoSaldo.conta_bancaria.isnot(None),
             FundoRotativoSaldo.conta_bancaria != '',
         )
@@ -612,14 +667,12 @@ def listar_contas_disponiveis():
     return [{'codigo': c, 'label': c} for (c,) in rows]
 
 
-def listar_meses_disponiveis():
-    """Meses distintos (1-12) presentes nos registros de saldo, asc."""
+def _listar_meses_saldo_query(query):
     meses = set()
     rows = (
-        db.session.query(FundoRotativoSaldo.mes)
+        query
+        .with_entities(FundoRotativoSaldo.mes)
         .filter(
-            FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
-            FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
             FundoRotativoSaldo.mes.isnot(None),
         )
         .distinct()
@@ -628,10 +681,9 @@ def listar_meses_disponiveis():
     meses.update(int(r[0]) for r in rows if r[0] is not None)
 
     legacy_rows = (
-        db.session.query(extract('month', FundoRotativoSaldo.data))
+        query
+        .with_entities(extract('month', FundoRotativoSaldo.data))
         .filter(
-            FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
-            FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
             FundoRotativoSaldo.data.isnot(None),
         )
         .distinct()
@@ -641,25 +693,211 @@ def listar_meses_disponiveis():
     return sorted(m for m in meses if 1 <= m <= 12)
 
 
-def listar_naturezas_disponiveis():
-    """Naturezas distintas conhecidas (a partir da LOA), com titulo quando houver."""
+def _listar_exercicios_saldo_query(query):
     rows = (
-        db.session.query(Loa.codNatureza)
-        .filter(Loa.codNatureza.isnot(None), Loa.codNatureza != '')
+        query
+        .with_entities(FundoRotativoSaldo.id_exercicio)
+        .filter(
+            FundoRotativoSaldo.id_exercicio.isnot(None),
+            FundoRotativoSaldo.id_exercicio != '',
+        )
         .distinct()
-        .order_by(Loa.codNatureza.asc())
+        .order_by(FundoRotativoSaldo.id_exercicio.asc())
         .all()
     )
-    codigos = [str(r[0]) for r in rows if r[0]]
-    codigos_int = []
-    for codigo in codigos:
-        try:
-            codigos_int.append(int(codigo))
-        except (TypeError, ValueError):
+    exercicios = []
+    for (eid,) in rows:
+        if not eid:
             continue
+        eid = str(eid)
+        exercicios.append((eid, FUNDO_ROTATIVO_EXERCICIOS_MAP.get(eid, eid)))
+    return exercicios
+
+
+def listar_opcoes_saldo_dependentes(
+    busca=None,
+    fonte_codigo=None,
+    id_exercicio=None,
+    ano=None,
+    mes=None,
+    conta_bancaria=None,
+):
+    """Opcoes dos filtros da aba Saldo, dependentes dos demais filtros ativos."""
+    filtros = _normalizar_filtros_saldo(
+        busca=busca,
+        fonte_codigo=fonte_codigo,
+        id_exercicio=id_exercicio,
+        ano=ano,
+        mes=mes,
+        conta_bancaria=conta_bancaria,
+    )
+    return {
+        'fontes': _listar_fontes_saldo_query(
+            _aplicar_filtros_saldo(_query_saldos_base(), filtros, excluir={'fonte_codigo'})
+        ),
+        'anos': _listar_anos_saldo_query(
+            _aplicar_filtros_saldo(_query_saldos_base(), filtros, excluir={'ano'})
+        ),
+        'meses': _listar_meses_saldo_query(
+            _aplicar_filtros_saldo(_query_saldos_base(), filtros, excluir={'mes'})
+        ),
+        'contas': _listar_contas_saldo_query(
+            _aplicar_filtros_saldo(_query_saldos_base(), filtros, excluir={'conta_bancaria'})
+        ),
+        'exercicios': _listar_exercicios_saldo_query(
+            _aplicar_filtros_saldo(_query_saldos_base(), filtros, excluir={'id_exercicio'})
+        ),
+    }
+
+
+def listar_fontes_saldo_disponiveis():
+    """Fontes presentes nos saldos, enriquecidas com class_fonte quando houver."""
+    return _listar_fontes_saldo_query(_query_saldos_base())
+
+
+def listar_anos_disponiveis():
+    """Anos distintos presentes nos registros de saldo (desc)."""
+    return _listar_anos_saldo_query(_query_saldos_base())
+
+
+def listar_contas_disponiveis():
+    """Numeros de conta bancaria distintos presentes nos saldos (asc)."""
+    return _listar_contas_saldo_query(_query_saldos_base())
+
+
+def listar_meses_disponiveis():
+    """Meses distintos (1-12) presentes nos registros de saldo, asc."""
+    return _listar_meses_saldo_query(_query_saldos_base())
+
+
+def _aplicar_filtros_execucao(query, model, filtros, excluir=None):
+    if not filtros:
+        return query
+
+    excluir = set(excluir or [])
+
+    if filtros.get('anos') and 'ano' not in excluir:
+        query = query.filter(extract('year', model.dataEmissao).in_(filtros['anos']))
+    if filtros.get('meses') and 'mes' not in excluir:
+        query = query.filter(extract('month', model.dataEmissao).in_(filtros['meses']))
+    if filtros.get('fontes_int') and 'fonte_codigo' not in excluir:
+        query = query.filter(model.codFonte.in_(filtros['fontes_int']))
+    if filtros.get('naturezas_int') and 'natureza' not in excluir:
+        query = query.filter(model.codNatureza.in_(filtros['naturezas_int']))
+    return query
+
+
+def _saldo_total_dashboard(filtros):
+    query = (
+        FundoRotativoSaldo.query
+        .filter(
+            FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
+            FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
+        )
+    )
+
+    if filtros.get('fontes'):
+        query = query.filter(FundoRotativoSaldo.fonte_codigo.in_(filtros['fontes']))
+    query = _filtro_ano_saldo(query, filtros.get('anos'))
+    if filtros.get('meses'):
+        query = query.filter(
+            db.or_(
+                FundoRotativoSaldo.mes.in_(filtros['meses']),
+                extract('month', FundoRotativoSaldo.data).in_(filtros['meses']),
+            )
+        )
+
+    return _somar_saldo_periodo_mais_recente(query)
+
+
+def _codigo_sort_key(codigo):
+    try:
+        return (0, int(str(codigo)))
+    except (TypeError, ValueError):
+        return (1, str(codigo))
+
+
+def _listar_anos_execucao_query(filtros, excluir=None):
+    anos = set()
+    for model in MODELOS_EXECUCAO_FUNDO_ROTATIVO:
+        query = (
+            db.session.query(extract('year', model.dataEmissao))
+            .filter(
+                model.codigoUG == UG_FUNDO_ROTATIVO,
+                model.statusDocumento == STATUS_CONTABILIZADO,
+                model.dataEmissao.isnot(None),
+            )
+        )
+        query = _aplicar_filtros_execucao(query, model, filtros, excluir=excluir)
+        rows = query.distinct().all()
+        anos.update(int(r[0]) for r in rows if r[0] is not None)
+    return sorted(anos, reverse=True)
+
+
+def _listar_meses_execucao_query(filtros, excluir=None):
+    meses = set()
+    for model in MODELOS_EXECUCAO_FUNDO_ROTATIVO:
+        query = (
+            db.session.query(extract('month', model.dataEmissao))
+            .filter(
+                model.codigoUG == UG_FUNDO_ROTATIVO,
+                model.statusDocumento == STATUS_CONTABILIZADO,
+                model.dataEmissao.isnot(None),
+            )
+        )
+        query = _aplicar_filtros_execucao(query, model, filtros, excluir=excluir)
+        rows = query.distinct().all()
+        meses.update(int(r[0]) for r in rows if r[0] is not None)
+    return sorted(m for m in meses if 1 <= m <= 12)
+
+
+def _listar_fontes_execucao_query(filtros, excluir=None):
+    codigos = set()
+    for model in MODELOS_EXECUCAO_FUNDO_ROTATIVO:
+        query = (
+            db.session.query(model.codFonte)
+            .filter(
+                model.codigoUG == UG_FUNDO_ROTATIVO,
+                model.statusDocumento == STATUS_CONTABILIZADO,
+                model.codFonte.isnot(None),
+            )
+        )
+        query = _aplicar_filtros_execucao(query, model, filtros, excluir=excluir)
+        rows = query.distinct().all()
+        codigos.update(str(int(r[0])) for r in rows if r[0] is not None)
+
+    descricoes = {}
+    if codigos:
+        fontes = ClassFonte.query.filter(ClassFonte.codigo.in_(codigos)).all()
+        descricoes = {f.codigo: f.descricao for f in fontes}
+
+    return [
+        {
+            'codigo': codigo,
+            'label': f'{codigo} - {descricoes[codigo]}' if descricoes.get(codigo) else codigo,
+        }
+        for codigo in sorted(codigos, key=_codigo_sort_key)
+    ]
+
+
+def _listar_naturezas_execucao_query(filtros, excluir=None):
+    codigos = set()
+    for model in MODELOS_EXECUCAO_FUNDO_ROTATIVO:
+        query = (
+            db.session.query(model.codNatureza)
+            .filter(
+                model.codigoUG == UG_FUNDO_ROTATIVO,
+                model.statusDocumento == STATUS_CONTABILIZADO,
+                model.codNatureza.isnot(None),
+            )
+        )
+        query = _aplicar_filtros_execucao(query, model, filtros, excluir=excluir)
+        rows = query.distinct().all()
+        codigos.update(str(int(r[0])) for r in rows if r[0] is not None)
 
     titulos = {}
-    if codigos_int:
+    if codigos:
+        codigos_int = [int(codigo) for codigo in codigos if codigo.isdigit()]
         naturezas = NatDespesa.query.filter(NatDespesa.codigo.in_(codigos_int)).all()
         titulos = {
             str(n.codigo): (n.titulo or '').strip()
@@ -673,58 +911,36 @@ def listar_naturezas_disponiveis():
             'titulo': titulos.get(codigo, ''),
             'label': f'{codigo} - {titulos[codigo]}' if titulos.get(codigo) else codigo,
         }
-        for codigo in codigos
+        for codigo in sorted(codigos, key=_codigo_sort_key)
     ]
 
 
-def _aplicar_filtros_execucao(query, model, filtros):
-    if not filtros:
-        return query
-
-    if filtros.get('anos'):
-        query = query.filter(extract('year', model.dataEmissao).in_(filtros['anos']))
-    if filtros.get('fontes_int'):
-        query = query.filter(model.codFonte.in_(filtros['fontes_int']))
-    if filtros.get('naturezas_int'):
-        query = query.filter(model.codNatureza.in_(filtros['naturezas_int']))
-    return query
-
-
-def _saldo_total_dashboard(filtros):
-    query = (
-        db.session.query(func.coalesce(func.sum(FundoRotativoSaldo.valor), 0))
-        .filter(
-            FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
-            FundoRotativoSaldo.conta_contabil == CONTA_CONTABIL_FUNDO_ROTATIVO,
-        )
+def listar_opcoes_dashboard_dependentes(ano=None, mes=None, fonte_codigo=None, natureza=None):
+    """Opcoes dos filtros do Dashboard, dependentes das execucoes existentes."""
+    filtros = _normalizar_filtros_dashboard(
+        ano=ano,
+        mes=mes,
+        fonte_codigo=fonte_codigo,
+        natureza=natureza,
     )
+    return {
+        'anos': _listar_anos_execucao_query(filtros, excluir={'ano'}),
+        'meses': _listar_meses_execucao_query(filtros, excluir={'mes'}),
+        'fontes': _listar_fontes_execucao_query(filtros, excluir={'fonte_codigo'}),
+        'naturezas': _listar_naturezas_execucao_query(filtros, excluir={'natureza'}),
+    }
 
-    if filtros.get('fontes'):
-        query = query.filter(FundoRotativoSaldo.fonte_codigo.in_(filtros['fontes']))
-    query = _filtro_ano_saldo(query, filtros.get('anos'))
 
-    return _as_float(query.scalar())
+def listar_naturezas_disponiveis():
+    """Naturezas distintas presentes nas execucoes do Fundo Rotativo."""
+    filtros = _normalizar_filtros_dashboard()
+    return _listar_naturezas_execucao_query(filtros)
 
 
 def listar_anos_dashboard_disponiveis():
     """Anos disponiveis para filtro do dashboard do Fundo Rotativo."""
-    ano_atual = datetime.now().year
-    anos = {ano_atual}
-    anos.update(listar_anos_disponiveis())
-
-    for model in (Reserva, Empenho, Liquidacao, PD, OB):
-        rows = (
-            db.session.query(extract('year', model.dataEmissao))
-            .filter(
-                model.codigoUG == UG_FUNDO_ROTATIVO,
-                model.dataEmissao.isnot(None),
-            )
-            .distinct()
-            .all()
-        )
-        anos.update(int(r[0]) for r in rows if r[0] is not None)
-
-    return sorted(anos, reverse=True)
+    filtros = _normalizar_filtros_dashboard()
+    return _listar_anos_execucao_query(filtros)
 
 
 def _normalizar_codigo_contrato(codigo):
@@ -812,10 +1028,11 @@ def _detalhar_pds_aberto_por_contrato(filtros=None):
     return detalhes
 
 
-def obter_dashboard_fundo_rotativo(ano=None, fonte_codigo=None, natureza=None):
+def obter_dashboard_fundo_rotativo(ano=None, mes=None, fonte_codigo=None, natureza=None):
     """Retorna KPIs e tabela de execucao por contrato da UG do Fundo Rotativo."""
     filtros = _normalizar_filtros_dashboard(
         ano=ano,
+        mes=mes,
         fonte_codigo=fonte_codigo,
         natureza=natureza,
     )

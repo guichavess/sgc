@@ -1,5 +1,5 @@
 """
-Blueprint do módulo CGFR (Consultoria de Gestão Financeira).
+Blueprint do módulo CGFR (Comissão de Gestão Financeira e Gestão Por Resultados).
 """
 from flask import Blueprint
 

@@ -331,9 +331,9 @@
                 </div>
                 <div class="fr-extrato-subtitle">
                     {% if tem_filtro_ativo %}
-                    Valor da visualiza&ccedil;&atilde;o filtrada
+                    Per&iacute;odo mais recente da visualiza&ccedil;&atilde;o filtrada
                     {% else %}
-                    Valor dos lan&ccedil;amentos exibidos
+                    Per&iacute;odo mais recente importado
                     {% endif %}
                 </div>
             </div>
@@ -516,6 +516,17 @@ function frSaldoInitFilters() {
     document.querySelectorAll('.column-filter-options').forEach(function(box) {
         var all = box.querySelector('[data-select-all]');
         var items = box.querySelectorAll('input[type="checkbox"]:not([data-select-all])');
+
+        box.querySelectorAll('[data-filter-option-row]').forEach(function(row) {
+            row.addEventListener('click', function(event) {
+                if (event.target.matches('input[type="checkbox"]')) return;
+                var checkbox = row.querySelector('input[type="checkbox"]');
+                if (!checkbox) return;
+                checkbox.checked = checkbox.hasAttribute('data-select-all') ? true : !checkbox.checked;
+                checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        });
+
         if (all) {
             all.addEventListener('change', function() {
                 if (all.checked) {

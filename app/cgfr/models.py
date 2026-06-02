@@ -1,5 +1,5 @@
 """
-Models do módulo CGFR (Consultoria de Gestão Financeira).
+Models do módulo CGFR (Comissão de Gestão Financeira e Gestão Por Resultados).
 Tabela principal: cgfr_processo_enviado
 Reutiliza tabelas existentes: natdespesas (NatDespesa), class_fonte (ClassFonte), acao (Acao).
 """

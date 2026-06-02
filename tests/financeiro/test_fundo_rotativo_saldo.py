@@ -299,7 +299,7 @@ def test_listar_saldos_filtra_por_mes(app, db_session):
         pagination, soma_total, soma_filtrada = listar_saldos(mes='6')
 
     assert pagination.total == 2
-    assert soma_filtrada == pytest.approx(600.0)
+    assert soma_filtrada == pytest.approx(200.0)
 
     with app.app_context():
         # combinacao ano=2026 + mes=6
@@ -308,6 +308,30 @@ def test_listar_saldos_filtra_por_mes(app, db_session):
     assert pagination.total == 1
     assert pagination.items[0].valor == Decimal('200.00')
     assert soma_filtrada == pytest.approx(200.0)
+
+
+def test_listar_saldos_calcula_saldo_atual_sem_somar_periodos_historicos(app, db_session):
+    from app.services.fundo_rotativo_service import sincronizar_saldos_periodos, listar_saldos
+
+    client = FakeSiafeClient(responses={
+        (2026, 2): [
+            _sample_api_row(saldo='100.00', ano='2026', mes='02', fonte='7.55', exercicio='1'),
+            _sample_api_row(saldo='40.00', ano='2026', mes='02', fonte='7.59', exercicio='1'),
+        ],
+        (2026, 3): [
+            # Saldo repetido porque nao houve movimento na fonte; nao pode ser somado de novo.
+            _sample_api_row(saldo='100.00', ano='2026', mes='03', fonte='7.55', exercicio='1'),
+            _sample_api_row(saldo='60.00', ano='2026', mes='03', fonte='7.59', exercicio='1'),
+        ],
+    })
+
+    with app.app_context():
+        sincronizar_saldos_periodos([(2026, 2), (2026, 3)], usuario_id=None, siafe_client=client)
+        pagination, soma_total, soma_filtrada = listar_saldos(ano='2026')
+
+    assert pagination.total == 4
+    assert soma_filtrada == pytest.approx(160.0)
+    assert soma_filtrada != pytest.approx(300.0)
 
 
 def test_listar_saldos_filtra_por_conta_bancaria(app, db_session):
@@ -397,6 +421,39 @@ def test_listar_meses_disponiveis(app, db_session):
     assert meses == [1, 5, 6]
 
 
+def test_opcoes_saldo_dependem_dos_filtros_selecionados(app, db_session):
+    from app.services.fundo_rotativo_service import (
+        listar_opcoes_saldo_dependentes,
+        sincronizar_saldos_periodos,
+    )
+
+    row_conta_88888 = _sample_api_row(saldo='200.00', ano='2026', mes='05', fonte='5.00')
+    for c in row_conta_88888['classificacao']:
+        if c['codigoTipoClassificador'] == 101:
+            c['nomeClassificador'] = '001.9999.88888'
+            c['valoresClassificador'] = ['001', '9999', '88888']
+
+    client = FakeSiafeClient(responses={
+        (2026, 6): [_sample_api_row(saldo='100.00', ano='2026', mes='06', fonte='7.55')],
+        (2026, 5): [row_conta_88888],
+        (2025, 6): [_sample_api_row(saldo='300.00', ano='2025', mes='06', fonte='7.59')],
+    })
+
+    with app.app_context():
+        sincronizar_saldos_periodos(
+            [(2026, 6), (2026, 5), (2025, 6)],
+            usuario_id=None,
+            siafe_client=client,
+        )
+        opcoes = listar_opcoes_saldo_dependentes(ano='2026', fonte_codigo='755')
+
+    assert {f['codigo'] for f in opcoes['fontes']} == {'500', '755'}
+    assert opcoes['meses'] == [6]
+    assert opcoes['contas'] == [{'codigo': '95192', 'label': '95192'}]
+    assert opcoes['anos'] == [2026]
+    assert opcoes['exercicios'][0][0] == '01'
+
+
 class TestFundoRotativoRotas:
     def test_get_lista_retorna_200_sem_crud_para_admin(self, client, db_session):
         _login_admin(client, db_session)
@@ -412,6 +469,7 @@ class TestFundoRotativoRotas:
         assert 'Editar Saldo' not in html
         assert 'Excluir Saldo' not in html
         assert 'name="natureza"' not in html
+        assert 'data-filter-option-row' in html
 
     def test_get_lista_mostra_saldo_filtrado_como_saldo_principal(self, app, client, db_session):
         from app.services.fundo_rotativo_service import sincronizar_saldos_periodos

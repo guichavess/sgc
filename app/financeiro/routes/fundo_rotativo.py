@@ -6,15 +6,10 @@ Sub-secao do modulo Financeiro. Permissoes: fundo_rotativo.visualizar / criar.
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from app.constants import FUNDO_ROTATIVO_EXERCICIOS
 from app.financeiro.routes import financeiro_bp
 from app.services.fundo_rotativo_service import (
-    listar_anos_dashboard_disponiveis,
-    listar_anos_disponiveis,
-    listar_contas_disponiveis,
-    listar_fontes_saldo_disponiveis,
-    listar_meses_disponiveis,
-    listar_naturezas_disponiveis,
+    listar_opcoes_dashboard_dependentes,
+    listar_opcoes_saldo_dependentes,
     listar_saldos,
     obter_dashboard_fundo_rotativo,
     sincronizar_saldos_inicial,
@@ -46,6 +41,14 @@ def fundo_rotativo_saldo_lista():
     )
 
     tem_filtro_ativo = bool(busca or fontes_codigo or ids_exercicio or anos_filtro or meses_filtro or contas_filtro)
+    opcoes = listar_opcoes_saldo_dependentes(
+        busca=busca or None,
+        fonte_codigo=fontes_codigo or None,
+        id_exercicio=ids_exercicio or None,
+        ano=anos_filtro or None,
+        mes=meses_filtro or None,
+        conta_bancaria=contas_filtro or None,
+    )
 
     return render_template(
         'financeiro/fundo_rotativo/saldo.html',
@@ -60,11 +63,11 @@ def fundo_rotativo_saldo_lista():
         anos_filtro=anos_filtro,
         meses_filtro=meses_filtro,
         contas_filtro=contas_filtro,
-        fontes=listar_fontes_saldo_disponiveis(),
-        exercicios=FUNDO_ROTATIVO_EXERCICIOS,
-        anos=listar_anos_disponiveis(),
-        meses=listar_meses_disponiveis(),
-        contas=listar_contas_disponiveis(),
+        fontes=opcoes['fontes'],
+        exercicios=opcoes['exercicios'],
+        anos=opcoes['anos'],
+        meses=opcoes['meses'],
+        contas=opcoes['contas'],
     )
 
 
@@ -105,26 +108,33 @@ def fundo_rotativo_saldo_sincronizar():
 @requires_permission('fundo_rotativo.visualizar')
 def fundo_rotativo_dashboard():
     anos_filtro = [v for v in request.args.getlist('ano') if v]
+    meses_filtro = [v for v in request.args.getlist('mes') if v]
     fontes_filtro = [v for v in request.args.getlist('fonte_codigo') if v]
     naturezas_filtro = [v for v in request.args.getlist('natureza') if v]
 
     dashboard = obter_dashboard_fundo_rotativo(
         ano=anos_filtro or None,
+        mes=meses_filtro or None,
         fonte_codigo=fontes_filtro or None,
         natureza=naturezas_filtro or None,
     )
-    fontes = listar_fontes_saldo_disponiveis()
-    naturezas = listar_naturezas_disponiveis()
-    anos = listar_anos_dashboard_disponiveis()
+    opcoes = listar_opcoes_dashboard_dependentes(
+        ano=anos_filtro or None,
+        mes=meses_filtro or None,
+        fonte_codigo=fontes_filtro or None,
+        natureza=naturezas_filtro or None,
+    )
 
     return render_template(
         'financeiro/fundo_rotativo/dashboard.html',
         kpis=dashboard['kpis'],
         rows=dashboard['rows'],
-        anos=anos,
-        fontes=fontes,
-        naturezas=naturezas,
+        anos=opcoes['anos'],
+        meses=opcoes['meses'],
+        fontes=opcoes['fontes'],
+        naturezas=opcoes['naturezas'],
         anos_filtro=anos_filtro,
+        meses_filtro=meses_filtro,
         fontes_filtro=fontes_filtro,
         naturezas_filtro=naturezas_filtro,
     )
