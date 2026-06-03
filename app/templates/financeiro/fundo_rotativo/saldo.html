@@ -89,13 +89,19 @@
     .fr-table-wrapper { max-height: calc(100vh - 360px); overflow: auto; }
     .fr-table { margin-bottom: 0; }
     .fr-table thead th {
-        background: #f8fafc; color: #475569;
-        font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
-        text-transform: uppercase;
-        padding: 12px 14px; white-space: nowrap;
-        border-bottom: 2px solid #e2e8f0;
+        background: #343990; color: #fff;
+        font-size: 0.78rem; font-weight: 600; letter-spacing: 0.02em;
+        padding: 14px 18px; white-space: nowrap;
+        border-bottom: 0;
         position: sticky; top: 0; z-index: 2;
     }
+    .fr-table thead th.sortable { cursor: pointer; user-select: none; }
+    .fr-table thead th.sortable:hover { background: #2c307a; }
+    .fr-table thead th.sortable .sort-icon {
+        font-size: 0.78rem; margin-left: 4px; opacity: 0.25;
+    }
+    .fr-table thead th.sortable.sort-asc .sort-icon,
+    .fr-table thead th.sortable.sort-desc .sort-icon { opacity: 1; }
     .fr-table tbody td {
         font-size: 0.84rem; vertical-align: middle;
         padding: 12px 14px; border-bottom: 1px solid #f1f5f9;
@@ -160,8 +166,10 @@
     .fr-table thead .fr-saldo-col,
     .fr-table thead .fr-action-col {
         z-index: 4;
+        background: #343990;
+        color: #fff;
     }
-    .fr-table thead .fr-saldo-col { background: #f8fafc; }
+    .fr-table thead .fr-saldo-col.sortable:hover { background: #2c307a; }
     .fr-table tbody td.fr-action-col {
         --bs-table-bg: #fff;
         background-color: #fff;
@@ -360,16 +368,16 @@
     </div>
 
     <div class="fr-table-wrapper">
-        <table class="table fr-table align-middle">
+        <table class="table fr-table align-middle" id="frSaldoTable">
             <thead>
                 <tr>
-                    <th>Período</th>
-                    <th>Conta</th>
-                    <th>Fonte</th>
-                    <th class="text-end">Saldo Anterior</th>
-                    <th class="text-end">Crédito</th>
-                    <th class="text-end">Débito</th>
-                    <th class="text-end fr-saldo-col">Saldo Atual</th>
+                    <th class="sortable" data-col="0" data-type="num">Período <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th class="sortable" data-col="1" data-type="text">Conta <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th class="sortable" data-col="2" data-type="text">Fonte <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th class="text-end sortable" data-col="3" data-type="num">Saldo Anterior <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th class="text-end sortable" data-col="4" data-type="num">Crédito <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th class="text-end sortable" data-col="5" data-type="num">Débito <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th class="text-end sortable fr-saldo-col" data-col="6" data-type="num">Saldo Atual <i class="bi bi-arrow-down-up sort-icon"></i></th>
                     <th class="text-center fr-action-col">&nbsp;</th>
                 </tr>
             </thead>
@@ -377,7 +385,7 @@
                 {% for s in saldos %}
                 {% set saldo_val = s.valor|float %}
                 <tr>
-                    <td>
+                    <td data-sort="{{ s.data.strftime('%Y%m') if s.data else '' }}">
                         <div class="fr-periodo">
                             <span class="mes">{{ s.mes_ano_label or s.data.strftime('%m/%Y') }}</span>
                             {% if s.data_sincronizacao %}
@@ -602,9 +610,66 @@ function frSaldoInitClassTooltip() {
     window.addEventListener('resize', removeTip);
 }
 
+function frSaldoInitSort() {
+    var table = document.getElementById('frSaldoTable');
+    if (!table) return;
+    var headers = table.querySelectorAll('thead th.sortable');
+
+    function parseNum(txt) {
+        var clean = (txt || '').replace(/[^\d,\-]/g, '').replace(',', '.');
+        var n = parseFloat(clean);
+        return isNaN(n) ? 0 : n;
+    }
+
+    function getCellValue(row, col, type) {
+        var cell = row.children[col];
+        if (!cell) return type === 'num' ? 0 : '';
+        var sortAttr = cell.getAttribute('data-sort');
+        var raw = sortAttr !== null && sortAttr !== '' ? sortAttr : cell.textContent.trim();
+        return type === 'num' ? parseNum(raw) : raw.toLowerCase();
+    }
+
+    headers.forEach(function(th) {
+        th.addEventListener('click', function() {
+            var col = parseInt(this.dataset.col, 10);
+            var type = this.dataset.type;
+            var tbody = table.querySelector('tbody');
+            if (!tbody) return;
+
+            var dir = 'desc';
+            if (this.classList.contains('sort-desc')) dir = 'asc';
+
+            headers.forEach(function(h) {
+                h.classList.remove('sort-asc', 'sort-desc');
+                var ic = h.querySelector('.sort-icon');
+                if (ic) ic.className = 'bi bi-arrow-down-up sort-icon';
+            });
+            this.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+            var icon = this.querySelector('.sort-icon');
+            if (icon) icon.className = dir === 'desc' ? 'bi bi-sort-down sort-icon' : 'bi bi-sort-up sort-icon';
+
+            var rows = Array.from(tbody.querySelectorAll('tr')).filter(function(r) {
+                return !r.querySelector('.fr-empty');
+            });
+            rows.sort(function(a, b) {
+                var va = getCellValue(a, col, type);
+                var vb = getCellValue(b, col, type);
+                if (type === 'num') {
+                    return dir === 'desc' ? vb - va : va - vb;
+                }
+                return dir === 'desc'
+                    ? vb.toString().localeCompare(va.toString(), 'pt-BR')
+                    : va.toString().localeCompare(vb.toString(), 'pt-BR');
+            });
+            rows.forEach(function(row) { tbody.appendChild(row); });
+        });
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     frSaldoInitFilters();
     frSaldoInitClassTooltip();
+    frSaldoInitSort();
 });
 </script>
 {% endblock %}
