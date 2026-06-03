@@ -243,13 +243,13 @@
                     {% endwith %}
 
                     {% set nomes_meses = {
-                        1:'Janeiro', 2:'Fevereiro', 3:'MarÃ§o', 4:'Abril',
+                        1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril',
                         5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto',
                         9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'
                     } %}
                     {% set opcoes_mes = [] %}
                     {% for m in meses %}{% set _ = opcoes_mes.append((m, '%02d - %s'|format(m, nomes_meses[m]))) %}{% endfor %}
-                    {% with rotulo='MÃªs', icone='bi-calendar-month', nome='mes',
+                    {% with rotulo='Mês', icone='bi-calendar-month', nome='mes',
                             opcoes=opcoes_mes, selecionados=meses_filtro %}
                         {% include 'financeiro/fundo_rotativo/_filtro_dropdown.html' %}
                     {% endwith %}

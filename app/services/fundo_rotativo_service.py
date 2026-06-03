@@ -472,6 +472,25 @@ def _filtro_ano_saldo(query, anos):
     )
 
 
+def _recorte_saldo_acumulativo(query, anos, meses):
+    """Restringe a query a snapshots ate (max_ano, max_mes), permitindo
+    'carry-forward' quando o mes filtrado nao tem snapshot proprio.
+    Aplica-se apenas quando ANO e MES estao filtrados juntos."""
+    if not (anos and meses):
+        return query
+    ano_corte = max(int(a) for a in anos)
+    mes_corte = max(int(m) for m in meses)
+    return query.filter(
+        db.or_(
+            FundoRotativoSaldo.ano < ano_corte,
+            db.and_(
+                FundoRotativoSaldo.ano == ano_corte,
+                FundoRotativoSaldo.mes <= mes_corte,
+            ),
+        )
+    )
+
+
 def _query_saldos_base():
     return FundoRotativoSaldo.query.filter(
         FundoRotativoSaldo.codigoUG == UG_FUNDO_ROTATIVO,
@@ -575,7 +594,12 @@ def listar_saldos(
     )
     query = _aplicar_filtros_saldo(_query_saldos_base(), filtros)
 
-    soma_filtrada = _somar_saldo_periodo_mais_recente(query)
+    # Card 'Saldo Atual da Conta': acumulativo. Quando ano+mes estao filtrados juntos,
+    # usa snapshot mais recente <= (ano, mes) em vez de exigir snapshot do mes exato.
+    # A tabela abaixo continua respeitando o filtro de mes exato.
+    query_card = _aplicar_filtros_saldo(_query_saldos_base(), filtros, excluir={'mes'})
+    query_card = _recorte_saldo_acumulativo(query_card, filtros.get('anos'), filtros.get('meses'))
+    soma_filtrada = _somar_saldo_periodo_mais_recente(query_card)
 
     soma_total = _somar_saldo_periodo_mais_recente(_query_saldos_base())
 
@@ -798,14 +822,15 @@ def _saldo_total_dashboard(filtros):
 
     if filtros.get('fontes'):
         query = query.filter(FundoRotativoSaldo.fonte_codigo.in_(filtros['fontes']))
-    query = _filtro_ano_saldo(query, filtros.get('anos'))
-    if filtros.get('meses'):
-        query = query.filter(
-            db.or_(
-                FundoRotativoSaldo.mes.in_(filtros['meses']),
-                extract('month', FundoRotativoSaldo.data).in_(filtros['meses']),
-            )
-        )
+
+    anos = filtros.get('anos') or []
+    meses = filtros.get('meses') or []
+
+    if anos and meses:
+        query = _recorte_saldo_acumulativo(query, anos, meses)
+    elif anos:
+        query = _filtro_ano_saldo(query, anos)
+    # Mes sem ano: ignorado (mantem comportamento de pegar o snapshot mais recente).
 
     return _somar_saldo_periodo_mais_recente(query)
 

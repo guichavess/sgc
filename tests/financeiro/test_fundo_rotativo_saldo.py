@@ -310,6 +310,28 @@ def test_listar_saldos_filtra_por_mes(app, db_session):
     assert soma_filtrada == pytest.approx(200.0)
 
 
+def test_listar_saldos_card_acumulativo_pega_snapshot_anterior_quando_mes_filtrado_vazio(app, db_session):
+    from app.services.fundo_rotativo_service import sincronizar_saldos_periodos, listar_saldos
+
+    client = FakeSiafeClient(responses={
+        (2026, 6): [_sample_api_row(saldo='4000000.00', ano='2026', mes='06', fonte='7.55')],
+        (2026, 8): [_sample_api_row(saldo='4787700.23', ano='2026', mes='08', fonte='7.55')],
+    })
+
+    with app.app_context():
+        sincronizar_saldos_periodos([(2026, 6), (2026, 8)], usuario_id=None, siafe_client=client)
+        # Filtra julho/2026 (sem snapshot proprio). Tabela fica vazia, mas o card
+        # 'Saldo Atual da Conta' mostra o snapshot acumulativo de junho.
+        pagination_jul, _, soma_jul = listar_saldos(ano='2026', mes='7')
+        # Sanity: filtrando agosto, tabela mostra agosto e card tambem.
+        pagination_ago, _, soma_ago = listar_saldos(ano='2026', mes='8')
+
+    assert pagination_jul.total == 0
+    assert soma_jul == pytest.approx(4000000.00)
+    assert pagination_ago.total == 1
+    assert soma_ago == pytest.approx(4787700.23)
+
+
 def test_listar_saldos_calcula_saldo_atual_sem_somar_periodos_historicos(app, db_session):
     from app.services.fundo_rotativo_service import sincronizar_saldos_periodos, listar_saldos
 

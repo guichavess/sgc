@@ -358,6 +358,37 @@ class TestFundoRotativoDashboardService:
         assert dashboard['kpis']['reservado'] == pytest.approx(300.0)
         assert dashboard['kpis']['disponivel'] == pytest.approx(50.0)
 
+    def test_saldo_total_acumulativo_pega_snapshot_anterior_quando_mes_filtrado_nao_tem(self, app, db_session):
+        from app.services.fundo_rotativo_service import obter_dashboard_fundo_rotativo
+
+        _seed_dashboard_data(db_session)
+        ano_atual = datetime.now().year
+        # Snapshots: junho (4.000.000) e agosto (4.787.700,23). Julho NAO tem snapshot.
+        # Usuario filtra julho/ano_atual: saldo eh acumulativo, deve pegar JUNHO (snapshot mais
+        # recente <= julho), nao agosto (que esta no futuro em relacao ao filtro).
+        db_session.add_all([
+            _make_saldo_siafe('4000000.00', datetime(ano_atual, 6, 1), '755', '339030', '01'),
+            _make_saldo_siafe('4787700.23', datetime(ano_atual, 8, 1), '755', '339030', '01'),
+        ])
+        db_session.flush()
+
+        with app.app_context():
+            dashboard_jul = obter_dashboard_fundo_rotativo(
+                ano=str(ano_atual),
+                mes='7',
+                fonte_codigo='755',
+            )
+            dashboard_ago = obter_dashboard_fundo_rotativo(
+                ano=str(ano_atual),
+                mes='8',
+                fonte_codigo='755',
+            )
+
+        # Julho sem snapshot proprio: pega junho (mais recente <= julho).
+        assert dashboard_jul['kpis']['saldo_total'] == pytest.approx(4000000.00)
+        # Sanity: agosto tem snapshot proprio.
+        assert dashboard_ago['kpis']['saldo_total'] == pytest.approx(4787700.23)
+
 
 class TestFundoRotativoDashboardRotas:
     def test_get_dashboard_retorna_200_com_kpis_e_tabela(self, client, db_session):
