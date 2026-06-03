@@ -462,7 +462,9 @@ class TestFundoRotativoDashboardRotas:
 
         assert resp.status_code == 200
         html = resp.data.decode('utf-8', errors='replace')
-        assert re.search(r'name="mes"\s+value="1"', html)
-        assert not re.search(r'name="mes"\s+value="2"', html)
+        # Dropdown Mes mostra sempre os 12 meses fixos (saldo acumulativo).
+        for m in range(1, 13):
+            assert re.search(rf'name="mes"\s+value="{m}"', html)
+        # Fonte/Natureza continuam interativos com os filtros.
         assert re.search(r'name="natureza"\s+value="339030"', html)
         assert not re.search(r'name="natureza"\s+value="339039"', html)

@@ -470,7 +470,8 @@ def test_opcoes_saldo_dependem_dos_filtros_selecionados(app, db_session):
         opcoes = listar_opcoes_saldo_dependentes(ano='2026', fonte_codigo='755')
 
     assert {f['codigo'] for f in opcoes['fontes']} == {'500', '755'}
-    assert opcoes['meses'] == [6]
+    # Mes mostra sempre os 12 fixos (saldo acumulativo permite filtrar qualquer mes).
+    assert opcoes['meses'] == list(range(1, 13))
     assert opcoes['contas'] == [{'codigo': '95192', 'label': '95192'}]
     assert opcoes['anos'] == [2026]
     assert opcoes['exercicios'][0][0] == '01'

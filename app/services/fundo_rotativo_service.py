@@ -762,9 +762,9 @@ def listar_opcoes_saldo_dependentes(
         'anos': _listar_anos_saldo_query(
             _aplicar_filtros_saldo(_query_saldos_base(), filtros, excluir={'ano'})
         ),
-        'meses': _listar_meses_saldo_query(
-            _aplicar_filtros_saldo(_query_saldos_base(), filtros, excluir={'mes'})
-        ),
+        # Filtro Mes mostra sempre os 12 meses fixos (saldo acumulativo permite
+        # filtrar qualquer mes mesmo sem snapshot/execucao naquele periodo).
+        'meses': list(range(1, 13)),
         'contas': _listar_contas_saldo_query(
             _aplicar_filtros_saldo(_query_saldos_base(), filtros, excluir={'conta_bancaria'})
         ),
@@ -950,7 +950,9 @@ def listar_opcoes_dashboard_dependentes(ano=None, mes=None, fonte_codigo=None, n
     )
     return {
         'anos': _listar_anos_execucao_query(filtros, excluir={'ano'}),
-        'meses': _listar_meses_execucao_query(filtros, excluir={'mes'}),
+        # Filtro Mes mostra sempre os 12 meses fixos (saldo acumulativo permite
+        # filtrar qualquer mes mesmo sem execucao/snapshot naquele periodo).
+        'meses': list(range(1, 13)),
         'fontes': _listar_fontes_execucao_query(filtros, excluir={'fonte_codigo'}),
         'naturezas': _listar_naturezas_execucao_query(filtros, excluir={'natureza'}),
     }
