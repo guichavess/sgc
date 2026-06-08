@@ -868,8 +868,9 @@ class PrestacaoContratoService:
             cod = int(codigo_contrato)
         except (ValueError, TypeError):
             return []
-        return PD.query.filter_by(
-            codContrato=cod
+        return PD.query.filter(
+            PD.codContrato == cod,
+            PD.statusDocumento == 'CONTABILIZADO'
         ).order_by(PD.dataEmissao.desc()).all()
 
     @staticmethod

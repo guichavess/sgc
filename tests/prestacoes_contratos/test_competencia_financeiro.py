@@ -15,6 +15,8 @@ vinculada com num_pd correspondente.
 Fix: adicionar campo `competencia` aos models PD, Liquidacao e Empenho, e
 ler direto do model no template (como ja era feito com OB.competencia).
 """
+from datetime import datetime
+
 import pytest
 
 from app.models.pd import PD
@@ -101,8 +103,20 @@ def test_listar_pds_retorna_competencia_do_model_diretamente(db_session):
     """
     from app.services.prestacao_contrato_service import PrestacaoContratoService
 
-    pd1 = PD(id=1, codigo='2025PD000001', codContrato=99999, competencia='06/2025')
-    pd2 = PD(id=2, codigo='2025PD000002', codContrato=99999, competencia=None)
+    pd1 = PD(
+        id=1,
+        codigo='2025PD000001',
+        codContrato=99999,
+        statusDocumento='CONTABILIZADO',
+        competencia='06/2025',
+    )
+    pd2 = PD(
+        id=2,
+        codigo='2025PD000002',
+        codContrato=99999,
+        statusDocumento='CONTABILIZADO',
+        competencia=None,
+    )
     db_session.add_all([pd1, pd2])
     db_session.flush()
 
@@ -111,3 +125,41 @@ def test_listar_pds_retorna_competencia_do_model_diretamente(db_session):
 
     assert competencias['2025PD000001'] == '06/2025'
     assert competencias['2025PD000002'] is None
+
+
+def test_listar_pds_filtra_apenas_contabilizadas_do_contrato(db_session):
+    """A aba Financeiro deve ignorar PD anulada e PD de outro contrato."""
+    from app.services.prestacao_contrato_service import PrestacaoContratoService
+
+    pd_contabilizada = PD(
+        id=10,
+        codigo='2025PD01203',
+        codContrato=99999,
+        statusDocumento='CONTABILIZADO',
+        dataEmissao=datetime(2025, 5, 20),
+        valor=100,
+    )
+    pd_anulada = PD(
+        id=11,
+        codigo='2025PD01204',
+        codContrato=99999,
+        statusDocumento='Anulado',
+        dataEmissao=datetime(2025, 5, 21),
+        valor=200,
+    )
+    pd_outro_contrato = PD(
+        id=12,
+        codigo='2025PD01205',
+        codContrato=88888,
+        statusDocumento='CONTABILIZADO',
+        dataEmissao=datetime(2025, 5, 22),
+        valor=300,
+    )
+    db_session.add_all([pd_contabilizada, pd_anulada, pd_outro_contrato])
+    db_session.flush()
+
+    pds = PrestacaoContratoService.listar_pds(99999)
+
+    assert [p.codigo for p in pds] == ['2025PD01203']
+    assert all(p.codContrato == 99999 for p in pds)
+    assert all(p.statusDocumento == 'CONTABILIZADO' for p in pds)
