@@ -40,6 +40,7 @@ class Empenho(db.Model):
     codigoModalidadeLicitacao = db.Column(db.BigInteger)
     descModalidadeLicitacao = db.Column(db.Text)
     codClassificacao = db.Column(db.Text)
+    competencia = db.Column(db.String(7))  # MM/YYYY
 
     def __repr__(self):
         return f'<Empenho {self.codigo}>'

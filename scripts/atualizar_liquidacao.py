@@ -64,6 +64,7 @@ COLUMNS = [
     "codigoCredor", "nomeCredor", "dataEmissao", "dataCancelamento",
     "dataContabilizacao", "valor", "observacao", "codigoEmpenhoVinculado",
     "exercicioNE", "codigoEL", "exercicioEL", "codClassificacao", "tipoAlteracao",
+    "competencia",
     "codContrato",
 ]
 
@@ -221,11 +222,12 @@ def build_cod_contrato_from_classificadores(classificadores):
     return _get_classificador_nome(classificadores, 54)
 
 def build_competencia_from_classificadores(classificadores):
-    # Ano = 81, Mês = 502
+    # Ano = 81, Mês = 502 — a API SIAFE de liquidação não devolve `competencia`
+    # como campo direto (diferente de PD), entao extraimos dos classificadores.
     ano = _get_classificador_nome(classificadores, 81)
     mes = _get_classificador_nome(classificadores, 502)
-    if not mes or not ano: return ""
-    # Mês com 2 dígitos
+    if not mes or not ano:
+        return ""
     return f"{mes.zfill(2)}/{ano}"
 
 # =============================================================================
@@ -315,6 +317,9 @@ def main():
         for col in DATE_COLUMNS:
             if col in final_df.columns:
                 final_df[col] = pd.to_datetime(final_df[col], errors="coerce")
+
+        if "competencia" in final_df.columns:
+            final_df["competencia"] = final_df["competencia"].astype("string")
 
         # Filtro defensivo: garante que só registros do ano-alvo sejam gravados.
         # Protege contra a API retornar NLs com dataEmissao fora do ano-alvo.

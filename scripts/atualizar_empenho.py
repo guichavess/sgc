@@ -25,6 +25,9 @@ dotenv_path = os.path.join(base_dir, '.env')
 from dotenv import load_dotenv
 load_dotenv(dotenv_path)
 
+sys.path.insert(0, base_dir)
+from app.utils.competencia import normalizar_competencia  # noqa: E402
+
 if not os.getenv('DB_USER'):
     print(f"AVISO: Arquivo .env não encontrado ou variáveis vazias. Buscado em: {dotenv_path}")
 
@@ -112,7 +115,8 @@ COLUMNS_EMPENHO = [
     "nomeCredor", "dataEmissao", "dataCancelamento", "dataContabilizacao", "valor",
     "observacao", "cnpjCredor", "idNR", "codNR", "modalidade", "tipoAlteracaoNE",
     "codContrato", "codAcao", "codDetalhamentoFonte", "codigoOrgao",
-    "codigoModalidadeLicitacao", "descModalidadeLicitacao", "codClassificacao"
+    "codigoModalidadeLicitacao", "descModalidadeLicitacao", "codClassificacao",
+    "competencia",
 ]
 
 INT_COLUMNS = [
@@ -396,6 +400,53 @@ def _collect_classificadores_recursivo(bucket, obj):
             _collect_classificadores_recursivo(bucket, it)
 
 
+def _extract_competencia_from_row(row_obj):
+    """Extrai competência (MM/YYYY) varrendo classificadores recursivamente.
+
+    Procura codigoTipoClassificador 81 (Ano) e 502 (Mês). A API SIAFE de empenho
+    não devolve `competencia` como campo direto — precisa ser construída a partir
+    dos classificadores, que podem aparecer no topo ou aninhados em `itens`.
+    """
+    ano = ""
+    mes = ""
+
+    def visit(obj):
+        nonlocal ano, mes
+        if obj is None or isinstance(obj, float):
+            return
+        if isinstance(obj, dict):
+            cls = obj.get("classificadores", None)
+            if isinstance(cls, list):
+                for c in cls:
+                    if not isinstance(c, dict):
+                        continue
+                    cod_tipo = c.get("codigoTipoClassificador")
+                    nome = c.get("nomeClassificador")
+                    if cod_tipo is None or nome is None:
+                        continue
+                    try:
+                        cod_tipo = int(cod_tipo)
+                    except Exception:
+                        continue
+                    val = str(nome).strip()
+                    if not val:
+                        continue
+                    if cod_tipo == 81:
+                        ano = val
+                    elif cod_tipo == 502:
+                        mes = val
+            for v in obj.values():
+                visit(v)
+        elif isinstance(obj, list):
+            for it in obj:
+                visit(it)
+
+    visit(row_obj)
+    if mes and ano:
+        return f"{mes.zfill(2)}/{ano}"
+    return None
+
+
 def expand_itens(df_raw):
     """
     Tabela empenho_itens: 1 linha por empenho.
@@ -479,6 +530,17 @@ def fetch_data(session, ug, token, year):
 
         # Tabela principal
         df_main = df_raw.reindex(columns=COLUMNS_EMPENHO)
+
+        # Competência:
+        # 1. tenta classificadores (Ano=81, Mês=502), recursivo p/ estruturas aninhadas
+        # 2. fallback: campo `competencia` que a API às vezes devolve (descritivo) — normalizado
+        comp_classif = df_raw.apply(
+            lambda r: _extract_competencia_from_row(r.to_dict()), axis=1
+        )
+        comp_direto = df_main["competencia"].apply(normalizar_competencia) \
+            if "competencia" in df_main.columns else pd.Series([None] * len(df_main))
+        df_main["competencia"] = comp_classif.where(comp_classif.notna(), comp_direto)
+
         if "codigo" in df_main.columns:
             df_main = df_main.drop_duplicates(subset="codigo", keep="first")
 
@@ -604,6 +666,9 @@ def main():
         for col in DATE_COLUMNS:
             if col in final_main.columns:
                 final_main[col] = pd.to_datetime(final_main[col], errors="coerce")
+
+        if "competencia" in final_main.columns:
+            final_main["competencia"] = final_main["competencia"].astype("string")
 
         # Filtro defensivo: garante que só empenhos do ano-alvo sejam gravados.
         # Tabelas filhas (produtos, itens) também são filtradas pelos códigos válidos.

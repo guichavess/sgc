@@ -223,13 +223,11 @@ def contrato_gerenciar(codigo):
     liquidacoes = []
     pagamentos = []
     pds = []
-    mapa_competencias_pd = {}
     if aba == 'financeiro':
         empenhos = PrestacaoContratoService.listar_empenhos(codigo)
         liquidacoes = PrestacaoContratoService.listar_liquidacoes(codigo)
         pagamentos = PrestacaoContratoService.listar_pagamentos_contrato(codigo)
         pds = PrestacaoContratoService.listar_pds(codigo)
-        mapa_competencias_pd = PrestacaoContratoService.buscar_competencias_pds(codigo)
 
     # Solicitações de pagamento (aba Pagamentos)
     solicitacoes_pagamento = []
@@ -308,7 +306,6 @@ def contrato_gerenciar(codigo):
         liquidacoes=liquidacoes,
         pagamentos=pagamentos,
         pds=pds,
-        mapa_competencias_pd=mapa_competencias_pd,
         detalhamento_financeiro=detalhamento_financeiro,
         naturezas_contrato=naturezas_contrato,
         divisao_saldo=divisao_saldo,

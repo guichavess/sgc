@@ -1317,6 +1317,7 @@
  <th>Código</th>
  <th>Credor</th>
  <th>Data Emissão</th>
+ <th>Competência</th>
  <th>Status</th>
  <th class="text-end">Valor</th>
  </tr>
@@ -1327,6 +1328,7 @@
  <td><strong>{{ emp.codigo or '—' }}</strong></td>
  <td>{{ emp.nomeCredor or '—' }}</td>
  <td>{{ emp.dataEmissao.strftime('%d/%m/%Y') if emp.dataEmissao else '—' }}</td>
+ <td>{{ emp.competencia or '—' }}</td>
  <td>
  {% if emp.statusDocumento %}
  <span class="badge bg-{{ 'success' if emp.statusDocumento == 'Contabilizado' else 'warning' }}">{{ emp.statusDocumento }}</span>
@@ -1382,6 +1384,7 @@
  <th>Código</th>
  <th>Credor</th>
  <th>Data Emissão</th>
+ <th>Competência</th>
  <th>NE Vinculada</th>
  <th class="text-end">Valor</th>
  </tr>
@@ -1392,6 +1395,7 @@
  <td><strong>{{ liq.codigo or '—' }}</strong></td>
  <td>{{ liq.nomeCredor or '—' }}</td>
  <td>{{ liq.dataEmissao.strftime('%d/%m/%Y') if liq.dataEmissao else '—' }}</td>
+ <td>{{ liq.competencia or '—' }}</td>
  <td>{{ liq.codigoEmpenhoVinculado or '—' }}</td>
  <td class="text-end text-success fw-semibold">R$ {{ "{:,.2f}".format(liq.valor or 0)|replace(",", "X")|replace(".", ",")|replace("X", ".") }}</td>
  </tr>
@@ -1455,9 +1459,7 @@
  <td><strong>{{ pd_item.codigo or '—' }}</strong></td>
  <td>{{ pd_item.nomeCredor or '—' }}</td>
  <td>{{ pd_item.dataEmissao.strftime('%d/%m/%Y') if pd_item.dataEmissao else '—' }}</td>
- <td>
- {{ mapa_competencias_pd.get(pd_item.codigo, '—') }}
- </td>
+ <td>{{ pd_item.competencia or '—' }}</td>
  <td>{{ pd_item.codigoNE or '—' }}</td>
  <td>
  {% if pd_item.statusExecucao == 'STATUS_DISPONIVEL' %}

@@ -17,6 +17,10 @@ from urllib3.util.retry import Retry
 from sqlalchemy import text, create_engine
 from dotenv import load_dotenv
 
+# Permite importar app.utils.competencia quando rodado como script
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.utils.competencia import normalizar_competencia  # noqa: E402
+
 # Suprime warnings de SSL (verify=False)
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 import urllib3
@@ -218,6 +222,7 @@ def parse_cod_contrato_from_codClassificacao(series: pd.Series) -> pd.Series:
     out = s.str.extract(r"(\d{8})\.\s*\d+\s*$", expand=False)
     return out.fillna("").astype("string")
 
+
 # =============================================================================
 # 6. FUNÇÕES DE BANCO (DELETE)
 # =============================================================================
@@ -303,6 +308,12 @@ def fetch_data(session, ug, token, year):
         else:
             df["codContrato"] = ""
 
+        # Competência: a API SIAFE de OB devolve direto (texto descritivo
+        # como '12 - Dezembro/2024'). Normaliza pra MM/YYYY pra ficar
+        # consistente com PD/liquidação/empenho.
+        if "competencia" in df.columns:
+            df["competencia"] = df["competencia"].apply(normalizar_competencia)
+
         # Dedup
         if "codigo" in df.columns:
             df = df.drop_duplicates(subset="codigo", keep="first")
@@ -373,6 +384,9 @@ def main():
         for col in DATE_COLUMNS:
             if col in final_df.columns:
                 final_df[col] = pd.to_datetime(final_df[col], errors="coerce")
+
+        if "competencia" in final_df.columns:
+            final_df["competencia"] = final_df["competencia"].astype("string")
 
         # codContrato permanece como string para não perder zeros à esquerda
 

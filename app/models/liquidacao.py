@@ -33,6 +33,7 @@ class Liquidacao(db.Model):
     exercicioEL = db.Column(db.BigInteger)
     codClassificacao = db.Column(db.Text)
     tipoAlteracao = db.Column(db.Text)
+    competencia = db.Column(db.String(7))  # MM/YYYY
     codContrato = db.Column(db.BigInteger)
 
     def __repr__(self):

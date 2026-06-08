@@ -17,6 +17,31 @@
 
 ## Pendências
 
+### Competência em Empenhos, Liquidações e OBs — Financeiro (2026-06-08)
+
+- [ ] **Adicionar coluna `competencia` em `empenho`, `liquidacao` e `ob`**
+  - Contexto: a aba Financeiro do gerenciamento de contrato passou a exibir a coluna Competência nas 4 sub-abas (Empenhos, Liquidações, PDs, Pagamentos/OB). Em produção, apenas a tabela `pd` tinha a coluna `competencia` — porque a API SIAFE de PD devolve o campo direto na resposta. Os endpoints de empenho/liquidação/OB **não** retornam `competencia` direto — confirmado via teste de produção. Os scripts agora extraem a competência dos classificadores `codigoTipoClassificador` 81 (Ano) e 502 (Mês), formato `MM/YYYY` (mesma lógica que `atualizar_liquidacao.py` já usava). Para OB foi adicionada extração recursiva (classificadores podem estar aninhados).
+  - SQL (executar no Workbench):
+  ```sql
+  ALTER TABLE empenho    ADD COLUMN competencia VARCHAR(7) NULL;
+  ALTER TABLE liquidacao ADD COLUMN competencia VARCHAR(7) NULL;
+  ALTER TABLE ob         ADD COLUMN competencia VARCHAR(7) NULL;
+  ```
+  - Após o ALTER, re-rodar os scripts em produção para popular o histórico:
+  ```bash
+  python scripts/atualizar_empenho.py
+  python scripts/atualizar_liquidacao.py
+  python scripts/atualizar_ob.py
+  ```
+  - Validação pós-backfill (deve retornar >0 em todas):
+  ```sql
+  SELECT COUNT(*) AS total, COUNT(competencia) AS com_competencia FROM empenho;
+  SELECT COUNT(*) AS total, COUNT(competencia) AS com_competencia FROM liquidacao;
+  SELECT COUNT(*) AS total, COUNT(competencia) AS com_competencia FROM ob;
+  SELECT COUNT(*) AS total, COUNT(competencia) AS com_competencia FROM pd;
+  ```
+  - Observação: até o backfill rodar, a coluna Competência das três sub-abas vai aparecer como `—` para registros antigos. PD não precisa de ALTER (coluna já existe), só do deploy do model atualizado.
+
 ### Hierarquia de Autorização — Diárias (2026-05-05)
 
 - [ ] **Definir `cargo_gestao = 'secretario_exercicio'` para Bruno Gomes** ⚠️ BLOQUEADO

@@ -32,6 +32,7 @@ class PD(db.Model):
     codigoNE = db.Column(db.Text)
     codigoNL = db.Column(db.Text)
     valorTotalPD = db.Column(db.Float)
+    competencia = db.Column(db.Text)
     codContrato = db.Column(db.BigInteger)
 
     def __repr__(self):
