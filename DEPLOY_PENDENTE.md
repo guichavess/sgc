@@ -27,11 +27,15 @@
   ALTER TABLE liquidacao ADD COLUMN competencia VARCHAR(7) NULL;
   ALTER TABLE ob         ADD COLUMN competencia VARCHAR(7) NULL;
   ```
+  - Observacao 2026-06-08: `codFonte` agora e normalizado antes do cast numerico nos scripts `atualizar_empenho.py`, `atualizar_liquidacao.py`, `atualizar_pd.py`, `atualizar_ob.py` e `atualizar_reserva.py`, evitando que fontes no formato SIAFE/classificador (`7.55`, `5.00`) sejam gravadas fora do padrao (`755`, `500`). Reexecutar os scripts listados abaixo corrige os registros recarregados por ano/UG; o backfill reverso preenche `empenho.competencia` restante via NL -> PD -> OB.
   - Após o ALTER, re-rodar os scripts em produção para popular o histórico:
   ```bash
   python scripts/atualizar_empenho.py
   python scripts/atualizar_liquidacao.py
+  python scripts/atualizar_pd.py
   python scripts/atualizar_ob.py
+  python scripts/atualizar_reserva.py
+  python scripts/backfill_competencia_empenho.py --executar
   ```
   - Validação pós-backfill (deve retornar >0 em todas):
   ```sql

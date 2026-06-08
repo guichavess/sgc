@@ -22,9 +22,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # =========================
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dotenv_path = os.path.join(base_dir, '.env')
+sys.path.insert(0, base_dir)
 
 from dotenv import load_dotenv
 load_dotenv(dotenv_path)
+from app.utils.siafe import normalizar_codigo_fonte  # noqa: E402
 
 if not os.getenv('DB_USER'):
     print(f"AVISO: Arquivo .env não encontrado ou variáveis vazias. Buscado em: {dotenv_path}")
@@ -461,6 +463,9 @@ def main_reserva():
 
         if DEBUG_LOG:
             log_diagnostico_reserva(final_df, max_examples=DEBUG_MAX_EXAMPLES)
+
+        if "codFonte" in final_df.columns:
+            final_df["codFonte"] = final_df["codFonte"].apply(normalizar_codigo_fonte)
 
         for col in INT_COLUMNS:
             if col in final_df.columns:

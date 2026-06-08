@@ -31,9 +31,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # =========================
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dotenv_path = os.path.join(base_dir, '.env')
+sys.path.insert(0, base_dir)
 
 from dotenv import load_dotenv
 load_dotenv(dotenv_path)
+from app.utils.siafe import normalizar_codigo_fonte  # noqa: E402
 
 if not os.getenv('DB_USER'):
     print(f"AVISO: Arquivo .env nao encontrado ou variaveis vazias. Buscado em: {dotenv_path}")
@@ -396,6 +398,9 @@ def main():
             final_items = pd.concat(dfs_items, ignore_index=True) if dfs_items else pd.DataFrame()
 
         # Conversoes tabela principal
+        if "codFonte" in final_main.columns:
+            final_main["codFonte"] = final_main["codFonte"].apply(normalizar_codigo_fonte)
+
         for col in INT_COLUMNS:
             if col in final_main.columns:
                 final_main[col] = (

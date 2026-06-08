@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 # Permite importar app.utils.competencia quando rodado como script
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.utils.competencia import normalizar_competencia  # noqa: E402
+from app.utils.siafe import normalizar_codigo_fonte  # noqa: E402
 
 # Suprime warnings de SSL (verify=False)
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
@@ -145,9 +146,6 @@ def get_token():
     except Exception as e:
         print(f"Erro ao obter token: {e}")
         sys.exit(1)
-
-print("Autenticando no SIAFE...")
-TOKEN = get_token()
 
 # =============================================================================
 # 4. HELPERS E SESSÃO
@@ -302,6 +300,9 @@ def fetch_data(session, ug, token, year):
         # Ajusta colunas principais
         df = df_raw.reindex(columns=COLUMNS)
 
+        if "codFonte" in df.columns:
+            df["codFonte"] = df["codFonte"].apply(normalizar_codigo_fonte)
+
         # codContrato extraído de codClassificacao
         if "codClassificacao" in df.columns:
             df["codContrato"] = parse_cod_contrato_from_codClassificacao(df["codClassificacao"])
@@ -333,6 +334,9 @@ def main():
     ugs = resolve_ugs()
     is_all_mode = (UG_MODE or "").lower().strip() == "all"
 
+    print("Autenticando no SIAFE...")
+    token = get_token()
+
     print("=" * 70)
     print(f"Iniciando atualização de dados de OB (Pagamento) - Anos {YEARS}")
     if is_all_mode:
@@ -356,7 +360,7 @@ def main():
         status_counts = {}
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(fetch_data, session, ug, TOKEN, year) for ug in ugs]
+            futures = [executor.submit(fetch_data, session, ug, token, year) for ug in ugs]
             for fut in as_completed(futures):
                 ug, df, qtd, elapsed, status = fut.result()
                 total_docs += qtd

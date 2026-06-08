@@ -26,7 +26,9 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Tenta localizar o .env na raiz do projeto
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dotenv_path = os.path.join(base_dir, '.env')
+sys.path.insert(0, base_dir)
 load_dotenv(dotenv_path)
+from app.utils.siafe import normalizar_codigo_fonte  # noqa: E402
 
 DB_USER = os.getenv('DB_USER')
 DB_PASS = os.getenv('DB_PASS')
@@ -310,6 +312,9 @@ def main():
             final_df = pd.concat(dfs, ignore_index=True)
 
         # Conversão de Tipos
+        if "codFonte" in final_df.columns:
+            final_df["codFonte"] = final_df["codFonte"].apply(normalizar_codigo_fonte)
+
         for col in INT_COLUMNS:
             if col in final_df.columns:
                 final_df[col] = pd.to_numeric(final_df[col], errors="coerce").fillna(0).astype("int64")

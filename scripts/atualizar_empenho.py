@@ -27,6 +27,7 @@ load_dotenv(dotenv_path)
 
 sys.path.insert(0, base_dir)
 from app.utils.competencia import normalizar_competencia  # noqa: E402
+from app.utils.siafe import normalizar_codigo_fonte  # noqa: E402
 
 if not os.getenv('DB_USER'):
     print(f"AVISO: Arquivo .env não encontrado ou variáveis vazias. Buscado em: {dotenv_path}")
@@ -660,6 +661,9 @@ def main():
             final_itens = pd.concat(dfs_itens, ignore_index=True) if dfs_itens else pd.DataFrame()
 
         # Converter tipos
+        if "codFonte" in final_main.columns:
+            final_main["codFonte"] = final_main["codFonte"].apply(normalizar_codigo_fonte)
+
         for col in INT_COLUMNS:
             if col in final_main.columns:
                 final_main[col] = pd.to_numeric(final_main[col], errors="coerce").fillna(0).astype("int64")
