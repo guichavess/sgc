@@ -192,7 +192,7 @@ def main():
         for r in registros:
             local = IdentidadeVisualLocal(
                 cidade=r['cidade'],
-                local=r['local'],
+                tipo_local=r['local'],
                 endereco=r['endereco'],
                 bairro=r['bairro'],
                 cep=r['cep'],
