@@ -181,6 +181,8 @@ class SaldoService:
             return saldo
 
         except Exception as e:
+            # Rollback evita "envenenar" a sessão para chamadas subsequentes
+            db.session.rollback()
             current_app.logger.error(f"Erro ao atualizar saldo: {e}")
             return None
 

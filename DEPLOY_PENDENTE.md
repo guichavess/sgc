@@ -116,6 +116,24 @@
   ```
   - Observação: criar pasta de uploads no servidor: `mkdir -p app/static/uploads/identidade_visual`
 
+- [ ] **Criar tabela `municipios_pi` e adicionar coluna `municipio_id` em `identidade_visual_locais`**
+  - Contexto: campo Cidade agora é um select pesquisável vinculado à tabela de municípios do IBGE. Tipo Local validado contra lista fixa. Campos Endereço, Bairro e CEP agora são obrigatórios.
+  - Script (executa tudo: cria tabela, adiciona coluna, importa 224 municípios, associa registros existentes):
+  ```bash
+  python scripts/importar_municipios_pi.py --executar
+  ```
+  - Observação: o CSV do IBGE já está em `/tmp/1ea51a9afb80a30312ac5186a4804b80.csv` no servidor.
+
+- [ ] **Padronizar tipo_local para apenas "Espaço da Cidadania" e "Sala da Cidadania"**
+  - Contexto: as variações "(Auto Mall)" e "(Pi Center Moda)" foram removidas da lista de tipos válidos.
+  - SQL (executar no Workbench após o deploy):
+  ```sql
+  UPDATE identidade_visual_locais
+  SET tipo_local = 'Espaço da Cidadania'
+  WHERE tipo_local LIKE 'Espaço da Cidadania%'
+    AND tipo_local != 'Espaço da Cidadania';
+  ```
+
 ### Hierarquia de Autorização — Diárias (2026-05-05)
 
 - [ ] **Definir `cargo_gestao = 'secretario_exercicio'` para Bruno Gomes** ⚠️ BLOQUEADO

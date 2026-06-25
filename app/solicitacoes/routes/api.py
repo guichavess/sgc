@@ -977,47 +977,59 @@ def api_atualizar_etapas():
 @requires_permission('solicitacoes.aprovar')
 def api_atualizar_todos_saldos():
     """Atualiza saldos de todos os contratos."""
+    app_real = current_app._get_current_object()
+
     def generate():
-        yield f"data: {json.dumps({'msg': 'Atualizando saldos...', 'progresso': 5})}\n\n"
+        with app_real.app_context():
+            from app.services.sincronizacao_pagamentos_service import atualizar_saldos_em_lote
 
-        try:
-            # Busca combinações únicas de contrato/competência
-            combinacoes = db.session.query(
-                Solicitacao.codigo_contrato,
-                Solicitacao.competencia
-            ).distinct().filter(
-                Solicitacao.competencia.isnot(None)
-            ).all()
+            yield f"data: {json.dumps({'msg': 'Atualizando saldos...', 'progresso': 5})}\n\n"
 
-            total = len(combinacoes)
-            atualizados = 0
-            erros = 0
+            try:
+                # Busca combinações únicas de contrato/competência
+                combinacoes = db.session.query(
+                    Solicitacao.codigo_contrato,
+                    Solicitacao.competencia
+                ).distinct().filter(
+                    Solicitacao.competencia.isnot(None)
+                ).all()
 
-            if total == 0:
-                yield f"data: {json.dumps({'msg': 'Nenhum saldo para atualizar.', 'progresso': 100, 'concluido': True})}\n\n"
-                return
+                total = len(combinacoes)
 
-            yield f"data: {json.dumps({'msg': f'Calculando saldos de {total} combinações...', 'progresso': 10})}\n\n"
+                if total == 0:
+                    yield f"data: {json.dumps({'msg': 'Nenhum saldo para atualizar.', 'progresso': 100, 'concluido': True})}\n\n"
+                    return
 
-            for i, (contrato, competencia) in enumerate(combinacoes):
-                try:
-                    SaldoService.atualizar_saldo_contrato(contrato, competencia)
-                    atualizados += 1
-                except Exception:
-                    erros += 1
+                yield f"data: {json.dumps({'msg': f'Calculando saldos de {total} combinações...', 'progresso': 10})}\n\n"
 
-                # Atualiza progresso a cada 10 itens para não sobrecarregar o SSE
-                if (i + 1) % 10 == 0 or (i + 1) == total:
-                    progresso = 10 + int(((i + 1) / total) * 85)
-                    yield f"data: {json.dumps({'msg': f'Processados {i+1}/{total}...', 'progresso': progresso})}\n\n"
+                # Buffer de progresso: o callback roda dentro do lote (não pode dar yield),
+                # então acumulamos eventos e emitimos a cada bloco de 10.
+                eventos = []
 
-            msg_final = f'Concluído! {atualizados} saldos atualizados.'
-            if erros:
-                msg_final += f' ({erros} erros)'
-            yield f"data: {json.dumps({'msg': msg_final, 'progresso': 100, 'concluido': True})}\n\n"
+                def progresso_cb(indice, tot):
+                    if indice % 10 == 0 or indice == tot:
+                        pct = 10 + int((indice / tot) * 85)
+                        eventos.append({'msg': f'Calculando saldos {indice}/{tot}...', 'progresso': pct})
 
-        except Exception as e:
-            yield f"data: {json.dumps({'msg': f'Erro: {str(e)}', 'progresso': 0})}\n\n"
+                atualizados, erros, lista_erros = atualizar_saldos_em_lote(
+                    combinacoes, progress_cb=progresso_cb
+                )
+
+                for ev in eventos:
+                    yield f"data: {json.dumps(ev)}\n\n"
+
+                # Detalha os erros no stream (front coleta itens com '[ALERTA]')
+                for msg_erro in lista_erros[:50]:
+                    yield f"data: {json.dumps({'progresso': 98, 'msg': f'[ALERTA] Saldo {msg_erro}'})}\n\n"
+
+                msg_final = f'Concluído! {atualizados} saldos atualizados.'
+                if erros:
+                    msg_final += f' ({erros} erros)'
+                yield f"data: {json.dumps({'msg': msg_final, 'progresso': 100, 'concluido': True})}\n\n"
+
+            except Exception as e:
+                db.session.rollback()
+                yield f"data: {json.dumps({'msg': f'Erro: {str(e)}', 'progresso': 0})}\n\n"
 
     return Response(
         stream_with_context(generate()),
@@ -1027,6 +1039,54 @@ def api_atualizar_todos_saldos():
             'X-Accel-Buffering': 'no'
         }
     )
+
+
+# =============================================================================
+# REGISTRO DA SINCRONIZAÇÃO MANUAL (fonte da "última atualização")
+# =============================================================================
+
+@solicitacoes_bp.route('/api/registrar-sincronizacao', methods=['POST'])
+@login_required
+@requires_permission('solicitacoes.aprovar')
+def api_registrar_sincronizacao():
+    """
+    Grava uma linha em sis_sincronizacao_log ao final da sincronização manual.
+
+    O front (finalizarTudo) envia o resumo já acumulado das 3 fases. Esse log é
+    a fonte da data de "última atualização" exibida no dashboard.
+    """
+    from app.services.sincronizacao_pagamentos_service import registrar_log
+
+    dados = request.get_json(silent=True) or {}
+
+    def _int(v):
+        try:
+            return int(v or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    erros = _int(dados.get('erros'))
+    status = dados.get('status') or ('parcial' if erros else 'sucesso')
+
+    try:
+        log = registrar_log(
+            origem='manual',
+            status=status,
+            docs=_int(dados.get('docs')),
+            etapas=_int(dados.get('etapas')),
+            saldos=_int(dados.get('saldos')),
+            erros=erros,
+            usuario_id=current_user.id,
+        )
+        return jsonify({
+            'sucesso': True,
+            'log_id': log.id,
+            'finalizado_em': log.finalizado_em.strftime('%d/%m/%Y %H:%M:%S'),
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Erro ao registrar sincronização: {e}')
+        return jsonify({'sucesso': False, 'msg': str(e)}), 500
 
 
 # =============================================================================

@@ -156,6 +156,10 @@ def dashboard():
             else:
                 tempos_preloaded[s.id] = "--"
 
+    # Última sincronização (fonte confiável da "Atualização Geral" do header)
+    from app.services.sincronizacao_pagamentos_service import obter_ultima_sincronizacao
+    ultima_sincronizacao = obter_ultima_sincronizacao()
+
     # Busca etapas para filtro
     todas_etapas = Etapa.query.order_by(Etapa.ordem).all()
 
@@ -228,4 +232,5 @@ def dashboard():
         saldos_preloaded=saldos_preloaded,
         empenho_vals=empenho_vals,
         tempos_preloaded=tempos_preloaded,
+        ultima_sincronizacao=ultima_sincronizacao,
     )

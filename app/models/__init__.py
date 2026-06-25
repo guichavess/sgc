@@ -82,6 +82,9 @@ from app.models.planejamento_orcamentario import PlanejamentoOrcamentario
 # Gestão do Fundo Rotativo
 from app.models.fundo_rotativo import FundoRotativoSaldo
 
+# Log de Sincronização do módulo de Pagamentos (SEI + Etapas + Saldos)
+from app.models.sincronizacao_log import SincronizacaoLog
+
 # CGFR (Comissão de Gestão Financeira e Gestão Por Resultados)
 from app.cgfr.models import CgfrProcessoEnviado, Acao
 
@@ -185,6 +188,8 @@ __all__ = [
     'ClassFonte',
     # Fundo Rotativo
     'FundoRotativoSaldo',
+    # Log de Sincronização (Pagamentos)
+    'SincronizacaoLog',
     # CGFR
     'CgfrProcessoEnviado',
     'Acao',

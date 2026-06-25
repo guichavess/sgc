@@ -8,6 +8,7 @@ Jobs:
     2. lembrete_ne_pendentes - diario 09:00
     3. limpar_notificacoes_expiradas - semanal (domingo 03:00)
     4. sincronizar_saldos_fundo_rotativo - 4x ao dia (00, 06, 12, 18)
+    5. sincronizar_pagamentos_sei - 4x ao dia (00:30, 06:30, 12:30, 18:30)
 """
 from datetime import datetime, timedelta
 from flask import Flask
@@ -83,8 +84,20 @@ def init_scheduler(app: Flask):
         misfire_grace_time=1800,
     )
 
+    # Job 5: Sincronizar Pagamentos (SEI + Etapas + Saldos) - 4x ao dia (:30)
+    # Defasado em 30min do job de Fundo Rotativo (:00) para não concorrer pela API SIAFE.
+    scheduler.add_job(
+        func=_job_sincronizar_pagamentos,
+        trigger=CronTrigger(hour='0,6,12,18', minute=30),
+        id='sincronizar_pagamentos_sei',
+        name='Sincronizar Pagamentos (SEI + Etapas + Saldos)',
+        kwargs={'app': app},
+        replace_existing=True,
+        misfire_grace_time=1800,
+    )
+
     scheduler.start()
-    app.logger.info('Scheduler inicializado com 4 jobs.')
+    app.logger.info('Scheduler inicializado com 5 jobs.')
 
 
 # =============================================================================
@@ -304,3 +317,31 @@ def _job_sincronizar_saldos(app: Flask):
             )
         except Exception as e:
             app.logger.error(f'Erro no job sincronizar_saldos: {e}')
+
+
+# =============================================================================
+# JOB 5: SINCRONIZAR PAGAMENTOS (SEI + ETAPAS + SALDOS)
+# =============================================================================
+
+def _job_sincronizar_pagamentos(app: Flask):
+    """
+    Executa a rotina completa "Sincronizar Tudo" do modulo de Pagamentos.
+
+    Baixa documentos do SEI, avanca etapas e recalcula saldos de empenho.
+    Roda 4x ao dia (00:30, 06:30, 12:30, 18:30). usuario_id=None = automatico.
+    """
+    with app.app_context():
+        try:
+            from app.services.sincronizacao_pagamentos_service import (
+                executar_sincronizacao_completa
+            )
+            resultado = executar_sincronizacao_completa(
+                usuario_id=None, origem='agendada'
+            )
+            app.logger.info(
+                f'Job sincronizar_pagamentos: status={resultado.get("status")} '
+                f'docs={resultado.get("docs")} etapas={resultado.get("etapas")} '
+                f'saldos={resultado.get("saldos")} erros={resultado.get("erros")}.'
+            )
+        except Exception as e:
+            app.logger.error(f'Erro no job sincronizar_pagamentos: {e}')

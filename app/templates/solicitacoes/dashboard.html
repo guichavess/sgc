@@ -1,15 +1,21 @@
 ﻿{% extends "base.html" %}
 {% block container_class %}container-fluid px-4 px-xl-5{% endblock %}
 
+{# Data confiável da última sincronização (tabela sis_sincronizacao_log).
+   Fallback: maior SaldoEmpenho.data da página, caso ainda não haja log. #}
 {% set ns = namespace(maior_data=none) %}
-{% for sol in solicitacoes %}
+{% if ultima_sincronizacao and ultima_sincronizacao.finalizado_em %}
+ {% set ns.maior_data = ultima_sincronizacao.finalizado_em %}
+{% else %}
+ {% for sol in solicitacoes %}
  {% set s = saldos_preloaded.get(sol.id) %}
  {% if s and s.data %}
  {% if ns.maior_data is none or s.data > ns.maior_data %}
  {% set ns.maior_data = s.data %}
  {% endif %}
  {% endif %}
-{% endfor %}
+ {% endfor %}
+{% endif %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-end mb-4">
  <div>
@@ -22,6 +28,9 @@
  <small class="text-muted fw-bold mb-1" style="font-size: 0.85rem;">
  <i class="bi bi-clock-history me-1"></i>
  Atualização Geral: {{ ns.maior_data.strftime('%d/%m/%Y %H:%M:%S') }}
+ {% if ultima_sincronizacao and ultima_sincronizacao.origem == 'agendada' %}
+ <span class="badge bg-secondary ms-1" style="font-size: 0.65rem;" title="Sincronização automática">auto</span>
+ {% endif %}
  </small>
  {% else %}
  <small class="text-muted mb-1" style="font-size: 0.85rem;">--</small>
@@ -745,6 +754,18 @@
  var temErros = errosSincronizacao.length > 0;
  var tem422 = protocolos422.length > 0;
  var temProblemas = temErros || tem422;
+
+ // Registra a sincronização (fonte da "Atualização Geral" do dashboard)
+ try {
+ fetch("{{ url_for('solicitacoes.api_registrar_sincronizacao') }}", {
+ method: 'POST',
+ headers: { 'Content-Type': 'application/json' },
+ body: JSON.stringify({
+ erros: errosSincronizacao.length + protocolos422.length,
+ status: temProblemas ? 'parcial' : 'sucesso'
+ })
+ }).catch(function () { /* não bloqueia a UI */ });
+ } catch (e) { /* ignora */ }
 
  titulo.innerText = temProblemas ? "Sincronização Concluída (com alertas)" : "Sincronização Completa!";
  titulo.className = temProblemas ? "fw-bold text-warning mb-2" : "fw-bold text-success mb-2";

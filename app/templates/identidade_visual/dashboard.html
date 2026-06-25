@@ -11,8 +11,8 @@
 .badge-realizado { background-color: #198754; color: #fff; }
 .badge-pendente { background-color: #ffc107; color: #000; }
 .btn-acao { padding: 0.25rem 0.65rem; font-size: 0.8rem; }
-.iv-stats { display: flex; gap: 1rem; margin-bottom: 1.25rem; }
-.iv-stat-card { flex: 1; background: var(--color-surface); border: 1px solid var(--color-surface-border); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; text-align: center; }
+.iv-stats { display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.iv-stat-card { flex: 1; min-width: 120px; background: var(--color-surface); border: 1px solid var(--color-surface-border); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; text-align: center; }
 .iv-stat-card .stat-value { font-size: 1.5rem; font-weight: 700; }
 .iv-stat-card .stat-label { font-size: 0.78rem; color: var(--color-text-tertiary); text-transform: uppercase; }
 .iv-stat-total .stat-value { color: var(--color-primary); }
@@ -20,44 +20,164 @@
 .iv-stat-pendente .stat-value { color: #ffc107; }
 .iv-stat-custo .stat-value { color: #0891B2; font-size: 1.2rem; }
 
-.modal-iv .modal-dialog { max-width: 720px; margin: 3rem auto; }
+.modal-iv .modal-dialog { max-width: 720px; }
 .modal-iv .modal-body { padding: 1.5rem 2rem; }
 .modal-iv .modal-header { padding: 1.25rem 2rem; }
 .modal-iv .modal-footer { padding: 1rem 2rem; }
 
-.arquivo-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; background: var(--color-surface-secondary, #f8f9fa); border-radius: 8px; margin-bottom: 0.5rem; }
+.arquivo-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; background: var(--color-surface-secondary, #f8f9fa); border-radius: 8px; margin-bottom: 0.5rem; flex-wrap: wrap; }
 .arquivo-item .arquivo-icon { font-size: 1.25rem; }
 .arquivo-item .arquivo-info { flex: 1; min-width: 0; }
 .arquivo-item .arquivo-nome { font-size: 0.85rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .arquivo-item .arquivo-data { font-size: 0.72rem; color: var(--color-text-tertiary); }
 .arquivo-item .btn-remove-arquivo { padding: 0.15rem 0.4rem; font-size: 0.75rem; }
 
-.iv-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-.iv-pagination { display: flex; align-items: center; gap: 0.5rem; }
-.iv-pagination .page-info { font-size: 0.82rem; color: var(--color-text-tertiary); }
+/* ===== Toast de sucesso ===== */
+.toast-sucesso {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    z-index: 9999;
+    min-width: 300px;
+    max-width: 420px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.15);
+    display: flex;
+    align-items: stretch;
+    overflow: hidden;
+    transform: translateX(120%);
+    opacity: 0;
+    transition: transform .4s cubic-bezier(.22,1,.36,1), opacity .4s ease;
+    pointer-events: none;
+}
+.toast-sucesso.show {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+.toast-sucesso .toast-barra {
+    width: 5px;
+    flex-shrink: 0;
+    border-radius: 12px 0 0 12px;
+}
+.toast-sucesso .toast-barra.sucesso { background: #198754; }
+.toast-sucesso .toast-barra.erro { background: #dc3545; }
+.toast-sucesso .toast-corpo {
+    flex: 1;
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.toast-sucesso .toast-icone {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+.toast-sucesso .toast-icone.sucesso { color: #198754; }
+.toast-sucesso .toast-icone.erro { color: #dc3545; }
+.toast-sucesso .toast-texto h6 { margin: 0 0 2px; font-size: 0.9rem; font-weight: 600; }
+.toast-sucesso .toast-texto p { margin: 0; font-size: 0.8rem; color: #6c757d; }
+.toast-sucesso .toast-fechar {
+    background: none;
+    border: none;
+    padding: 0.5rem 0.75rem;
+    font-size: 1.1rem;
+    color: #adb5bd;
+    cursor: pointer;
+    align-self: flex-start;
+}
+.toast-sucesso .toast-fechar:hover { color: #495057; }
+.toast-sucesso .toast-progresso {
+    position: absolute;
+    bottom: 0;
+    left: 5px;
+    right: 0;
+    height: 3px;
+    border-radius: 0 0 12px 0;
+    transform-origin: left;
+    animation: toastProgress 3s linear forwards;
+}
+.toast-sucesso .toast-progresso.sucesso { background: #198754; }
+.toast-sucesso .toast-progresso.erro { background: #dc3545; }
+@keyframes toastProgress {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+}
+
+@media (max-width: 767.98px) {
+    .toast-sucesso { top: auto; bottom: 1rem; right: 0.75rem; left: 0.75rem; min-width: 0; max-width: none; }
+}
+
+/* ===== Cards mobile — tabela vira cards ===== */
+@media (max-width: 767.98px) {
+    .iv-stats { gap: 0.5rem; }
+    .iv-stat-card { min-width: 0; flex: 1 1 45%; padding: 0.75rem 0.5rem; }
+    .iv-stat-card .stat-value { font-size: 1.2rem; }
+    .iv-stat-custo .stat-value { font-size: 1rem; }
+
+    .iv-filters .row { gap: 0.5rem; }
+
+    .iv-table thead { display: none; }
+    .iv-table tbody tr {
+        display: block;
+        border: 1px solid var(--color-surface-border, #dee2e6);
+        border-radius: 10px;
+        margin-bottom: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: var(--color-surface, #fff);
+    }
+    .iv-table tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.3rem 0;
+        border: none;
+        font-size: 0.82rem;
+    }
+    .iv-table tbody td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        color: var(--color-text-tertiary, #6c757d);
+        margin-right: 0.75rem;
+        flex-shrink: 0;
+    }
+    .iv-table tbody td:last-child { justify-content: flex-end; margin-top: 0.25rem; }
+    .iv-table tbody td:last-child::before { display: none; }
+
+    .modal-iv .modal-body { padding: 1rem; }
+    .modal-iv .modal-header { padding: 1rem; }
+    .modal-iv .modal-footer { padding: 0.75rem 1rem; }
+
+    .page-info { font-size: 0.75rem !important; }
+    .header-actions { flex-direction: column; gap: 0.5rem; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-start mb-3">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div>
             <h4 class="fw-bold mb-1">Acompanhamento de Fachadas</h4>
-            <p class="text-muted mb-0" style="font-size:0.85rem;">Identidade Visual — Espaços e Salas da Cidadania</p>
+            <p class="text-muted mb-0 d-none d-md-block" style="font-size:0.85rem;">Identidade Visual — Espaços e Salas da Cidadania</p>
         </div>
-        <a href="{{ url_for('identidade_visual.exportar_excel') }}" class="btn btn-outline-success btn-sm">
-            <i class="bi bi-file-earmark-excel"></i> Exportar Excel
-        </a>
+        <div class="d-flex gap-2 header-actions">
+            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovoLocal">
+                <i class="bi bi-plus-lg"></i> Novo
+            </button>
+            <a href="{{ url_for('identidade_visual.exportar_excel') }}" class="btn btn-outline-success btn-sm">
+                <i class="bi bi-file-earmark-excel"></i> Exportar
+            </a>
+        </div>
     </div>
 
     {# KPIs #}
-    {% set total_geral = total %}
-    {% set realizados = locais|selectattr('status', 'equalto', 'REALIZADO')|list|length %}
-    {% set pendentes = locais|length - realizados %}
-    {% set custo_total = locais|selectattr('custo')|map(attribute='custo')|sum %}
     <div class="iv-stats">
         <div class="iv-stat-card iv-stat-total">
-            <div class="stat-value">{{ total_geral }}</div>
+            <div class="stat-value">{{ total }}</div>
             <div class="stat-label">Total</div>
         </div>
         <div class="iv-stat-card iv-stat-realizado">
@@ -77,7 +197,7 @@
     {# Filtros #}
     <div class="iv-filters">
         <form method="GET" class="row g-2 align-items-end">
-            <div class="col-md-3">
+            <div class="col-6 col-md-3">
                 <label class="form-label fw-semibold" style="font-size:0.8rem;">Cidade</label>
                 <select name="cidade" class="form-select form-select-sm">
                     <option value="">Todas</option>
@@ -86,7 +206,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-6 col-md-3">
                 <label class="form-label fw-semibold" style="font-size:0.8rem;">Tipo Local</label>
                 <select name="tipo_local" class="form-select form-select-sm">
                     <option value="">Todos</option>
@@ -95,7 +215,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold" style="font-size:0.8rem;">Bairro</label>
                 <select name="bairro" class="form-select form-select-sm">
                     <option value="">Todos</option>
@@ -104,7 +224,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold" style="font-size:0.8rem;">Status</label>
                 <select name="status" class="form-select form-select-sm">
                     <option value="">Todos</option>
@@ -112,7 +232,7 @@
                     <option value="PENDENTE" {{ 'selected' if filtro_status == 'PENDENTE' }}>Pendente</option>
                 </select>
             </div>
-            <div class="col-md-2 d-flex gap-2">
+            <div class="col-12 col-md-2 d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-funnel"></i> Filtrar</button>
                 <a href="{{ url_for('identidade_visual.dashboard') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg"></i></a>
             </div>
@@ -137,27 +257,27 @@
             <tbody>
                 {% for l in locais %}
                 <tr id="row-{{ l.id }}" data-custo="{{ l.custo or 0 }}" data-dataacao="{{ l.data_acao.strftime('%Y%m%d%H%M') if l.data_acao else '' }}">
-                    <td>{{ l.cidade }}</td>
-                    <td>{{ l.tipo_local }}</td>
-                    <td>{{ l.endereco or '—' }}</td>
-                    <td>{{ l.bairro or '—' }}</td>
-                    <td>
+                    <td data-label="Cidade">{{ l.cidade }}</td>
+                    <td data-label="Tipo">{{ l.tipo_local }}</td>
+                    <td data-label="Endereço">{{ l.endereco or '—' }}</td>
+                    <td data-label="Bairro">{{ l.bairro or '—' }}</td>
+                    <td data-label="Status">
                         <span class="badge {{ 'badge-realizado' if l.status == 'REALIZADO' else 'badge-pendente' }}">
                             {{ l.status }}
                         </span>
                     </td>
-                    <td>
+                    <td data-label="Custo">
                         {% if l.custo %}
                         R$ {{ "{:,.2f}".format(l.custo).replace(",","X").replace(".",",").replace("X",".") }}
                         {% else %}—{% endif %}
                     </td>
-                    <td>
+                    <td data-label="Data/Hora">
                         {% if l.data_acao %}
                         {{ l.data_acao.strftime('%d/%m/%Y %H:%M') }}
                         {% else %}—{% endif %}
                     </td>
                     <td class="text-center">
-                        <button class="btn btn-outline-primary btn-acao" onclick="abrirModal({{ l.id }}, '{{ l.cidade }}', '{{ l.tipo_local|replace("'", "\\'")|e }}')">
+                        <button class="btn btn-outline-primary btn-acao" onclick="abrirModal({{ l.id }})">
                             <i class="bi bi-pencil-square"></i> {{ 'Editar' if l.status == 'REALIZADO' else 'Registrar' }}
                         </button>
                     </td>
@@ -174,7 +294,7 @@
 
     {# Paginação #}
     {% if total_pages > 1 %}
-    <nav class="d-flex justify-content-between align-items-center mt-3">
+    <nav class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
         <span class="page-info" style="font-size:0.82rem; color:var(--color-text-tertiary);">
             Página {{ page }} de {{ total_pages }} ({{ total }} registros)
         </span>
@@ -205,9 +325,9 @@
     {% endif %}
 </div>
 
-{# Modal de Ação #}
+{# Modal de Ação (Registrar/Editar) #}
 <div class="modal fade modal-iv" id="modalAcao" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <div>
@@ -220,6 +340,63 @@
             </div>
             <form id="formAcao" enctype="multipart/form-data">
                 <div class="modal-body">
+                    {# Endereço (editável) #}
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-semibold mb-0">Endereço</label>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnToggleEndereco">
+                                <i class="bi bi-pencil"></i> Editar
+                            </button>
+                        </div>
+                        <div id="enderecoView" class="p-2 rounded" style="background: var(--color-surface-secondary, #f8f9fa); font-size: 0.88rem;">
+                            <span id="enderecoDisplay">—</span>
+                        </div>
+                        <div id="enderecoEdit" class="d-none">
+                            <div class="row g-2">
+                                <div class="col-12 col-md-5">
+                                    <label for="editCidade" class="form-label" style="font-size:0.78rem;">Cidade <span class="text-danger">*</span></label>
+                                    <select id="editCidade" class="form-select form-select-sm">
+                                        <option value="">Selecione...</option>
+                                        {% for m in municipios %}
+                                        <option value="{{ m.id }}">{{ m.nome }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-12 col-md-7">
+                                    <label for="editTipoLocal" class="form-label" style="font-size:0.78rem;">Tipo Local <span class="text-danger">*</span></label>
+                                    <select id="editTipoLocal" class="form-select form-select-sm">
+                                        <option value="">Selecione...</option>
+                                        {% for t in tipos_local_opcoes %}
+                                        <option value="{{ t }}">{{ t }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-12">
+                                    <label for="editEndereco" class="form-label" style="font-size:0.78rem;">Endereço <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control form-control-sm" id="editEndereco" placeholder="Rua, número, complemento">
+                                </div>
+                                <div class="col-7 col-md-7">
+                                    <label for="editBairro" class="form-label" style="font-size:0.78rem;">Bairro <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control form-control-sm" id="editBairro">
+                                </div>
+                                <div class="col-5 col-md-5">
+                                    <label for="editCep" class="form-label" style="font-size:0.78rem;">CEP <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control form-control-sm" id="editCep" placeholder="00000-000" maxlength="9">
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <button type="button" class="btn btn-sm btn-primary" id="btnSalvarEndereco">
+                                        <i class="bi bi-check-lg"></i> Salvar Endereço
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCancelarEndereco">
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+
                     {# Data e Hora #}
                     <div class="mb-4">
                         <label for="inputDataAcao" class="form-label fw-semibold">Data e Hora <span class="text-danger">*</span></label>
@@ -229,7 +406,7 @@
                     {# Custo #}
                     <div class="mb-4">
                         <label for="inputCusto" class="form-label fw-semibold">Custo Estimado <span class="text-muted fw-normal" style="font-size:0.78rem;">(opcional)</span></label>
-                        <div class="input-group input-group-lg">
+                        <div class="input-group">
                             <span class="input-group-text">R$</span>
                             <input type="text" class="form-control" id="inputCusto" placeholder="0,00">
                         </div>
@@ -247,7 +424,7 @@
                     <div class="mb-2">
                         <label for="inputArquivos" class="form-label fw-semibold">Adicionar Arquivos</label>
                         <input type="file" class="form-control" id="inputArquivos" accept=".pdf,.jpg,.jpeg,.heic" multiple>
-                        <div class="form-text">Formatos aceitos: JPG, JPEG, HEIC, PDF — múltiplos arquivos permitidos</div>
+                        <div class="form-text">JPG, JPEG, HEIC, PDF — múltiplos permitidos</div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -258,33 +435,274 @@
         </div>
     </div>
 </div>
+
+{# Modal Novo Local #}
+<div class="modal fade modal-iv" id="modalNovoLocal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title mb-0"><i class="bi bi-plus-circle me-2"></i>Novo Endereço</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formNovoLocal">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label for="novoCidade" class="form-label fw-semibold">Cidade <span class="text-danger">*</span></label>
+                            <select id="novoCidade" class="form-select">
+                                <option value="">Selecione o município...</option>
+                                {% for m in municipios %}
+                                <option value="{{ m.id }}">{{ m.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label for="novoTipoLocal" class="form-label fw-semibold">Tipo Local <span class="text-danger">*</span></label>
+                            <select id="novoTipoLocal" class="form-select">
+                                <option value="">Selecione o tipo...</option>
+                                {% for t in tipos_local_opcoes %}
+                                <option value="{{ t }}">{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="novoEndereco" class="form-label fw-semibold">Endereço <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="novoEndereco" placeholder="Rua, número, complemento">
+                        </div>
+                        <div class="col-7 col-md-7">
+                            <label for="novoBairro" class="form-label fw-semibold">Bairro <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="novoBairro" placeholder="Ex: Centro">
+                        </div>
+                        <div class="col-5 col-md-5">
+                            <label for="novoCep" class="form-label fw-semibold">CEP <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="novoCep" placeholder="00000-000" maxlength="9">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary px-4"><i class="bi bi-plus-lg"></i> Adicionar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# Toast de notificação #}
+<div class="toast-sucesso" id="toastNotificacao">
+    <div class="toast-barra" id="toastBarra"></div>
+    <div class="toast-corpo">
+        <i class="bi toast-icone" id="toastIcone"></i>
+        <div class="toast-texto">
+            <h6 id="toastTitulo"></h6>
+            <p id="toastMsg"></p>
+        </div>
+    </div>
+    <button class="toast-fechar" onclick="fecharToast()">&times;</button>
+    <div class="toast-progresso" id="toastProgresso"></div>
+</div>
 {% endblock %}
 
 {% block iv_js %}
 <script>
 let localIdAtual = null;
 let temArquivosExistentes = false;
-const modal = new bootstrap.Modal(document.getElementById('modalAcao'));
+let dadosLocalAtual = {};
 
-function abrirModal(id, cidade, tipoLocal) {
+const modalAcaoEl = document.getElementById('modalAcao');
+const modal = new bootstrap.Modal(modalAcaoEl);
+const modalNovoLocal = new bootstrap.Modal(document.getElementById('modalNovoLocal'));
+
+/* ===== Toast ===== */
+let toastTimer = null;
+function mostrarToast(titulo, msg, tipo) {
+    const el = document.getElementById('toastNotificacao');
+    const cls = tipo === 'erro' ? 'erro' : 'sucesso';
+    document.getElementById('toastBarra').className = 'toast-barra ' + cls;
+    document.getElementById('toastIcone').className = 'bi toast-icone ' + cls + (cls === 'sucesso' ? ' bi-check-circle-fill' : ' bi-exclamation-triangle-fill');
+    document.getElementById('toastTitulo').textContent = titulo;
+    document.getElementById('toastMsg').textContent = msg;
+    const prog = document.getElementById('toastProgresso');
+    prog.className = 'toast-progresso ' + cls;
+    prog.style.animation = 'none';
+    void prog.offsetWidth;
+    prog.style.animation = '';
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(fecharToast, 3000);
+}
+function fecharToast() {
+    document.getElementById('toastNotificacao').classList.remove('show');
+    clearTimeout(toastTimer);
+}
+
+/* ===== Helpers ===== */
+function apiCall(url, opts) {
+    return fetch(url, opts).then(r => {
+        if (!r.ok && r.status >= 500) {
+            return r.text().then(txt => { throw new Error('Erro no servidor: ' + r.status); });
+        }
+        return r.json();
+    });
+}
+
+function formatarMoeda(valor) {
+    let num = parseFloat(valor);
+    if (isNaN(num)) return '';
+    return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function maskCep(input) {
+    input.addEventListener('input', function() {
+        let v = this.value.replace(/\D/g, '').substring(0, 8);
+        if (v.length > 5) v = v.substring(0, 5) + '-' + v.substring(5);
+        this.value = v;
+    });
+}
+maskCep(document.getElementById('editCep'));
+maskCep(document.getElementById('novoCep'));
+
+/* ===== Tom Select — Novo Local ===== */
+const tsNovoCidade = new TomSelect('#novoCidade', {
+    placeholder: 'Digite para buscar...',
+    allowEmptyOption: true,
+    create: false,
+});
+const tsNovoTipo = new TomSelect('#novoTipoLocal', {
+    placeholder: 'Selecione o tipo...',
+    allowEmptyOption: true,
+    create: false,
+});
+
+/* ===== Tom Select — Edit (criados 1x, reutilizados) ===== */
+const tsEditCidade = new TomSelect('#editCidade', {
+    placeholder: 'Digite para buscar...',
+    allowEmptyOption: true,
+    create: false,
+});
+const tsEditTipo = new TomSelect('#editTipoLocal', {
+    placeholder: 'Selecione o tipo...',
+    allowEmptyOption: true,
+    create: false,
+});
+
+/* ===== Modal de Ação ===== */
+function abrirModal(id) {
     localIdAtual = id;
     temArquivosExistentes = false;
-    document.getElementById('modalCidade').textContent = cidade;
-    document.getElementById('modalLocal').textContent = tipoLocal;
+    dadosLocalAtual = {};
     document.getElementById('inputCusto').value = '';
     document.getElementById('inputDataAcao').value = '';
     document.getElementById('inputArquivos').value = '';
+    fecharEnderecoEdit();
+    document.getElementById('enderecoDisplay').textContent = 'Carregando...';
     carregarArquivos(id);
     modal.show();
 }
 
+function fecharEnderecoEdit() {
+    document.getElementById('enderecoEdit').classList.add('d-none');
+    document.getElementById('enderecoView').classList.remove('d-none');
+}
+
+function abrirEnderecoEdit() {
+    document.getElementById('enderecoView').classList.add('d-none');
+    document.getElementById('enderecoEdit').classList.remove('d-none');
+
+    tsEditCidade.setValue(dadosLocalAtual.municipio_id || '', true);
+    tsEditTipo.setValue(dadosLocalAtual.tipo_local || '', true);
+    document.getElementById('editEndereco').value = dadosLocalAtual.endereco || '';
+    document.getElementById('editBairro').value = dadosLocalAtual.bairro || '';
+    document.getElementById('editCep').value = dadosLocalAtual.cep || '';
+}
+
+document.getElementById('btnToggleEndereco').addEventListener('click', abrirEnderecoEdit);
+document.getElementById('btnCancelarEndereco').addEventListener('click', fecharEnderecoEdit);
+
+function atualizarEnderecoDisplay(data) {
+    const parts = [];
+    if (data.endereco) parts.push(data.endereco);
+    if (data.bairro) parts.push(data.bairro);
+    if (data.cep) parts.push('CEP: ' + data.cep);
+    document.getElementById('enderecoDisplay').textContent = parts.length > 0 ? parts.join(' — ') : '—';
+    document.getElementById('modalCidade').textContent = data.cidade || '';
+    document.getElementById('modalLocal').textContent = data.tipo_local || '';
+}
+
+/* ===== Salvar Endereço ===== */
+document.getElementById('btnSalvarEndereco').addEventListener('click', function() {
+    const municipioId = tsEditCidade.getValue();
+    const tipoLocal = tsEditTipo.getValue();
+    const endereco = document.getElementById('editEndereco').value.trim();
+    const bairro = document.getElementById('editBairro').value.trim();
+    const cep = document.getElementById('editCep').value.trim();
+
+    if (!municipioId) { mostrarToast('Campo obrigatório', 'Selecione a cidade.', 'erro'); return; }
+    if (!tipoLocal) { mostrarToast('Campo obrigatório', 'Selecione o tipo local.', 'erro'); return; }
+    if (!endereco) { mostrarToast('Campo obrigatório', 'Informe o endereço.', 'erro'); return; }
+    if (!bairro) { mostrarToast('Campo obrigatório', 'Informe o bairro.', 'erro'); return; }
+    if (!cep) { mostrarToast('Campo obrigatório', 'Informe o CEP.', 'erro'); return; }
+
+    const payload = {
+        municipio_id: parseInt(municipioId),
+        tipo_local: tipoLocal,
+        endereco: endereco,
+        bairro: bairro,
+        cep: cep,
+    };
+
+    apiCall('/identidade-visual/api/editar-local/' + localIdAtual, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    })
+    .then(data => {
+        if (data.ok) {
+            const opt = tsEditCidade.options[municipioId];
+            const cidadeNome = opt ? opt.text : municipioId;
+
+            dadosLocalAtual.municipio_id = municipioId;
+            dadosLocalAtual.tipo_local = tipoLocal;
+            dadosLocalAtual.cidade = cidadeNome;
+            dadosLocalAtual.endereco = endereco;
+            dadosLocalAtual.bairro = bairro;
+            dadosLocalAtual.cep = cep;
+
+            atualizarEnderecoDisplay(dadosLocalAtual);
+            fecharEnderecoEdit();
+
+            const row = document.getElementById('row-' + localIdAtual);
+            if (row) {
+                const cells = row.querySelectorAll('td');
+                cells[0].textContent = cidadeNome;
+                cells[1].textContent = tipoLocal;
+                cells[2].textContent = endereco || '—';
+                cells[3].textContent = bairro || '—';
+            }
+            mostrarToast('Sucesso', 'Endereço atualizado com sucesso.', 'sucesso');
+        } else {
+            mostrarToast('Erro', data.erro || 'Erro ao salvar endereço.', 'erro');
+        }
+    })
+    .catch(err => mostrarToast('Erro', err.message || 'Erro de conexão.', 'erro'));
+});
+
+/* ===== Carregar arquivos ===== */
 function carregarArquivos(id) {
     const container = document.getElementById('listaArquivos');
     container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;"><i class="bi bi-hourglass-split"></i> Carregando...</p>';
 
-    fetch(`/identidade-visual/api/arquivos/${id}`)
-        .then(r => r.json())
+    apiCall('/identidade-visual/api/arquivos/' + id)
         .then(data => {
+            dadosLocalAtual = {
+                municipio_id: data.municipio_id || '',
+                tipo_local: data.tipo_local || '',
+                cidade: data.cidade || '',
+                endereco: data.endereco || '',
+                bairro: data.bairro || '',
+                cep: data.cep || '',
+            };
+
             if (data.custo) {
                 document.getElementById('inputCusto').value = formatarMoeda(data.custo);
             }
@@ -292,8 +710,9 @@ function carregarArquivos(id) {
                 document.getElementById('inputDataAcao').value = data.data_acao;
             }
 
-            temArquivosExistentes = data.arquivos && data.arquivos.length > 0;
+            atualizarEnderecoDisplay(dadosLocalAtual);
 
+            temArquivosExistentes = data.arquivos && data.arquivos.length > 0;
             if (!temArquivosExistentes) {
                 container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">Nenhum arquivo anexado.</p>';
                 return;
@@ -304,20 +723,18 @@ function carregarArquivos(id) {
                 const iconClass = a.tipo === 'pdf' ? 'bi-file-earmark-pdf text-danger' : 'bi-file-earmark-image text-primary';
                 const div = document.createElement('div');
                 div.className = 'arquivo-item';
-                div.dataset.id = a.id;
-                div.innerHTML = `
-                    <i class="bi ${iconClass} arquivo-icon"></i>
-                    <div class="arquivo-info">
-                        <div class="arquivo-nome">${a.nome}</div>
-                        <div class="arquivo-data">${a.data}</div>
-                    </div>
-                    <a href="${a.url}" target="_blank" class="btn btn-outline-secondary btn-sm" title="Visualizar">
-                        <i class="bi bi-eye"></i>
-                    </a>
-                    <button class="btn btn-outline-danger btn-sm btn-remove-arquivo" onclick="removerArquivo(${a.id}, this)" title="Remover">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                `;
+                div.innerHTML =
+                    '<i class="bi ' + iconClass + ' arquivo-icon"></i>' +
+                    '<div class="arquivo-info">' +
+                        '<div class="arquivo-nome">' + a.nome + '</div>' +
+                        '<div class="arquivo-data">' + a.data + '</div>' +
+                    '</div>' +
+                    '<a href="' + a.url + '" target="_blank" class="btn btn-outline-secondary btn-sm" title="Ver">' +
+                        '<i class="bi bi-eye"></i>' +
+                    '</a>' +
+                    '<button class="btn btn-outline-danger btn-sm btn-remove-arquivo" data-id="' + a.id + '" title="Remover">' +
+                        '<i class="bi bi-trash"></i>' +
+                    '</button>';
                 container.appendChild(div);
             });
         })
@@ -326,31 +743,30 @@ function carregarArquivos(id) {
         });
 }
 
-function removerArquivo(arquivoId, btn) {
+/* Delegated click for remove buttons */
+document.getElementById('listaArquivos').addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-remove-arquivo');
+    if (!btn) return;
+    const arquivoId = btn.dataset.id;
     if (!confirm('Remover este arquivo?')) return;
-    fetch(`/identidade-visual/api/remover-arquivo/${arquivoId}`, { method: 'POST' })
-        .then(r => r.json())
+    apiCall('/identidade-visual/api/remover-arquivo/' + arquivoId, { method: 'POST' })
         .then(data => {
             if (data.ok) {
-                const item = btn.closest('.arquivo-item');
-                item.remove();
+                btn.closest('.arquivo-item').remove();
                 const container = document.getElementById('listaArquivos');
                 temArquivosExistentes = container.querySelectorAll('.arquivo-item').length > 0;
                 if (!temArquivosExistentes) {
                     container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">Nenhum arquivo anexado.</p>';
                 }
+                mostrarToast('Sucesso', 'Arquivo removido com sucesso.', 'sucesso');
             } else {
-                alert(data.erro || 'Erro ao remover');
+                mostrarToast('Erro', data.erro || 'Erro ao remover arquivo.', 'erro');
             }
-        });
-}
+        })
+        .catch(err => mostrarToast('Erro', err.message || 'Erro de conexão.', 'erro'));
+});
 
-function formatarMoeda(valor) {
-    let num = parseFloat(valor);
-    if (isNaN(num)) return '';
-    return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
+/* ===== Custo mask ===== */
 document.getElementById('inputCusto').addEventListener('input', function(e) {
     let v = e.target.value.replace(/\D/g, '');
     if (!v) { e.target.value = ''; return; }
@@ -358,84 +774,121 @@ document.getElementById('inputCusto').addEventListener('input', function(e) {
     e.target.value = parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 });
 
+/* ===== Submit Ação (data/custo/arquivos) ===== */
 document.getElementById('formAcao').addEventListener('submit', function(e) {
     e.preventDefault();
+    const btn = this.querySelector('button[type="submit"]');
 
     const dataAcao = document.getElementById('inputDataAcao').value;
-    if (!dataAcao) {
-        alert('Informe a Data e Hora.');
-        document.getElementById('inputDataAcao').focus();
-        return;
-    }
+    if (!dataAcao) { mostrarToast('Campo obrigatório', 'Informe a Data e Hora.', 'erro'); return; }
 
     const arquivosNovos = document.getElementById('inputArquivos').files;
-    if (!temArquivosExistentes && arquivosNovos.length === 0) {
-        alert('Anexe pelo menos um arquivo.');
-        document.getElementById('inputArquivos').focus();
-        return;
-    }
+    if (!temArquivosExistentes && arquivosNovos.length === 0) { mostrarToast('Campo obrigatório', 'Anexe pelo menos um arquivo.', 'erro'); return; }
 
     const form = new FormData();
     form.append('data_acao', dataAcao);
-
     const custo = document.getElementById('inputCusto').value;
     if (custo) form.append('custo', custo);
+    for (let i = 0; i < arquivosNovos.length; i++) form.append('arquivos', arquivosNovos[i]);
 
-    for (let i = 0; i < arquivosNovos.length; i++) {
-        form.append('arquivos', arquivosNovos[i]);
-    }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Salvando...';
 
-    fetch(`/identidade-visual/api/salvar-acao/${localIdAtual}`, { method: 'POST', body: form })
-        .then(r => r.json())
+    apiCall('/identidade-visual/api/salvar-acao/' + localIdAtual, { method: 'POST', body: form })
         .then(data => {
             if (data.ok) {
                 modal.hide();
-                location.reload();
-            } else {
-                alert(data.erro || 'Erro ao salvar');
+                mostrarToast('Sucesso', 'Ação salva com sucesso.', 'sucesso');
+                setTimeout(() => location.reload(), 1500);
             }
+            else { mostrarToast('Erro', data.erro || 'Erro ao salvar.', 'erro'); }
         })
-        .catch(() => alert('Erro de conexão'));
+        .catch(err => mostrarToast('Erro', err.message || 'Erro de conexão.', 'erro'))
+        .finally(() => { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Salvar'; });
 });
 
-/* ===== Sorting da tabela ===== */
+/* Reset ao fechar modal ação */
+modalAcaoEl.addEventListener('hidden.bs.modal', function() {
+    fecharEnderecoEdit();
+});
+
+/* ===== Novo Local ===== */
+document.getElementById('formNovoLocal').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const btn = this.querySelector('button[type="submit"]');
+
+    const municipioId = tsNovoCidade.getValue();
+    const tipoLocal = tsNovoTipo.getValue();
+    const endereco = document.getElementById('novoEndereco').value.trim();
+    const bairro = document.getElementById('novoBairro').value.trim();
+    const cep = document.getElementById('novoCep').value.trim();
+
+    if (!municipioId) { mostrarToast('Campo obrigatório', 'Selecione a cidade.', 'erro'); return; }
+    if (!tipoLocal) { mostrarToast('Campo obrigatório', 'Selecione o tipo local.', 'erro'); return; }
+    if (!endereco) { mostrarToast('Campo obrigatório', 'Informe o endereço.', 'erro'); return; }
+    if (!bairro) { mostrarToast('Campo obrigatório', 'Informe o bairro.', 'erro'); return; }
+    if (!cep) { mostrarToast('Campo obrigatório', 'Informe o CEP.', 'erro'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Salvando...';
+
+    apiCall('/identidade-visual/api/criar-local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            municipio_id: parseInt(municipioId),
+            tipo_local: tipoLocal,
+            endereco: endereco,
+            bairro: bairro,
+            cep: cep,
+        }),
+    })
+    .then(data => {
+        if (data.ok) {
+            modalNovoLocal.hide();
+            mostrarToast('Sucesso', 'Local adicionado com sucesso.', 'sucesso');
+            setTimeout(() => location.reload(), 1500);
+        }
+        else { mostrarToast('Erro', data.erro || 'Erro ao criar local.', 'erro'); }
+    })
+    .catch(err => mostrarToast('Erro', err.message || 'Erro de conexão.', 'erro'))
+    .finally(() => { btn.disabled = false; btn.innerHTML = '<i class="bi bi-plus-lg"></i> Adicionar'; });
+});
+
+/* Reset form on modal close */
+document.getElementById('modalNovoLocal').addEventListener('hidden.bs.modal', function() {
+    tsNovoCidade.clear(true);
+    tsNovoTipo.clear(true);
+    document.getElementById('novoEndereco').value = '';
+    document.getElementById('novoBairro').value = '';
+    document.getElementById('novoCep').value = '';
+});
+
+/* ===== Sorting ===== */
 (function() {
     const table = document.getElementById('tabelaLocais');
     if (!table) return;
     const headers = table.querySelectorAll('th[data-col]');
     let sortCol = -1, sortAsc = true;
-
     headers.forEach(th => {
         th.addEventListener('click', function() {
             const col = parseInt(this.dataset.col);
-            if (sortCol === col) { sortAsc = !sortAsc; }
+            if (sortCol === col) sortAsc = !sortAsc;
             else { sortCol = col; sortAsc = true; }
-
             headers.forEach(h => h.classList.remove('sort-active'));
             this.classList.add('sort-active');
-            const icon = this.querySelector('.sort-icon');
-            icon.className = 'bi sort-icon ' + (sortAsc ? 'bi-arrow-up' : 'bi-arrow-down');
-
+            this.querySelector('.sort-icon').className = 'bi sort-icon ' + (sortAsc ? 'bi-arrow-up' : 'bi-arrow-down');
             const tbody = table.querySelector('tbody');
             const rows = Array.from(tbody.querySelectorAll('tr'));
-
             rows.sort((a, b) => {
                 let va, vb;
-                if (col === 5) {
-                    va = parseFloat(a.dataset.custo) || 0;
-                    vb = parseFloat(b.dataset.custo) || 0;
-                } else if (col === 6) {
-                    va = a.dataset.dataacao || '';
-                    vb = b.dataset.dataacao || '';
-                } else {
-                    va = (a.children[col]?.textContent || '').trim().toLowerCase();
-                    vb = (b.children[col]?.textContent || '').trim().toLowerCase();
-                }
+                if (col === 5) { va = parseFloat(a.dataset.custo) || 0; vb = parseFloat(b.dataset.custo) || 0; }
+                else if (col === 6) { va = a.dataset.dataacao || ''; vb = b.dataset.dataacao || ''; }
+                else { va = (a.children[col]?.textContent || '').trim().toLowerCase(); vb = (b.children[col]?.textContent || '').trim().toLowerCase(); }
                 if (va < vb) return sortAsc ? -1 : 1;
                 if (va > vb) return sortAsc ? 1 : -1;
                 return 0;
             });
-
             rows.forEach(r => tbody.appendChild(r));
         });
     });

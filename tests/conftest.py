@@ -96,6 +96,11 @@ def app():
 
     flask_app = create_app(SGCTestConfig)
 
+    # Substituir Flask-Session (filesystem) pela interface de cookie padrão
+    # do Flask para que session_transaction() funcione nos testes.
+    from flask.sessions import SecureCookieSessionInterface
+    flask_app.session_interface = SecureCookieSessionInterface()
+
     yield flask_app
 
 

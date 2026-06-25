@@ -1,5 +1,21 @@
 from app.extensions import db
 from datetime import datetime
+from sqlalchemy.orm import deferred
+
+
+class MunicipioPiaui(db.Model):
+    __tablename__ = 'municipios_pi'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    nome = db.Column(db.String(100), nullable=False, unique=True)
+    codigo_ibge = db.Column(db.String(10), nullable=False, unique=True)
+    gentilico = db.Column(db.String(100), nullable=True)
+
+
+TIPOS_LOCAL = [
+    'Espaço da Cidadania',
+    'Sala da Cidadania',
+]
 
 
 class IdentidadeVisualLocal(db.Model):
@@ -7,6 +23,8 @@ class IdentidadeVisualLocal(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     cidade = db.Column(db.String(100), nullable=False)
+    # deferred: coluna não entra no SELECT padrão — seguro antes da migração
+    municipio_id = deferred(db.Column(db.Integer, nullable=True))
     tipo_local = db.Column('tipo_local', db.String(200), nullable=False)
     endereco = db.Column(db.String(500), nullable=True)
     bairro = db.Column(db.String(200), nullable=True)

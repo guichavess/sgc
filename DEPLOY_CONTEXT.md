@@ -39,7 +39,7 @@ cd /home/sead/sgc_novo && source .venv/bin/activate && git pull origin main:mast
 ## Regras
 - Antes de cada deploy: **ler `DEPLOY_PENDENTE.md`** e executar pendências de banco (SQL/ALTER) **antes** do `git pull`.
 - Alteração de schema (nova tabela/coluna/índice) → registrar em `DEPLOY_PENDENTE.md`; **remover o item após aplicar em produção**.
-- SQLs no servidor: entrar no MySQL (`mysql -u root -p sgc`) ou usar heredoc — **não** colar SQL direto no bash.
+- **Operações MySQL (prod e dev) → sempre MySQL Workbench.** Não gerar comandos `mysql`/`mysqldump` via CLI; entregar o SQL pronto para colar/executar no Workbench (backup via `Data Export`, validações como `SELECT`, execução do arquivo via `File → Open SQL Script`). Conexão prod: host `10.153.1.102`, user `website`, schema `sgc`.
 - **Nunca**: `git push`/`--force` sem autorização · commitar `.env` ou `tiposDoc.json` · rodar script que altere banco de produção sem ok do usuário.
 - A tabela `sis_usuarios` **não** tem coluna `login` (usar `nome` / `id`).
 
