@@ -3,7 +3,7 @@ import os
 import uuid
 from datetime import datetime
 from flask import render_template, request, jsonify, send_file
-from flask_login import login_required
+from app.utils.permissions import requires_permission
 from werkzeug.utils import secure_filename
 from app.extensions import db
 from app.models.identidade_visual import IdentidadeVisualLocal, IdentidadeVisualArquivo
@@ -19,7 +19,7 @@ def _allowed_file(filename):
 
 
 @identidade_visual_bp.route('/')
-@login_required
+@requires_permission('identidade_visual.visualizar')
 def dashboard():
     cidade = request.args.get('cidade', '')
     tipo_local = request.args.get('tipo_local', '')
@@ -83,7 +83,7 @@ def dashboard():
 
 
 @identidade_visual_bp.route('/api/salvar-acao/<int:local_id>', methods=['POST'])
-@login_required
+@requires_permission('identidade_visual.editar')
 def salvar_acao(local_id):
     local = IdentidadeVisualLocal.query.get(local_id)
     if not local:
@@ -140,7 +140,7 @@ def salvar_acao(local_id):
 
 
 @identidade_visual_bp.route('/api/remover-arquivo/<int:arquivo_id>', methods=['POST'])
-@login_required
+@requires_permission('identidade_visual.editar')
 def remover_arquivo(arquivo_id):
     arquivo = IdentidadeVisualArquivo.query.get(arquivo_id)
     if not arquivo:
@@ -157,7 +157,7 @@ def remover_arquivo(arquivo_id):
 
 
 @identidade_visual_bp.route('/api/remover-custo/<int:local_id>', methods=['POST'])
-@login_required
+@requires_permission('identidade_visual.editar')
 def remover_custo(local_id):
     local = IdentidadeVisualLocal.query.get(local_id)
     if not local:
@@ -169,7 +169,7 @@ def remover_custo(local_id):
 
 
 @identidade_visual_bp.route('/api/arquivos/<int:local_id>')
-@login_required
+@requires_permission('identidade_visual.visualizar')
 def listar_arquivos(local_id):
     local = IdentidadeVisualLocal.query.get(local_id)
     if not local:
@@ -191,7 +191,7 @@ def listar_arquivos(local_id):
 
 
 @identidade_visual_bp.route('/exportar-excel')
-@login_required
+@requires_permission('identidade_visual.visualizar')
 def exportar_excel():
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side

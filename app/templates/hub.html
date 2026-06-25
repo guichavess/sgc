@@ -276,8 +276,8 @@
  </div>
  {% endif %}
 
- {# Modulo Identidade Visual (admin) #}
- {% if current_user.is_admin %}
+ {# Modulo Identidade Visual #}
+ {% if current_user.tem_permissao('identidade_visual') %}
  <div class="col-md-4">
  <a href="{{ url_for('identidade_visual.dashboard') }}" class="module-card module-card-identidade-visual">
  <div class="module-icon module-icon-identidade-visual">

@@ -77,6 +77,7 @@ MODULOS = [
     ('diarias', 'Diárias'),
     ('cgfr', 'CGFR'),
     ('fundo_rotativo', 'Fundo Rotativo'),
+    ('identidade_visual', 'Identidade Visual'),
 ]
 
 ACOES = [
