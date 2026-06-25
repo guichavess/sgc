@@ -261,6 +261,9 @@ def _register_blueprints(app):
     from app.notificacoes import notificacoes_bp
     app.register_blueprint(notificacoes_bp, url_prefix='/notificacoes')
 
+    from app.identidade_visual.routes import identidade_visual_bp
+    app.register_blueprint(identidade_visual_bp, url_prefix='/identidade-visual')
+
 
 def _register_context_processors(app):
     """Registra context processors globais."""

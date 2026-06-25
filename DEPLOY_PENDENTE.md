@@ -17,6 +17,35 @@
 
 ## Pendências
 
+### Tabela de log de sincronização — Pagamentos (2026-06-23)
+
+- [ ] **Criar tabela `sis_sincronizacao_log`**
+  - Contexto: o módulo de Pagamentos passou a registrar cada execução da rotina
+    "Sincronizar Tudo (SEI + Etapas + Saldos)" — tanto a manual (botão) quanto a nova
+    automática (job agendado 00:30/06:30/12:30/18:30). Essa tabela é a fonte única e
+    confiável da data de "Atualização Geral" exibida no dashboard de solicitações
+    (antes derivada do maior `SaldoEmpenho.data` apenas da página atual, por isso
+    sumia). Sem a tabela, a aplicação quebra ao abrir o dashboard.
+  - SQL (executar no Workbench):
+  ```sql
+  CREATE TABLE sis_sincronizacao_log (
+    id                 INT AUTO_INCREMENT PRIMARY KEY,
+    iniciado_em        DATETIME NOT NULL,
+    finalizado_em      DATETIME NULL,
+    status             VARCHAR(20) NOT NULL DEFAULT 'em_andamento',
+    origem             VARCHAR(20) NOT NULL DEFAULT 'manual',
+    docs_atualizados   INT DEFAULT 0,
+    etapas_avancadas   INT DEFAULT 0,
+    saldos_atualizados INT DEFAULT 0,
+    erros              INT DEFAULT 0,
+    usuario_id         INT NULL,
+    INDEX idx_sync_finalizado (finalizado_em),
+    INDEX idx_sync_usuario (usuario_id)
+  );
+  ```
+  - Observação: o job agendado `sincronizar_pagamentos_sei` roda automaticamente após
+    o deploy (4x ao dia). Nenhuma dependência Python nova (usa APScheduler já instalado).
+
 ### Competência em Empenhos, Liquidações e OBs — Financeiro (2026-06-08)
 
 - [ ] **Adicionar coluna `competencia` em `empenho`, `liquidacao` e `ob`**
@@ -45,6 +74,47 @@
   SELECT COUNT(*) AS total, COUNT(competencia) AS com_competencia FROM pd;
   ```
   - Observação: até o backfill rodar, a coluna Competência das três sub-abas vai aparecer como `—` para registros antigos. PD não precisa de ALTER (coluna já existe), só do deploy do model atualizado.
+
+### Módulo Identidade Visual — Fachadas (2026-06-25)
+
+- [ ] **Criar tabela `identidade_visual_locais` e importar dados**
+  - Contexto: módulo temporário para acompanhamento de fachadas dos Espaços/Salas da Cidadania.
+  - SQL (executar no Workbench):
+  ```sql
+  CREATE TABLE identidade_visual_locais (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    cidade          VARCHAR(100) NOT NULL,
+    tipo_local      VARCHAR(200) NOT NULL,
+    endereco        VARCHAR(500),
+    bairro          VARCHAR(200),
+    cep             VARCHAR(10),
+    custo           DECIMAL(12,2),
+    data_acao       DATETIME NULL,
+    arquivo_nome    VARCHAR(255),
+    arquivo_caminho VARCHAR(500),
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ```
+  - Script de importação (após criar a tabela):
+  ```bash
+  python scripts/importar_identidade_visual.py --executar
+  ```
+  - Observação: copiar `Acompanhamento Fachada.xlsx` para `~/Downloads/` no servidor antes de rodar, ou usar `--arquivo caminho/do/arquivo.xlsx`.
+- [ ] **Criar tabela `identidade_visual_arquivos`** (múltiplos arquivos por local)
+  ```sql
+  CREATE TABLE identidade_visual_arquivos (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    local_id        INT NOT NULL,
+    nome_original   VARCHAR(255) NOT NULL,
+    nome_servidor   VARCHAR(500) NOT NULL,
+    tipo            VARCHAR(10) NOT NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_iv_arq_local (local_id),
+    FOREIGN KEY (local_id) REFERENCES identidade_visual_locais(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ```
+  - Observação: criar pasta de uploads no servidor: `mkdir -p app/static/uploads/identidade_visual`
 
 ### Hierarquia de Autorização — Diárias (2026-05-05)
 

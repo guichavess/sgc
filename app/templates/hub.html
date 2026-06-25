@@ -139,6 +139,14 @@
  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.25);
  }
 
+ .module-icon-identidade-visual {
+ background: linear-gradient(135deg, #0891B2, #06B6D4);
+ }
+
+ .module-card-identidade-visual:hover .module-icon {
+ box-shadow: 0 6px 16px rgba(8, 145, 178, 0.25);
+ }
+
  .user-greeting {
  text-align: center;
  margin-bottom: 2rem;
@@ -263,6 +271,21 @@
  <h3 class="module-name">Dashboards</h3>
  <p class="module-description">
  Visão consolidada com gráficos e indicadores de desempenho
+ </p>
+ </a>
+ </div>
+ {% endif %}
+
+ {# Modulo Identidade Visual (admin) #}
+ {% if current_user.is_admin %}
+ <div class="col-md-4">
+ <a href="{{ url_for('identidade_visual.dashboard') }}" class="module-card module-card-identidade-visual">
+ <div class="module-icon module-icon-identidade-visual">
+ <i class="bi bi-palette"></i>
+ </div>
+ <h3 class="module-name">Identidade Visual</h3>
+ <p class="module-description">
+ Acompanhamento de fachadas dos Espaços e Salas da Cidadania
  </p>
  </a>
  </div>

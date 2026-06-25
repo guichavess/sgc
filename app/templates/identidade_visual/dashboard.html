@@ -1,0 +1,444 @@
+{% extends "identidade_visual/base_identidade_visual.html" %}
+
+{% block iv_css %}
+<style>
+.iv-filters { background: var(--color-surface); border: 1px solid var(--color-surface-border); border-radius: var(--border-radius-lg); padding: 1.25rem; margin-bottom: 1.5rem; }
+.iv-table th { font-size: 0.8rem; text-transform: uppercase; color: var(--color-text-tertiary); font-weight: 600; white-space: nowrap; cursor: pointer; user-select: none; }
+.iv-table th:hover { color: var(--color-text-primary); }
+.iv-table th .sort-icon { font-size: 0.65rem; margin-left: 4px; opacity: 0.4; }
+.iv-table th.sort-active .sort-icon { opacity: 1; color: var(--color-primary); }
+.iv-table td { vertical-align: middle; font-size: 0.875rem; }
+.badge-realizado { background-color: #198754; color: #fff; }
+.badge-pendente { background-color: #ffc107; color: #000; }
+.btn-acao { padding: 0.25rem 0.65rem; font-size: 0.8rem; }
+.iv-stats { display: flex; gap: 1rem; margin-bottom: 1.25rem; }
+.iv-stat-card { flex: 1; background: var(--color-surface); border: 1px solid var(--color-surface-border); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; text-align: center; }
+.iv-stat-card .stat-value { font-size: 1.5rem; font-weight: 700; }
+.iv-stat-card .stat-label { font-size: 0.78rem; color: var(--color-text-tertiary); text-transform: uppercase; }
+.iv-stat-total .stat-value { color: var(--color-primary); }
+.iv-stat-realizado .stat-value { color: #198754; }
+.iv-stat-pendente .stat-value { color: #ffc107; }
+.iv-stat-custo .stat-value { color: #0891B2; font-size: 1.2rem; }
+
+.modal-iv .modal-dialog { max-width: 720px; margin: 3rem auto; }
+.modal-iv .modal-body { padding: 1.5rem 2rem; }
+.modal-iv .modal-header { padding: 1.25rem 2rem; }
+.modal-iv .modal-footer { padding: 1rem 2rem; }
+
+.arquivo-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; background: var(--color-surface-secondary, #f8f9fa); border-radius: 8px; margin-bottom: 0.5rem; }
+.arquivo-item .arquivo-icon { font-size: 1.25rem; }
+.arquivo-item .arquivo-info { flex: 1; min-width: 0; }
+.arquivo-item .arquivo-nome { font-size: 0.85rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arquivo-item .arquivo-data { font-size: 0.72rem; color: var(--color-text-tertiary); }
+.arquivo-item .btn-remove-arquivo { padding: 0.15rem 0.4rem; font-size: 0.75rem; }
+
+.iv-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.iv-pagination { display: flex; align-items: center; gap: 0.5rem; }
+.iv-pagination .page-info { font-size: 0.82rem; color: var(--color-text-tertiary); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <h4 class="fw-bold mb-1">Acompanhamento de Fachadas</h4>
+            <p class="text-muted mb-0" style="font-size:0.85rem;">Identidade Visual — Espaços e Salas da Cidadania</p>
+        </div>
+        <a href="{{ url_for('identidade_visual.exportar_excel') }}" class="btn btn-outline-success btn-sm">
+            <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+        </a>
+    </div>
+
+    {# KPIs #}
+    {% set total_geral = total %}
+    {% set realizados = locais|selectattr('status', 'equalto', 'REALIZADO')|list|length %}
+    {% set pendentes = locais|length - realizados %}
+    {% set custo_total = locais|selectattr('custo')|map(attribute='custo')|sum %}
+    <div class="iv-stats">
+        <div class="iv-stat-card iv-stat-total">
+            <div class="stat-value">{{ total_geral }}</div>
+            <div class="stat-label">Total</div>
+        </div>
+        <div class="iv-stat-card iv-stat-realizado">
+            <div class="stat-value">{{ realizados }}</div>
+            <div class="stat-label">Realizados</div>
+        </div>
+        <div class="iv-stat-card iv-stat-pendente">
+            <div class="stat-value">{{ pendentes }}</div>
+            <div class="stat-label">Pendentes</div>
+        </div>
+        <div class="iv-stat-card iv-stat-custo">
+            <div class="stat-value">R$ {{ "{:,.2f}".format(custo_total).replace(",","X").replace(".",",").replace("X",".") }}</div>
+            <div class="stat-label">Custo Total</div>
+        </div>
+    </div>
+
+    {# Filtros #}
+    <div class="iv-filters">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label fw-semibold" style="font-size:0.8rem;">Cidade</label>
+                <select name="cidade" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    {% for c in cidades %}
+                    <option value="{{ c }}" {{ 'selected' if filtro_cidade == c }}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold" style="font-size:0.8rem;">Tipo Local</label>
+                <select name="tipo_local" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for t in tipos_local %}
+                    <option value="{{ t }}" {{ 'selected' if filtro_tipo_local == t }}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold" style="font-size:0.8rem;">Bairro</label>
+                <select name="bairro" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for b in bairros %}
+                    <option value="{{ b }}" {{ 'selected' if filtro_bairro == b }}>{{ b }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold" style="font-size:0.8rem;">Status</label>
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="REALIZADO" {{ 'selected' if filtro_status == 'REALIZADO' }}>Realizado</option>
+                    <option value="PENDENTE" {{ 'selected' if filtro_status == 'PENDENTE' }}>Pendente</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-funnel"></i> Filtrar</button>
+                <a href="{{ url_for('identidade_visual.dashboard') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg"></i></a>
+            </div>
+        </form>
+    </div>
+
+    {# Tabela #}
+    <div class="table-responsive">
+        <table class="table table-hover iv-table align-middle" id="tabelaLocais">
+            <thead class="table-light">
+                <tr>
+                    <th data-col="0">Cidade <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th data-col="1">Tipo Local <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th data-col="2">Endereço <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th data-col="3">Bairro <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th data-col="4">Status <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th data-col="5">Custo <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th data-col="6">Data/Hora <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                    <th class="text-center" style="cursor:default;">Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in locais %}
+                <tr id="row-{{ l.id }}" data-custo="{{ l.custo or 0 }}" data-dataacao="{{ l.data_acao.strftime('%Y%m%d%H%M') if l.data_acao else '' }}">
+                    <td>{{ l.cidade }}</td>
+                    <td>{{ l.tipo_local }}</td>
+                    <td>{{ l.endereco or '—' }}</td>
+                    <td>{{ l.bairro or '—' }}</td>
+                    <td>
+                        <span class="badge {{ 'badge-realizado' if l.status == 'REALIZADO' else 'badge-pendente' }}">
+                            {{ l.status }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if l.custo %}
+                        R$ {{ "{:,.2f}".format(l.custo).replace(",","X").replace(".",",").replace("X",".") }}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if l.data_acao %}
+                        {{ l.data_acao.strftime('%d/%m/%Y %H:%M') }}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-center">
+                        <button class="btn btn-outline-primary btn-acao" onclick="abrirModal({{ l.id }}, '{{ l.cidade }}', '{{ l.tipo_local|replace("'", "\\'")|e }}')">
+                            <i class="bi bi-pencil-square"></i> {{ 'Editar' if l.status == 'REALIZADO' else 'Registrar' }}
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not locais %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-4">Nenhum registro encontrado.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    {# Paginação #}
+    {% if total_pages > 1 %}
+    <nav class="d-flex justify-content-between align-items-center mt-3">
+        <span class="page-info" style="font-size:0.82rem; color:var(--color-text-tertiary);">
+            Página {{ page }} de {{ total_pages }} ({{ total }} registros)
+        </span>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {{ 'disabled' if page <= 1 }}">
+                <a class="page-link" href="{{ url_for('identidade_visual.dashboard', page=page-1, cidade=filtro_cidade, tipo_local=filtro_tipo_local, bairro=filtro_bairro, status=filtro_status) }}">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+            </li>
+            {% for p in range(1, total_pages + 1) %}
+                {% if p == page %}
+                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p <= 3 or p > total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('identidade_visual.dashboard', page=p, cidade=filtro_cidade, tipo_local=filtro_tipo_local, bairro=filtro_bairro, status=filtro_status) }}">{{ p }}</a>
+                </li>
+                {% elif p == 4 or p == total_pages - 2 %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% endif %}
+            {% endfor %}
+            <li class="page-item {{ 'disabled' if page >= total_pages }}">
+                <a class="page-link" href="{{ url_for('identidade_visual.dashboard', page=page+1, cidade=filtro_cidade, tipo_local=filtro_tipo_local, bairro=filtro_bairro, status=filtro_status) }}">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+
+{# Modal de Ação #}
+<div class="modal fade modal-iv" id="modalAcao" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0">Registrar Ação</h5>
+                    <p class="text-muted mb-0" style="font-size:0.85rem;">
+                        <strong id="modalCidade"></strong> — <span id="modalLocal"></span>
+                    </p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formAcao" enctype="multipart/form-data">
+                <div class="modal-body">
+                    {# Data e Hora #}
+                    <div class="mb-4">
+                        <label for="inputDataAcao" class="form-label fw-semibold">Data e Hora <span class="text-danger">*</span></label>
+                        <input type="datetime-local" class="form-control" id="inputDataAcao" required>
+                    </div>
+
+                    {# Custo #}
+                    <div class="mb-4">
+                        <label for="inputCusto" class="form-label fw-semibold">Custo Estimado <span class="text-muted fw-normal" style="font-size:0.78rem;">(opcional)</span></label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text">R$</span>
+                            <input type="text" class="form-control" id="inputCusto" placeholder="0,00">
+                        </div>
+                    </div>
+
+                    {# Arquivos existentes #}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Arquivos Anexados <span class="text-danger">*</span></label>
+                        <div id="listaArquivos">
+                            <p class="text-muted" style="font-size:0.85rem;">Carregando...</p>
+                        </div>
+                    </div>
+
+                    {# Upload novos #}
+                    <div class="mb-2">
+                        <label for="inputArquivos" class="form-label fw-semibold">Adicionar Arquivos</label>
+                        <input type="file" class="form-control" id="inputArquivos" accept=".pdf,.jpg,.jpeg,.heic" multiple>
+                        <div class="form-text">Formatos aceitos: JPG, JPEG, HEIC, PDF — múltiplos arquivos permitidos</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                    <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg"></i> Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block iv_js %}
+<script>
+let localIdAtual = null;
+let temArquivosExistentes = false;
+const modal = new bootstrap.Modal(document.getElementById('modalAcao'));
+
+function abrirModal(id, cidade, tipoLocal) {
+    localIdAtual = id;
+    temArquivosExistentes = false;
+    document.getElementById('modalCidade').textContent = cidade;
+    document.getElementById('modalLocal').textContent = tipoLocal;
+    document.getElementById('inputCusto').value = '';
+    document.getElementById('inputDataAcao').value = '';
+    document.getElementById('inputArquivos').value = '';
+    carregarArquivos(id);
+    modal.show();
+}
+
+function carregarArquivos(id) {
+    const container = document.getElementById('listaArquivos');
+    container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;"><i class="bi bi-hourglass-split"></i> Carregando...</p>';
+
+    fetch(`/identidade-visual/api/arquivos/${id}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.custo) {
+                document.getElementById('inputCusto').value = formatarMoeda(data.custo);
+            }
+            if (data.data_acao) {
+                document.getElementById('inputDataAcao').value = data.data_acao;
+            }
+
+            temArquivosExistentes = data.arquivos && data.arquivos.length > 0;
+
+            if (!temArquivosExistentes) {
+                container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">Nenhum arquivo anexado.</p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            data.arquivos.forEach(a => {
+                const iconClass = a.tipo === 'pdf' ? 'bi-file-earmark-pdf text-danger' : 'bi-file-earmark-image text-primary';
+                const div = document.createElement('div');
+                div.className = 'arquivo-item';
+                div.dataset.id = a.id;
+                div.innerHTML = `
+                    <i class="bi ${iconClass} arquivo-icon"></i>
+                    <div class="arquivo-info">
+                        <div class="arquivo-nome">${a.nome}</div>
+                        <div class="arquivo-data">${a.data}</div>
+                    </div>
+                    <a href="${a.url}" target="_blank" class="btn btn-outline-secondary btn-sm" title="Visualizar">
+                        <i class="bi bi-eye"></i>
+                    </a>
+                    <button class="btn btn-outline-danger btn-sm btn-remove-arquivo" onclick="removerArquivo(${a.id}, this)" title="Remover">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+        })
+        .catch(() => {
+            container.innerHTML = '<p class="text-danger" style="font-size:0.85rem;">Erro ao carregar arquivos.</p>';
+        });
+}
+
+function removerArquivo(arquivoId, btn) {
+    if (!confirm('Remover este arquivo?')) return;
+    fetch(`/identidade-visual/api/remover-arquivo/${arquivoId}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                const item = btn.closest('.arquivo-item');
+                item.remove();
+                const container = document.getElementById('listaArquivos');
+                temArquivosExistentes = container.querySelectorAll('.arquivo-item').length > 0;
+                if (!temArquivosExistentes) {
+                    container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">Nenhum arquivo anexado.</p>';
+                }
+            } else {
+                alert(data.erro || 'Erro ao remover');
+            }
+        });
+}
+
+function formatarMoeda(valor) {
+    let num = parseFloat(valor);
+    if (isNaN(num)) return '';
+    return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+document.getElementById('inputCusto').addEventListener('input', function(e) {
+    let v = e.target.value.replace(/\D/g, '');
+    if (!v) { e.target.value = ''; return; }
+    v = (parseInt(v, 10) / 100).toFixed(2);
+    e.target.value = parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+});
+
+document.getElementById('formAcao').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const dataAcao = document.getElementById('inputDataAcao').value;
+    if (!dataAcao) {
+        alert('Informe a Data e Hora.');
+        document.getElementById('inputDataAcao').focus();
+        return;
+    }
+
+    const arquivosNovos = document.getElementById('inputArquivos').files;
+    if (!temArquivosExistentes && arquivosNovos.length === 0) {
+        alert('Anexe pelo menos um arquivo.');
+        document.getElementById('inputArquivos').focus();
+        return;
+    }
+
+    const form = new FormData();
+    form.append('data_acao', dataAcao);
+
+    const custo = document.getElementById('inputCusto').value;
+    if (custo) form.append('custo', custo);
+
+    for (let i = 0; i < arquivosNovos.length; i++) {
+        form.append('arquivos', arquivosNovos[i]);
+    }
+
+    fetch(`/identidade-visual/api/salvar-acao/${localIdAtual}`, { method: 'POST', body: form })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                modal.hide();
+                location.reload();
+            } else {
+                alert(data.erro || 'Erro ao salvar');
+            }
+        })
+        .catch(() => alert('Erro de conexão'));
+});
+
+/* ===== Sorting da tabela ===== */
+(function() {
+    const table = document.getElementById('tabelaLocais');
+    if (!table) return;
+    const headers = table.querySelectorAll('th[data-col]');
+    let sortCol = -1, sortAsc = true;
+
+    headers.forEach(th => {
+        th.addEventListener('click', function() {
+            const col = parseInt(this.dataset.col);
+            if (sortCol === col) { sortAsc = !sortAsc; }
+            else { sortCol = col; sortAsc = true; }
+
+            headers.forEach(h => h.classList.remove('sort-active'));
+            this.classList.add('sort-active');
+            const icon = this.querySelector('.sort-icon');
+            icon.className = 'bi sort-icon ' + (sortAsc ? 'bi-arrow-up' : 'bi-arrow-down');
+
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            rows.sort((a, b) => {
+                let va, vb;
+                if (col === 5) {
+                    va = parseFloat(a.dataset.custo) || 0;
+                    vb = parseFloat(b.dataset.custo) || 0;
+                } else if (col === 6) {
+                    va = a.dataset.dataacao || '';
+                    vb = b.dataset.dataacao || '';
+                } else {
+                    va = (a.children[col]?.textContent || '').trim().toLowerCase();
+                    vb = (b.children[col]?.textContent || '').trim().toLowerCase();
+                }
+                if (va < vb) return sortAsc ? -1 : 1;
+                if (va > vb) return sortAsc ? 1 : -1;
+                return 0;
+            });
+
+            rows.forEach(r => tbody.appendChild(r));
+        });
+    });
+})();
+</script>
+{% endblock %}
