@@ -2,7 +2,11 @@
 
 {% block iv_css %}
 <style>
-.iv-filters { background: var(--color-surface); border: 1px solid var(--color-surface-border); border-radius: var(--border-radius-lg); padding: 1.25rem; margin-bottom: 1.5rem; }
+.iv-filters { background: var(--color-surface); border: 1px solid var(--color-surface-border); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; margin-bottom: 1.5rem; position: relative; z-index: 10; }
+.iv-filters .dropdown-toggle::after { margin-left: 0.4rem; }
+.iv-filter-scroll::-webkit-scrollbar { width: 6px; }
+.iv-filter-scroll::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+.iv-filters .item-filtro:hover { background: var(--color-surface-secondary, #f8f9fa); border-radius: 6px; }
 .iv-table th { font-size: 0.8rem; text-transform: uppercase; color: var(--color-text-tertiary); font-weight: 600; white-space: nowrap; cursor: pointer; user-select: none; }
 .iv-table th:hover { color: var(--color-text-primary); }
 .iv-table th .sort-icon { font-size: 0.65rem; margin-left: 4px; opacity: 0.4; }
@@ -199,47 +203,57 @@
         </div>
     </div>
 
+    {# Macro de filtro multi-seleção com contagem por item (estilo Pagamentos) #}
+    {% macro filtro_dropdown(titulo, nome, icone, valores, contagens, selecionados, rotulos=None) %}
+    <div class="col-auto">
+        <div class="dropdown">
+            <button class="btn btn-outline-secondary btn-sm text-start d-flex align-items-center dropdown-toggle px-2"
+                    type="button" id="ddbtn_{{ nome }}" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
+                <i class="bi {{ icone }} me-1"></i>
+                <span id="ddlabel_{{ nome }}">{{ titulo }}</span>
+                <span class="badge bg-primary ms-1 filtro-badge-sel" id="ddbadge_{{ nome }}" style="display:none;">0</span>
+            </button>
+            <div class="dropdown-menu p-2 shadow-lg border-0" style="min-width:240px; z-index:1060;">
+                <div class="d-flex justify-content-between mb-2 border-bottom pb-2 px-1">
+                    <small class="text-muted fw-bold">{{ titulo }}:</small>
+                    <a href="#" class="text-decoration-none small" onclick="limparFiltro('{{ nome }}', this); return false;">Limpar</a>
+                </div>
+                <div class="overflow-auto iv-filter-scroll" style="max-height:260px;">
+                    {% for v in valores %}
+                    <div class="form-check item-filtro py-1 px-1" data-filtro-valor="{{ v }}" data-count="{{ contagens.get(v, 0) }}">
+                        <input class="form-check-input filtro-check" type="checkbox" name="{{ nome }}"
+                               value="{{ v }}" id="{{ nome }}_{{ loop.index }}"
+                               {{ 'checked' if v in selecionados }} onchange="atualizarFiltroLabel('{{ nome }}', '{{ titulo }}')">
+                        <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="{{ nome }}_{{ loop.index }}" style="cursor:pointer;">
+                            <span>{{ rotulos[v] if rotulos and v in rotulos else v }}</span>
+                            <span class="badge bg-light text-muted border ms-2">{{ contagens.get(v, 0) }}</span>
+                        </label>
+                    </div>
+                    {% endfor %}
+                    {% if not valores %}
+                    <div class="text-muted small px-1 py-2">Sem opções</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endmacro %}
+
     {# Filtros #}
-    <div class="iv-filters">
-        <form method="GET" class="row g-2 align-items-end">
-            <div class="col-6 col-md-3">
-                <label class="form-label fw-semibold" style="font-size:0.8rem;">Cidade</label>
-                <select name="cidade" class="form-select form-select-sm">
-                    <option value="">Todas</option>
-                    {% for c in cidades %}
-                    <option value="{{ c }}" {{ 'selected' if filtro_cidade == c }}>{{ c }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-6 col-md-3">
-                <label class="form-label fw-semibold" style="font-size:0.8rem;">Tipo Local</label>
-                <select name="tipo_local" class="form-select form-select-sm">
-                    <option value="">Todos</option>
-                    {% for t in tipos_local %}
-                    <option value="{{ t }}" {{ 'selected' if filtro_tipo_local == t }}>{{ t }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold" style="font-size:0.8rem;">Bairro</label>
-                <select name="bairro" class="form-select form-select-sm">
-                    <option value="">Todos</option>
-                    {% for b in bairros %}
-                    <option value="{{ b }}" {{ 'selected' if filtro_bairro == b }}>{{ b }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label fw-semibold" style="font-size:0.8rem;">Status</label>
-                <select name="status" class="form-select form-select-sm">
-                    <option value="">Todos</option>
-                    <option value="REALIZADO" {{ 'selected' if filtro_status == 'REALIZADO' }}>Realizado</option>
-                    <option value="PENDENTE" {{ 'selected' if filtro_status == 'PENDENTE' }}>Pendente</option>
-                </select>
-            </div>
-            <div class="col-12 col-md-2 d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-funnel"></i> Filtrar</button>
-                <a href="{{ url_for('identidade_visual.dashboard') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg"></i></a>
+    <div class="iv-filters" style="overflow:visible;">
+        <form method="GET" id="formFiltrosIV">
+            <div class="row g-2 align-items-center">
+                {{ filtro_dropdown('Cidade', 'cidade', 'bi-geo-alt', cidades, contagem_cidades, filtro_cidades) }}
+                {{ filtro_dropdown('Tipo Local', 'tipo_local', 'bi-tag', tipos_local, contagem_tipos, filtro_tipos) }}
+                {{ filtro_dropdown('Bairro', 'bairro', 'bi-signpost', bairros, contagem_bairros, filtro_bairros) }}
+                {{ filtro_dropdown('Status', 'status', 'bi-flag', ['PENDENTE', 'REALIZADO'], contagem_status, filtro_status_sel, {'PENDENTE': 'Pendente', 'REALIZADO': 'Realizado'}) }}
+
+                <div class="col-auto d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-3" title="Filtrar"><i class="bi bi-funnel"></i> Filtrar</button>
+                    {% if filtro_cidades or filtro_tipos or filtro_bairros or filtro_status_sel %}
+                    <a href="{{ url_for('identidade_visual.dashboard') }}" class="btn btn-outline-danger btn-sm" title="Limpar filtros"><i class="bi bi-x-lg"></i></a>
+                    {% endif %}
+                </div>
             </div>
         </form>
     </div>
@@ -307,7 +321,16 @@
         </table>
     </div>
 
-    {# Paginação #}
+    {# Paginação — preserva filtros multi-valor na query string #}
+    {% macro page_url(page_num) -%}
+        {%- set params = [] -%}
+        {%- for c in filtro_cidades -%}{{ params.append('cidade=' ~ c) or '' }}{%- endfor -%}
+        {%- for t in filtro_tipos -%}{{ params.append('tipo_local=' ~ t) or '' }}{%- endfor -%}
+        {%- for b in filtro_bairros -%}{{ params.append('bairro=' ~ b) or '' }}{%- endfor -%}
+        {%- for s in filtro_status_sel -%}{{ params.append('status=' ~ s) or '' }}{%- endfor -%}
+        {{- params.append('page=' ~ page_num) or '' -}}
+        {{- url_for('identidade_visual.dashboard') }}?{{ params | join('&') -}}
+    {%- endmacro %}
     {% if total_pages > 1 %}
     <nav class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
         <span class="page-info" style="font-size:0.82rem; color:var(--color-text-tertiary);">
@@ -315,25 +338,21 @@
         </span>
         <ul class="pagination pagination-sm mb-0">
             <li class="page-item {{ 'disabled' if page <= 1 }}">
-                <a class="page-link" href="{{ url_for('identidade_visual.dashboard', page=page-1, cidade=filtro_cidade, tipo_local=filtro_tipo_local, bairro=filtro_bairro, status=filtro_status) }}">
-                    <i class="bi bi-chevron-left"></i>
-                </a>
+                <a class="page-link" href="{{ page_url(page-1) }}"><i class="bi bi-chevron-left"></i></a>
             </li>
             {% for p in range(1, total_pages + 1) %}
                 {% if p == page %}
                 <li class="page-item active"><span class="page-link">{{ p }}</span></li>
                 {% elif p <= 3 or p > total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
                 <li class="page-item">
-                    <a class="page-link" href="{{ url_for('identidade_visual.dashboard', page=p, cidade=filtro_cidade, tipo_local=filtro_tipo_local, bairro=filtro_bairro, status=filtro_status) }}">{{ p }}</a>
+                    <a class="page-link" href="{{ page_url(p) }}">{{ p }}</a>
                 </li>
                 {% elif p == 4 or p == total_pages - 2 %}
                 <li class="page-item disabled"><span class="page-link">…</span></li>
                 {% endif %}
             {% endfor %}
             <li class="page-item {{ 'disabled' if page >= total_pages }}">
-                <a class="page-link" href="{{ url_for('identidade_visual.dashboard', page=page+1, cidade=filtro_cidade, tipo_local=filtro_tipo_local, bairro=filtro_bairro, status=filtro_status) }}">
-                    <i class="bi bi-chevron-right"></i>
-                </a>
+                <a class="page-link" href="{{ page_url(page+1) }}"><i class="bi bi-chevron-right"></i></a>
             </li>
         </ul>
     </nav>
@@ -933,6 +952,39 @@ document.getElementById('modalNovoLocal').addEventListener('hidden.bs.modal', fu
     document.getElementById('novoEndereco').value = '';
     document.getElementById('novoBairro').value = '';
     document.getElementById('novoCep').value = '';
+});
+
+/* ===== Filtros multi-seleção (label + badge de selecionados) ===== */
+function atualizarFiltroLabel(nome, titulo) {
+    const marcados = document.querySelectorAll('.filtro-check[name="' + nome + '"]:checked');
+    const label = document.getElementById('ddlabel_' + nome);
+    const badge = document.getElementById('ddbadge_' + nome);
+    const count = marcados.length;
+    if (count > 0) {
+        label.innerText = count === 1 ? '1 selecionado' : count + ' selecionados';
+        badge.innerText = count;
+        badge.style.display = 'inline-block';
+    } else {
+        label.innerText = titulo;
+        badge.style.display = 'none';
+    }
+}
+
+function limparFiltro(nome, link) {
+    document.querySelectorAll('.filtro-check[name="' + nome + '"]').forEach(i => i.checked = false);
+    const span = document.getElementById('ddlabel_' + nome);
+    atualizarFiltroLabel(nome, span ? (span.dataset.titulo || nome) : nome);
+}
+
+/* Inicializa labels/badges conforme seleção atual e guarda o título base */
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[id^="ddlabel_"]').forEach(span => {
+        span.dataset.titulo = span.innerText.trim();
+    });
+    ['cidade', 'tipo_local', 'bairro', 'status'].forEach(nome => {
+        const span = document.getElementById('ddlabel_' + nome);
+        if (span) atualizarFiltroLabel(nome, span.dataset.titulo);
+    });
 });
 
 /* ===== Excluir Local (acesso full) ===== */

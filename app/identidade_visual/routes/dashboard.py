@@ -37,71 +37,73 @@ def _registrar_log(acao, descricao, local_id=None):
 @identidade_visual_bp.route('/')
 @requires_permission('identidade_visual.visualizar')
 def dashboard():
-    cidade = request.args.get('cidade', '')
-    tipo_local = request.args.get('tipo_local', '')
-    bairro = request.args.get('bairro', '')
-    status = request.args.get('status', '')
+    # Filtros multi-seleção (estilo Pagamentos): cada um aceita vários valores.
+    cidades_sel = [c for c in request.args.getlist('cidade') if c]
+    tipos_sel = [t for t in request.args.getlist('tipo_local') if t]
+    bairros_sel = [b for b in request.args.getlist('bairro') if b]
+    status_sel = [s for s in request.args.getlist('status') if s]
     page = max(1, int(request.args.get('page', 1) or 1))
 
     query = IdentidadeVisualLocal.query
 
-    if cidade:
-        query = query.filter(IdentidadeVisualLocal.cidade == cidade)
-    if tipo_local:
-        query = query.filter(IdentidadeVisualLocal.tipo_local == tipo_local)
-    if bairro:
-        query = query.filter(IdentidadeVisualLocal.bairro == bairro)
+    if cidades_sel:
+        query = query.filter(IdentidadeVisualLocal.cidade.in_(cidades_sel))
+    if tipos_sel:
+        query = query.filter(IdentidadeVisualLocal.tipo_local.in_(tipos_sel))
+    if bairros_sel:
+        query = query.filter(IdentidadeVisualLocal.bairro.in_(bairros_sel))
 
     query = query.order_by(IdentidadeVisualLocal.cidade)
 
     # Prioridade de exibição: PENDENTES primeiro, depois por cidade.
     # status é calculado em Python (depende de data_acao + arquivos), por isso
-    # a ordenação final é feita aqui, sobre a lista já materializada.
+    # a ordenação e o filtro de status são feitos sobre a lista materializada.
     def _ordem(l):
         return (0 if l.status == 'PENDENTE' else 1, (l.cidade or '').lower())
 
-    # KPIs sobre TODOS os registros filtrados (antes da paginação)
-    if status:
-        all_filtered = query.all()
-        if status == 'REALIZADO':
-            all_filtered = [l for l in all_filtered if l.status == 'REALIZADO']
-        elif status == 'PENDENTE':
-            all_filtered = [l for l in all_filtered if l.status == 'PENDENTE']
-        all_filtered.sort(key=_ordem)
-        total = len(all_filtered)
-        total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
-        page = min(page, total_pages)
-        locais = all_filtered[(page - 1) * PER_PAGE: page * PER_PAGE]
-        todos_para_kpi = all_filtered
-    else:
-        all_for_kpi = query.all()
-        all_for_kpi.sort(key=_ordem)
-        total = len(all_for_kpi)
-        total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
-        page = min(page, total_pages)
-        locais = all_for_kpi[(page - 1) * PER_PAGE: page * PER_PAGE]
-        todos_para_kpi = all_for_kpi
+    all_filtered = query.all()
+    if status_sel:
+        all_filtered = [l for l in all_filtered if l.status in status_sel]
+    all_filtered.sort(key=_ordem)
+
+    total = len(all_filtered)
+    total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+    page = min(page, total_pages)
+    locais = all_filtered[(page - 1) * PER_PAGE: page * PER_PAGE]
+    todos_para_kpi = all_filtered
 
     realizados = sum(1 for l in todos_para_kpi if l.status == 'REALIZADO')
     pendentes = total - realizados
     custo_total = sum(float(l.custo) for l in todos_para_kpi if l.custo)
 
-    # Filtro Cidade: apenas cidades que existem nos registros
-    cidades = db.session.query(IdentidadeVisualLocal.cidade).distinct().order_by(
-        IdentidadeVisualLocal.cidade
+    # ── Contagens globais para os badges dos filtros (todos os registros) ──
+    # Uma query leve por colunas + 1 query distinta de arquivos evita N+1.
+    rows = db.session.query(
+        IdentidadeVisualLocal.id,
+        IdentidadeVisualLocal.cidade,
+        IdentidadeVisualLocal.tipo_local,
+        IdentidadeVisualLocal.bairro,
+        IdentidadeVisualLocal.data_acao,
     ).all()
-    cidades = [c[0] for c in cidades]
+    ids_com_arquivo = {
+        r[0] for r in db.session.query(IdentidadeVisualArquivo.local_id).distinct()
+    }
 
-    tipos_local_existentes = db.session.query(IdentidadeVisualLocal.tipo_local).distinct().order_by(
-        IdentidadeVisualLocal.tipo_local
-    ).all()
-    tipos_local_existentes = [t[0] for t in tipos_local_existentes]
+    contagem_cidades, contagem_tipos, contagem_bairros = {}, {}, {}
+    contagem_status = {'PENDENTE': 0, 'REALIZADO': 0}
+    for rid, rcidade, rtipo, rbairro, rdata in rows:
+        if rcidade:
+            contagem_cidades[rcidade] = contagem_cidades.get(rcidade, 0) + 1
+        if rtipo:
+            contagem_tipos[rtipo] = contagem_tipos.get(rtipo, 0) + 1
+        if rbairro:
+            contagem_bairros[rbairro] = contagem_bairros.get(rbairro, 0) + 1
+        st = 'REALIZADO' if (rdata is not None and rid in ids_com_arquivo) else 'PENDENTE'
+        contagem_status[st] += 1
 
-    bairros = db.session.query(IdentidadeVisualLocal.bairro).filter(
-        IdentidadeVisualLocal.bairro.isnot(None),
-        IdentidadeVisualLocal.bairro != ''
-    ).distinct().order_by(IdentidadeVisualLocal.bairro).all()
-    bairros = [b[0] for b in bairros]
+    cidades = sorted(contagem_cidades.keys())
+    tipos_local_existentes = sorted(contagem_tipos.keys())
+    bairros = sorted(contagem_bairros.keys())
 
     if 'municipios_pi' in sa_inspect(db.engine).get_table_names():
         municipios = MunicipioPiaui.query.order_by(MunicipioPiaui.nome).all()
@@ -115,10 +117,14 @@ def dashboard():
         tipos_local=tipos_local_existentes,
         tipos_local_opcoes=TIPOS_LOCAL,
         bairros=bairros,
-        filtro_cidade=cidade,
-        filtro_tipo_local=tipo_local,
-        filtro_bairro=bairro,
-        filtro_status=status,
+        contagem_cidades=contagem_cidades,
+        contagem_tipos=contagem_tipos,
+        contagem_bairros=contagem_bairros,
+        contagem_status=contagem_status,
+        filtro_cidades=cidades_sel,
+        filtro_tipos=tipos_sel,
+        filtro_bairros=bairros_sel,
+        filtro_status_sel=status_sel,
         page=page,
         total_pages=total_pages,
         total=total,
