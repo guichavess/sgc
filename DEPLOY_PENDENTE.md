@@ -134,6 +134,42 @@
     AND tipo_local != 'Espaço da Cidadania';
   ```
 
+### Auditoria + Exclusão — Identidade Visual (2026-06-26)
+
+- [ ] **Adicionar colunas de autoria em `identidade_visual_locais` e criar tabela de log `identidade_visual_log`**
+  - Contexto: o módulo passou a (1) registrar o usuário que criou/atualizou cada local,
+    (2) ordenar a listagem com os PENDENTES primeiro, e (3) permitir exclusão de registros
+    **apenas** para usuários com acesso full ao módulo (permissão `identidade_visual.excluir`
+    ou `is_admin`). Toda criação/edição/exclusão é gravada em `identidade_visual_log`.
+    As colunas novas são `deferred` no model, então a listagem continua funcionando antes
+    do ALTER; mas criar/editar/excluir só funcionam após rodar o SQL abaixo.
+  - SQL (executar no Workbench):
+  ```sql
+  ALTER TABLE identidade_visual_locais
+    ADD COLUMN criado_por_id     BIGINT NULL,
+    ADD COLUMN atualizado_por_id BIGINT NULL;
+
+  CREATE TABLE identidade_visual_log (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    local_id     INT NULL,
+    acao         VARCHAR(20) NOT NULL,          -- CRIAR | EDITAR | EXCLUIR
+    descricao    VARCHAR(500) NULL,
+    usuario_id   BIGINT NULL,
+    usuario_nome VARCHAR(255) NULL,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_iv_log_local (local_id),
+    INDEX idx_iv_log_usuario (usuario_id),
+    INDEX idx_iv_log_data (created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ```
+  - Permissões (perfis): a ação `excluir` já existe na lista `ACOES`. Para liberar a exclusão
+    a um perfil, marcar a permissão **Identidade Visual → Excluir** na tela de Perfis. Papéis
+    sugeridos dentro do módulo:
+    - **Visualizador**: `identidade_visual.visualizar` (vê e exporta).
+    - **Operador**: `visualizar` + `editar` (cria locais, registra ações, anexa/remove arquivos).
+    - **Gestor / Full**: `visualizar` + `editar` + `excluir` (tudo + exclusão). `is_admin` tem tudo.
+  - Observação: nenhuma dependência Python nova.
+
 ### Hierarquia de Autorização — Diárias (2026-05-05)
 
 - [ ] **Definir `cargo_gestao = 'secretario_exercicio'` para Bruno Gomes** ⚠️ BLOQUEADO

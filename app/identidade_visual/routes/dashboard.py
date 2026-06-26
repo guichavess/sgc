@@ -2,13 +2,15 @@ import io
 import os
 import uuid
 from datetime import datetime
-from flask import render_template, request, jsonify, send_file
+from flask import render_template, request, jsonify, send_file, current_app
+from flask_login import current_user
 from app.utils.permissions import requires_permission
 from werkzeug.utils import secure_filename
 from sqlalchemy import inspect as sa_inspect
 from app.extensions import db
 from app.models.identidade_visual import (
-    IdentidadeVisualLocal, IdentidadeVisualArquivo, MunicipioPiaui, TIPOS_LOCAL,
+    IdentidadeVisualLocal, IdentidadeVisualArquivo, IdentidadeVisualLog,
+    MunicipioPiaui, TIPOS_LOCAL,
 )
 from app.identidade_visual.routes import identidade_visual_bp
 
@@ -19,6 +21,17 @@ PER_PAGE = 15
 
 def _allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def _registrar_log(acao, descricao, local_id=None):
+    """Adiciona um registro de auditoria à sessão (commit fica a cargo do chamador)."""
+    db.session.add(IdentidadeVisualLog(
+        local_id=local_id,
+        acao=acao,
+        descricao=descricao,
+        usuario_id=getattr(current_user, 'id', None),
+        usuario_nome=getattr(current_user, 'nome', None),
+    ))
 
 
 @identidade_visual_bp.route('/')
@@ -41,6 +54,12 @@ def dashboard():
 
     query = query.order_by(IdentidadeVisualLocal.cidade)
 
+    # Prioridade de exibição: PENDENTES primeiro, depois por cidade.
+    # status é calculado em Python (depende de data_acao + arquivos), por isso
+    # a ordenação final é feita aqui, sobre a lista já materializada.
+    def _ordem(l):
+        return (0 if l.status == 'PENDENTE' else 1, (l.cidade or '').lower())
+
     # KPIs sobre TODOS os registros filtrados (antes da paginação)
     if status:
         all_filtered = query.all()
@@ -48,6 +67,7 @@ def dashboard():
             all_filtered = [l for l in all_filtered if l.status == 'REALIZADO']
         elif status == 'PENDENTE':
             all_filtered = [l for l in all_filtered if l.status == 'PENDENTE']
+        all_filtered.sort(key=_ordem)
         total = len(all_filtered)
         total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
         page = min(page, total_pages)
@@ -55,6 +75,7 @@ def dashboard():
         todos_para_kpi = all_filtered
     else:
         all_for_kpi = query.all()
+        all_for_kpi.sort(key=_ordem)
         total = len(all_for_kpi)
         total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
         page = min(page, total_pages)
@@ -105,6 +126,7 @@ def dashboard():
         pendentes=pendentes,
         custo_total=custo_total,
         municipios=municipios,
+        pode_excluir=current_user.tem_permissao('identidade_visual', 'excluir'),
     )
 
 
@@ -160,6 +182,9 @@ def salvar_acao(local_id):
             tipo=extensao,
         )
         db.session.add(novo_arquivo)
+
+    local.atualizado_por_id = getattr(current_user, 'id', None)
+    _registrar_log('EDITAR', f'Registrou ação/anexos em {local.cidade} — {local.tipo_local}', local_id=local.id)
 
     db.session.commit()
     return jsonify({'ok': True, 'status': local.status})
@@ -263,6 +288,7 @@ def criar_local():
     if not municipio:
         return jsonify({'erro': 'Município não encontrado'}), 400
 
+    uid = getattr(current_user, 'id', None)
     local = IdentidadeVisualLocal(
         cidade=municipio.nome,
         municipio_id=municipio.id,
@@ -270,8 +296,12 @@ def criar_local():
         endereco=data['endereco'].strip(),
         bairro=data['bairro'].strip(),
         cep=data['cep'].strip(),
+        criado_por_id=uid,
+        atualizado_por_id=uid,
     )
     db.session.add(local)
+    db.session.flush()
+    _registrar_log('CRIAR', f'Criou o local {local.cidade} — {local.tipo_local}', local_id=local.id)
     db.session.commit()
 
     return jsonify({'ok': True, 'id': local.id})
@@ -300,10 +330,41 @@ def editar_local(local_id):
     local.endereco = data['endereco'].strip()
     local.bairro = data['bairro'].strip()
     local.cep = data['cep'].strip()
+    local.atualizado_por_id = getattr(current_user, 'id', None)
 
+    _registrar_log('EDITAR', f'Editou o local {local.cidade} — {local.tipo_local}', local_id=local.id)
     db.session.commit()
 
     return jsonify({'ok': True, 'id': local.id})
+
+
+@identidade_visual_bp.route('/api/excluir-local/<int:local_id>', methods=['POST'])
+@requires_permission('identidade_visual.excluir')
+def excluir_local(local_id):
+    """Exclui um local. Restrito a usuários com acesso FULL ao módulo
+    (permissão `identidade_visual.excluir` ou is_admin). A ação é auditada."""
+    local = IdentidadeVisualLocal.query.get(local_id)
+    if not local:
+        return jsonify({'erro': 'Local não encontrado'}), 404
+
+    # Remove arquivos físicos antes de apagar os registros filhos (cascade)
+    for arquivo in local.arquivos.all():
+        caminho = os.path.join(UPLOAD_FOLDER, arquivo.nome_servidor)
+        if os.path.exists(caminho):
+            try:
+                os.remove(caminho)
+            except OSError:
+                current_app.logger.warning(
+                    f'[IDENTIDADE_VISUAL] Falha ao remover arquivo {caminho}')
+
+    descricao = f'Excluiu o local {local.cidade} — {local.tipo_local} (#{local.id})'
+    _registrar_log('EXCLUIR', descricao, local_id=local.id)
+
+    db.session.delete(local)
+    db.session.commit()
+    current_app.logger.info(f'[IDENTIDADE_VISUAL] {descricao} por '
+                            f'{getattr(current_user, "nome", "?")}')
+    return jsonify({'ok': True})
 
 
 @identidade_visual_bp.route('/exportar-excel')

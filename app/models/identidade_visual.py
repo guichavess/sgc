@@ -33,6 +33,10 @@ class IdentidadeVisualLocal(db.Model):
     data_acao = db.Column(db.DateTime, nullable=True)
     arquivo_nome = db.Column(db.String(255), nullable=True)
     arquivo_caminho = db.Column(db.String(500), nullable=True)
+    # deferred: colunas de auditoria — ficam fora do SELECT padrão para que a
+    # listagem continue funcionando mesmo antes do ALTER TABLE em produção.
+    criado_por_id = deferred(db.Column(db.BigInteger, nullable=True))
+    atualizado_por_id = deferred(db.Column(db.BigInteger, nullable=True))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -56,3 +60,20 @@ class IdentidadeVisualArquivo(db.Model):
     nome_servidor = db.Column(db.String(500), nullable=False)
     tipo = db.Column(db.String(10), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class IdentidadeVisualLog(db.Model):
+    """Auditoria de ações do módulo (criar/editar/excluir locais).
+
+    Mantém `local_id` como inteiro simples (sem FK) para que o registro de
+    exclusão sobreviva à remoção do local.
+    """
+    __tablename__ = 'identidade_visual_log'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    local_id = db.Column(db.Integer, nullable=True, index=True)
+    acao = db.Column(db.String(20), nullable=False)  # CRIAR | EDITAR | EXCLUIR
+    descricao = db.Column(db.String(500), nullable=True)
+    usuario_id = db.Column(db.BigInteger, nullable=True, index=True)
+    usuario_nome = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)

@@ -109,6 +109,11 @@
     .toast-sucesso { top: auto; bottom: 1rem; right: 0.75rem; left: 0.75rem; min-width: 0; max-width: none; }
 }
 
+/* ===== CEP spinner ===== */
+.spin-icon { display: inline-block; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.cep-spinner { background: transparent; border-color: #dee2e6; }
+
 /* ===== Cards mobile — tabela vira cards ===== */
 @media (max-width: 767.98px) {
     .iv-stats { gap: 0.5rem; }
@@ -277,9 +282,19 @@
                         {% else %}—{% endif %}
                     </td>
                     <td class="text-center">
-                        <button class="btn btn-outline-primary btn-acao" onclick="abrirModal({{ l.id }})">
-                            <i class="bi bi-pencil-square"></i> {{ 'Editar' if l.status == 'REALIZADO' else 'Registrar' }}
-                        </button>
+                        <div class="d-inline-flex gap-1">
+                            <button class="btn btn-outline-primary btn-acao" onclick="abrirModal({{ l.id }})">
+                                <i class="bi bi-pencil-square"></i> {{ 'Editar' if l.status == 'REALIZADO' else 'Registrar' }}
+                            </button>
+                            {% if pode_excluir %}
+                            <button class="btn btn-outline-danger btn-acao btn-excluir-local"
+                                    data-id="{{ l.id }}"
+                                    data-desc="{{ l.cidade }} — {{ l.tipo_local }}"
+                                    title="Excluir registro">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -371,17 +386,21 @@
                                         {% endfor %}
                                     </select>
                                 </div>
-                                <div class="col-12">
+                                <div class="col-5 col-md-4">
+                                    <label for="editCep" class="form-label" style="font-size:0.78rem;">CEP <span class="text-danger">*</span></label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control form-control-sm cep-busca" id="editCep" placeholder="00000-000" maxlength="9" data-target="edit">
+                                        <span class="input-group-text cep-spinner d-none" id="editCepSpinner"><i class="bi bi-arrow-repeat spin-icon"></i></span>
+                                    </div>
+                                    <div class="form-text" style="font-size:0.7rem; color:#0891b2;">Digite o CEP para preencher automaticamente</div>
+                                </div>
+                                <div class="col-7 col-md-8">
                                     <label for="editEndereco" class="form-label" style="font-size:0.78rem;">Endereço <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control form-control-sm" id="editEndereco" placeholder="Rua, número, complemento">
                                 </div>
                                 <div class="col-7 col-md-7">
                                     <label for="editBairro" class="form-label" style="font-size:0.78rem;">Bairro <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control form-control-sm" id="editBairro">
-                                </div>
-                                <div class="col-5 col-md-5">
-                                    <label for="editCep" class="form-label" style="font-size:0.78rem;">CEP <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control form-control-sm" id="editCep" placeholder="00000-000" maxlength="9">
                                 </div>
                                 <div class="col-12 mt-2">
                                     <button type="button" class="btn btn-sm btn-primary" id="btnSalvarEndereco">
@@ -465,17 +484,21 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-12">
+                        <div class="col-5 col-md-4">
+                            <label for="novoCep" class="form-label fw-semibold">CEP <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="text" class="form-control cep-busca" id="novoCep" placeholder="00000-000" maxlength="9" data-target="novo">
+                                <span class="input-group-text cep-spinner d-none" id="novoCepSpinner"><i class="bi bi-arrow-repeat spin-icon"></i></span>
+                            </div>
+                            <div class="form-text" style="font-size:0.78rem; color:#0891b2;"><i class="bi bi-info-circle"></i> Digite o CEP para preencher automaticamente</div>
+                        </div>
+                        <div class="col-7 col-md-8">
                             <label for="novoEndereco" class="form-label fw-semibold">Endereço <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="novoEndereco" placeholder="Rua, número, complemento">
                         </div>
                         <div class="col-7 col-md-7">
                             <label for="novoBairro" class="form-label fw-semibold">Bairro <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="novoBairro" placeholder="Ex: Centro">
-                        </div>
-                        <div class="col-5 col-md-5">
-                            <label for="novoCep" class="form-label fw-semibold">CEP <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="novoCep" placeholder="00000-000" maxlength="9">
                         </div>
                     </div>
                 </div>
@@ -561,6 +584,54 @@ function maskCep(input) {
 }
 maskCep(document.getElementById('editCep'));
 maskCep(document.getElementById('novoCep'));
+
+/* ===== Busca CEP — BrasilAPI ===== */
+function buscarCep(cepRaw, target) {
+    const cep = cepRaw.replace(/\D/g, '');
+    if (cep.length !== 8) return;
+
+    const prefix = target === 'edit' ? 'edit' : 'novo';
+    const spinner = document.getElementById(prefix === 'edit' ? 'editCepSpinner' : 'novoCepSpinner');
+    spinner.classList.remove('d-none');
+
+    fetch('https://brasilapi.com.br/api/cep/v2/' + cep)
+        .then(r => {
+            if (!r.ok) throw new Error('CEP não encontrado');
+            return r.json();
+        })
+        .then(data => {
+            const enderecoField = document.getElementById(prefix + (prefix === 'edit' ? 'Endereco' : 'Endereco'));
+            const bairroField = document.getElementById(prefix + (prefix === 'edit' ? 'Bairro' : 'Bairro'));
+
+            if (data.street) enderecoField.value = data.street;
+            if (data.neighborhood) bairroField.value = data.neighborhood;
+
+            if (data.city && (prefix === 'novo' ? tsNovoCidade : tsEditCidade)) {
+                const ts = prefix === 'novo' ? tsNovoCidade : tsEditCidade;
+                const opts = ts.options;
+                for (const key in opts) {
+                    if (opts[key].text && opts[key].text.toUpperCase() === data.city.toUpperCase()) {
+                        ts.setValue(key, true);
+                        break;
+                    }
+                }
+            }
+            mostrarToast('CEP encontrado', 'Endereço preenchido automaticamente.', 'sucesso');
+        })
+        .catch(() => {
+            mostrarToast('CEP não encontrado', 'Verifique o CEP ou preencha manualmente.', 'erro');
+        })
+        .finally(() => {
+            spinner.classList.add('d-none');
+        });
+}
+
+document.querySelectorAll('.cep-busca').forEach(input => {
+    input.addEventListener('input', function() {
+        const cep = this.value.replace(/\D/g, '');
+        if (cep.length === 8) buscarCep(this.value, this.dataset.target);
+    });
+});
 
 /* ===== Tom Select — Novo Local ===== */
 const tsNovoCidade = new TomSelect('#novoCidade', {
@@ -862,6 +933,37 @@ document.getElementById('modalNovoLocal').addEventListener('hidden.bs.modal', fu
     document.getElementById('novoEndereco').value = '';
     document.getElementById('novoBairro').value = '';
     document.getElementById('novoCep').value = '';
+});
+
+/* ===== Excluir Local (acesso full) ===== */
+document.querySelectorAll('.btn-excluir-local').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const id = this.dataset.id;
+        const desc = this.dataset.desc || 'este registro';
+        if (!confirm('Excluir definitivamente ' + desc + '?\nEsta ação não pode ser desfeita.')) return;
+
+        this.disabled = true;
+        const original = this.innerHTML;
+        this.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+        apiCall('/identidade-visual/api/excluir-local/' + id, { method: 'POST' })
+            .then(data => {
+                if (data.ok) {
+                    const row = document.getElementById('row-' + id);
+                    if (row) row.remove();
+                    mostrarToast('Sucesso', 'Registro excluído com sucesso.', 'sucesso');
+                } else {
+                    this.disabled = false;
+                    this.innerHTML = original;
+                    mostrarToast('Erro', data.erro || 'Erro ao excluir.', 'erro');
+                }
+            })
+            .catch(err => {
+                this.disabled = false;
+                this.innerHTML = original;
+                mostrarToast('Erro', err.message || 'Erro de conexão.', 'erro');
+            });
+    });
 });
 
 /* ===== Sorting ===== */
