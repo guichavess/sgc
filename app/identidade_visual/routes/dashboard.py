@@ -16,6 +16,7 @@ from app.identidade_visual.routes import identidade_visual_bp
 
 UPLOAD_FOLDER = os.path.join('app', 'static', 'uploads', 'identidade_visual')
 ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'heic'}
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB por arquivo (mantenha em sync com MAX_FOTO_MB no template)
 PER_PAGE = 15
 
 
@@ -168,16 +169,33 @@ def salvar_acao(local_id):
     else:
         local.custo = None
 
-    for arquivo in arquivos:
-        if not arquivo or not arquivo.filename:
-            continue
+    arquivos_novos = [a for a in arquivos if a and a.filename]
+
+    # Valida TODOS os arquivos antes de gravar qualquer um — evita deixar
+    # arquivos órfãos no disco se um arquivo posterior for rejeitado.
+    for arquivo in arquivos_novos:
         if not _allowed_file(arquivo.filename):
             return jsonify({'erro': f'Tipo de arquivo não permitido: {arquivo.filename}'}), 400
+        # Mede o tamanho sem carregar o arquivo inteiro na memória
+        arquivo.seek(0, os.SEEK_END)
+        tamanho = arquivo.tell()
+        arquivo.seek(0)
+        if tamanho > MAX_FILE_SIZE:
+            limite_mb = MAX_FILE_SIZE // (1024 * 1024)
+            return jsonify({'erro': f'O arquivo "{arquivo.filename}" tem '
+                                    f'{tamanho / (1024 * 1024):.1f} MB e excede o '
+                                    f'limite de {limite_mb} MB por arquivo.'}), 400
 
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-        nome_seguro = secure_filename(arquivo.filename)
-        extensao = nome_seguro.rsplit('.', 1)[1].lower()
-        nome_unico = f"{uuid.uuid4().hex[:8]}_{nome_seguro}"
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    for arquivo in arquivos_novos:
+        # Extensão vem do nome ORIGINAL (já validado em _allowed_file).
+        # secure_filename pode descartar nomes não-ASCII e devolver algo sem
+        # extensão (ou vazio) — por isso não derivamos a extensão dele.
+        extensao = arquivo.filename.rsplit('.', 1)[1].lower()
+        base_segura = secure_filename(arquivo.filename)
+        if not base_segura or '.' not in base_segura:
+            base_segura = f'foto.{extensao}'
+        nome_unico = f"{uuid.uuid4().hex[:8]}_{base_segura}"
         caminho = os.path.join(UPLOAD_FOLDER, nome_unico)
         arquivo.save(caminho)
 
