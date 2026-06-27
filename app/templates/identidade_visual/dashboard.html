@@ -12,6 +12,14 @@
 .iv-table th .sort-icon { font-size: 0.65rem; margin-left: 4px; opacity: 0.4; }
 .iv-table th.sort-active .sort-icon { opacity: 1; color: var(--color-primary); }
 .iv-table td { vertical-align: middle; font-size: 0.875rem; }
+.iv-table tbody tr[id^="row-"] { cursor: pointer; }
+.iv-table tbody tr[id^="row-"]:hover { background-color: var(--color-surface-secondary, #f8f9fa); }
+.iv-maps-link { color: var(--color-primary, #0891b2); text-decoration: none; font-weight: 500; }
+.iv-maps-link:hover { text-decoration: underline; }
+.iv-view-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .02em; color: var(--color-text-tertiary, #6c757d); font-weight: 600; margin-bottom: 2px; }
+.iv-view-value { font-size: 0.9rem; color: var(--color-text-primary, #212529); word-break: break-word; }
+.iv-view-arquivo { display: flex; align-items: center; gap: .6rem; padding: .45rem .65rem; background: var(--color-surface-secondary, #f8f9fa); border-radius: 8px; margin-bottom: .4rem; }
+.iv-view-arquivo .nome { flex: 1; min-width: 0; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .badge-realizado { background-color: #198754; color: #fff; }
 .badge-pendente { background-color: #ffc107; color: #000; }
 .iv-arq-badge { display: inline-flex; align-items: center; gap: 2px; font-size: 0.72rem; color: var(--color-text-tertiary, #6c757d); background: var(--color-surface-secondary, #f1f3f5); border-radius: 20px; padding: 1px 7px 1px 5px; margin-left: 4px; vertical-align: middle; }
@@ -350,7 +358,14 @@
                 <tr id="row-{{ l.id }}" data-custo="{{ l.custo or 0 }}" data-dataacao="{{ l.data_acao.strftime('%Y%m%d%H%M') if l.data_acao else '' }}">
                     <td data-label="Cidade">{{ l.cidade }}</td>
                     <td data-label="Tipo">{{ l.tipo_local }}</td>
-                    <td data-label="Endereço">{{ l.endereco or '—' }}</td>
+                    <td data-label="Endereço">
+                        {% if l.endereco %}
+                        <a href="https://www.google.com/maps/search/?api=1&query={{ [l.endereco, l.bairro, l.cidade, 'Piauí'] | select | join(', ') | urlencode }}"
+                           target="_blank" rel="noopener" class="iv-maps-link" title="Validar endereço no Google Maps">
+                            <i class="bi bi-geo-alt"></i> {{ l.endereco }}
+                        </a>
+                        {% else %}—{% endif %}
+                    </td>
                     <td data-label="Bairro">{{ l.bairro or '—' }}</td>
                     <td data-label="Status">
                         <span class="badge {{ 'badge-realizado' if st == 'REALIZADO' else 'badge-pendente' }}">
@@ -607,6 +622,65 @@
     </div>
 </div>
 
+{# Modal de Visualização (somente leitura) #}
+<div class="modal fade modal-iv" id="modalView" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0"><i class="bi bi-eye me-2"></i>Detalhes do Local</h5>
+                    <p class="text-muted mb-0" style="font-size:0.85rem;">
+                        <strong id="viewCidade"></strong> — <span id="viewTipo"></span>
+                    </p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-12">
+                        <div class="iv-view-label">Endereço</div>
+                        <div class="iv-view-value" id="viewEndereco">—</div>
+                        <a id="viewMapsLink" href="#" target="_blank" rel="noopener" class="iv-maps-link small d-none mt-1 d-inline-block">
+                            <i class="bi bi-geo-alt-fill"></i> Ver no Google Maps
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="iv-view-label">Bairro</div>
+                        <div class="iv-view-value" id="viewBairro">—</div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="iv-view-label">CEP</div>
+                        <div class="iv-view-value" id="viewCep">—</div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="iv-view-label">Status</div>
+                        <div class="iv-view-value" id="viewStatus">—</div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="iv-view-label">Custo</div>
+                        <div class="iv-view-value" id="viewCusto">—</div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="iv-view-label">Data/Hora</div>
+                        <div class="iv-view-value" id="viewData">—</div>
+                    </div>
+                </div>
+                <hr class="my-3">
+                <div class="mb-1">
+                    <label class="form-label fw-semibold">Arquivos Anexados</label>
+                    <div id="viewArquivos">
+                        <p class="text-muted" style="font-size:0.85rem;">Carregando...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-primary" id="btnViewEditar"><i class="bi bi-pencil-square"></i> Editar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {# Toast de notificação #}
 <div class="toast-sucesso" id="toastNotificacao">
     <div class="toast-barra" id="toastBarra"></div>
@@ -632,6 +706,8 @@ const MAX_FOTO_MB = 25;  // mantenha em sync com MAX_FILE_SIZE no backend
 const modalAcaoEl = document.getElementById('modalAcao');
 const modal = new bootstrap.Modal(modalAcaoEl);
 const modalNovoLocal = new bootstrap.Modal(document.getElementById('modalNovoLocal'));
+const modalView = new bootstrap.Modal(document.getElementById('modalView'));
+let viewIdAtual = null;
 
 /* A11y: tira o foco de dentro do modal ANTES do aria-hidden ser aplicado,
    evitando o aviso "Blocked aria-hidden on an element with focused descendant". */
@@ -905,7 +981,7 @@ document.getElementById('btnSalvarEndereco').addEventListener('click', function(
                 const cells = row.querySelectorAll('td');
                 cells[0].textContent = cidadeNome;
                 cells[1].textContent = tipoLocal;
-                cells[2].textContent = endereco || '—';
+                cells[2].innerHTML = enderecoCellHtml(endereco, bairro, cidadeNome);
                 cells[3].textContent = bairro || '—';
             }
             mostrarToast('Sucesso', 'Endereço atualizado com sucesso.', 'sucesso');
@@ -1165,6 +1241,118 @@ document.querySelectorAll('.btn-excluir-local').forEach(btn => {
                 mostrarToast('Erro', err.message || 'Erro de conexão.', 'erro');
             });
     });
+});
+
+/* ===== Link do Google Maps (endereço + bairro + cidade) ===== */
+function buildMapsUrl(endereco, bairro, cidade) {
+    const parts = [endereco, bairro, cidade].filter(Boolean);
+    parts.push('Piauí');
+    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(parts.join(', '));
+}
+
+/* Reconstrói o HTML da célula de endereço (mantém o link após edição inline) */
+function enderecoCellHtml(endereco, bairro, cidade) {
+    if (!endereco) return '—';
+    const a = document.createElement('a');
+    a.href = buildMapsUrl(endereco, bairro, cidade);
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.className = 'iv-maps-link';
+    a.title = 'Validar endereço no Google Maps';
+    a.innerHTML = '<i class="bi bi-geo-alt"></i> ';
+    a.appendChild(document.createTextNode(endereco));
+    return a.outerHTML;
+}
+
+/* datetime-local 'YYYY-MM-DDTHH:MM' -> 'dd/mm/aaaa HH:MM' */
+function formatarDataAcao(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(s || '');
+    if (!m) return s || '—';
+    return m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5];
+}
+
+/* ===== Visualização (somente leitura) ===== */
+function abrirView(id) {
+    viewIdAtual = id;
+
+    // Status: lê o badge da própria linha (sem ida extra ao servidor)
+    const row = document.getElementById('row-' + id);
+    let statusTxt = '—', statusReal = false;
+    if (row) {
+        const badge = row.querySelector('.badge-realizado, .badge-pendente');
+        if (badge) { statusTxt = badge.textContent.trim(); statusReal = badge.classList.contains('badge-realizado'); }
+    }
+    document.getElementById('viewStatus').innerHTML =
+        '<span class="badge ' + (statusReal ? 'badge-realizado' : 'badge-pendente') + '">' + statusTxt + '</span>';
+
+    document.getElementById('viewCidade').textContent = '';
+    document.getElementById('viewTipo').textContent = '';
+    document.getElementById('viewEndereco').textContent = '—';
+    document.getElementById('viewBairro').textContent = '—';
+    document.getElementById('viewCep').textContent = '—';
+    document.getElementById('viewCusto').textContent = '—';
+    document.getElementById('viewData').textContent = '—';
+    const mapsLink = document.getElementById('viewMapsLink');
+    mapsLink.classList.add('d-none');
+    const arq = document.getElementById('viewArquivos');
+    arq.innerHTML = '<p class="text-muted" style="font-size:0.85rem;"><i class="bi bi-hourglass-split"></i> Carregando...</p>';
+
+    modalView.show();
+
+    apiCall('/identidade-visual/api/arquivos/' + id)
+        .then(data => {
+            document.getElementById('viewCidade').textContent = data.cidade || '';
+            document.getElementById('viewTipo').textContent = data.tipo_local || '';
+            document.getElementById('viewEndereco').textContent = data.endereco || '—';
+            document.getElementById('viewBairro').textContent = data.bairro || '—';
+            document.getElementById('viewCep').textContent = data.cep || '—';
+            document.getElementById('viewCusto').textContent = data.custo ? ('R$ ' + formatarMoeda(data.custo)) : '—';
+            document.getElementById('viewData').textContent = data.data_acao ? formatarDataAcao(data.data_acao) : '—';
+
+            if (data.endereco) {
+                mapsLink.href = buildMapsUrl(data.endereco, data.bairro, data.cidade);
+                mapsLink.classList.remove('d-none');
+            }
+
+            if (!data.arquivos || !data.arquivos.length) {
+                arq.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">Nenhum arquivo anexado.</p>';
+                return;
+            }
+            arq.innerHTML = '';
+            data.arquivos.forEach(a => {
+                const icon = a.tipo === 'pdf' ? 'bi-file-earmark-pdf text-danger' : 'bi-file-earmark-image text-primary';
+                const div = document.createElement('div');
+                div.className = 'iv-view-arquivo';
+                div.innerHTML =
+                    '<i class="bi ' + icon + '" style="font-size:1.2rem;"></i>' +
+                    '<div class="nome">' + a.nome +
+                        '<div style="font-size:.72rem;color:#6c757d;">' + a.data + '</div>' +
+                    '</div>' +
+                    '<a href="' + a.url + '" target="_blank" class="btn btn-outline-secondary btn-sm" title="Ver"><i class="bi bi-eye"></i></a>';
+                arq.appendChild(div);
+            });
+        })
+        .catch(() => {
+            arq.innerHTML = '<p class="text-danger" style="font-size:0.85rem;">Erro ao carregar dados.</p>';
+        });
+}
+
+/* Clique na linha/cartão abre a visualização (ignora links e botões) */
+document.querySelector('#tabelaLocais tbody').addEventListener('click', function(e) {
+    if (e.target.closest('a, button')) return;
+    const tr = e.target.closest('tr[id^="row-"]');
+    if (!tr) return;
+    abrirView(parseInt(tr.id.replace('row-', ''), 10));
+});
+
+/* Botão "Editar" dentro da visualização -> abre o modal de ação */
+document.getElementById('btnViewEditar').addEventListener('click', function() {
+    const id = viewIdAtual;
+    document.getElementById('modalView').addEventListener('hidden.bs.modal', function abrirAposFechar() {
+        this.removeEventListener('hidden.bs.modal', abrirAposFechar);
+        if (id != null) abrirModal(id);
+    });
+    modalView.hide();
 });
 
 /* ===== Sorting ===== */
