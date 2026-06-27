@@ -605,44 +605,95 @@ function maskCep(input) {
 maskCep(document.getElementById('editCep'));
 maskCep(document.getElementById('novoCep'));
 
-/* ===== Busca CEP — BrasilAPI ===== */
+/* ===== Busca CEP — corrida entre provedores + cache + cancelamento ===== */
+const _cepCache = {};
+let _cepAbort = null;
+let _cepEmAndamento = null;
+
+/* Normaliza texto p/ comparação: remove acentos, espaços e caixa */
+function _normTxt(s) {
+    return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+}
+
+/* Seleciona a cidade no TomSelect comparando sem acento/caixa */
+function _selecionarCidade(ts, nomeCidade) {
+    if (!ts || !nomeCidade) return false;
+    const alvo = _normTxt(nomeCidade);
+    for (const key in ts.options) {
+        if (_normTxt(ts.options[key].text) === alvo) {
+            ts.setValue(key, true);
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Unifica o formato das respostas dos provedores */
+function _normalizarRespostaCep(data, fonte) {
+    if (fonte === 'viacep') {
+        if (data.erro) throw new Error('CEP não encontrado');
+        return { street: data.logradouro, neighborhood: data.bairro, city: data.localidade };
+    }
+    return { street: data.street, neighborhood: data.neighborhood, city: data.city };  // brasilapi
+}
+
+/* Dispara ViaCEP e BrasilAPI em paralelo e usa o 1º que responder */
+function _fetchCepRapido(cep, signal) {
+    const viacep = fetch('https://viacep.com.br/ws/' + cep + '/json/', { signal })
+        .then(r => { if (!r.ok) throw new Error('viacep'); return r.json(); })
+        .then(d => _normalizarRespostaCep(d, 'viacep'));
+    const brasilapi = fetch('https://brasilapi.com.br/api/cep/v2/' + cep, { signal })
+        .then(r => { if (!r.ok) throw new Error('brasilapi'); return r.json(); })
+        .then(d => _normalizarRespostaCep(d, 'brasilapi'));
+    return Promise.any([viacep, brasilapi]);
+}
+
 function buscarCep(cepRaw, target) {
     const cep = cepRaw.replace(/\D/g, '');
     if (cep.length !== 8) return;
 
     const prefix = target === 'edit' ? 'edit' : 'novo';
     const spinner = document.getElementById(prefix === 'edit' ? 'editCepSpinner' : 'novoCepSpinner');
-    spinner.classList.remove('d-none');
+    const enderecoField = document.getElementById(prefix + 'Endereco');
+    const bairroField = document.getElementById(prefix + 'Bairro');
+    const ts = prefix === 'novo' ? tsNovoCidade : tsEditCidade;
 
-    fetch('https://brasilapi.com.br/api/cep/v2/' + cep)
-        .then(r => {
-            if (!r.ok) throw new Error('CEP não encontrado');
-            return r.json();
-        })
-        .then(data => {
-            const enderecoField = document.getElementById(prefix + (prefix === 'edit' ? 'Endereco' : 'Endereco'));
-            const bairroField = document.getElementById(prefix + (prefix === 'edit' ? 'Bairro' : 'Bairro'));
-
-            if (data.street) enderecoField.value = data.street;
-            if (data.neighborhood) bairroField.value = data.neighborhood;
-
-            if (data.city && (prefix === 'novo' ? tsNovoCidade : tsEditCidade)) {
-                const ts = prefix === 'novo' ? tsNovoCidade : tsEditCidade;
-                const opts = ts.options;
-                for (const key in opts) {
-                    if (opts[key].text && opts[key].text.toUpperCase() === data.city.toUpperCase()) {
-                        ts.setValue(key, true);
-                        break;
-                    }
-                }
-            }
+    const aplicar = (data) => {
+        if (data.street) enderecoField.value = data.street;
+        if (data.neighborhood) bairroField.value = data.neighborhood;
+        const achouCidade = _selecionarCidade(ts, data.city);
+        if (achouCidade) {
+            mostrarToast('CEP encontrado', 'Endereço e cidade preenchidos automaticamente.', 'sucesso');
+        } else if (data.city) {
+            mostrarToast('CEP encontrado', 'Endereço preenchido. Selecione a cidade "' + data.city + '" manualmente.', 'sucesso');
+        } else {
             mostrarToast('CEP encontrado', 'Endereço preenchido automaticamente.', 'sucesso');
+        }
+    };
+
+    // Cache: CEP já consultado → resposta instantânea (sem rede)
+    if (_cepCache[cep]) { aplicar(_cepCache[cep]); return; }
+    if (_cepEmAndamento === cep) return;  // evita disparo duplicado do mesmo CEP
+
+    // Cancela uma busca anterior ainda em andamento (digitação rápida)
+    if (_cepAbort) _cepAbort.abort();
+    const controller = new AbortController();
+    _cepAbort = controller;
+    _cepEmAndamento = cep;
+
+    spinner.classList.remove('d-none');
+    _fetchCepRapido(cep, controller.signal)
+        .then(data => {
+            _cepCache[cep] = data;
+            aplicar(data);
         })
         .catch(() => {
+            if (controller.signal.aborted) return;  // substituída por busca mais nova
             mostrarToast('CEP não encontrado', 'Verifique o CEP ou preencha manualmente.', 'erro');
         })
         .finally(() => {
-            spinner.classList.add('d-none');
+            if (_cepEmAndamento === cep) _cepEmAndamento = null;
+            if (!controller.signal.aborted) spinner.classList.add('d-none');
         });
 }
 
