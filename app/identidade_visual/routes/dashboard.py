@@ -153,6 +153,8 @@ def dashboard():
         pendentes=pendentes,
         custo_total=custo_total,
         municipios=municipios,
+        pode_criar=current_user.tem_permissao('identidade_visual', 'criar'),
+        pode_editar=current_user.tem_permissao('identidade_visual', 'editar'),
         pode_excluir=current_user.tem_permissao('identidade_visual', 'excluir'),
     )
 
@@ -320,7 +322,7 @@ def _validar_local(data):
 
 
 @identidade_visual_bp.route('/api/criar-local', methods=['POST'])
-@requires_permission('identidade_visual.editar')
+@requires_permission('identidade_visual.criar')
 def criar_local():
     data = request.get_json() or {}
 

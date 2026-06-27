@@ -252,9 +252,11 @@
             <p class="text-muted mb-0 d-none d-md-block" style="font-size:0.85rem;">Identidade Visual — Espaços e Salas da Cidadania</p>
         </div>
         <div class="d-flex gap-2 header-actions">
+            {% if pode_criar %}
             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovoLocal">
                 <i class="bi bi-plus-lg"></i> Novo
             </button>
+            {% endif %}
             <a href="{{ url_for('identidade_visual.exportar_excel') }}" class="btn btn-outline-success btn-sm">
                 <i class="bi bi-file-earmark-excel"></i> Exportar
             </a>
@@ -389,9 +391,15 @@
                     </td>
                     <td class="text-center">
                         <div class="d-inline-flex gap-1">
+                            {% if pode_editar %}
                             <button class="btn btn-outline-primary btn-acao" onclick="abrirModal({{ l.id }})">
                                 <i class="bi bi-pencil-square"></i> {{ 'Editar' if st == 'REALIZADO' else 'Registrar' }}
                             </button>
+                            {% else %}
+                            <button class="btn btn-outline-secondary btn-acao" onclick="abrirView({{ l.id }})">
+                                <i class="bi bi-eye"></i> Ver
+                            </button>
+                            {% endif %}
                             {% if pode_excluir %}
                             <button class="btn btn-outline-danger btn-acao btn-excluir-local"
                                     data-id="{{ l.id }}"
@@ -675,7 +683,9 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                {% if pode_editar %}
                 <button type="button" class="btn btn-primary" id="btnViewEditar"><i class="bi bi-pencil-square"></i> Editar</button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -1346,14 +1356,17 @@ document.querySelector('#tabelaLocais tbody').addEventListener('click', function
 });
 
 /* Botão "Editar" dentro da visualização -> abre o modal de ação */
-document.getElementById('btnViewEditar').addEventListener('click', function() {
-    const id = viewIdAtual;
-    document.getElementById('modalView').addEventListener('hidden.bs.modal', function abrirAposFechar() {
-        this.removeEventListener('hidden.bs.modal', abrirAposFechar);
-        if (id != null) abrirModal(id);
+const _btnViewEditar = document.getElementById('btnViewEditar');
+if (_btnViewEditar) {
+    _btnViewEditar.addEventListener('click', function() {
+        const id = viewIdAtual;
+        document.getElementById('modalView').addEventListener('hidden.bs.modal', function abrirAposFechar() {
+            this.removeEventListener('hidden.bs.modal', abrirAposFechar);
+            if (id != null) abrirModal(id);
+        });
+        modalView.hide();
     });
-    modalView.hide();
-});
+}
 
 /* ===== Sorting ===== */
 (function() {
