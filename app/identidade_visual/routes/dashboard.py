@@ -6,7 +6,7 @@ from flask import render_template, request, jsonify, send_file, current_app
 from flask_login import current_user
 from app.utils.permissions import requires_permission
 from werkzeug.utils import secure_filename
-from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import inspect as sa_inspect, func
 from app.extensions import db
 from app.models.identidade_visual import (
     IdentidadeVisualLocal, IdentidadeVisualArquivo, IdentidadeVisualLog,
@@ -45,40 +45,62 @@ def dashboard():
     status_sel = [s for s in request.args.getlist('status') if s]
     page = max(1, int(request.args.get('page', 1) or 1))
 
-    query = IdentidadeVisualLocal.query
+    # Quantidade de arquivos por local em UMA query (group by) — base para o
+    # cálculo de status sem N+1 (antes cada l.status disparava arquivos.count()).
+    contagem_arquivos = dict(
+        db.session.query(
+            IdentidadeVisualArquivo.local_id,
+            func.count(IdentidadeVisualArquivo.id),
+        ).group_by(IdentidadeVisualArquivo.local_id).all()
+    )
 
+    def _status(lid, data_acao):
+        return 'REALIZADO' if (data_acao is not None and contagem_arquivos.get(lid, 0) > 0) else 'PENDENTE'
+
+    # Conjunto FILTRADO, consulta leve (só colunas necessárias p/ ordenar/filtrar/KPI).
+    base = db.session.query(
+        IdentidadeVisualLocal.id,
+        IdentidadeVisualLocal.cidade,
+        IdentidadeVisualLocal.custo,
+        IdentidadeVisualLocal.data_acao,
+    )
     if cidades_sel:
-        query = query.filter(IdentidadeVisualLocal.cidade.in_(cidades_sel))
+        base = base.filter(IdentidadeVisualLocal.cidade.in_(cidades_sel))
     if tipos_sel:
-        query = query.filter(IdentidadeVisualLocal.tipo_local.in_(tipos_sel))
+        base = base.filter(IdentidadeVisualLocal.tipo_local.in_(tipos_sel))
     if bairros_sel:
-        query = query.filter(IdentidadeVisualLocal.bairro.in_(bairros_sel))
+        base = base.filter(IdentidadeVisualLocal.bairro.in_(bairros_sel))
 
-    query = query.order_by(IdentidadeVisualLocal.cidade)
+    registros = []
+    for lid, cidade, custo, data_acao in base.all():
+        st = _status(lid, data_acao)
+        if status_sel and st not in status_sel:
+            continue
+        registros.append({'id': lid, 'cidade': cidade, 'custo': custo, 'status': st})
 
     # Prioridade de exibição: PENDENTES primeiro, depois por cidade.
-    # status é calculado em Python (depende de data_acao + arquivos), por isso
-    # a ordenação e o filtro de status são feitos sobre a lista materializada.
-    def _ordem(l):
-        return (0 if l.status == 'PENDENTE' else 1, (l.cidade or '').lower())
+    registros.sort(key=lambda r: (0 if r['status'] == 'PENDENTE' else 1, (r['cidade'] or '').lower()))
 
-    all_filtered = query.all()
-    if status_sel:
-        all_filtered = [l for l in all_filtered if l.status in status_sel]
-    all_filtered.sort(key=_ordem)
-
-    total = len(all_filtered)
+    total = len(registros)
     total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
     page = min(page, total_pages)
-    locais = all_filtered[(page - 1) * PER_PAGE: page * PER_PAGE]
-    todos_para_kpi = all_filtered
+    page_slice = registros[(page - 1) * PER_PAGE: page * PER_PAGE]
+    page_ids = [r['id'] for r in page_slice]
 
-    realizados = sum(1 for l in todos_para_kpi if l.status == 'REALIZADO')
+    realizados = sum(1 for r in registros if r['status'] == 'REALIZADO')
     pendentes = total - realizados
-    custo_total = sum(float(l.custo) for l in todos_para_kpi if l.custo)
+    custo_total = sum(float(r['custo']) for r in registros if r['custo'])
+
+    # Carrega APENAS os objetos completos da página, preservando a ordem.
+    objs = {}
+    if page_ids:
+        objs = {l.id: l for l in IdentidadeVisualLocal.query.filter(
+            IdentidadeVisualLocal.id.in_(page_ids)).all()}
+    locais = [objs[i] for i in page_ids if i in objs]
+    status_por_local = {r['id']: r['status'] for r in page_slice}
+    qtd_arquivos = {i: contagem_arquivos.get(i, 0) for i in page_ids}
 
     # ── Contagens globais para os badges dos filtros (todos os registros) ──
-    # Uma query leve por colunas + 1 query distinta de arquivos evita N+1.
     rows = db.session.query(
         IdentidadeVisualLocal.id,
         IdentidadeVisualLocal.cidade,
@@ -86,9 +108,6 @@ def dashboard():
         IdentidadeVisualLocal.bairro,
         IdentidadeVisualLocal.data_acao,
     ).all()
-    ids_com_arquivo = {
-        r[0] for r in db.session.query(IdentidadeVisualArquivo.local_id).distinct()
-    }
 
     contagem_cidades, contagem_tipos, contagem_bairros = {}, {}, {}
     contagem_status = {'PENDENTE': 0, 'REALIZADO': 0}
@@ -99,8 +118,7 @@ def dashboard():
             contagem_tipos[rtipo] = contagem_tipos.get(rtipo, 0) + 1
         if rbairro:
             contagem_bairros[rbairro] = contagem_bairros.get(rbairro, 0) + 1
-        st = 'REALIZADO' if (rdata is not None and rid in ids_com_arquivo) else 'PENDENTE'
-        contagem_status[st] += 1
+        contagem_status[_status(rid, rdata)] += 1
 
     cidades = sorted(contagem_cidades.keys())
     tipos_local_existentes = sorted(contagem_tipos.keys())
@@ -114,6 +132,8 @@ def dashboard():
     return render_template(
         'identidade_visual/dashboard.html',
         locais=locais,
+        status_por_local=status_por_local,
+        qtd_arquivos=qtd_arquivos,
         cidades=cidades,
         tipos_local=tipos_local_existentes,
         tipos_local_opcoes=TIPOS_LOCAL,
@@ -399,6 +419,14 @@ def exportar_excel():
 
     locais = IdentidadeVisualLocal.query.order_by(IdentidadeVisualLocal.cidade).all()
 
+    # Quantidade de arquivos por local em UMA query — evita N+1 (status + count).
+    contagem_arquivos = dict(
+        db.session.query(
+            IdentidadeVisualArquivo.local_id,
+            func.count(IdentidadeVisualArquivo.id),
+        ).group_by(IdentidadeVisualArquivo.local_id).all()
+    )
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Identidade Visual'
@@ -419,16 +447,18 @@ def exportar_excel():
         cell.border = thin_border
 
     for row_idx, l in enumerate(locais, 2):
+        qtd = contagem_arquivos.get(l.id, 0)
+        status = 'REALIZADO' if (l.data_acao is not None and qtd > 0) else 'PENDENTE'
         valores = [
             l.cidade,
             l.tipo_local,
             l.endereco or '',
             l.bairro or '',
             l.cep or '',
-            l.status,
+            status,
             float(l.custo) if l.custo else None,
             l.data_acao.strftime('%d/%m/%Y %H:%M') if l.data_acao else '',
-            l.arquivos.count(),
+            qtd,
         ]
         for col, v in enumerate(valores, 1):
             cell = ws.cell(row=row_idx, column=col, value=v)

@@ -14,6 +14,7 @@
 .iv-table td { vertical-align: middle; font-size: 0.875rem; }
 .badge-realizado { background-color: #198754; color: #fff; }
 .badge-pendente { background-color: #ffc107; color: #000; }
+.iv-arq-badge { display: inline-flex; align-items: center; gap: 2px; font-size: 0.72rem; color: var(--color-text-tertiary, #6c757d); background: var(--color-surface-secondary, #f1f3f5); border-radius: 20px; padding: 1px 7px 1px 5px; margin-left: 4px; vertical-align: middle; }
 .btn-acao { padding: 0.25rem 0.65rem; font-size: 0.8rem; }
 .iv-stats { display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
 .iv-stat-card { flex: 1; min-width: 120px; background: var(--color-surface); border: 1px solid var(--color-surface-border); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; text-align: center; }
@@ -120,48 +121,117 @@
 
 /* ===== Cards mobile — tabela vira cards ===== */
 @media (max-width: 767.98px) {
+    .container-fluid { padding-left: 0.75rem; padding-right: 0.75rem; }
+
+    /* KPIs: grid 2x2 compacto */
     .iv-stats { gap: 0.5rem; }
-    .iv-stat-card { min-width: 0; flex: 1 1 45%; padding: 0.75rem 0.5rem; }
-    .iv-stat-card .stat-value { font-size: 1.2rem; }
+    .iv-stat-card { min-width: 0; flex: 1 1 calc(50% - 0.25rem); padding: 0.7rem 0.5rem; }
+    .iv-stat-card .stat-value { font-size: 1.25rem; }
     .iv-stat-custo .stat-value { font-size: 1rem; }
+    .iv-stat-card .stat-label { font-size: 0.68rem; }
 
+    /* Header: título + ações empilhados, botões lado a lado preenchendo a largura */
+    .header-actions { width: 100%; gap: 0.5rem; }
+    .header-actions .btn { flex: 1; padding: 0.55rem 0.5rem; }
+
+    /* Filtros: 2 por linha, dropdown ocupa toda a largura da célula */
+    .iv-filters { padding: 0.85rem; }
     .iv-filters .row { gap: 0.5rem; }
+    .iv-filters .col-auto { flex: 1 1 calc(50% - 0.25rem); }
+    .iv-filters .col-auto .dropdown,
+    .iv-filters .col-auto .dropdown-toggle { width: 100%; }
+    .iv-filters .col-auto .dropdown-menu { width: 100%; }
+    .iv-filters .col-auto:last-child { flex-basis: 100%; }
+    .iv-filters .col-auto:last-child .btn { padding: 0.55rem 0.5rem; }
+    .iv-filters .col-auto:last-child .btn[type="submit"] { flex: 1; }
 
+    /* Tabela vira cartões */
     .iv-table thead { display: none; }
     .iv-table tbody tr {
         display: block;
-        border: 1px solid var(--color-surface-border, #dee2e6);
-        border-radius: 10px;
-        margin-bottom: 0.75rem;
-        padding: 0.75rem 1rem;
+        position: relative;
+        border: 1px solid var(--color-surface-border, #e3e6ea);
+        border-radius: 14px;
+        margin-bottom: 0.85rem;
+        padding: 0.9rem 1rem 0.85rem;
         background: var(--color-surface, #fff);
+        box-shadow: 0 2px 8px rgba(0,0,0,.05);
     }
     .iv-table tbody td {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 0.3rem 0;
+        padding: 0.28rem 0;
         border: none;
-        font-size: 0.82rem;
+        font-size: 0.85rem;
+        gap: 0.75rem;
     }
     .iv-table tbody td::before {
         content: attr(data-label);
         font-weight: 600;
-        font-size: 0.72rem;
+        font-size: 0.7rem;
         text-transform: uppercase;
+        letter-spacing: 0.02em;
         color: var(--color-text-tertiary, #6c757d);
-        margin-right: 0.75rem;
         flex-shrink: 0;
     }
-    .iv-table tbody td:last-child { justify-content: flex-end; margin-top: 0.25rem; }
+    .iv-table tbody td > * { text-align: right; }
+
+    /* Cidade = título do cartão */
+    .iv-table tbody td[data-label="Cidade"] {
+        font-weight: 700;
+        font-size: 1.05rem;
+        color: var(--color-text-primary, #212529);
+        padding: 0 4.5rem 0.1rem 0;   /* espaço p/ o badge de status no canto */
+        display: block;
+    }
+    .iv-table tbody td[data-label="Cidade"]::before { display: none; }
+
+    /* Tipo = subtítulo */
+    .iv-table tbody td[data-label="Tipo"] {
+        display: block;
+        text-align: left;
+        color: var(--color-primary, #0891b2);
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        padding: 0 0 0.55rem;
+        margin-bottom: 0.35rem;
+        border-bottom: 1px solid var(--color-surface-border, #eef0f2);
+    }
+    .iv-table tbody td[data-label="Tipo"]::before { display: none; }
+
+    /* Status flutua no canto superior direito do cartão */
+    .iv-table tbody td[data-label="Status"] {
+        position: absolute;
+        top: 0.85rem;
+        right: 0.9rem;
+        padding: 0;
+        justify-content: flex-end;
+    }
+    .iv-table tbody td[data-label="Status"]::before { display: none; }
+
+    /* Ação: botões grandes, lado a lado preenchendo a largura */
+    .iv-table tbody td:last-child {
+        margin-top: 0.6rem;
+        padding-top: 0.6rem;
+        border-top: 1px solid var(--color-surface-border, #eef0f2);
+    }
     .iv-table tbody td:last-child::before { display: none; }
+    .iv-table tbody td:last-child .d-inline-flex { width: 100%; gap: 0.5rem; }
+    .iv-table tbody td:last-child .btn-acao { flex: 1; padding: 0.5rem; font-size: 0.85rem; }
+    .iv-table tbody td:last-child .btn-excluir-local { flex: 0 0 auto; min-width: 46px; }
+
+    /* Linha "nenhum registro" não deve virar cartão estranho */
+    .iv-table tbody tr td[colspan] { display: block; padding: 1.25rem; text-align: center; }
+    .iv-table tbody tr td[colspan]::before { display: none; }
 
     .modal-iv .modal-body { padding: 1rem; }
     .modal-iv .modal-header { padding: 1rem; }
     .modal-iv .modal-footer { padding: 0.75rem 1rem; }
 
     .page-info { font-size: 0.75rem !important; }
-    .header-actions { flex-direction: column; gap: 0.5rem; }
 }
 </style>
 {% endblock %}
@@ -275,15 +345,22 @@
             </thead>
             <tbody>
                 {% for l in locais %}
+                {% set st = status_por_local[l.id] %}
+                {% set n_arq = qtd_arquivos[l.id] %}
                 <tr id="row-{{ l.id }}" data-custo="{{ l.custo or 0 }}" data-dataacao="{{ l.data_acao.strftime('%Y%m%d%H%M') if l.data_acao else '' }}">
                     <td data-label="Cidade">{{ l.cidade }}</td>
                     <td data-label="Tipo">{{ l.tipo_local }}</td>
                     <td data-label="Endereço">{{ l.endereco or '—' }}</td>
                     <td data-label="Bairro">{{ l.bairro or '—' }}</td>
                     <td data-label="Status">
-                        <span class="badge {{ 'badge-realizado' if l.status == 'REALIZADO' else 'badge-pendente' }}">
-                            {{ l.status }}
+                        <span class="badge {{ 'badge-realizado' if st == 'REALIZADO' else 'badge-pendente' }}">
+                            {{ st }}
                         </span>
+                        {% if n_arq %}
+                        <span class="iv-arq-badge" title="{{ n_arq }} arquivo(s) anexado(s)">
+                            <i class="bi bi-paperclip"></i>{{ n_arq }}
+                        </span>
+                        {% endif %}
                     </td>
                     <td data-label="Custo">
                         {% if l.custo %}
@@ -298,7 +375,7 @@
                     <td class="text-center">
                         <div class="d-inline-flex gap-1">
                             <button class="btn btn-outline-primary btn-acao" onclick="abrirModal({{ l.id }})">
-                                <i class="bi bi-pencil-square"></i> {{ 'Editar' if l.status == 'REALIZADO' else 'Registrar' }}
+                                <i class="bi bi-pencil-square"></i> {{ 'Editar' if st == 'REALIZADO' else 'Registrar' }}
                             </button>
                             {% if pode_excluir %}
                             <button class="btn btn-outline-danger btn-acao btn-excluir-local"
