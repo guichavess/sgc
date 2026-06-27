@@ -633,6 +633,16 @@ const modalAcaoEl = document.getElementById('modalAcao');
 const modal = new bootstrap.Modal(modalAcaoEl);
 const modalNovoLocal = new bootstrap.Modal(document.getElementById('modalNovoLocal'));
 
+/* A11y: tira o foco de dentro do modal ANTES do aria-hidden ser aplicado,
+   evitando o aviso "Blocked aria-hidden on an element with focused descendant". */
+document.querySelectorAll('.modal-iv').forEach(function(m) {
+    m.addEventListener('hide.bs.modal', function() {
+        if (document.activeElement && m.contains(document.activeElement)) {
+            document.activeElement.blur();
+        }
+    });
+});
+
 /* ===== Toast ===== */
 let toastTimer = null;
 function mostrarToast(titulo, msg, tipo) {
