@@ -61,6 +61,22 @@ class TestLimiteTamanho:
             assert db_session.query(IdentidadeVisualArquivo).filter_by(local_id=local.id).count() == 1
 
 
+class TestExtensoesAceitas:
+
+    def test_png_e_webp_sao_aceitos(self, logged_client, db_session, app, monkeypatch, tmp_path):
+        monkeypatch.setattr(iv_dashboard, 'UPLOAD_FOLDER', str(tmp_path))
+        with app.app_context():
+            for ext in ('png', 'webp'):
+                local = _criar_local(db_session)
+                resp = logged_client.post(f'/identidade-visual/api/salvar-acao/{local.id}', data={
+                    'data_acao': '2026-01-01T10:00',
+                    'arquivos': (io.BytesIO(b'abc'), f'foto.{ext}'),
+                }, content_type='multipart/form-data')
+                assert resp.status_code == 200, ext
+                arq = db_session.query(IdentidadeVisualArquivo).filter_by(local_id=local.id).first()
+                assert arq.tipo == ext
+
+
 class TestNomeArquivoRobusto:
 
     def test_nome_sem_ascii_nao_quebra(self, logged_client, db_session, app, monkeypatch, tmp_path):

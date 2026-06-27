@@ -15,7 +15,7 @@ from app.models.identidade_visual import (
 from app.identidade_visual.routes import identidade_visual_bp
 
 UPLOAD_FOLDER = os.path.join('app', 'static', 'uploads', 'identidade_visual')
-ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'heic'}
+ALLOWED_EXTENSIONS = {'pdf', 'jpg', 'jpeg', 'heic', 'png', 'webp'}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB por arquivo (mantenha em sync com MAX_FOTO_MB no template)
 PER_PAGE = 15
 
