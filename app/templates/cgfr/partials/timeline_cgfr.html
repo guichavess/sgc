@@ -48,6 +48,17 @@
                 </div>
                 {% endif %}
 
+                {# Doc extra CGFR (idSerie 3771) — basta este OU o 3639 p/ concluir a etapa #}
+                {% if loop.index == 2 and mov_cgfr_extra %}
+                <div class="mt-1">
+                    <a href="{{ mov_cgfr_extra.link_acesso }}" target="_blank"
+                       class="text-decoration-none d-inline-block"
+                       style="font-size: 0.72rem; color: #0d6efd;">
+                        <i class="bi bi-file-earmark-plus me-1"></i>{{ mov_cgfr_extra.nome }}
+                    </a>
+                </div>
+                {% endif %}
+
                 {# Link NR na etapa SEFAZ - UGGP (3a etapa) #}
                 {% if loop.index == 3 and mov_nr %}
                 <div class="mt-2">

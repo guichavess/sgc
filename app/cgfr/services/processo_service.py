@@ -528,14 +528,25 @@ def obter_timeline_acompanhamento(protocolo):
 
     # Separar documentos por IdSerie
     doc_cgfr = next((d for d in docs if str(d.id_serie) == SerieDocumentoCGFR.CGFR_DESPACHO), None)
+    doc_cgfr_extra = next(
+        (d for d in docs if str(d.id_serie) == SerieDocumentoCGFR.CGFR_DESPACHO_EXTRA), None
+    )
     doc_sefaz = next((d for d in docs if str(d.id_serie) == SerieDocumentoCGFR.SEFAZ_UGGP), None)
     doc_nr = next((d for d in docs if str(d.id_serie) == SerieDocumentoCGFR.NOTA_RESERVA), None)
     doc_contrato = next((d for d in docs if str(d.id_serie) == SerieDocumentoCGFR.CONTRATO), None)
 
     # Datas
     data_envio = _parse_date(processo.tramitado_sead_cgfr)
-    # Etapa CGFR usa "Data Receb. CGFR" do processo, NAO a data do documento 3639
+    # Etapa CGFR: basta um dos sinais (data_recebido_cgfr do processo, doc 3639 ou doc 3771).
+    # Prioriza data_recebido_cgfr; se ausente, cai na data do doc mais antigo dentre 3639/3771.
     data_cgfr = _parse_date(processo.data_recebido_cgfr) if processo.data_recebido_cgfr else None
+    if not data_cgfr:
+        candidatas_cgfr = [
+            _parse_date(d.data) for d in (doc_cgfr, doc_cgfr_extra) if d is not None
+        ]
+        candidatas_cgfr = [d for d in candidatas_cgfr if d is not None]
+        if candidatas_cgfr:
+            data_cgfr = min(candidatas_cgfr)
     data_sefaz = _parse_date(doc_sefaz.data) if doc_sefaz else None
     data_nr = _parse_date(doc_nr.data) if doc_nr else None
     data_contrato = _parse_date(doc_contrato.data) if doc_contrato else None
@@ -552,6 +563,15 @@ def obter_timeline_acompanhamento(protocolo):
             'nome': doc_cgfr.serie_nome or 'SEFAZ: CGFR - Despacho',
             'link_acesso': doc_cgfr.link_acesso or '',
             'numero': doc_cgfr.numero or doc_cgfr.documento_formatado or '',
+        }
+
+    # Montar CGFR doc extra info (doc 3771) — exibido junto do 3639 na etapa CGFR
+    mov_cgfr_extra = None
+    if doc_cgfr_extra:
+        mov_cgfr_extra = {
+            'nome': doc_cgfr_extra.serie_nome or 'SEFAZ: CGFR - Documento Extra',
+            'link_acesso': doc_cgfr_extra.link_acesso or '',
+            'numero': doc_cgfr_extra.numero or doc_cgfr_extra.documento_formatado or '',
         }
 
     # Montar NR info
@@ -618,6 +638,7 @@ def obter_timeline_acompanhamento(protocolo):
         'processo': processo_dict,
         'timeline_data': timeline_data,
         'mov_cgfr': mov_cgfr,
+        'mov_cgfr_extra': mov_cgfr_extra,
         'mov_nr': mov_nr,
         'tem_orcamento': tem_orcamento,
     }
@@ -638,8 +659,10 @@ def _enrich_etapa_atual(records):
         return
 
     # Batch query: buscar id_serie distintos por protocolo
+    # Obs.: doc 3771 é sinônimo de 3639 para efeito da etapa CGFR (basta um dos dois).
     etapa_series = {
         SerieDocumentoCGFR.CGFR_DESPACHO: 2,
+        SerieDocumentoCGFR.CGFR_DESPACHO_EXTRA: 2,
         SerieDocumentoCGFR.SEFAZ_UGGP: 3,
         SerieDocumentoCGFR.CONTRATO: 4,
     }

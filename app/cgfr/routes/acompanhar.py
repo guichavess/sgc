@@ -185,6 +185,7 @@ def acompanhar(protocolo):
         processo=dados['processo'],
         timeline_data=dados['timeline_data'],
         mov_cgfr=dados['mov_cgfr'],
+        mov_cgfr_extra=dados.get('mov_cgfr_extra'),
         mov_nr=dados['mov_nr'],
         tem_orcamento=dados['tem_orcamento'],
     )

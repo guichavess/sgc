@@ -12,6 +12,12 @@
         animation: spin-sync-anim 1.2s linear infinite;
         display: inline-block;
     }
+    #tabelaProcessos mark.cgfr-hl {
+        background: #fff3a3;
+        color: inherit;
+        padding: 0 1px;
+        border-radius: 2px;
+    }
 </style>
 <div class="container-fluid py-4">
 
@@ -297,6 +303,8 @@ window.cgfrFilterOptions = {{ filter_options|tojson }};
 $(document).ready(function() {
     var dataTable;
     var searchTerm = '';
+    var searchTokens = [];      /* tokens normalizados p/ filtro */
+    var searchRegexes = [];     /* regex accent-insensitive p/ highlight */
     var statusFilter = 'prioritarios';
     var etapaFilter = '';
     var showOnlyEdited = false;
@@ -304,6 +312,132 @@ $(document).ready(function() {
     var activeColumnFilters = {};
     var reservaFilter = '';
     var prioridadeFilter = '';
+
+    /* ===== Normalização da busca — usada tanto no filtro quanto no highlight ===== */
+    /* Retira acentos (NFD + strip marks), lowercase, remove pontuação típica
+       de código de processo (.,-/()) e colapsa espaços. Assim "acao" bate com
+       "Ação" e "00002123456" bate com "00002.123456/2025-11". */
+    function normalizeSearch(s) {
+        if (s == null || s === '') return '';
+        return String(s)
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .toLowerCase()
+            .replace(/[.\/\-()]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    function tokenizeSearch(s) {
+        var n = normalizeSearch(s);
+        if (!n) return [];
+        return n.split(' ').filter(function(t) { return t.length > 0; });
+    }
+    /* Constrói regex accent-insensitive para destacar o token no texto original */
+    var _accentClass = {
+        'a': '[aáàâãäå]', 'e': '[eéèêë]', 'i': '[iíìîï]',
+        'o': '[oóòôõö]', 'u': '[uúùûü]', 'c': '[cç]', 'n': '[nñ]'
+    };
+    function buildAccentRegex(token) {
+        if (!token) return null;
+        /* Não destacamos tokens muito curtos (1 char) — evita ruído visual */
+        if (token.length < 2) return null;
+        var pattern = '';
+        for (var i = 0; i < token.length; i++) {
+            var ch = token[i];
+            if (_accentClass[ch]) {
+                pattern += _accentClass[ch];
+            } else if (/[a-z0-9]/.test(ch)) {
+                pattern += ch;
+            } else {
+                /* pontuação/espaço no token normalizado — improvável, pular */
+                pattern += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+        }
+        try { return new RegExp(pattern, 'gi'); } catch (e) { return null; }
+    }
+
+    /* Aplica <mark class="cgfr-hl"> em text nodes das células que casam com
+       algum dos tokens da busca. Preserva HTML original (links, badges) porque
+       só toca text nodes fora de <mark>/<script>/<style>. Idempotente: limpa
+       destaques anteriores antes de aplicar. */
+    function applyHighlight() {
+        var tbody = document.querySelector('#tabelaProcessos tbody');
+        if (!tbody) return;
+
+        /* Limpa marks antigos */
+        var oldMarks = tbody.querySelectorAll('mark.cgfr-hl');
+        for (var i = 0; i < oldMarks.length; i++) {
+            var m = oldMarks[i];
+            var parent = m.parentNode;
+            while (m.firstChild) parent.insertBefore(m.firstChild, m);
+            parent.removeChild(m);
+            parent.normalize();
+        }
+
+        if (!searchRegexes.length) return;
+
+        /* Coleta text nodes candidatos */
+        var walker = document.createTreeWalker(tbody, NodeFilter.SHOW_TEXT, {
+            acceptNode: function(n) {
+                var p = n.parentNode;
+                if (!p) return NodeFilter.FILTER_REJECT;
+                var tag = p.tagName;
+                if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') {
+                    return NodeFilter.FILTER_REJECT;
+                }
+                if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        });
+        var nodes = [];
+        var node;
+        while ((node = walker.nextNode())) nodes.push(node);
+
+        nodes.forEach(function(n) {
+            var text = n.nodeValue;
+            /* Coleta todas as posições de match para todos os tokens */
+            var ranges = [];
+            for (var r = 0; r < searchRegexes.length; r++) {
+                var re = searchRegexes[r];
+                re.lastIndex = 0;
+                var m;
+                while ((m = re.exec(text)) !== null) {
+                    if (m[0].length === 0) { re.lastIndex++; continue; }
+                    ranges.push({ start: m.index, end: m.index + m[0].length });
+                }
+            }
+            if (!ranges.length) return;
+
+            /* Merge overlapping ranges */
+            ranges.sort(function(a, b) { return a.start - b.start; });
+            var merged = [ranges[0]];
+            for (var k = 1; k < ranges.length; k++) {
+                var prev = merged[merged.length - 1];
+                if (ranges[k].start <= prev.end) {
+                    if (ranges[k].end > prev.end) prev.end = ranges[k].end;
+                } else {
+                    merged.push(ranges[k]);
+                }
+            }
+
+            /* Substitui o text node por fragmentos com <mark> nos ranges */
+            var frag = document.createDocumentFragment();
+            var pos = 0;
+            merged.forEach(function(rng) {
+                if (rng.start > pos) {
+                    frag.appendChild(document.createTextNode(text.substring(pos, rng.start)));
+                }
+                var mark = document.createElement('mark');
+                mark.className = 'cgfr-hl';
+                mark.appendChild(document.createTextNode(text.substring(rng.start, rng.end)));
+                frag.appendChild(mark);
+                pos = rng.end;
+            });
+            if (pos < text.length) {
+                frag.appendChild(document.createTextNode(text.substring(pos)));
+            }
+            n.parentNode.replaceChild(frag, n);
+        });
+    }
 
     initDataTable();
     initRadioFilters();
@@ -476,17 +610,27 @@ $(document).ready(function() {
             if (prioridadeFilter && (rowData.nivel_prioridade || '') !== prioridadeFilter) return false;
             /* Etapa */
             if (etapaFilter && (rowData.etapa_atual || '') !== etapaFilter) return false;
-            /* Busca textual client-side */
-            if (searchTerm) {
-                var q = searchTerm.toLowerCase();
-                var haystack = (
-                    (rowData.processo_formatado || '') + ' ' +
-                    (rowData.objeto_do_pedido || '') + ' ' +
-                    (rowData.fornecedor || '') + ' ' +
-                    (rowData.especificacao || '') + ' ' +
-                    (rowData.tipo_processo || '')
-                ).toLowerCase();
-                if (haystack.indexOf(q) === -1) return false;
+            /* Busca textual client-side — tokenizada + accent/punct-insensitive.
+               Todos os tokens precisam aparecer no haystack (AND). */
+            if (searchTokens.length > 0) {
+                var haystack = normalizeSearch([
+                    rowData.processo_formatado,
+                    rowData.objeto_do_pedido,
+                    rowData.fornecedor,
+                    rowData.especificacao,
+                    rowData.tipo_processo,
+                    rowData.natureza_despesa,
+                    rowData.natureza_codigo,
+                    rowData.deliberacao,
+                    rowData.acao,
+                    rowData.tipo_despesa,
+                    rowData.nivel_prioridade,
+                    rowData.valor_solicitado_fmt,
+                    rowData.valor_acordado_fmt
+                ].filter(function(v){ return v != null && v !== ''; }).join(' '));
+                for (var ti = 0; ti < searchTokens.length; ti++) {
+                    if (haystack.indexOf(searchTokens[ti]) === -1) return false;
+                }
             }
             /* Filtros por coluna */
             for (var col in activeColumnFilters) {
@@ -503,6 +647,7 @@ $(document).ready(function() {
                 var el = this;
                 if (!bootstrap.Tooltip.getInstance(el)) new bootstrap.Tooltip(el, { trigger: 'hover', html: false });
             });
+            applyHighlight();
         });
 
         window.cgfrTable = dataTable;
@@ -569,10 +714,18 @@ $(document).ready(function() {
 
     function initSearchDebounce() {
         var timer;
-        $('#searchGlobal').on('keyup', function() {
+        $('#searchGlobal').on('input', function() {
             var self = this;
             clearTimeout(timer);
-            timer = setTimeout(function() { searchTerm = self.value.trim(); updateClearVis(); drawLocal(); }, 200);
+            timer = setTimeout(function() {
+                searchTerm = self.value.trim();
+                searchTokens = tokenizeSearch(searchTerm);
+                searchRegexes = searchTokens
+                    .map(buildAccentRegex)
+                    .filter(function(r) { return r !== null; });
+                updateClearVis();
+                drawLocal();
+            }, 150);
         });
     }
 
@@ -731,7 +884,7 @@ $(document).ready(function() {
             $('#filterReserva').val(''); reservaFilter = '';
             $('#filterPrioridade').val(''); prioridadeFilter = '';
             $('#filterEtapa').val(''); etapaFilter = '';
-            $('#searchGlobal').val(''); searchTerm = '';
+            $('#searchGlobal').val(''); searchTerm = ''; searchTokens = []; searchRegexes = [];
             $('#filterAll').prop('checked', true); statusFilter = 'all';
             $('#tableTitle').text('Todos os Processos');
             activeColumnFilters = {};
