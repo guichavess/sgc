@@ -14,6 +14,12 @@ __pycache__/
 flask_session/
 instance/
 
+# Uploads de usuario (criados em runtime; pasta recriada no servidor no deploy)
+app/static/uploads/
+
+# Scripts de debug avulsos
+tests/debug_login.py
+
 # Dados e planilhas (nao versionar)
 *.xlsx
 *.xls

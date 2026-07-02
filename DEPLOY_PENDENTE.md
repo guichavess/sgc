@@ -170,6 +170,36 @@
     - **Gestor / Full**: `visualizar` + `editar` + `excluir` (tudo + exclusão). `is_admin` tem tudo.
   - Observação: nenhuma dependência Python nova.
 
+### Categoria "Veículo" — Identidade Visual (2026-07-02)
+
+- [ ] **Adicionar colunas de veículo em `identidade_visual_locais` e tornar `cidade` opcional**
+  - Contexto: o módulo passou a aceitar registros do tipo **Veículo** (carros adesivados),
+    além dos locais físicos (Espaço/Sala da Cidadania). Um veículo não tem cidade/endereço:
+    o usuário informa só a **placa** e os dados (tipo do veículo, marca/modelo e cor) são
+    buscados automaticamente no gateway DETRAN-SEAD. As colunas novas são `deferred` no
+    model (ficam fora do SELECT da listagem), então a listagem continua funcionando antes
+    do ALTER; mas **criar/editar veículos** só funciona após rodar o SQL abaixo. Também é
+    necessário tornar `cidade` NULL (veículo não preenche cidade).
+  - SQL (executar no Workbench — aplicar no localhost `sgc` e em produção):
+  ```sql
+  ALTER TABLE identidade_visual_locais
+    MODIFY COLUMN cidade      VARCHAR(100) NULL,
+    ADD COLUMN placa          VARCHAR(10)  NULL,
+    ADD COLUMN tipo_veiculo   VARCHAR(100) NULL,
+    ADD COLUMN marca_modelo   VARCHAR(200) NULL,
+    ADD COLUMN cor            VARCHAR(60)  NULL;
+  ```
+  - Config/ambiente (`.env` de produção): adicionar as variáveis do gateway DETRAN
+    (a chave NÃO vai para o front-end — a consulta é feita no servidor):
+    ```
+    DETRAN_API_URL=https://pidigital.pi.gov.br/api/api-gateway-detran-sead
+    DETRAN_API_KEY=033f58e8-e2d8-4533-8004-ae3ca3ad3105
+    ```
+  - Endpoint usado: `GET {DETRAN_API_URL}/sead/renavam/consulta-veiculo-local?placa=XXX`
+    com header `X-Api-Key`. Só `tipoVeiculo/marcaModelo/cor/placa` são persistidos; os
+    dados do proprietário retornados pela API (nome/CPF/endereço) são descartados.
+  - Observação: nenhuma dependência Python nova (`requests`/`urllib3` já usados).
+
 ### Hierarquia de Autorização — Diárias (2026-05-05)
 
 - [ ] **Definir `cargo_gestao = 'secretario_exercicio'` para Bruno Gomes** ⚠️ BLOQUEADO

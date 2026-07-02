@@ -147,6 +147,13 @@
  box-shadow: 0 6px 16px rgba(8, 145, 178, 0.25);
  }
 
+ /* Logo (imagem) dentro do tile do card — a arte é branca, aparece sobre o gradiente ciano */
+ .module-logo-img {
+ width: 46px;
+ height: 46px;
+ object-fit: contain;
+ }
+
  .user-greeting {
  text-align: center;
  margin-bottom: 2rem;
@@ -281,7 +288,7 @@
  <div class="col-md-4">
  <a href="{{ url_for('identidade_visual.dashboard') }}" class="module-card module-card-identidade-visual">
  <div class="module-icon module-icon-identidade-visual">
- <i class="bi bi-palette"></i>
+ <img src="{{ url_for('static', filename='img/logo-identidade-visual.png') }}" alt="Identidade Visual" class="module-logo-img">
  </div>
  <h3 class="module-name">Identidade Visual</h3>
  <p class="module-description">

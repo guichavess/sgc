@@ -77,6 +77,13 @@ class Config:
     SGA_API_HASHKEY = os.getenv('SGA_API_HASHKEY', '')
 
     # ==========================================================================
+    # DETRAN / Gateway SEAD (Identidade Visual - consulta de veículo por placa)
+    # ==========================================================================
+    DETRAN_API_URL = os.getenv('DETRAN_API_URL',
+                               'https://pidigital.pi.gov.br/api/api-gateway-detran-sead')
+    DETRAN_API_KEY = os.getenv('DETRAN_API_KEY', '')
+
+    # ==========================================================================
     # TRINO DATA LAKE (CGFR - leitura do Data Lake SEI)
     # ==========================================================================
     TRINO_HOST = os.getenv('TRINO_HOST', '10.0.122.75')

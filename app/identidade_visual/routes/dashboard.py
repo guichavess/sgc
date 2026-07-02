@@ -10,8 +10,9 @@ from sqlalchemy import inspect as sa_inspect, func
 from app.extensions import db
 from app.models.identidade_visual import (
     IdentidadeVisualLocal, IdentidadeVisualArquivo, IdentidadeVisualLog,
-    MunicipioPiaui, TIPOS_LOCAL,
+    MunicipioPiaui, TIPOS_LOCAL, TIPO_LOCAL_VEICULO,
 )
+from app.services.detran_service import consultar_veiculo, normalizar_placa, DetranError
 from app.identidade_visual.routes import identidade_visual_bp
 
 UPLOAD_FOLDER = os.path.join('app', 'static', 'uploads', 'identidade_visual')
@@ -33,6 +34,16 @@ def _registrar_log(acao, descricao, local_id=None):
         usuario_id=getattr(current_user, 'id', None),
         usuario_nome=getattr(current_user, 'nome', None),
     ))
+
+
+def _rotulo(local):
+    """Rótulo curto de um registro para logs/descrições.
+
+    Veículo → 'Veículo PLACA'; local físico → nome da cidade.
+    """
+    if local.is_veiculo:
+        return f'Veículo {local.placa or ""}'.strip()
+    return local.cidade or ''
 
 
 @identidade_visual_bp.route('/')
@@ -58,12 +69,13 @@ def dashboard():
         return 'REALIZADO' if (data_acao is not None and contagem_arquivos.get(lid, 0) > 0) else 'PENDENTE'
 
     # Conjunto FILTRADO, consulta leve (só colunas necessárias p/ ordenar/filtrar/KPI).
+    # A aba "Fachadas" mostra apenas locais físicos — veículos têm aba própria.
     base = db.session.query(
         IdentidadeVisualLocal.id,
         IdentidadeVisualLocal.cidade,
         IdentidadeVisualLocal.custo,
         IdentidadeVisualLocal.data_acao,
-    )
+    ).filter(IdentidadeVisualLocal.tipo_local != TIPO_LOCAL_VEICULO)
     if cidades_sel:
         base = base.filter(IdentidadeVisualLocal.cidade.in_(cidades_sel))
     if tipos_sel:
@@ -100,14 +112,14 @@ def dashboard():
     status_por_local = {r['id']: r['status'] for r in page_slice}
     qtd_arquivos = {i: contagem_arquivos.get(i, 0) for i in page_ids}
 
-    # ── Contagens globais para os badges dos filtros (todos os registros) ──
+    # ── Contagens globais para os badges dos filtros (só locais físicos) ──
     rows = db.session.query(
         IdentidadeVisualLocal.id,
         IdentidadeVisualLocal.cidade,
         IdentidadeVisualLocal.tipo_local,
         IdentidadeVisualLocal.bairro,
         IdentidadeVisualLocal.data_acao,
-    ).all()
+    ).filter(IdentidadeVisualLocal.tipo_local != TIPO_LOCAL_VEICULO).all()
 
     contagem_cidades, contagem_tipos, contagem_bairros = {}, {}, {}
     contagem_status = {'PENDENTE': 0, 'REALIZADO': 0}
@@ -124,20 +136,138 @@ def dashboard():
     tipos_local_existentes = sorted(contagem_tipos.keys())
     bairros = sorted(contagem_bairros.keys())
 
+    # ── KPIs GERAIS + detalhamento por Tipo Local (TODOS os registros) ──
+    # Cards gerais acima das abas; clique expande a quebra por tipo. Query leve
+    # (colunas não-deferred) → segura antes do ALTER (sem veículos, só físicos).
+    todos_kpi = db.session.query(
+        IdentidadeVisualLocal.id,
+        IdentidadeVisualLocal.tipo_local,
+        IdentidadeVisualLocal.custo,
+        IdentidadeVisualLocal.data_acao,
+    ).all()
+
+    tipos_presentes = []
+    for _kid, ktipo, _kc, _kd in todos_kpi:
+        if ktipo and ktipo not in tipos_presentes:
+            tipos_presentes.append(ktipo)
+    # Ordem: os tipos conhecidos (Veículo, Espaço, Sala) e depois eventuais legados.
+    kpi_tipos = list(TIPOS_LOCAL) + [t for t in tipos_presentes if t not in TIPOS_LOCAL]
+
+    total_por_tipo = {t: 0 for t in kpi_tipos}
+    realizados_por_tipo = {t: 0 for t in kpi_tipos}
+    pendentes_por_tipo = {t: 0 for t in kpi_tipos}
+    custo_por_tipo = {t: 0.0 for t in kpi_tipos}
+    geral_total = 0
+    geral_realizados = 0
+    geral_custo = 0.0
+    for kid, ktipo, kcusto, kdata in todos_kpi:
+        if not ktipo:
+            continue
+        geral_total += 1
+        total_por_tipo[ktipo] += 1
+        if _status(kid, kdata) == 'REALIZADO':
+            geral_realizados += 1
+            realizados_por_tipo[ktipo] += 1
+        else:
+            pendentes_por_tipo[ktipo] += 1
+        if kcusto:
+            geral_custo += float(kcusto)
+            custo_por_tipo[ktipo] += float(kcusto)
+    geral_pendentes = geral_total - geral_realizados
+
     if 'municipios_pi' in sa_inspect(db.engine).get_table_names():
         municipios = MunicipioPiaui.query.order_by(MunicipioPiaui.nome).all()
     else:
         municipios = []
+
+    # ── Aba "Veículos": conjunto separado, estilo dashboard de Diárias ──
+    # Filtros próprios da aba (prefixo v_ p/ não colidir com os de Fachadas):
+    # Tipo do Veículo, Cor, Status + busca livre (placa/marca).
+    v_tipos_sel = [t for t in request.args.getlist('v_tipo') if t]
+    v_cores_sel = [c for c in request.args.getlist('v_cor') if c]
+    v_status_sel = [s for s in request.args.getlist('v_status') if s]
+    v_busca = (request.args.get('v_q') or '').strip().lower()
+
+    # Sem `undefer`: o SELECT padrão não inclui as colunas de veículo (deferred),
+    # então a página continua abrindo antes do ALTER (não há veículos pré-migração,
+    # o loop fica vazio e as colunas nunca são acessadas). Frota pequena → o
+    # lazy-load por linha aqui é irrelevante.
+    todos_veiculos = (IdentidadeVisualLocal.query
+                      .filter(IdentidadeVisualLocal.tipo_local == TIPO_LOCAL_VEICULO)
+                      .all())
+    status_por_veiculo = {v.id: _status(v.id, v.data_acao) for v in todos_veiculos}
+
+    # Opções + contagens dos filtros calculadas sobre TODOS os veículos.
+    contagem_tipo_veic, contagem_cor_veic = {}, {}
+    contagem_status_veic = {'PENDENTE': 0, 'REALIZADO': 0}
+    for v in todos_veiculos:
+        if v.tipo_veiculo:
+            contagem_tipo_veic[v.tipo_veiculo] = contagem_tipo_veic.get(v.tipo_veiculo, 0) + 1
+        if v.cor:
+            contagem_cor_veic[v.cor] = contagem_cor_veic.get(v.cor, 0) + 1
+        contagem_status_veic[status_por_veiculo[v.id]] += 1
+
+    def _veiculo_passa(v):
+        if v_tipos_sel and (v.tipo_veiculo or '') not in v_tipos_sel:
+            return False
+        if v_cores_sel and (v.cor or '') not in v_cores_sel:
+            return False
+        if v_status_sel and status_por_veiculo[v.id] not in v_status_sel:
+            return False
+        if v_busca:
+            alvo = ' '.join(x for x in (v.placa, v.marca_modelo, v.tipo_veiculo, v.cor) if x).lower()
+            if v_busca not in alvo:
+                return False
+        return True
+
+    # PENDENTES primeiro, depois por placa.
+    veiculos = [v for v in todos_veiculos if _veiculo_passa(v)]
+    veiculos.sort(key=lambda v: (0 if status_por_veiculo[v.id] == 'PENDENTE' else 1,
+                                 (v.placa or '').lower()))
+    qtd_arquivos_veiculo = {v.id: contagem_arquivos.get(v.id, 0) for v in veiculos}
+    total_veiculos = len(veiculos)
+    veic_realizados = sum(1 for v in veiculos if status_por_veiculo[v.id] == 'REALIZADO')
+    veic_pendentes = total_veiculos - veic_realizados
+    veic_custo_total = sum(float(v.custo) for v in veiculos if v.custo)
+    tipos_veic = sorted(contagem_tipo_veic.keys())
+    cores_veic = sorted(contagem_cor_veic.keys())
 
     return render_template(
         'identidade_visual/dashboard.html',
         locais=locais,
         status_por_local=status_por_local,
         qtd_arquivos=qtd_arquivos,
+        veiculos=veiculos,
+        status_por_veiculo=status_por_veiculo,
+        qtd_arquivos_veiculo=qtd_arquivos_veiculo,
+        total_veiculos=total_veiculos,
+        veic_realizados=veic_realizados,
+        veic_pendentes=veic_pendentes,
+        veic_custo_total=veic_custo_total,
+        tipos_veic=tipos_veic,
+        cores_veic=cores_veic,
+        contagem_tipo_veic=contagem_tipo_veic,
+        contagem_cor_veic=contagem_cor_veic,
+        contagem_status_veic=contagem_status_veic,
+        filtro_v_tipo=v_tipos_sel,
+        filtro_v_cor=v_cores_sel,
+        filtro_v_status=v_status_sel,
+        filtro_v_q=v_busca,
+        aba_ativa=request.args.get('aba', 'fachadas'),
+        geral_total=geral_total,
+        geral_realizados=geral_realizados,
+        geral_pendentes=geral_pendentes,
+        geral_custo=geral_custo,
+        kpi_tipos=kpi_tipos,
+        total_por_tipo=total_por_tipo,
+        realizados_por_tipo=realizados_por_tipo,
+        pendentes_por_tipo=pendentes_por_tipo,
+        custo_por_tipo=custo_por_tipo,
         cidades=cidades,
         tipos_local=tipos_local_existentes,
         tipos_local_opcoes=TIPOS_LOCAL,
         bairros=bairros,
+        tipo_veiculo_nome=TIPO_LOCAL_VEICULO,
         contagem_cidades=contagem_cidades,
         contagem_tipos=contagem_tipos,
         contagem_bairros=contagem_bairros,
@@ -230,7 +360,7 @@ def salvar_acao(local_id):
         db.session.add(novo_arquivo)
 
     local.atualizado_por_id = getattr(current_user, 'id', None)
-    _registrar_log('EDITAR', f'Registrou ação/anexos em {local.cidade} — {local.tipo_local}', local_id=local.id)
+    _registrar_log('EDITAR', f'Registrou ação/anexos em {_rotulo(local)} — {local.tipo_local}', local_id=local.id)
 
     db.session.commit()
     return jsonify({'ok': True, 'status': local.status})
@@ -295,30 +425,62 @@ def listar_arquivos(local_id):
         'endereco': local.endereco or '',
         'bairro': local.bairro or '',
         'cep': local.cep or '',
+        'is_veiculo': local.is_veiculo,
+        'placa': local.placa or '',
+        'tipo_veiculo': local.tipo_veiculo or '',
+        'marca_modelo': local.marca_modelo or '',
+        'cor': local.cor or '',
     })
 
 
 def _validar_local(data):
-    """Valida campos comuns de criação/edição. Retorna (erro_msg, status_code) ou None."""
-    municipio_id = data.get('municipio_id')
-    tipo_local = (data.get('tipo_local') or '').strip()
-    endereco = (data.get('endereco') or '').strip()
-    bairro = (data.get('bairro') or '').strip()
-    cep = (data.get('cep') or '').strip()
+    """Valida campos de criação/edição. Retorna (erro_msg, status_code) ou None.
 
-    if not municipio_id:
-        return 'Cidade é obrigatória', 400
+    A validação diverge por tipo: 'Veículo' exige só a placa; os demais tipos
+    (locais físicos) exigem município, endereço, bairro e CEP.
+    """
+    tipo_local = (data.get('tipo_local') or '').strip()
     if not tipo_local:
         return 'Tipo Local é obrigatório', 400
-    if not endereco:
-        return 'Endereço é obrigatório', 400
-    if not bairro:
-        return 'Bairro é obrigatório', 400
-    if not cep:
-        return 'CEP é obrigatório', 400
     if tipo_local not in TIPOS_LOCAL:
         return 'Tipo Local inválido', 400
+
+    if tipo_local == TIPO_LOCAL_VEICULO:
+        if len(normalizar_placa(data.get('placa'))) != 7:
+            return 'Placa é obrigatória (7 caracteres)', 400
+        return None
+
+    # Local físico
+    if not data.get('municipio_id'):
+        return 'Cidade é obrigatória', 400
+    if not (data.get('endereco') or '').strip():
+        return 'Endereço é obrigatório', 400
+    if not (data.get('bairro') or '').strip():
+        return 'Bairro é obrigatório', 400
+    if not (data.get('cep') or '').strip():
+        return 'CEP é obrigatório', 400
     return None
+
+
+@identidade_visual_bp.route('/api/consultar-placa')
+@requires_permission('identidade_visual.criar')
+def consultar_placa():
+    """Proxy server-side da consulta DETRAN por placa.
+
+    Mantém a `X-Api-Key` no servidor e devolve só os campos públicos
+    (tipo/marca-modelo/cor) — nunca os dados do proprietário retornados pela API.
+    """
+    try:
+        info = consultar_veiculo(request.args.get('placa', ''))
+    except DetranError as e:
+        return jsonify({'erro': str(e)}), 400
+    except Exception:
+        current_app.logger.exception('[IDENTIDADE_VISUAL] Falha ao consultar placa no DETRAN')
+        return jsonify({'erro': 'Falha ao consultar a placa. Tente novamente.'}), 502
+
+    if not info.get('marca_modelo') and not info.get('tipo_veiculo'):
+        return jsonify({'erro': 'Veículo não encontrado para essa placa'}), 404
+    return jsonify({'ok': True, **info})
 
 
 @identidade_visual_bp.route('/api/criar-local', methods=['POST'])
@@ -330,15 +492,44 @@ def criar_local():
     if erro:
         return jsonify({'erro': erro[0]}), erro[1]
 
+    uid = getattr(current_user, 'id', None)
+    tipo_local = data['tipo_local'].strip()
+
+    if tipo_local == TIPO_LOCAL_VEICULO:
+        # Dados do veículo vêm do DETRAN (fonte confiável) — não confiamos no
+        # que o cliente enviou como marca/cor, só na placa.
+        try:
+            info = consultar_veiculo(data.get('placa'))
+        except DetranError as e:
+            return jsonify({'erro': str(e)}), 400
+        except Exception:
+            current_app.logger.exception('[IDENTIDADE_VISUAL] Falha ao consultar placa no DETRAN')
+            return jsonify({'erro': 'Falha ao consultar a placa. Tente novamente.'}), 502
+
+        local = IdentidadeVisualLocal(
+            tipo_local=tipo_local,
+            placa=info['placa'],
+            tipo_veiculo=info.get('tipo_veiculo'),
+            marca_modelo=info.get('marca_modelo'),
+            cor=info.get('cor'),
+            criado_por_id=uid,
+            atualizado_por_id=uid,
+        )
+        db.session.add(local)
+        db.session.flush()
+        _registrar_log('CRIAR', f'Criou o veículo {local.placa} — {local.marca_modelo or ""}'.strip(),
+                       local_id=local.id)
+        db.session.commit()
+        return jsonify({'ok': True, 'id': local.id})
+
     municipio = db.session.get(MunicipioPiaui, data['municipio_id'])
     if not municipio:
         return jsonify({'erro': 'Município não encontrado'}), 400
 
-    uid = getattr(current_user, 'id', None)
     local = IdentidadeVisualLocal(
         cidade=municipio.nome,
         municipio_id=municipio.id,
-        tipo_local=data['tipo_local'].strip(),
+        tipo_local=tipo_local,
         endereco=data['endereco'].strip(),
         bairro=data['bairro'].strip(),
         cep=data['cep'].strip(),
@@ -366,16 +557,49 @@ def editar_local(local_id):
     if erro:
         return jsonify({'erro': erro[0]}), erro[1]
 
+    tipo_local = data['tipo_local'].strip()
+
+    if tipo_local == TIPO_LOCAL_VEICULO:
+        try:
+            info = consultar_veiculo(data.get('placa'))
+        except DetranError as e:
+            return jsonify({'erro': str(e)}), 400
+        except Exception:
+            current_app.logger.exception('[IDENTIDADE_VISUAL] Falha ao consultar placa no DETRAN')
+            return jsonify({'erro': 'Falha ao consultar a placa. Tente novamente.'}), 502
+
+        local.tipo_local = tipo_local
+        local.placa = info['placa']
+        local.tipo_veiculo = info.get('tipo_veiculo')
+        local.marca_modelo = info.get('marca_modelo')
+        local.cor = info.get('cor')
+        # Zera campos de local físico — o registro deixou de ser um endereço.
+        local.cidade = None
+        local.municipio_id = None
+        local.endereco = None
+        local.bairro = None
+        local.cep = None
+        local.atualizado_por_id = getattr(current_user, 'id', None)
+        _registrar_log('EDITAR', f'Editou o veículo {local.placa} — {local.marca_modelo or ""}'.strip(),
+                       local_id=local.id)
+        db.session.commit()
+        return jsonify({'ok': True, 'id': local.id})
+
     municipio = db.session.get(MunicipioPiaui, data['municipio_id'])
     if not municipio:
         return jsonify({'erro': 'Município não encontrado'}), 400
 
     local.cidade = municipio.nome
     local.municipio_id = municipio.id
-    local.tipo_local = data['tipo_local'].strip()
+    local.tipo_local = tipo_local
     local.endereco = data['endereco'].strip()
     local.bairro = data['bairro'].strip()
     local.cep = data['cep'].strip()
+    # Limpa campos de veículo caso o registro tenha sido convertido de volta.
+    local.placa = None
+    local.tipo_veiculo = None
+    local.marca_modelo = None
+    local.cor = None
     local.atualizado_por_id = getattr(current_user, 'id', None)
 
     _registrar_log('EDITAR', f'Editou o local {local.cidade} — {local.tipo_local}', local_id=local.id)
@@ -403,7 +627,7 @@ def excluir_local(local_id):
                 current_app.logger.warning(
                     f'[IDENTIDADE_VISUAL] Falha ao remover arquivo {caminho}')
 
-    descricao = f'Excluiu o local {local.cidade} — {local.tipo_local} (#{local.id})'
+    descricao = f'Excluiu o local {_rotulo(local)} — {local.tipo_local} (#{local.id})'
     _registrar_log('EXCLUIR', descricao, local_id=local.id)
 
     db.session.delete(local)
@@ -433,7 +657,8 @@ def exportar_excel():
     ws = wb.active
     ws.title = 'Identidade Visual'
 
-    headers = ['Cidade', 'Tipo Local', 'Endereço', 'Bairro', 'CEP', 'Status', 'Custo (R$)', 'Data/Hora', 'Qtd Arquivos']
+    headers = ['Cidade', 'Tipo Local', 'Endereço', 'Bairro', 'CEP', 'Placa',
+               'Marca/Modelo', 'Cor', 'Status', 'Custo (R$)', 'Data/Hora', 'Qtd Arquivos']
     header_fill = PatternFill(start_color='0891B2', end_color='0891B2', fill_type='solid')
     header_font = Font(bold=True, color='FFFFFF', size=11)
     thin_border = Border(
@@ -451,12 +676,18 @@ def exportar_excel():
     for row_idx, l in enumerate(locais, 2):
         qtd = contagem_arquivos.get(l.id, 0)
         status = 'REALIZADO' if (l.data_acao is not None and qtd > 0) else 'PENDENTE'
+        # Só toca nas colunas de veículo (deferred) quando o registro é veículo —
+        # evita lazy-load/erro em linhas físicas antes do ALTER em produção.
+        eh_veic = l.is_veiculo
         valores = [
-            l.cidade,
+            l.cidade or '',
             l.tipo_local,
             l.endereco or '',
             l.bairro or '',
             l.cep or '',
+            (l.placa or '') if eh_veic else '',
+            (l.marca_modelo or '') if eh_veic else '',
+            (l.cor or '') if eh_veic else '',
             status,
             float(l.custo) if l.custo else None,
             l.data_acao.strftime('%d/%m/%Y %H:%M') if l.data_acao else '',
@@ -465,10 +696,10 @@ def exportar_excel():
         for col, v in enumerate(valores, 1):
             cell = ws.cell(row=row_idx, column=col, value=v)
             cell.border = thin_border
-            if col == 7 and v is not None:
+            if col == 10 and v is not None:
                 cell.number_format = '#,##0.00'
 
-    col_widths = [22, 30, 40, 18, 12, 12, 15, 18, 14]
+    col_widths = [22, 18, 40, 18, 12, 12, 30, 14, 12, 15, 18, 14]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 

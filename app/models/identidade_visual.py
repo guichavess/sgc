@@ -12,7 +12,12 @@ class MunicipioPiaui(db.Model):
     gentilico = db.Column(db.String(100), nullable=True)
 
 
+# Categoria especial: registro é um veículo (adesivado), não um endereço físico.
+# Fica em 1º na lista → 1ª opção do "Tipo Local" no popup de criação.
+TIPO_LOCAL_VEICULO = 'Veículo'
+
 TIPOS_LOCAL = [
+    TIPO_LOCAL_VEICULO,
     'Espaço da Cidadania',
     'Sala da Cidadania',
 ]
@@ -22,13 +27,22 @@ class IdentidadeVisualLocal(db.Model):
     __tablename__ = 'identidade_visual_locais'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    cidade = db.Column(db.String(100), nullable=False)
+    # nullable: registros do tipo "Veículo" não têm cidade (só placa).
+    cidade = db.Column(db.String(100), nullable=True)
     # deferred: coluna não entra no SELECT padrão — seguro antes da migração
     municipio_id = deferred(db.Column(db.Integer, nullable=True))
     tipo_local = db.Column('tipo_local', db.String(200), nullable=False)
     endereco = db.Column(db.String(500), nullable=True)
     bairro = db.Column(db.String(200), nullable=True)
     cep = db.Column(db.String(10), nullable=True)
+    # ── Campos exclusivos de "Veículo" (preenchidos via API DETRAN pela placa) ──
+    # deferred: ficam fora do SELECT padrão da listagem — seguro rodar antes do
+    # ALTER TABLE em produção (só são acessados ao renderizar um veículo, que só
+    # passa a existir depois da migração).
+    placa = deferred(db.Column(db.String(10), nullable=True))
+    tipo_veiculo = deferred(db.Column(db.String(100), nullable=True))
+    marca_modelo = deferred(db.Column(db.String(200), nullable=True))
+    cor = deferred(db.Column(db.String(60), nullable=True))
     custo = db.Column(db.Numeric(12, 2), nullable=True)
     data_acao = db.Column(db.DateTime, nullable=True)
     arquivo_nome = db.Column(db.String(255), nullable=True)
@@ -43,6 +57,10 @@ class IdentidadeVisualLocal(db.Model):
     arquivos = db.relationship('IdentidadeVisualArquivo', backref='local_ref',
                                lazy='dynamic', cascade='all, delete-orphan',
                                order_by='IdentidadeVisualArquivo.created_at.desc()')
+
+    @property
+    def is_veiculo(self):
+        return self.tipo_local == TIPO_LOCAL_VEICULO
 
     @property
     def status(self):
