@@ -20,18 +20,55 @@
 .iv-view-value { font-size: 0.9rem; color: var(--color-text-primary, #212529); word-break: break-word; }
 .iv-view-arquivo { display: flex; align-items: center; gap: .6rem; padding: .45rem .65rem; background: var(--color-surface-secondary, #f8f9fa); border-radius: 8px; margin-bottom: .4rem; }
 .iv-view-arquivo .nome { flex: 1; min-width: 0; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.badge-realizado { background-color: #198754; color: #fff; }
-.badge-pendente { background-color: #ffc107; color: #000; }
+.badge-realizado { background-color: #198754; color: #fff; display: inline-flex; align-items: center; gap: 4px; }
+.badge-pendente { background-color: #ffc107; color: #000; display: inline-flex; align-items: center; gap: 4px; }
+.badge-realizado .bi, .badge-pendente .bi { font-size: 0.72rem; }
 .iv-arq-badge { display: inline-flex; align-items: center; gap: 2px; font-size: 0.72rem; color: var(--color-text-tertiary, #6c757d); background: var(--color-surface-secondary, #f1f3f5); border-radius: 20px; padding: 1px 7px 1px 5px; margin-left: 4px; vertical-align: middle; }
+/* Indicador de cor no dropdown de status */
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.status-dot-realizado { background-color: #198754; }
+.status-dot-pendente { background-color: #e6a200; }
+.status-item-label { display: flex; align-items: center; gap: 6px; }
+.status-item-label .bi { font-size: 0.78rem; }
 .btn-acao { padding: 0.25rem 0.65rem; font-size: 0.8rem; }
 .iv-stats { display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
-.iv-stat-card { flex: 1; min-width: 120px; background: var(--color-surface); border: 1px solid var(--color-surface-border); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; text-align: center; }
+.iv-stat-card { flex: 1; min-width: 120px; background: var(--color-surface); border: 1px solid var(--color-surface-border); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; text-align: center; position: relative; overflow: hidden; }
+.iv-stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0; }
 .iv-stat-card .stat-value { font-size: 1.5rem; font-weight: 700; }
-.iv-stat-card .stat-label { font-size: 0.78rem; color: var(--color-text-tertiary); text-transform: uppercase; }
+.iv-stat-card .stat-label { font-size: 0.78rem; color: var(--color-text-tertiary); text-transform: uppercase; display: flex; align-items: center; justify-content: center; gap: 0.35rem; }
+.iv-stat-card .stat-label .bi { font-size: 0.85rem; }
+.iv-stat-total { border-color: rgba(8,145,178,.2); }
+.iv-stat-total::before { background: linear-gradient(90deg, #0891B2, #06B6D4); }
 .iv-stat-total .stat-value { color: var(--color-primary); }
+.iv-stat-total .stat-label .bi { color: #0891B2; }
+.iv-stat-realizado { border-color: rgba(25,135,84,.2); }
+.iv-stat-realizado::before { background: linear-gradient(90deg, #198754, #20c997); }
 .iv-stat-realizado .stat-value { color: #198754; }
-.iv-stat-pendente .stat-value { color: #ffc107; }
-.iv-stat-custo .stat-value { color: #0891B2; font-size: 1.2rem; }
+.iv-stat-realizado .stat-label .bi { color: #198754; }
+.iv-stat-pendente { border-color: rgba(255,193,7,.3); }
+.iv-stat-pendente::before { background: linear-gradient(90deg, #ffc107, #ffda6a); }
+.iv-stat-pendente .stat-value { color: #e6a200; }
+.iv-stat-pendente .stat-label .bi { color: #e6a200; }
+.iv-stat-custo { border-color: rgba(8,145,178,.2); }
+.iv-stat-custo::before { background: linear-gradient(90deg, #6f42c1, #a370f7); }
+.iv-stat-custo .stat-value { color: #6f42c1; font-size: 1.2rem; }
+.iv-stat-custo .stat-label .bi { color: #6f42c1; }
+
+/* TomSelect com dropdownParent:'body' precisa ficar acima do modal (z-index 1055) */
+.ts-dropdown { z-index: 1060; }
+
+/* Sub-abas Fachadas / Veículos */
+.iv-tabs { border-bottom: 1px solid var(--color-surface-border, #e3e6ea); }
+.iv-tabs .nav-link { color: var(--color-text-secondary, #6c757d); font-weight: 600; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 1rem; }
+.iv-tabs .nav-link.active { color: #0891B2; border-bottom-color: #0891B2; background: transparent; }
+.iv-tabs .nav-link:hover:not(.active) { border-bottom-color: #06B6D4; }
+#tabelaVeiculos tbody tr.veic-row:hover { background-color: var(--color-surface-secondary, #f8f9fa); }
+
+/* KPI clicável (abre detalhamento por Tipo Local) — estilo Diárias */
+.iv-kpi-toggle { cursor: pointer; position: relative; transition: box-shadow .15s ease, transform .15s ease; }
+.iv-kpi-toggle:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); transform: translateY(-1px); }
+.iv-kpi-toggle .kpi-chevron { position: absolute; top: .5rem; right: .6rem; font-size: .72rem; color: var(--color-text-tertiary, #9aa0a6); transition: transform .2s ease; }
+.iv-kpi-toggle[aria-expanded="true"] .kpi-chevron { transform: rotate(180deg); color: var(--color-primary, #0891b2); }
 
 .modal-iv .modal-dialog { max-width: 720px; }
 .modal-iv .modal-body { padding: 1.5rem 2rem; }
@@ -263,25 +300,81 @@
         </div>
     </div>
 
-    {# KPIs #}
+    {# ── KPIs GERAIS (todos os registros: fachadas + veículos) ──
+       Cada card é clicável → expande o detalhamento por Tipo Local (estilo Diárias). #}
+    {% set tipo_icones = {'Veículo': 'bi-car-front-fill', 'Espaço da Cidadania': 'bi-buildings', 'Sala da Cidadania': 'bi-door-open-fill'} %}
     <div class="iv-stats">
-        <div class="iv-stat-card iv-stat-total">
-            <div class="stat-value">{{ total }}</div>
-            <div class="stat-label">Total</div>
+        <div class="iv-stat-card iv-stat-total iv-kpi-toggle" role="button" tabindex="0"
+             data-bs-toggle="collapse" data-bs-target="#bdTotal" aria-expanded="false" aria-controls="bdTotal">
+            <i class="bi bi-chevron-down kpi-chevron"></i>
+            <div class="stat-value">{{ geral_total }}</div>
+            <div class="stat-label"><i class="bi bi-grid-3x3-gap-fill"></i> Total</div>
         </div>
-        <div class="iv-stat-card iv-stat-realizado">
-            <div class="stat-value">{{ realizados }}</div>
-            <div class="stat-label">Realizados</div>
+        <div class="iv-stat-card iv-stat-realizado iv-kpi-toggle" role="button" tabindex="0"
+             data-bs-toggle="collapse" data-bs-target="#bdRealizados" aria-expanded="false" aria-controls="bdRealizados">
+            <i class="bi bi-chevron-down kpi-chevron"></i>
+            <div class="stat-value">{{ geral_realizados }}</div>
+            <div class="stat-label"><i class="bi bi-check-circle-fill"></i> Realizados</div>
         </div>
-        <div class="iv-stat-card iv-stat-pendente">
-            <div class="stat-value">{{ pendentes }}</div>
-            <div class="stat-label">Pendentes</div>
+        <div class="iv-stat-card iv-stat-pendente iv-kpi-toggle" role="button" tabindex="0"
+             data-bs-toggle="collapse" data-bs-target="#bdPendentes" aria-expanded="false" aria-controls="bdPendentes">
+            <i class="bi bi-chevron-down kpi-chevron"></i>
+            <div class="stat-value">{{ geral_pendentes }}</div>
+            <div class="stat-label"><i class="bi bi-clock-fill"></i> Pendentes</div>
         </div>
-        <div class="iv-stat-card iv-stat-custo">
-            <div class="stat-value">R$ {{ "{:,.2f}".format(custo_total).replace(",","X").replace(".",",").replace("X",".") }}</div>
-            <div class="stat-label">Custo Total</div>
+        <div class="iv-stat-card iv-stat-custo iv-kpi-toggle" role="button" tabindex="0"
+             data-bs-toggle="collapse" data-bs-target="#bdCusto" aria-expanded="false" aria-controls="bdCusto">
+            <i class="bi bi-chevron-down kpi-chevron"></i>
+            <div class="stat-value">R$ {{ "{:,.2f}".format(geral_custo).replace(",","X").replace(".",",").replace("X",".") }}</div>
+            <div class="stat-label"><i class="bi bi-cash-stack"></i> Custo Total</div>
         </div>
     </div>
+
+    {# Detalhamento por Tipo Local — accordion (um aberto por vez) #}
+    {% macro kpi_breakdown(cid, dados, tipos, icones, is_custo=False) %}
+    <div class="collapse" id="{{ cid }}" data-bs-parent="#kpiBreakdowns">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body py-3">
+                <div class="row g-3 text-center">
+                    {% for t in tipos %}
+                    <div class="col-6 col-md">
+                        <div class="fs-4 fw-bold">
+                            {% if is_custo %}R$ {{ "{:,.2f}".format(dados.get(t, 0)).replace(",","X").replace(".",",").replace("X",".") }}{% else %}{{ dados.get(t, 0) }}{% endif %}
+                        </div>
+                        <div class="text-muted small"><i class="bi {{ icones.get(t, 'bi-tag') }} me-1"></i>{{ t }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endmacro %}
+    <div id="kpiBreakdowns" class="mb-3">
+        {{ kpi_breakdown('bdTotal', total_por_tipo, kpi_tipos, tipo_icones) }}
+        {{ kpi_breakdown('bdRealizados', realizados_por_tipo, kpi_tipos, tipo_icones) }}
+        {{ kpi_breakdown('bdPendentes', pendentes_por_tipo, kpi_tipos, tipo_icones) }}
+        {{ kpi_breakdown('bdCusto', custo_por_tipo, kpi_tipos, tipo_icones, True) }}
+    </div>
+
+    {# Sub-abas: Fachadas (locais físicos) × Veículos (adesivados) #}
+    <ul class="nav nav-tabs iv-tabs mb-3" id="ivTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {{ 'active' if aba_ativa != 'veiculos' }}" id="tab-fachadas-btn" data-bs-toggle="tab" data-bs-target="#pane-fachadas" type="button" role="tab">
+                <i class="bi bi-buildings me-1"></i> Fachadas
+                <span class="badge rounded-pill bg-secondary ms-1">{{ total }}</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link {{ 'active' if aba_ativa == 'veiculos' }}" id="tab-veiculos-btn" data-bs-toggle="tab" data-bs-target="#pane-veiculos" type="button" role="tab">
+                <i class="bi bi-car-front-fill me-1"></i> Veículos
+                <span class="badge rounded-pill bg-secondary ms-1">{{ total_veiculos }}</span>
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+    {# ================= ABA FACHADAS ================= #}
+    <div class="tab-pane fade {{ 'show active' if aba_ativa != 'veiculos' }}" id="pane-fachadas" role="tabpanel">
 
     {# Macro de filtro multi-seleção com contagem por item (estilo Pagamentos) #}
     {% macro filtro_dropdown(titulo, nome, icone, valores, contagens, selecionados, rotulos=None) %}
@@ -305,7 +398,15 @@
                                value="{{ v }}" id="{{ nome }}_{{ loop.index }}"
                                {{ 'checked' if v in selecionados }} onchange="atualizarFiltroLabel('{{ nome }}', '{{ titulo }}')">
                         <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="{{ nome }}_{{ loop.index }}" style="cursor:pointer;">
+                            {% if 'status' in nome %}
+                            <span class="status-item-label">
+                                <span class="status-dot {{ 'status-dot-realizado' if v == 'REALIZADO' else 'status-dot-pendente' }}"></span>
+                                <i class="bi {{ 'bi-check-circle-fill text-success' if v == 'REALIZADO' else 'bi-clock-fill' }}" {% if v == 'PENDENTE' %}style="color:#e6a200;"{% endif %}></i>
+                                {{ rotulos[v] if rotulos and v in rotulos else v }}
+                            </span>
+                            {% else %}
                             <span>{{ rotulos[v] if rotulos and v in rotulos else v }}</span>
+                            {% endif %}
                             <span class="badge bg-light text-muted border ms-2">{{ contagens.get(v, 0) }}</span>
                         </label>
                     </div>
@@ -371,7 +472,7 @@
                     <td data-label="Bairro">{{ l.bairro or '—' }}</td>
                     <td data-label="Status">
                         <span class="badge {{ 'badge-realizado' if st == 'REALIZADO' else 'badge-pendente' }}">
-                            {{ st }}
+                            <i class="bi {{ 'bi-check-circle-fill' if st == 'REALIZADO' else 'bi-clock-fill' }}"></i> {{ st }}
                         </span>
                         {% if n_arq %}
                         <span class="iv-arq-badge" title="{{ n_arq }} arquivo(s) anexado(s)">
@@ -457,6 +558,110 @@
         </ul>
     </nav>
     {% endif %}
+    </div>{# /pane-fachadas #}
+
+    {# ================= ABA VEÍCULOS ================= #}
+    <div class="tab-pane fade {{ 'show active' if aba_ativa == 'veiculos' }}" id="pane-veiculos" role="tabpanel">
+
+        {# Filtros da aba Veículos (Tipo do Veículo / Cor / Status + busca) #}
+        <div class="iv-filters" style="overflow:visible;">
+            <form method="GET" id="formFiltrosVeic">
+                <input type="hidden" name="aba" value="veiculos">
+                <div class="row g-2 align-items-center">
+                    <div class="col-12 col-md">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" name="v_q" class="form-control border-start-0 ps-0"
+                                   placeholder="Placa, marca/modelo..." value="{{ filtro_v_q }}">
+                        </div>
+                    </div>
+                    {{ filtro_dropdown('Tipo do Veículo', 'v_tipo', 'bi-car-front', tipos_veic, contagem_tipo_veic, filtro_v_tipo) }}
+                    {{ filtro_dropdown('Cor', 'v_cor', 'bi-palette', cores_veic, contagem_cor_veic, filtro_v_cor) }}
+                    {{ filtro_dropdown('Status', 'v_status', 'bi-flag', ['PENDENTE', 'REALIZADO'], contagem_status_veic, filtro_v_status, {'PENDENTE': 'Pendente', 'REALIZADO': 'Realizado'}) }}
+
+                    <div class="col-auto d-flex gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm fw-bold px-3" title="Filtrar"><i class="bi bi-funnel"></i> Filtrar</button>
+                        {% if filtro_v_tipo or filtro_v_cor or filtro_v_status or filtro_v_q %}
+                        <a href="{{ url_for('identidade_visual.dashboard') }}?aba=veiculos" class="btn btn-outline-danger btn-sm" title="Limpar filtros"><i class="bi bi-x-lg"></i></a>
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        {# Tabela de veículos — estilo do dashboard de Diárias (card + tabela limpa) #}
+        <div class="card overflow-hidden">
+            <div class="card-header bg-white border-bottom py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-car-front-fill me-2"></i>Veículos Adesivados</h5>
+                    <span class="badge bg-secondary">{{ total_veiculos }} registro(s)</span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="tabelaVeiculos">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Placa</th>
+                                <th>Tipo</th>
+                                <th>Marca / Modelo</th>
+                                <th>Cor</th>
+                                <th>Data/Hora</th>
+                                <th class="text-end">Custo</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-center">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for v in veiculos %}
+                            {% set st = status_por_veiculo[v.id] %}
+                            {% set n_arq = qtd_arquivos_veiculo[v.id] %}
+                            <tr id="row-{{ v.id }}" class="veic-row" data-veic-id="{{ v.id }}" style="cursor:pointer;">
+                                <td class="ps-4 fw-bold"><i class="bi bi-car-front-fill text-primary me-1"></i>{{ v.placa or '—' }}</td>
+                                <td>{% if v.tipo_veiculo %}<span class="badge rounded-pill bg-info text-dark">{{ v.tipo_veiculo }}</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
+                                <td>{{ v.marca_modelo or '—' }}</td>
+                                <td>{{ v.cor or '—' }}</td>
+                                <td>{% if v.data_acao %}<span class="small">{{ v.data_acao.strftime('%d/%m/%Y %H:%M') }}</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
+                                <td class="text-end">{% if v.custo %}<span class="fw-bold text-success">R$ {{ "{:,.2f}".format(v.custo).replace(",","X").replace(".",",").replace("X",".") }}</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
+                                <td class="text-center">
+                                    <span class="badge {{ 'badge-realizado' if st == 'REALIZADO' else 'badge-pendente' }}"><i class="bi {{ 'bi-check-circle-fill' if st == 'REALIZADO' else 'bi-clock-fill' }}"></i> {{ st }}</span>
+                                    {% if n_arq %}<span class="iv-arq-badge" title="{{ n_arq }} arquivo(s) anexado(s)"><i class="bi bi-paperclip"></i>{{ n_arq }}</span>{% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <div class="d-inline-flex gap-1">
+                                        {% if pode_editar %}
+                                        <button class="btn btn-outline-primary btn-acao" onclick="abrirModal({{ v.id }})">
+                                            <i class="bi bi-pencil-square"></i> {{ 'Editar' if st == 'REALIZADO' else 'Registrar' }}
+                                        </button>
+                                        {% else %}
+                                        <button class="btn btn-outline-secondary btn-acao" onclick="abrirView({{ v.id }})">
+                                            <i class="bi bi-eye"></i> Ver
+                                        </button>
+                                        {% endif %}
+                                        {% if pode_excluir %}
+                                        <button class="btn btn-outline-danger btn-acao btn-excluir-local"
+                                                data-id="{{ v.id }}" data-desc="Veículo {{ v.placa }}" title="Excluir registro">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center py-5 text-muted">
+                                    <i class="bi bi-car-front fs-1 d-block mb-2"></i>
+                                    Nenhum veículo cadastrado. Clique em <strong>Novo</strong> e escolha o tipo <strong>Veículo</strong>.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>{# /pane-veiculos #}
+    </div>{# /tab-content #}
 </div>
 
 {# Modal de Ação (Registrar/Editar) #}
@@ -477,7 +682,7 @@
                     {# Endereço (editável) #}
                     <div class="mb-4">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <label class="form-label fw-semibold mb-0">Endereço</label>
+                            <label class="form-label fw-semibold mb-0" id="lblAcaoEndereco">Endereço</label>
                             <button type="button" class="btn btn-outline-secondary btn-sm" id="btnToggleEndereco">
                                 <i class="bi bi-pencil"></i> Editar
                             </button>
@@ -585,16 +790,8 @@
             <form id="formNovoLocal">
                 <div class="modal-body">
                     <div class="row g-3">
-                        <div class="col-12 col-md-6">
-                            <label for="novoCidade" class="form-label fw-semibold">Cidade <span class="text-danger">*</span></label>
-                            <select id="novoCidade" class="form-select">
-                                <option value="">Selecione o município...</option>
-                                {% for m in municipios %}
-                                <option value="{{ m.id }}">{{ m.nome }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-12 col-md-6">
+                        {# Tipo Local — 1º campo; define quais campos aparecem abaixo #}
+                        <div class="col-12">
                             <label for="novoTipoLocal" class="form-label fw-semibold">Tipo Local <span class="text-danger">*</span></label>
                             <select id="novoTipoLocal" class="form-select">
                                 <option value="">Selecione o tipo...</option>
@@ -603,21 +800,65 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-5 col-md-4">
-                            <label for="novoCep" class="form-label fw-semibold">CEP <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <input type="text" class="form-control cep-busca" id="novoCep" placeholder="00000-000" maxlength="9" data-target="novo">
-                                <span class="input-group-text cep-spinner d-none" id="novoCepSpinner"><i class="bi bi-arrow-repeat spin-icon"></i></span>
+
+                        {# ── Campos de LOCAL FÍSICO (Espaço/Sala da Cidadania) ── #}
+                        <div class="col-12 iv-grupo-local d-none">
+                            <div class="row g-3">
+                                <div class="col-12 col-md-6">
+                                    <label for="novoCidade" class="form-label fw-semibold">Cidade <span class="text-danger">*</span></label>
+                                    <select id="novoCidade" class="form-select">
+                                        <option value="">Selecione o município...</option>
+                                        {% for m in municipios %}
+                                        <option value="{{ m.id }}">{{ m.nome }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-5 col-md-4">
+                                    <label for="novoCep" class="form-label fw-semibold">CEP <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control cep-busca" id="novoCep" placeholder="00000-000" maxlength="9" data-target="novo">
+                                        <span class="input-group-text cep-spinner d-none" id="novoCepSpinner"><i class="bi bi-arrow-repeat spin-icon"></i></span>
+                                    </div>
+                                    <div class="form-text" style="font-size:0.78rem; color:#0891b2;"><i class="bi bi-info-circle"></i> Digite o CEP para preencher automaticamente</div>
+                                </div>
+                                <div class="col-7 col-md-8">
+                                    <label for="novoEndereco" class="form-label fw-semibold">Endereço <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="novoEndereco" placeholder="Rua, número, complemento">
+                                </div>
+                                <div class="col-12">
+                                    <label for="novoBairro" class="form-label fw-semibold">Bairro <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="novoBairro" placeholder="Ex: Centro">
+                                </div>
                             </div>
-                            <div class="form-text" style="font-size:0.78rem; color:#0891b2;"><i class="bi bi-info-circle"></i> Digite o CEP para preencher automaticamente</div>
                         </div>
-                        <div class="col-7 col-md-8">
-                            <label for="novoEndereco" class="form-label fw-semibold">Endereço <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="novoEndereco" placeholder="Rua, número, complemento">
-                        </div>
-                        <div class="col-7 col-md-7">
-                            <label for="novoBairro" class="form-label fw-semibold">Bairro <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="novoBairro" placeholder="Ex: Centro">
+
+                        {# ── Campos de VEÍCULO (placa → consulta DETRAN) ── #}
+                        <div class="col-12 iv-grupo-veiculo d-none">
+                            <label for="novoPlaca" class="form-label fw-semibold">Placa <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-car-front-fill"></i></span>
+                                <input type="text" class="form-control text-uppercase" id="novoPlaca" placeholder="AAA0A00 ou AAA0000" maxlength="8" autocomplete="off">
+                                <span class="input-group-text cep-spinner d-none" id="novoPlacaSpinner"><i class="bi bi-arrow-repeat spin-icon"></i></span>
+                            </div>
+                            <div class="form-text" style="font-size:0.78rem; color:#0891b2;"><i class="bi bi-info-circle"></i> Digite a placa para buscar os dados do veículo automaticamente</div>
+
+                            {# Prévia dos dados retornados pela API #}
+                            <div id="novoVeiculoPreview" class="mt-3 p-3 rounded d-none" style="background: var(--color-surface-secondary, #f8f9fa); border: 1px solid var(--color-surface-border, #e3e6ea);">
+                                <div class="row g-2">
+                                    <div class="col-12 col-md-4">
+                                        <div class="iv-view-label">Tipo do Veículo</div>
+                                        <div class="iv-view-value" id="pvTipoVeiculo">—</div>
+                                    </div>
+                                    <div class="col-12 col-md-5">
+                                        <div class="iv-view-label">Marca / Modelo</div>
+                                        <div class="iv-view-value" id="pvMarcaModelo">—</div>
+                                    </div>
+                                    <div class="col-12 col-md-3">
+                                        <div class="iv-view-label">Cor</div>
+                                        <div class="iv-view-value" id="pvCor">—</div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -646,18 +887,18 @@
             <div class="modal-body">
                 <div class="row g-3 mb-3">
                     <div class="col-12">
-                        <div class="iv-view-label">Endereço</div>
+                        <div class="iv-view-label" id="lblViewEndereco">Endereço</div>
                         <div class="iv-view-value" id="viewEndereco">—</div>
                         <a id="viewMapsLink" href="#" target="_blank" rel="noopener" class="iv-maps-link small d-none mt-1 d-inline-block">
                             <i class="bi bi-geo-alt-fill"></i> Ver no Google Maps
                         </a>
                     </div>
                     <div class="col-6 col-md-4">
-                        <div class="iv-view-label">Bairro</div>
+                        <div class="iv-view-label" id="lblViewBairro">Bairro</div>
                         <div class="iv-view-value" id="viewBairro">—</div>
                     </div>
                     <div class="col-6 col-md-4">
-                        <div class="iv-view-label">CEP</div>
+                        <div class="iv-view-label" id="lblViewCep">CEP</div>
                         <div class="iv-view-value" id="viewCep">—</div>
                     </div>
                     <div class="col-6 col-md-4">
@@ -712,6 +953,7 @@ let localIdAtual = null;
 let temArquivosExistentes = false;
 let dadosLocalAtual = {};
 const MAX_FOTO_MB = 25;  // mantenha em sync com MAX_FILE_SIZE no backend
+const TIPO_VEICULO = {{ tipo_veiculo_nome|tojson }};
 
 const modalAcaoEl = document.getElementById('modalAcao');
 const modal = new bootstrap.Modal(modalAcaoEl);
@@ -877,16 +1119,21 @@ document.querySelectorAll('.cep-busca').forEach(input => {
     });
 });
 
-/* ===== Tom Select — Novo Local ===== */
+/* ===== Tom Select — Novo Local =====
+   dropdownParent:'body' → a lista abre no nível do body, escapando do
+   overflow:auto do .modal-body (modal-dialog-scrollable), que senão clipa as
+   opções para uma única linha quando o modal tem poucos campos visíveis. */
 const tsNovoCidade = new TomSelect('#novoCidade', {
     placeholder: 'Digite para buscar...',
     allowEmptyOption: true,
     create: false,
+    dropdownParent: 'body',
 });
 const tsNovoTipo = new TomSelect('#novoTipoLocal', {
     placeholder: 'Selecione o tipo...',
     allowEmptyOption: true,
     create: false,
+    dropdownParent: 'body',
 });
 
 /* ===== Tom Select — Edit (criados 1x, reutilizados) ===== */
@@ -894,11 +1141,13 @@ const tsEditCidade = new TomSelect('#editCidade', {
     placeholder: 'Digite para buscar...',
     allowEmptyOption: true,
     create: false,
+    dropdownParent: 'body',
 });
 const tsEditTipo = new TomSelect('#editTipoLocal', {
     placeholder: 'Selecione o tipo...',
     allowEmptyOption: true,
     create: false,
+    dropdownParent: 'body',
 });
 
 /* ===== Modal de Ação ===== */
@@ -935,13 +1184,32 @@ document.getElementById('btnToggleEndereco').addEventListener('click', abrirEnde
 document.getElementById('btnCancelarEndereco').addEventListener('click', fecharEnderecoEdit);
 
 function atualizarEnderecoDisplay(data) {
+    const btnEditar = document.getElementById('btnToggleEndereco');
+    const lbl = document.getElementById('lblAcaoEndereco');
+    document.getElementById('modalLocal').textContent = data.tipo_local || '';
+
+    if (data.is_veiculo) {
+        // Veículo: mostra os dados do carro; a edição inline de placa não fica
+        // disponível aqui (feita na criação/exclusão) → esconde o botão Editar.
+        lbl.textContent = 'Veículo';
+        const parts = [];
+        if (data.tipo_veiculo) parts.push(data.tipo_veiculo);
+        if (data.marca_modelo) parts.push(data.marca_modelo);
+        if (data.cor) parts.push(data.cor);
+        document.getElementById('enderecoDisplay').textContent = parts.length ? parts.join(' — ') : '—';
+        document.getElementById('modalCidade').textContent = data.placa || '';
+        btnEditar.classList.add('d-none');
+        return;
+    }
+
+    lbl.textContent = 'Endereço';
+    btnEditar.classList.remove('d-none');
     const parts = [];
     if (data.endereco) parts.push(data.endereco);
     if (data.bairro) parts.push(data.bairro);
     if (data.cep) parts.push('CEP: ' + data.cep);
     document.getElementById('enderecoDisplay').textContent = parts.length > 0 ? parts.join(' — ') : '—';
     document.getElementById('modalCidade').textContent = data.cidade || '';
-    document.getElementById('modalLocal').textContent = data.tipo_local || '';
 }
 
 /* ===== Salvar Endereço ===== */
@@ -1016,6 +1284,11 @@ function carregarArquivos(id) {
                 endereco: data.endereco || '',
                 bairro: data.bairro || '',
                 cep: data.cep || '',
+                is_veiculo: !!data.is_veiculo,
+                placa: data.placa || '',
+                tipo_veiculo: data.tipo_veiculo || '',
+                marca_modelo: data.marca_modelo || '',
+                cor: data.cor || '',
             };
 
             if (data.custo) {
@@ -1124,6 +1397,7 @@ document.getElementById('formAcao').addEventListener('submit', function(e) {
             if (data.ok) {
                 modal.hide();
                 mostrarToast('Sucesso', 'Ação salva com sucesso.', 'sucesso');
+                if (dadosLocalAtual.is_veiculo) location.hash = 'veiculos';
                 setTimeout(() => location.reload(), 1500);
             }
             else { mostrarToast('Erro', data.erro || 'Erro ao salvar.', 'erro'); }
@@ -1137,22 +1411,84 @@ modalAcaoEl.addEventListener('hidden.bs.modal', function() {
     fecharEnderecoEdit();
 });
 
-/* ===== Novo Local ===== */
+/* ===== Novo Local — alterna grupos de campos conforme o Tipo Local ===== */
+let novoVeiculoDados = null;  // dados retornados pela consulta de placa (null = não consultado)
+
+function _normalizarPlaca(v) { return (v || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase(); }
+
+function toggleGrupoNovoLocal() {
+    const ehVeiculo = tsNovoTipo.getValue() === TIPO_VEICULO;
+    document.querySelector('.iv-grupo-veiculo').classList.toggle('d-none', !ehVeiculo);
+    document.querySelector('.iv-grupo-local').classList.toggle('d-none', ehVeiculo);
+}
+tsNovoTipo.on('change', toggleGrupoNovoLocal);
+
+function limparPreviewVeiculo() {
+    novoVeiculoDados = null;
+    document.getElementById('novoVeiculoPreview').classList.add('d-none');
+    document.getElementById('pvTipoVeiculo').textContent = '—';
+    document.getElementById('pvMarcaModelo').textContent = '—';
+    document.getElementById('pvCor').textContent = '—';
+}
+
+/* Consulta a placa no backend (que consulta o DETRAN) e preenche a prévia */
+function consultarPlacaNovo() {
+    const placa = _normalizarPlaca(document.getElementById('novoPlaca').value);
+    if (placa.length !== 7) { limparPreviewVeiculo(); return; }
+
+    const spinner = document.getElementById('novoPlacaSpinner');
+    spinner.classList.remove('d-none');
+    apiCall('/identidade-visual/api/consultar-placa?placa=' + encodeURIComponent(placa))
+        .then(data => {
+            if (data.ok) {
+                novoVeiculoDados = data;
+                document.getElementById('pvTipoVeiculo').textContent = data.tipo_veiculo || '—';
+                document.getElementById('pvMarcaModelo').textContent = data.marca_modelo || '—';
+                document.getElementById('pvCor').textContent = data.cor || '—';
+                document.getElementById('novoVeiculoPreview').classList.remove('d-none');
+                mostrarToast('Veículo encontrado', (data.marca_modelo || 'Dados preenchidos') + '.', 'sucesso');
+            } else {
+                limparPreviewVeiculo();
+                mostrarToast('Placa não encontrada', data.erro || 'Verifique a placa informada.', 'erro');
+            }
+        })
+        .catch(err => { limparPreviewVeiculo(); mostrarToast('Erro', err.message || 'Erro de conexão.', 'erro'); })
+        .finally(() => spinner.classList.add('d-none'));
+}
+
+(function() {
+    const inp = document.getElementById('novoPlaca');
+    inp.addEventListener('input', function() {
+        this.value = _normalizarPlaca(this.value).substring(0, 7);
+        if (_normalizarPlaca(this.value).length === 7) consultarPlacaNovo();
+        else limparPreviewVeiculo();
+    });
+})();
+
+/* ===== Novo Local — submit ===== */
 document.getElementById('formNovoLocal').addEventListener('submit', function(e) {
     e.preventDefault();
     const btn = this.querySelector('button[type="submit"]');
-
-    const municipioId = tsNovoCidade.getValue();
     const tipoLocal = tsNovoTipo.getValue();
-    const endereco = document.getElementById('novoEndereco').value.trim();
-    const bairro = document.getElementById('novoBairro').value.trim();
-    const cep = document.getElementById('novoCep').value.trim();
-
-    if (!municipioId) { mostrarToast('Campo obrigatório', 'Selecione a cidade.', 'erro'); return; }
     if (!tipoLocal) { mostrarToast('Campo obrigatório', 'Selecione o tipo local.', 'erro'); return; }
-    if (!endereco) { mostrarToast('Campo obrigatório', 'Informe o endereço.', 'erro'); return; }
-    if (!bairro) { mostrarToast('Campo obrigatório', 'Informe o bairro.', 'erro'); return; }
-    if (!cep) { mostrarToast('Campo obrigatório', 'Informe o CEP.', 'erro'); return; }
+
+    let payload;
+    if (tipoLocal === TIPO_VEICULO) {
+        const placa = _normalizarPlaca(document.getElementById('novoPlaca').value);
+        if (placa.length !== 7) { mostrarToast('Campo obrigatório', 'Informe uma placa válida (7 caracteres).', 'erro'); return; }
+        if (!novoVeiculoDados) { mostrarToast('Aguarde', 'Consultando os dados do veículo — tente novamente em instantes.', 'erro'); consultarPlacaNovo(); return; }
+        payload = { tipo_local: tipoLocal, placa: placa };
+    } else {
+        const municipioId = tsNovoCidade.getValue();
+        const endereco = document.getElementById('novoEndereco').value.trim();
+        const bairro = document.getElementById('novoBairro').value.trim();
+        const cep = document.getElementById('novoCep').value.trim();
+        if (!municipioId) { mostrarToast('Campo obrigatório', 'Selecione a cidade.', 'erro'); return; }
+        if (!endereco) { mostrarToast('Campo obrigatório', 'Informe o endereço.', 'erro'); return; }
+        if (!bairro) { mostrarToast('Campo obrigatório', 'Informe o bairro.', 'erro'); return; }
+        if (!cep) { mostrarToast('Campo obrigatório', 'Informe o CEP.', 'erro'); return; }
+        payload = { municipio_id: parseInt(municipioId), tipo_local: tipoLocal, endereco: endereco, bairro: bairro, cep: cep };
+    }
 
     btn.disabled = true;
     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Salvando...';
@@ -1160,21 +1496,16 @@ document.getElementById('formNovoLocal').addEventListener('submit', function(e) 
     apiCall('/identidade-visual/api/criar-local', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            municipio_id: parseInt(municipioId),
-            tipo_local: tipoLocal,
-            endereco: endereco,
-            bairro: bairro,
-            cep: cep,
-        }),
+        body: JSON.stringify(payload),
     })
     .then(data => {
         if (data.ok) {
             modalNovoLocal.hide();
-            mostrarToast('Sucesso', 'Local adicionado com sucesso.', 'sucesso');
+            mostrarToast('Sucesso', (tipoLocal === TIPO_VEICULO ? 'Veículo' : 'Local') + ' adicionado com sucesso.', 'sucesso');
+            if (tipoLocal === TIPO_VEICULO) location.hash = 'veiculos';
             setTimeout(() => location.reload(), 1500);
         }
-        else { mostrarToast('Erro', data.erro || 'Erro ao criar local.', 'erro'); }
+        else { mostrarToast('Erro', data.erro || 'Erro ao criar registro.', 'erro'); }
     })
     .catch(err => mostrarToast('Erro', err.message || 'Erro de conexão.', 'erro'))
     .finally(() => { btn.disabled = false; btn.innerHTML = '<i class="bi bi-plus-lg"></i> Adicionar'; });
@@ -1187,6 +1518,9 @@ document.getElementById('modalNovoLocal').addEventListener('hidden.bs.modal', fu
     document.getElementById('novoEndereco').value = '';
     document.getElementById('novoBairro').value = '';
     document.getElementById('novoCep').value = '';
+    document.getElementById('novoPlaca').value = '';
+    limparPreviewVeiculo();
+    toggleGrupoNovoLocal();
 });
 
 /* ===== Filtros multi-seleção (label + badge de selecionados) ===== */
@@ -1216,7 +1550,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('[id^="ddlabel_"]').forEach(span => {
         span.dataset.titulo = span.innerText.trim();
     });
-    ['cidade', 'tipo_local', 'bairro', 'status'].forEach(nome => {
+    ['cidade', 'tipo_local', 'bairro', 'status', 'v_tipo', 'v_cor', 'v_status'].forEach(nome => {
         const span = document.getElementById('ddlabel_' + nome);
         if (span) atualizarFiltroLabel(nome, span.dataset.titulo);
     });
@@ -1311,17 +1645,32 @@ function abrirView(id) {
 
     apiCall('/identidade-visual/api/arquivos/' + id)
         .then(data => {
-            document.getElementById('viewCidade').textContent = data.cidade || '';
             document.getElementById('viewTipo').textContent = data.tipo_local || '';
-            document.getElementById('viewEndereco').textContent = data.endereco || '—';
-            document.getElementById('viewBairro').textContent = data.bairro || '—';
-            document.getElementById('viewCep').textContent = data.cep || '—';
             document.getElementById('viewCusto').textContent = data.custo ? ('R$ ' + formatarMoeda(data.custo)) : '—';
             document.getElementById('viewData').textContent = data.data_acao ? formatarDataAcao(data.data_acao) : '—';
 
-            if (data.endereco) {
-                mapsLink.href = buildMapsUrl(data.endereco, data.bairro, data.cidade);
-                mapsLink.classList.remove('d-none');
+            if (data.is_veiculo) {
+                // Veículo: reaproveita os 3 campos como Placa / Marca-Modelo / Cor
+                document.getElementById('viewCidade').textContent = data.placa || '';
+                document.getElementById('lblViewEndereco').textContent = 'Marca / Modelo';
+                document.getElementById('viewEndereco').textContent = data.marca_modelo || '—';
+                document.getElementById('lblViewBairro').textContent = 'Cor';
+                document.getElementById('viewBairro').textContent = data.cor || '—';
+                document.getElementById('lblViewCep').textContent = 'Tipo do Veículo';
+                document.getElementById('viewCep').textContent = data.tipo_veiculo || '—';
+            } else {
+                document.getElementById('viewCidade').textContent = data.cidade || '';
+                document.getElementById('lblViewEndereco').textContent = 'Endereço';
+                document.getElementById('viewEndereco').textContent = data.endereco || '—';
+                document.getElementById('lblViewBairro').textContent = 'Bairro';
+                document.getElementById('viewBairro').textContent = data.bairro || '—';
+                document.getElementById('lblViewCep').textContent = 'CEP';
+                document.getElementById('viewCep').textContent = data.cep || '—';
+
+                if (data.endereco) {
+                    mapsLink.href = buildMapsUrl(data.endereco, data.bairro, data.cidade);
+                    mapsLink.classList.remove('d-none');
+                }
             }
 
             if (!data.arquivos || !data.arquivos.length) {
@@ -1354,6 +1703,23 @@ document.querySelector('#tabelaLocais tbody').addEventListener('click', function
     if (!tr) return;
     abrirView(parseInt(tr.id.replace('row-', ''), 10));
 });
+
+/* Clique na linha de veículo (tabela da aba Veículos) abre a visualização */
+const _veicTbody = document.querySelector('#tabelaVeiculos tbody');
+if (_veicTbody) {
+    _veicTbody.addEventListener('click', function(e) {
+        if (e.target.closest('a, button')) return;
+        const tr = e.target.closest('tr[data-veic-id]');
+        if (!tr) return;
+        abrirView(parseInt(tr.dataset.veicId, 10));
+    });
+}
+
+/* Após criar/mexer num veículo, a página recarrega com #veiculos → reabre a aba */
+if (location.hash === '#veiculos') {
+    const _tabVeic = document.getElementById('tab-veiculos-btn');
+    if (_tabVeic) new bootstrap.Tab(_tabVeic).show();
+}
 
 /* Botão "Editar" dentro da visualização -> abre o modal de ação */
 const _btnViewEditar = document.getElementById('btnViewEditar');
