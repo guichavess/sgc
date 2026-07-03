@@ -46,6 +46,12 @@ def _rotulo(local):
     return local.cidade or ''
 
 
+def _marca_modelo(local):
+    """Concatena marca+modelo com "/" para logs/exibições legadas."""
+    partes = [p for p in (local.marca, local.modelo) if p]
+    return '/'.join(partes)
+
+
 @identidade_visual_bp.route('/')
 @requires_permission('identidade_visual.visualizar')
 def dashboard():
@@ -215,7 +221,7 @@ def dashboard():
         if v_status_sel and status_por_veiculo[v.id] not in v_status_sel:
             return False
         if v_busca:
-            alvo = ' '.join(x for x in (v.placa, v.marca_modelo, v.tipo_veiculo, v.cor) if x).lower()
+            alvo = ' '.join(x for x in (v.placa, v.marca, v.modelo, v.tipo_veiculo, v.cor) if x).lower()
             if v_busca not in alvo:
                 return False
         return True
@@ -428,7 +434,8 @@ def listar_arquivos(local_id):
         'is_veiculo': local.is_veiculo,
         'placa': local.placa or '',
         'tipo_veiculo': local.tipo_veiculo or '',
-        'marca_modelo': local.marca_modelo or '',
+        'marca': local.marca or '',
+        'modelo': local.modelo or '',
         'cor': local.cor or '',
     })
 
@@ -478,7 +485,7 @@ def consultar_placa():
         current_app.logger.exception('[IDENTIDADE_VISUAL] Falha ao consultar placa no DETRAN')
         return jsonify({'erro': 'Falha ao consultar a placa. Tente novamente.'}), 502
 
-    if not info.get('marca_modelo') and not info.get('tipo_veiculo'):
+    if not info.get('marca') and not info.get('modelo') and not info.get('tipo_veiculo'):
         return jsonify({'erro': 'Veículo não encontrado para essa placa'}), 404
     return jsonify({'ok': True, **info})
 
@@ -510,14 +517,16 @@ def criar_local():
             tipo_local=tipo_local,
             placa=info['placa'],
             tipo_veiculo=info.get('tipo_veiculo'),
-            marca_modelo=info.get('marca_modelo'),
+            marca=info.get('marca'),
+            modelo=info.get('modelo'),
             cor=info.get('cor'),
             criado_por_id=uid,
             atualizado_por_id=uid,
         )
         db.session.add(local)
         db.session.flush()
-        _registrar_log('CRIAR', f'Criou o veículo {local.placa} — {local.marca_modelo or ""}'.strip(),
+        _registrar_log('CRIAR',
+                       f'Criou o veículo {local.placa} — {_marca_modelo(local)}'.strip(' —'),
                        local_id=local.id)
         db.session.commit()
         return jsonify({'ok': True, 'id': local.id})
@@ -571,7 +580,8 @@ def editar_local(local_id):
         local.tipo_local = tipo_local
         local.placa = info['placa']
         local.tipo_veiculo = info.get('tipo_veiculo')
-        local.marca_modelo = info.get('marca_modelo')
+        local.marca = info.get('marca')
+        local.modelo = info.get('modelo')
         local.cor = info.get('cor')
         # Zera campos de local físico — o registro deixou de ser um endereço.
         local.cidade = None
@@ -580,7 +590,8 @@ def editar_local(local_id):
         local.bairro = None
         local.cep = None
         local.atualizado_por_id = getattr(current_user, 'id', None)
-        _registrar_log('EDITAR', f'Editou o veículo {local.placa} — {local.marca_modelo or ""}'.strip(),
+        _registrar_log('EDITAR',
+                       f'Editou o veículo {local.placa} — {_marca_modelo(local)}'.strip(' —'),
                        local_id=local.id)
         db.session.commit()
         return jsonify({'ok': True, 'id': local.id})
@@ -598,7 +609,8 @@ def editar_local(local_id):
     # Limpa campos de veículo caso o registro tenha sido convertido de volta.
     local.placa = None
     local.tipo_veiculo = None
-    local.marca_modelo = None
+    local.marca = None
+    local.modelo = None
     local.cor = None
     local.atualizado_por_id = getattr(current_user, 'id', None)
 
@@ -658,7 +670,7 @@ def exportar_excel():
     ws.title = 'Identidade Visual'
 
     headers = ['Cidade', 'Tipo Local', 'Endereço', 'Bairro', 'CEP', 'Placa',
-               'Marca/Modelo', 'Cor', 'Status', 'Custo (R$)', 'Data/Hora', 'Qtd Arquivos']
+               'Marca', 'Modelo', 'Cor', 'Status', 'Custo (R$)', 'Data/Hora', 'Qtd Arquivos']
     header_fill = PatternFill(start_color='0891B2', end_color='0891B2', fill_type='solid')
     header_font = Font(bold=True, color='FFFFFF', size=11)
     thin_border = Border(
@@ -686,7 +698,8 @@ def exportar_excel():
             l.bairro or '',
             l.cep or '',
             (l.placa or '') if eh_veic else '',
-            (l.marca_modelo or '') if eh_veic else '',
+            (l.marca or '') if eh_veic else '',
+            (l.modelo or '') if eh_veic else '',
             (l.cor or '') if eh_veic else '',
             status,
             float(l.custo) if l.custo else None,
@@ -696,10 +709,10 @@ def exportar_excel():
         for col, v in enumerate(valores, 1):
             cell = ws.cell(row=row_idx, column=col, value=v)
             cell.border = thin_border
-            if col == 10 and v is not None:
+            if col == 11 and v is not None:
                 cell.number_format = '#,##0.00'
 
-    col_widths = [22, 18, 40, 18, 12, 12, 30, 14, 12, 15, 18, 14]
+    col_widths = [22, 18, 40, 18, 12, 12, 16, 28, 14, 12, 15, 18, 14]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 

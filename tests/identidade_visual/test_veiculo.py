@@ -38,7 +38,8 @@ def _fake_consultar(placa):
     return {
         'placa': detran_service.normalizar_placa(placa),
         'tipo_veiculo': 'AUTOMOVEL',
-        'marca_modelo': 'HYUNDAI/CRETA20A ULTIMTE',
+        'marca': 'HYUNDAI',
+        'modelo': 'CRETA20A ULTIMTE',
         'cor': 'CINZA',
     }
 
@@ -47,8 +48,10 @@ def _fake_consultar_variado(placa):
     """Devolve dados diferentes por placa — para exercitar os filtros."""
     p = detran_service.normalizar_placa(placa)
     if p == 'ABC1D23':
-        return {'placa': p, 'tipo_veiculo': 'MOTOCICLETA', 'marca_modelo': 'HONDA/CG160', 'cor': 'PRETA'}
-    return {'placa': p, 'tipo_veiculo': 'AUTOMOVEL', 'marca_modelo': 'HYUNDAI/CRETA', 'cor': 'CINZA'}
+        return {'placa': p, 'tipo_veiculo': 'MOTOCICLETA',
+                'marca': 'HONDA', 'modelo': 'CG160', 'cor': 'PRETA'}
+    return {'placa': p, 'tipo_veiculo': 'AUTOMOVEL',
+            'marca': 'HYUNDAI', 'modelo': 'CRETA', 'cor': 'CINZA'}
 
 
 class TestDetranService:
@@ -71,15 +74,29 @@ class TestDetranService:
             app.config['DETRAN_API_KEY'] = 'chave-teste'
             info = detran_service.consultar_veiculo('rsk-6j04')
 
+        # DETRAN devolve "MARCA/MODELO" numa string única — o serviço divide.
         assert info == {
             'placa': 'RSK6J04',
             'tipo_veiculo': 'AUTOMOVEL',
-            'marca_modelo': 'HYUNDAI/CRETA20A ULTIMTE',
+            'marca': 'HYUNDAI',
+            'modelo': 'CRETA20A ULTIMTE',
             'cor': 'CINZA',
         }
         # Garante que dados pessoais do proprietário NÃO vazam.
         assert 'nomePossuidor' not in info
         assert 'documentoPossuidor' not in info
+
+    def test_split_marca_modelo_divide_no_primeiro_slash(self):
+        # "CHEV/PRISMA 1.4MT LT" e "HONDA/CG150 FAN ESDI" são casos reais do banco.
+        assert detran_service.split_marca_modelo('CHEV/PRISMA 1.4MT LT') == ('CHEV', 'PRISMA 1.4MT LT')
+        assert detran_service.split_marca_modelo('HONDA/CG150 FAN ESDI') == ('HONDA', 'CG150 FAN ESDI')
+        # Espaços em volta do "/" são descartados.
+        assert detran_service.split_marca_modelo(' HYUNDAI / CRETA20A ULTIMTE ') == ('HYUNDAI', 'CRETA20A ULTIMTE')
+        # Sem "/" — vira só marca; modelo fica None.
+        assert detran_service.split_marca_modelo('FIAT UNO') == ('FIAT UNO', None)
+        # Vazio / None → (None, None), nunca lança.
+        assert detran_service.split_marca_modelo('') == (None, None)
+        assert detran_service.split_marca_modelo(None) == (None, None)
 
 
 class TestConsultarPlacaEndpoint:
@@ -93,7 +110,8 @@ class TestConsultarPlacaEndpoint:
             data = resp.get_json()
             assert data['ok'] is True
             assert data['placa'] == 'RSK6J04'
-            assert data['marca_modelo'] == 'HYUNDAI/CRETA20A ULTIMTE'
+            assert data['marca'] == 'HYUNDAI'
+            assert data['modelo'] == 'CRETA20A ULTIMTE'
             assert data['cor'] == 'CINZA'
             assert data['tipo_veiculo'] == 'AUTOMOVEL'
 
@@ -113,7 +131,8 @@ class TestCriarVeiculo:
             assert local.is_veiculo
             assert local.placa == 'RSK6J04'
             assert local.tipo_veiculo == 'AUTOMOVEL'
-            assert local.marca_modelo == 'HYUNDAI/CRETA20A ULTIMTE'
+            assert local.marca == 'HYUNDAI'
+            assert local.modelo == 'CRETA20A ULTIMTE'
             assert local.cor == 'CINZA'
             # Veículo não tem localização física.
             assert local.cidade is None

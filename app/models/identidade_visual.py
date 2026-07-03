@@ -41,7 +41,8 @@ class IdentidadeVisualLocal(db.Model):
     # passa a existir depois da migração).
     placa = deferred(db.Column(db.String(10), nullable=True))
     tipo_veiculo = deferred(db.Column(db.String(100), nullable=True))
-    marca_modelo = deferred(db.Column(db.String(200), nullable=True))
+    marca = deferred(db.Column(db.String(60), nullable=True))
+    modelo = deferred(db.Column(db.String(200), nullable=True))
     cor = deferred(db.Column(db.String(60), nullable=True))
     custo = db.Column(db.Numeric(12, 2), nullable=True)
     data_acao = db.Column(db.DateTime, nullable=True)

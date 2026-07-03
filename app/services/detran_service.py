@@ -47,11 +47,31 @@ def _cor(node):
     return valor or None
 
 
+def split_marca_modelo(texto):
+    """Divide "MARCA/MODELO" no primeiro `/`. Sem barra, tudo vira marca.
+
+    O DETRAN devolve marca+modelo grudados numa string única (ex.:
+    "CHEV/PRISMA 1.4MT LT", "HONDA/CG150 FAN ESDI"). Aqui separamos para
+    persistir em colunas distintas.
+    """
+    if not texto:
+        return (None, None)
+    valor = texto.strip()
+    if not valor:
+        return (None, None)
+    if '/' not in valor:
+        return (valor, None)
+    marca, modelo = valor.split('/', 1)
+    return (marca.strip() or None, modelo.strip() or None)
+
+
 def consultar_veiculo(placa):
     """Consulta a placa no gateway DETRAN-SEAD.
 
-    Retorna um dict `{placa, tipo_veiculo, marca_modelo, cor}` apenas com os
-    campos públicos. Levanta `DetranError` para erros de negócio (placa inválida,
+    Retorna um dict `{placa, tipo_veiculo, marca, modelo, cor}` apenas com os
+    campos públicos. `marca` e `modelo` vêm juntos do DETRAN em "MARCA/MODELO"
+    (ex.: "CHEV/PRISMA 1.4MT LT") — divididos aqui p/ persistência em colunas
+    distintas. Levanta `DetranError` para erros de negócio (placa inválida,
     integração não configurada, veículo não encontrado) e `requests`/`Exception`
     para falhas de rede/servidor (o chamador decide o status HTTP).
     """
@@ -87,9 +107,11 @@ def consultar_veiculo(placa):
     if not data:
         raise DetranError('Veículo não encontrado para essa placa')
 
+    marca, modelo = split_marca_modelo(_descricao(data.get('marcaModelo')))
     return {
         'placa': placa_norm,
         'tipo_veiculo': _descricao(data.get('tipoVeiculo')),
-        'marca_modelo': _descricao(data.get('marcaModelo')),
+        'marca': marca,
+        'modelo': modelo,
         'cor': _cor(data.get('cor')),
     }

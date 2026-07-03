@@ -180,14 +180,34 @@
     model (ficam fora do SELECT da listagem), então a listagem continua funcionando antes
     do ALTER; mas **criar/editar veículos** só funciona após rodar o SQL abaixo. Também é
     necessário tornar `cidade` NULL (veículo não preenche cidade).
-  - SQL (executar no Workbench — aplicar no localhost `sgc` e em produção):
+  - SQL (executar no Workbench — aplicar em produção; o localhost `sgc` já tem
+    o esquema antigo com `marca_modelo`, ver mini-migração logo abaixo):
   ```sql
   ALTER TABLE identidade_visual_locais
     MODIFY COLUMN cidade      VARCHAR(100) NULL,
     ADD COLUMN placa          VARCHAR(10)  NULL,
     ADD COLUMN tipo_veiculo   VARCHAR(100) NULL,
-    ADD COLUMN marca_modelo   VARCHAR(200) NULL,
+    ADD COLUMN marca          VARCHAR(60)  NULL,
+    ADD COLUMN modelo         VARCHAR(200) NULL,
     ADD COLUMN cor            VARCHAR(60)  NULL;
+  ```
+  - **Mini-migração localhost `sgc`** (só necessária no dev, que já tinha
+    `marca_modelo` — divide os valores existentes em `marca/modelo` no primeiro `/`):
+  ```sql
+  ALTER TABLE identidade_visual_locais
+    ADD COLUMN marca  VARCHAR(60)  NULL AFTER tipo_veiculo,
+    ADD COLUMN modelo VARCHAR(200) NULL AFTER marca;
+
+  UPDATE identidade_visual_locais
+     SET marca  = TRIM(SUBSTRING_INDEX(marca_modelo, '/', 1)),
+         modelo = TRIM(SUBSTRING(marca_modelo, LOCATE('/', marca_modelo) + 1))
+   WHERE marca_modelo IS NOT NULL AND marca_modelo LIKE '%/%';
+
+  UPDATE identidade_visual_locais
+     SET marca = TRIM(marca_modelo)
+   WHERE marca_modelo IS NOT NULL AND marca_modelo NOT LIKE '%/%';
+
+  ALTER TABLE identidade_visual_locais DROP COLUMN marca_modelo;
   ```
   - Config/ambiente (`.env` de produção): adicionar as variáveis do gateway DETRAN
     (a chave NÃO vai para o front-end — a consulta é feita no servidor):
