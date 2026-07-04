@@ -75,6 +75,30 @@
 .modal-iv .modal-header { padding: 1.25rem 2rem; }
 .modal-iv .modal-footer { padding: 1rem 2rem; }
 
+/* ===== Fix: footer (botão Salvar/Adicionar) sumindo em modais com <form> =====
+   Nos modais de Ação e Novo Local o <form> envolve o .modal-body E o
+   .modal-footer. Num .modal-dialog-scrollable o Bootstrap espera body/footer
+   como filhos DIRETOS do .modal-content (que é flex-column, max-height:100%,
+   overflow:hidden) para o padrão "body rola / footer fixo". Com o <form> no
+   meio, o body cresce livremente e empurra o footer — com o botão Salvar —
+   para fora, onde o overflow:hidden do .modal-content o corta.
+   Solução: o próprio <form> vira o container flex-column, o body rola e o
+   footer fica fixo. */
+.modal-iv .modal-content > form {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;      /* permite encolher dentro do .modal-content */
+    max-height: 100%;
+    overflow: hidden;
+}
+.modal-iv .modal-content > form > .modal-body {
+    overflow-y: auto;
+    min-height: 0;
+}
+.modal-iv .modal-content > form > .modal-footer {
+    flex-shrink: 0;     /* nunca encolhe/some: o botão Salvar fica sempre visível */
+}
+
 .arquivo-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; background: var(--color-surface-secondary, #f8f9fa); border-radius: 8px; margin-bottom: 0.5rem; flex-wrap: wrap; }
 .arquivo-item .arquivo-icon { font-size: 1.25rem; }
 .arquivo-item .arquivo-info { flex: 1; min-width: 0; }
@@ -271,6 +295,74 @@
     /* Linha "nenhum registro" não deve virar cartão estranho */
     .iv-table tbody tr td[colspan] { display: block; padding: 1.25rem; text-align: center; }
     .iv-table tbody tr td[colspan]::before { display: none; }
+
+    /* ===== Tabela de Veículos também vira cartões (mesmo padrão das Fachadas) ===== */
+    #tabelaVeiculos thead { display: none; }
+    #tabelaVeiculos tbody tr {
+        display: block;
+        position: relative;
+        border: 1px solid var(--color-surface-border, #e3e6ea);
+        border-radius: 14px;
+        margin-bottom: 0.85rem;
+        padding: 0.9rem 1rem 0.85rem;
+        background: var(--color-surface, #fff);
+        box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    }
+    #tabelaVeiculos tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.28rem 0;
+        border: none;
+        font-size: 0.85rem;
+        gap: 0.75rem;
+        text-align: left;
+    }
+    #tabelaVeiculos tbody td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        color: var(--color-text-tertiary, #6c757d);
+        flex-shrink: 0;
+    }
+    #tabelaVeiculos tbody td > * { text-align: right; }
+
+    /* Placa = título do cartão */
+    #tabelaVeiculos tbody td[data-label="Placa"] {
+        display: block;
+        font-weight: 700;
+        font-size: 1.05rem;
+        padding: 0 4.5rem 0.1rem 0;   /* espaço p/ o badge de status no canto */
+    }
+    #tabelaVeiculos tbody td[data-label="Placa"]::before { display: none; }
+    #tabelaVeiculos tbody td[data-label="Placa"] .ps-4 { padding-left: 0 !important; }
+
+    /* Status flutua no canto superior direito */
+    #tabelaVeiculos tbody td[data-label="Status"] {
+        position: absolute;
+        top: 0.85rem;
+        right: 0.9rem;
+        padding: 0;
+        justify-content: flex-end;
+    }
+    #tabelaVeiculos tbody td[data-label="Status"]::before { display: none; }
+
+    /* Ação: botões grandes lado a lado ocupando a largura */
+    #tabelaVeiculos tbody td[data-label="Ação"] {
+        margin-top: 0.6rem;
+        padding-top: 0.6rem;
+        border-top: 1px solid var(--color-surface-border, #eef0f2);
+    }
+    #tabelaVeiculos tbody td[data-label="Ação"]::before { display: none; }
+    #tabelaVeiculos tbody td[data-label="Ação"] .d-inline-flex { width: 100%; gap: 0.5rem; }
+    #tabelaVeiculos tbody td[data-label="Ação"] .btn-acao { flex: 1; padding: 0.5rem; font-size: 0.85rem; }
+    #tabelaVeiculos tbody td[data-label="Ação"] .btn-excluir-local { flex: 0 0 auto; min-width: 46px; }
+
+    /* Linha "nenhum veículo" não deve virar cartão estranho */
+    #tabelaVeiculos tbody tr td[colspan] { display: block; padding: 1.5rem; text-align: center; }
+    #tabelaVeiculos tbody tr td[colspan]::before { display: none; }
 
     .modal-iv .modal-body { padding: 1rem; }
     .modal-iv .modal-header { padding: 1rem; }
@@ -618,18 +710,18 @@
                             {% set st = status_por_veiculo[v.id] %}
                             {% set n_arq = qtd_arquivos_veiculo[v.id] %}
                             <tr id="row-{{ v.id }}" class="veic-row" data-veic-id="{{ v.id }}" style="cursor:pointer;">
-                                <td class="ps-4 fw-bold"><i class="bi bi-car-front-fill text-primary me-1"></i>{{ v.placa or '—' }}</td>
-                                <td>{% if v.tipo_veiculo %}<span class="badge rounded-pill bg-info text-dark">{{ v.tipo_veiculo }}</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
-                                <td class="fw-semibold">{{ v.marca or '—' }}</td>
-                                <td>{{ v.modelo or '—' }}</td>
-                                <td>{{ v.cor or '—' }}</td>
-                                <td>{% if v.data_acao %}<span class="small">{{ v.data_acao.strftime('%d/%m/%Y %H:%M') }}</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
-                                <td class="text-end">{% if v.custo %}<span class="fw-bold text-success">R$ {{ "{:,.2f}".format(v.custo).replace(",","X").replace(".",",").replace("X",".") }}</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
-                                <td class="text-center">
+                                <td class="ps-4 fw-bold" data-label="Placa"><i class="bi bi-car-front-fill text-primary me-1"></i>{{ v.placa or '—' }}</td>
+                                <td data-label="Tipo">{% if v.tipo_veiculo %}<span class="badge rounded-pill bg-info text-dark">{{ v.tipo_veiculo }}</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
+                                <td class="fw-semibold" data-label="Marca">{{ v.marca or '—' }}</td>
+                                <td data-label="Modelo">{{ v.modelo or '—' }}</td>
+                                <td data-label="Cor">{{ v.cor or '—' }}</td>
+                                <td data-label="Data/Hora">{% if v.data_acao %}<span class="small">{{ v.data_acao.strftime('%d/%m/%Y %H:%M') }}</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
+                                <td class="text-end" data-label="Custo">{% if v.custo %}<span class="fw-bold text-success">R$ {{ "{:,.2f}".format(v.custo).replace(",","X").replace(".",",").replace("X",".") }}</span>{% else %}<span class="text-muted small">—</span>{% endif %}</td>
+                                <td class="text-center" data-label="Status">
                                     <span class="badge {{ 'badge-realizado' if st == 'REALIZADO' else 'badge-pendente' }}"><i class="bi {{ 'bi-check-circle-fill' if st == 'REALIZADO' else 'bi-clock-fill' }}"></i> {{ st }}</span>
                                     {% if n_arq %}<span class="iv-arq-badge" title="{{ n_arq }} arquivo(s) anexado(s)"><i class="bi bi-paperclip"></i>{{ n_arq }}</span>{% endif %}
                                 </td>
-                                <td class="text-center">
+                                <td class="text-center" data-label="Ação">
                                     <div class="d-inline-flex gap-1">
                                         {% if pode_editar %}
                                         <button class="btn btn-outline-primary btn-acao" onclick="abrirModal({{ v.id }})">
@@ -957,6 +1049,7 @@
 <script>
 let localIdAtual = null;
 let temArquivosExistentes = false;
+let dadosLocalCarregado = false;  // true só após o fetch de arquivos concluir com sucesso
 let dadosLocalAtual = {};
 const MAX_FOTO_MB = 25;  // mantenha em sync com MAX_FILE_SIZE no backend
 const TIPO_VEICULO = {{ tipo_veiculo_nome|tojson }};
@@ -1003,8 +1096,16 @@ function fecharToast() {
 /* ===== Helpers ===== */
 function apiCall(url, opts) {
     return fetch(url, opts).then(r => {
-        if (!r.ok && r.status >= 500) {
-            return r.text().then(txt => { throw new Error('Erro no servidor: ' + r.status); });
+        // Sem permissão / sessão expirada → o backend faz redirect(hub|login) (302).
+        // O fetch segue o redirect e devolve HTML: chamar .json() aqui estouraria
+        // com "Unexpected token '<'". Detecta pelo redirect ou content-type.
+        const ct = r.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+            if (r.redirected || r.status === 401 || r.status === 403) {
+                throw new Error('Sessão expirada ou sem permissão para esta ação. Recarregue a página e faça login novamente.');
+            }
+            if (r.status >= 500) throw new Error('Erro no servidor: ' + r.status);
+            throw new Error('Resposta inesperada do servidor (' + r.status + ').');
         }
         return r.json();
     });
@@ -1160,6 +1261,7 @@ const tsEditTipo = new TomSelect('#editTipoLocal', {
 function abrirModal(id) {
     localIdAtual = id;
     temArquivosExistentes = false;
+    dadosLocalCarregado = false;
     dadosLocalAtual = {};
     document.getElementById('inputCusto').value = '';
     document.getElementById('inputDataAcao').value = '';
@@ -1176,6 +1278,12 @@ function fecharEnderecoEdit() {
 }
 
 function abrirEnderecoEdit() {
+    // Se o fetch dos dados ainda não terminou, dadosLocalAtual está vazio —
+    // abrir o editor agora traria campos em branco. Aguarda o carregamento.
+    if (!dadosLocalCarregado) {
+        mostrarToast('Aguarde', 'Carregando os dados do local…', 'erro');
+        return;
+    }
     document.getElementById('enderecoView').classList.add('d-none');
     document.getElementById('enderecoEdit').classList.remove('d-none');
 
@@ -1307,6 +1415,7 @@ function carregarArquivos(id) {
             }
 
             atualizarEnderecoDisplay(dadosLocalAtual);
+            dadosLocalCarregado = true;
 
             temArquivosExistentes = data.arquivos && data.arquivos.length > 0;
             if (!temArquivosExistentes) {
@@ -1374,6 +1483,13 @@ document.getElementById('inputCusto').addEventListener('input', function(e) {
 document.getElementById('formAcao').addEventListener('submit', function(e) {
     e.preventDefault();
     const btn = this.querySelector('button[type="submit"]');
+
+    // Se o carregamento dos dados falhou, temArquivosExistentes é pouco confiável
+    // (fica false) e o usuário veria "anexe um arquivo" mesmo já havendo anexos.
+    if (!dadosLocalCarregado) {
+        mostrarToast('Não foi possível carregar', 'Os dados do local não carregaram. Feche o modal e tente novamente.', 'erro');
+        return;
+    }
 
     const dataAcao = document.getElementById('inputDataAcao').value;
     if (!dataAcao) { mostrarToast('Campo obrigatório', 'Informe a Data e Hora.', 'erro'); return; }
