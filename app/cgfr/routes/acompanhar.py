@@ -28,7 +28,11 @@ from app.utils.permissions import requires_permission
 logger = logging.getLogger(__name__)
 
 # Constantes
-_SEI_TIMEOUT = 60
+# Timeout por tentativa na listagem de docs SEI. Generoso de proposito:
+# processos grandes (ate 1000 docs numa tacada) levam >60s pra responder e,
+# como o sync individual agora e SSE com heartbeats, a conexao sobrevive alem
+# do idle timeout do ALB (60s) — nao ha mais 504 por causa da espera.
+_SEI_TIMEOUT = 180
 _MAX_RETRIES = 3
 _MAX_WORKERS = 8
 # Intervalo (s) entre heartbeats do SSE enquanto a API SEI processa.

@@ -160,6 +160,22 @@ def test_sync_documentos_excecao_inesperada_vira_evento_sse(client, app, db_sess
     assert 'falha simulada' in final[-1]['error']
 
 
+def test_sync_usa_timeout_generoso_pois_sse_remove_limite_do_alb():
+    """Com SSE + heartbeats a conexao sobrevive alem dos 60s do ALB, entao o
+    timeout por tentativa ao SEI pode ser generoso (processos grandes levam >60s).
+    O heartbeat, por sua vez, precisa caber dentro do idle timeout do ALB.
+    """
+    from app.cgfr.routes import acompanhar
+
+    assert acompanhar._SEI_TIMEOUT >= 120, (
+        'listagem de docs precisa de timeout generoso; processos grandes '
+        'demoram >60s e o SSE ja evita o 504 do ALB'
+    )
+    assert acompanhar._SSE_HEARTBEAT < 60, (
+        'heartbeat precisa ser menor que o idle timeout do ALB (60s)'
+    )
+
+
 def test_sync_documentos_emite_heartbeat_durante_processamento(client, app, db_session):
     """Enquanto o SEI processa, o stream emite heartbeats (evita idle timeout do ALB)."""
     protocolo = '00002.000506/2026-06'
