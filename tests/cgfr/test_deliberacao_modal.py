@@ -174,7 +174,8 @@ def test_modal_edicao_nao_mantem_campo_aberto_para_deliberacao():
     assert 'textarea class="form-control form-control-sm" id="modal-deliberacao"' not in html
 
 
-def test_sync_documentos_retorna_json_em_erro_inesperado(client, app, db_session):
+def test_sync_documentos_entrega_erro_inesperado_via_sse(client, app, db_session):
+    """Erro inesperado no sync agora chega como evento SSE (rota nao-bloqueante)."""
     protocolo = '00002.000099/2026-09'
     processo = CgfrProcessoEnviado(processo_formatado=protocolo)
     db_session.add(processo)
@@ -188,10 +189,10 @@ def test_sync_documentos_retorna_json_em_erro_inesperado(client, app, db_session
                  'app.cgfr.routes.acompanhar._fetch_and_save_docs',
                  side_effect=RuntimeError('falha simulada'),
              ):
-            resp = client.post(f'/cgfr/acompanhar/{protocolo}/sync')
+            resp = client.get(f'/cgfr/acompanhar/{protocolo}/sync')
+            corpo = resp.get_data(as_text=True)
 
-    assert resp.status_code == 500
-    assert resp.is_json
-    data = resp.get_json()
-    assert data['success'] is False
-    assert 'falha simulada' in data['error']
+    assert resp.status_code == 200
+    assert resp.mimetype == 'text/event-stream'
+    assert 'falha simulada' in corpo
+    assert '"success": false' in corpo

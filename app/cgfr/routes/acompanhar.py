@@ -7,6 +7,7 @@ para chamada API + retry. Persiste em CgfrMovimentacao (tabela propria do CGFR).
 """
 import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests as http_requests
@@ -30,6 +31,9 @@ logger = logging.getLogger(__name__)
 _SEI_TIMEOUT = 60
 _MAX_RETRIES = 3
 _MAX_WORKERS = 8
+# Intervalo (s) entre heartbeats do SSE enquanto a API SEI processa.
+# Precisa ser < idle timeout do proxy/ALB (60s) para manter a conexao viva.
+_SSE_HEARTBEAT = 15
 
 
 # ---------------------------------------------------------------------------
@@ -191,42 +195,95 @@ def acompanhar(protocolo):
     )
 
 
-@cgfr_bp.route('/acompanhar/<path:protocolo>/sync', methods=['POST'])
+@cgfr_bp.route('/acompanhar/<path:protocolo>/sync', methods=['GET'])
 @login_required
 @requires_permission('cgfr')
 def sync_documentos(protocolo):
-    """Sincroniza documentos SEI de um processo CGFR via API SEI."""
+    """Sincroniza documentos SEI de um processo CGFR via SSE (nao-bloqueante).
+
+    A API SEI pode demorar minutos para responder. Se a requisicao ficar
+    bloqueada esperando, o idle timeout do proxy/ALB (60s) corta a conexao e
+    o navegador recebe 504 — mesmo que o Gunicorn conclua e salve os docs.
+
+    Solucao: rodar a sincronizacao numa thread e transmitir o progresso via
+    Server-Sent Events, com heartbeats periodicos (< 60s) que mantem a
+    conexao viva enquanto o SEI processa. A resposta HTTP sai na hora.
+    """
     processo = CgfrProcessoEnviado.query.get(protocolo)
     if not processo:
         return jsonify({'success': False, 'error': 'Processo nao encontrado'}), 404
 
-    try:
-        token_sei = gerar_token_sei_admin()
+    app_obj = current_app._get_current_object()
+
+    def _sync_full():
+        """Executado em thread separada; gerencia o proprio app_context."""
+        with app_obj.app_context():
+            token_sei = gerar_token_sei_admin()
         if not token_sei:
-            return jsonify({'success': False, 'error': 'Falha ao obter token SEI'}), 500
-    except Exception as e:
-        return jsonify({'success': False, 'error': f'Erro autenticacao SEI: {str(e)}'}), 500
-
-    try:
-        app_obj = current_app._get_current_object()
-
+            return (False, 'Falha ao obter token SEI')
         # 1. Atualiza campos sync do processo (link_acesso, especificacao, etc.)
         _update_processo_from_sei(protocolo, token_sei, app_obj)
-
         # 2. Sincroniza documentos (usa sei_integration compartilhada)
-        success, msg = _fetch_and_save_docs(protocolo, token_sei, app_obj)
+        return _fetch_and_save_docs(protocolo, token_sei, app_obj)
+
+    def generate():
+        yield f"data: {json.dumps({'msg': 'Conectando ao SEI...', 'progresso': 5})}\n\n"
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_sync_full)
+
+            # Heartbeats mantem a conexao viva enquanto o SEI processa,
+            # evitando o idle timeout do ALB sem bloquear ate o fim da chamada.
+            while not future.done():
+                yield (
+                    "data: "
+                    + json.dumps({
+                        'msg': 'Baixando documentos do SEI...',
+                        'progresso': 50,
+                        'heartbeat': True,
+                    })
+                    + "\n\n"
+                )
+                time.sleep(_SSE_HEARTBEAT)
+
+            try:
+                success, msg = future.result()
+            except Exception as e:
+                logger.exception('[CGFR] Erro inesperado ao sincronizar documentos')
+                yield (
+                    "data: "
+                    + json.dumps({
+                        'success': False,
+                        'concluido': True,
+                        'error': f'Erro inesperado ao sincronizar documentos: {e}',
+                    })
+                    + "\n\n"
+                )
+                return
 
         if success:
-            return jsonify({'success': True, 'message': msg})
+            yield (
+                "data: "
+                + json.dumps({
+                    'success': True,
+                    'concluido': True,
+                    'progresso': 100,
+                    'message': msg,
+                })
+                + "\n\n"
+            )
+        else:
+            yield (
+                "data: "
+                + json.dumps({'success': False, 'concluido': True, 'error': msg})
+                + "\n\n"
+            )
 
-        return jsonify({'success': False, 'error': msg}), 500
-    except Exception as e:
-        current_app.logger.exception('[CGFR] Erro inesperado ao sincronizar documentos')
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'error': f'Erro inesperado ao sincronizar documentos: {e}',
-        }), 500
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
 
 
 @cgfr_bp.route('/acompanhar/sync-bulk')
