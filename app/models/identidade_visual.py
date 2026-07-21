@@ -20,6 +20,7 @@ TIPOS_LOCAL = [
     TIPO_LOCAL_VEICULO,
     'Espaço da Cidadania',
     'Sala da Cidadania',
+    'Justo Acesso',
 ]
 
 

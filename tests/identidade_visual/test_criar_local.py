@@ -27,6 +27,24 @@ class TestCriarLocal:
             assert local.cep == '64000-000'
             assert local.status == 'PENDENTE'
 
+    def test_criar_local_justo_acesso(self, logged_client, db_session, app, municipio_teresina):
+        """'Justo Acesso' é um tipo de local físico válido (como Sala/Espaço da Cidadania)."""
+        with app.app_context():
+            resp = logged_client.post('/identidade-visual/api/criar-local', json={
+                'municipio_id': municipio_teresina.id,
+                'tipo_local': 'Justo Acesso',
+                'endereco': 'Rua Teste, 456',
+                'bairro': 'Centro',
+                'cep': '64000-000',
+            })
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data['ok'] is True
+
+            local = db_session.get(IdentidadeVisualLocal, data['id'])
+            assert local.tipo_local == 'Justo Acesso'
+            assert local.cidade == 'Teresina'
+
     def test_criar_local_cidade_obrigatoria(self, logged_client, app, municipio_teresina):
         with app.app_context():
             resp = logged_client.post('/identidade-visual/api/criar-local', json={
