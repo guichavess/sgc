@@ -239,6 +239,19 @@
   ```
   - Observação: **sem esta atualização**, o Nível 2 (Bruno) nunca será detectado e o sistema escalará direto para Nível 3. Não há alteração de schema — `cargo_gestao` já é `VARCHAR(50)`.
 
+
+### Dependências Python — Relatório Fotográfico PDF (2026-07-22)
+
+- [ ] **Instalar fpdf2 e Pillow no venv de produção**
+  - Contexto: o módulo Identidade Visual agora gera o Relatório Fotográfico como
+    PDF para download direto (rota `/identidade-visual/relatorio-fotografico/pdf`).
+    Bibliotecas puras Python, sem dependência de sistema.
+  - Comando (executar no servidor após o git pull):
+  ```bash
+  cd /home/sead/sgc_novo && source .venv/bin/activate && pip install fpdf2>=2.8.0 Pillow>=10.0.0
+  ```
+  - Observação: nenhuma alteração de banco necessária.
+
 ---
 
 ## Formato para novos itens

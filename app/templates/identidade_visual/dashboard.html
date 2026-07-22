@@ -202,6 +202,9 @@
     /* Header: título + ações empilhados, botões lado a lado preenchendo a largura */
     .header-actions { width: 100%; gap: 0.5rem; }
     .header-actions .btn { flex: 1; padding: 0.55rem 0.5rem; }
+    /* O dropdown "Exportar" é o item flex — o botão dentro dele ocupa a célula toda. */
+    .header-actions .dropdown { flex: 1; }
+    .header-actions .dropdown .btn { width: 100%; }
 
     /* Filtros: 2 por linha, dropdown ocupa toda a largura da célula */
     .iv-filters { padding: 0.85rem; }
@@ -386,9 +389,37 @@
                 <i class="bi bi-plus-lg"></i> Novo
             </button>
             {% endif %}
-            <a href="{{ url_for('identidade_visual.exportar_excel') }}" class="btn btn-outline-success btn-sm">
-                <i class="bi bi-file-earmark-excel"></i> Exportar
-            </a>
+            {# Exportar: menu único — o usuário escolhe o formato (Excel ou PDF). #}
+            <div class="dropdown">
+                <button type="button" id="menuExportar" class="btn btn-outline-success btn-sm dropdown-toggle"
+                        data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-download"></i> Exportar
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="menuExportar">
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('identidade_visual.exportar_excel') }}">
+                            <i class="bi bi-file-earmark-excel text-success me-1"></i> Excel
+                            <small class="d-block text-muted">Planilha com todos os registros</small>
+                        </a>
+                    </li>
+                    {% if pode_gerar_relatorio_fotografico %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('identidade_visual.relatorio_fotografico_pdf') }}">
+                            <i class="bi bi-file-earmark-pdf text-danger me-1"></i> PDF
+                            <small class="d-block text-muted">Relatório Fotográfico (realizados)</small>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('identidade_visual.relatorio_fotografico') }}"
+                           target="_blank" rel="noopener">
+                            <i class="bi bi-images text-primary me-1"></i> Gerar Relatório Fotográfico
+                            <small class="d-block text-muted">Visualizar no navegador</small>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
         </div>
     </div>
 

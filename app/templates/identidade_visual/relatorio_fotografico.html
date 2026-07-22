@@ -17,6 +17,8 @@
         .subtitulo { margin: 7px 0 0; color: var(--cinza); font-size: 13px; }
         .acoes { display: flex; justify-content: flex-end; margin: 20px 0; }
         .btn-imprimir { cursor: pointer; border: 0; border-radius: 5px; padding: 10px 15px; color: #fff; background: var(--azul); font-weight: 700; font-size: 14px; }
+        .btn-pdf { display: inline-block; cursor: pointer; border: 2px solid var(--azul); border-radius: 5px; padding: 9px 15px; color: var(--azul); background: #fff; font-weight: 700; font-size: 14px; text-decoration: none; margin-right: 10px; transition: background .2s, color .2s; }
+        .btn-pdf:hover { background: var(--azul); color: #fff; }
         .resumo { margin: 20px 0 28px; padding: 13px 16px; background: #edf5fa; border-left: 4px solid var(--azul); font-size: 14px; }
         .registro { break-inside: avoid; margin: 0 0 28px; padding: 20px; border: 1px solid var(--borda); border-radius: 7px; }
         .registro-topo { display: flex; gap: 16px; justify-content: space-between; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid var(--borda); }
@@ -62,7 +64,10 @@
             </div>
         </header>
 
-        <div class="acoes"><button type="button" class="btn-imprimir" onclick="window.print()">Imprimir / Salvar em PDF</button></div>
+        <div class="acoes">
+            <a href="{{ url_for('identidade_visual.relatorio_fotografico_pdf') }}" class="btn-pdf">⬇ Baixar PDF</a>
+            <button type="button" class="btn-imprimir" onclick="window.print()">Imprimir</button>
+        </div>
         <p class="resumo"><strong>{{ registros|length }}</strong> registro(s) realizado(s), gerado em {{ data_geracao.strftime('%d/%m/%Y às %H:%M') }}.</p>
 
         {% for registro in registros %}

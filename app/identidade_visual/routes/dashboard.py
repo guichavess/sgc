@@ -2,9 +2,9 @@ import io
 import os
 import uuid
 from datetime import datetime
-from flask import render_template, request, jsonify, send_file, current_app
+from flask import render_template, request, jsonify, send_file, current_app, url_for
 from flask_login import current_user
-from app.utils.permissions import requires_permission
+from app.utils.permissions import requires_admin, requires_permission
 from werkzeug.utils import secure_filename
 from sqlalchemy import inspect as sa_inspect, func
 from app.extensions import db
@@ -292,8 +292,372 @@ def dashboard():
         pode_criar=current_user.tem_permissao('identidade_visual', 'criar'),
         pode_editar=current_user.tem_permissao('identidade_visual', 'editar'),
         pode_excluir=current_user.tem_permissao('identidade_visual', 'excluir'),
+        pode_gerar_relatorio_fotografico=current_user.is_admin,
     )
 
+
+@identidade_visual_bp.route('/relatorio-fotografico')
+@requires_admin
+def relatorio_fotografico():
+    """Exibe a versão imprimível dos registros com status REALIZADO.
+
+    As imagens são servidas diretamente da pasta de uploads da aplicação no
+    servidor. Dessa forma, não há extração manual de arquivos para montar o
+    relatório. PDFs e HEIC permanecem disponíveis no cadastro, mas não entram
+    no layout fotográfico por não serem renderizáveis no navegador.
+    """
+    locais = (IdentidadeVisualLocal.query
+              .join(IdentidadeVisualArquivo)
+              .filter(IdentidadeVisualLocal.data_acao.isnot(None))
+              .distinct()
+              .all())
+
+    local_ids = [local.id for local in locais]
+    arquivos_por_local = {local_id: [] for local_id in local_ids}
+    if local_ids:
+        arquivos = (IdentidadeVisualArquivo.query
+                    .filter(IdentidadeVisualArquivo.local_id.in_(local_ids))
+                    .order_by(
+                        IdentidadeVisualArquivo.local_id,
+                        IdentidadeVisualArquivo.created_at,
+                        IdentidadeVisualArquivo.id,
+                    )
+                    .all())
+        extensoes_imagem = {'jpg', 'jpeg', 'png', 'webp'}
+        for arquivo in arquivos:
+            if arquivo.tipo.lower() not in extensoes_imagem:
+                continue
+            arquivos_por_local[arquivo.local_id].append({
+                'nome': arquivo.nome_original,
+                'url': url_for(
+                    'static',
+                    filename=f'uploads/identidade_visual/{arquivo.nome_servidor}',
+                ),
+            })
+
+    registros = []
+    for local in locais:
+        if local.is_veiculo:
+            identificacao = {
+                'categoria': 'Veículo',
+                'titulo': local.placa or 'Veículo sem placa',
+                'detalhes': [
+                    ('Tipo', local.tipo_veiculo),
+                    ('Marca', local.marca),
+                    ('Modelo', local.modelo),
+                    ('Cor', local.cor),
+                ],
+            }
+        else:
+            identificacao = {
+                'categoria': local.tipo_local,
+                'titulo': local.cidade or 'Local sem cidade',
+                'detalhes': [
+                    ('Endereço', local.endereco),
+                    ('Bairro', local.bairro),
+                    ('CEP', local.cep),
+                ],
+            }
+
+        registros.append({
+            **identificacao,
+            'data_acao': local.data_acao,
+            'fotos': arquivos_por_local[local.id],
+        })
+
+    registros.sort(key=lambda registro: (
+        registro['categoria'] == TIPO_LOCAL_VEICULO,
+        registro['titulo'].lower(),
+    ))
+    return render_template(
+        'identidade_visual/relatorio_fotografico.html',
+        registros=registros,
+        data_geracao=datetime.now(),
+    )
+
+
+@identidade_visual_bp.route('/relatorio-fotografico/pdf')
+@requires_admin
+def relatorio_fotografico_pdf():
+    """Gera o Relatório Fotográfico em PDF para download direto.
+
+    Usa fpdf2 para renderizar o relatório server-side, sem depender do
+    Ctrl+P do navegador. As fotos são lidas diretamente do disco do
+    servidor (UPLOAD_FOLDER).
+    """
+    from fpdf import FPDF
+    from PIL import Image as PILImage
+
+    # ── Cores (mesmas do template HTML) ──
+    AZUL = (7, 90, 155)
+    CINZA = (93, 102, 112)
+    PRETO = (32, 37, 42)
+    COR_BORDA = (220, 226, 232)
+
+    # ── Dimensões A4 ──
+    PG_W = 210
+    MARGEM = 15
+    LARG = PG_W - 2 * MARGEM       # 180 mm úteis
+    GAP_COL = 8                     # espaço entre colunas
+    COL_W = (LARG - GAP_COL) / 2   # ~86 mm por foto
+    MAX_IMG_H = 105                 # altura máxima por foto (mm)
+    Y_MAX = 297 - 20                # limite inferior antes do footer
+
+    brasao_path = os.path.join('app', 'static', 'img', 'brasao_piaui.png')
+
+    # ── Subclasse com cabeçalho/rodapé ──
+    class _PDF(FPDF):
+        def header(self):
+            if self.page_no() == 1:
+                if os.path.isfile(brasao_path):
+                    self.image(brasao_path, x=(PG_W - 22) / 2, y=12, w=22)
+                self.set_y(37)
+                self.set_font('Helvetica', '', 8)
+                self.set_text_color(*CINZA)
+                self.cell(LARG, 4,
+                          'ESTADO DO PIAU\u00cd - SECRETARIA DE ADMINISTRA\u00c7\u00c3O (SEAD)',
+                          align='C', new_x='LMARGIN', new_y='NEXT')
+                self.set_font('Helvetica', 'B', 20)
+                self.set_text_color(*AZUL)
+                self.cell(LARG, 12, 'Relat\u00f3rio Fotogr\u00e1fico',
+                          align='C', new_x='LMARGIN', new_y='NEXT')
+                self.set_font('Helvetica', '', 9)
+                self.set_text_color(*CINZA)
+                self.cell(LARG, 5,
+                          'Identidade Visual - registros com status realizado',
+                          align='C', new_x='LMARGIN', new_y='NEXT')
+                y = self.get_y() + 3
+                self.set_draw_color(*AZUL)
+                self.set_line_width(0.8)
+                self.line(MARGEM, y, PG_W - MARGEM, y)
+                self.set_y(y + 6)
+            else:
+                self.set_font('Helvetica', 'B', 9)
+                self.set_text_color(*AZUL)
+                self.cell(LARG, 6,
+                          'Relat\u00f3rio Fotogr\u00e1fico - Identidade Visual',
+                          new_x='LMARGIN', new_y='NEXT')
+                self.set_draw_color(*AZUL)
+                self.set_line_width(0.3)
+                self.line(MARGEM, self.get_y(), PG_W - MARGEM, self.get_y())
+                self.ln(4)
+
+        def footer(self):
+            self.set_y(-12)
+            self.set_font('Helvetica', '', 8)
+            self.set_text_color(*CINZA)
+            self.cell(0, 10, f'P\u00e1gina {self.page_no()}/{{nb}}', align='C')
+
+    # ── Buscar registros realizados (mesma query do HTML) ──
+    locais = (IdentidadeVisualLocal.query
+              .join(IdentidadeVisualArquivo)
+              .filter(IdentidadeVisualLocal.data_acao.isnot(None))
+              .distinct()
+              .all())
+
+    local_ids = [local.id for local in locais]
+    arquivos_por_local = {lid: [] for lid in local_ids}
+    if local_ids:
+        arquivos = (IdentidadeVisualArquivo.query
+                    .filter(IdentidadeVisualArquivo.local_id.in_(local_ids))
+                    .order_by(IdentidadeVisualArquivo.local_id,
+                              IdentidadeVisualArquivo.created_at,
+                              IdentidadeVisualArquivo.id)
+                    .all())
+        ext_imagem = {'jpg', 'jpeg', 'png', 'webp'}
+        for arq in arquivos:
+            if arq.tipo.lower() not in ext_imagem:
+                continue
+            caminho = os.path.join(UPLOAD_FOLDER, arq.nome_servidor)
+            if os.path.isfile(caminho):
+                arquivos_por_local[arq.local_id].append({
+                    'nome': arq.nome_original,
+                    'caminho': caminho,
+                })
+
+    registros = []
+    for local in locais:
+        if local.is_veiculo:
+            ident = {
+                'categoria': 'Ve\u00edculo',
+                'titulo': local.placa or 'Ve\u00edculo sem placa',
+                'detalhes': [
+                    ('Tipo', local.tipo_veiculo), ('Marca', local.marca),
+                    ('Modelo', local.modelo), ('Cor', local.cor),
+                ],
+            }
+        else:
+            ident = {
+                'categoria': local.tipo_local,
+                'titulo': local.cidade or 'Local sem cidade',
+                'detalhes': [
+                    ('Endere\u00e7o', local.endereco), ('Bairro', local.bairro),
+                    ('CEP', local.cep),
+                ],
+            }
+        registros.append({
+            **ident,
+            'data_acao': local.data_acao,
+            'fotos': arquivos_por_local[local.id],
+        })
+
+    registros.sort(key=lambda r: (
+        r['categoria'] == TIPO_LOCAL_VEICULO,
+        r['titulo'].lower(),
+    ))
+
+    # ── Montar PDF ──
+    pdf = _PDF('P', 'mm', 'A4')
+    pdf.set_margins(MARGEM, MARGEM, MARGEM)
+    pdf.set_auto_page_break(auto=False)
+    pdf.alias_nb_pages()
+    pdf.add_page()
+
+    agora = datetime.now()
+
+    # Resumo
+    pdf.set_fill_color(237, 245, 250)
+    pdf.set_font('Helvetica', '', 10)
+    pdf.set_text_color(*PRETO)
+    y0 = pdf.get_y()
+    pdf.rect(MARGEM, y0, LARG, 8, style='F')
+    pdf.set_draw_color(*AZUL)
+    pdf.set_line_width(0.8)
+    pdf.line(MARGEM, y0, MARGEM, y0 + 8)
+    pdf.set_xy(MARGEM + 4, y0 + 1)
+    resumo = (f'{len(registros)} registro(s) realizado(s), gerado em '
+              f'{agora.strftime("%d/%m/%Y \u00e0s %H:%M")}.')
+    pdf.cell(LARG - 4, 6, resumo)
+    pdf.set_y(y0 + 14)
+
+    if not registros:
+        pdf.set_font('Helvetica', '', 12)
+        pdf.set_text_color(*CINZA)
+        pdf.cell(LARG, 30,
+                 'N\u00e3o h\u00e1 registros realizados para exibir.', align='C')
+
+    def _img_size(caminho_img):
+        """Retorna (w, h) em mm que cabem em COL_W x MAX_IMG_H."""
+        try:
+            with PILImage.open(caminho_img) as img:
+                w_px, h_px = img.size
+        except Exception:
+            return 0, 0
+        aspect = h_px / w_px
+        w, h = COL_W, COL_W * aspect
+        if h > MAX_IMG_H:
+            h = MAX_IMG_H
+            w = h / aspect
+        return w, h
+
+    for idx, reg in enumerate(registros):
+        if idx > 0:
+            pdf.add_page()
+
+        # Categoria
+        pdf.set_font('Helvetica', 'B', 9)
+        pdf.set_text_color(*AZUL)
+        pdf.cell(LARG, 5, reg['categoria'].upper(),
+                 new_x='LMARGIN', new_y='NEXT')
+
+        # Título + Data
+        pdf.set_font('Helvetica', 'B', 16)
+        pdf.set_text_color(*PRETO)
+        pdf.cell(LARG * 0.6, 9, reg['titulo'])
+
+        data_str = ''
+        if reg['data_acao']:
+            data_str = (f'Realizado em '
+                        f'{reg["data_acao"].strftime("%d/%m/%Y \u00e0s %H:%M")}')
+        pdf.set_font('Helvetica', '', 9)
+        pdf.set_text_color(*CINZA)
+        pdf.cell(LARG * 0.4, 9, data_str, align='R',
+                 new_x='LMARGIN', new_y='NEXT')
+
+        # Detalhes
+        detalhes = [f'{r}: {v}' for r, v in reg['detalhes'] if v]
+        if detalhes:
+            pdf.set_font('Helvetica', '', 10)
+            pdf.set_text_color(*CINZA)
+            pdf.cell(LARG, 6, '  |  '.join(detalhes),
+                     new_x='LMARGIN', new_y='NEXT')
+
+        # Separador
+        pdf.ln(3)
+        pdf.set_draw_color(*COR_BORDA)
+        pdf.set_line_width(0.3)
+        pdf.line(MARGEM, pdf.get_y(), PG_W - MARGEM, pdf.get_y())
+        pdf.ln(5)
+
+        # ── Fotos em grid 2 colunas ──
+        fotos = reg.get('fotos', [])
+        if not fotos:
+            pdf.set_font('Helvetica', 'I', 10)
+            pdf.set_text_color(109, 77, 0)
+            pdf.cell(LARG, 8,
+                     'Sem fotos em formato compat\u00edvel para o relat\u00f3rio.',
+                     new_x='LMARGIN', new_y='NEXT')
+            continue
+
+        i = 0
+        while i < len(fotos):
+            par = fotos[i:i + 2]
+            tamanhos = [_img_size(f['caminho']) for f in par]
+            alturas = [h for _, h in tamanhos if h > 0]
+            row_h = max(alturas) if alturas else 0
+
+            # Bloco = foto + legenda (~7mm extra)
+            if pdf.get_y() + row_h + 7 > Y_MAX:
+                pdf.add_page()
+
+            y_row = pdf.get_y()
+
+            for j, foto in enumerate(par):
+                w_img, h_img = tamanhos[j]
+                if w_img == 0:
+                    continue
+                x = MARGEM + j * (COL_W + GAP_COL)
+                x_offset = (COL_W - w_img) / 2 if w_img < COL_W else 0
+
+                # Borda fina ao redor da foto
+                pdf.set_draw_color(*COR_BORDA)
+                pdf.set_line_width(0.2)
+                pdf.rect(x + x_offset - 0.5, y_row - 0.5,
+                         w_img + 1, h_img + 1)
+
+                try:
+                    pdf.image(foto['caminho'],
+                              x=x + x_offset, y=y_row,
+                              w=w_img, h=h_img)
+                except Exception:
+                    current_app.logger.warning(
+                        '[IV-PDF] Erro ao inserir imagem: %s',
+                        foto['caminho'])
+
+                # Legenda (nome do arquivo)
+                pdf.set_xy(x, y_row + h_img + 1)
+                pdf.set_font('Helvetica', '', 7)
+                pdf.set_text_color(*CINZA)
+                nome_leg = foto['nome']
+                if len(nome_leg) > 40:
+                    nome_leg = nome_leg[:37] + '...'
+                pdf.cell(COL_W, 4, nome_leg)
+
+            pdf.set_y(y_row + row_h + 8)
+            i += 2
+
+    # ── Retornar PDF como download ──
+    buf = io.BytesIO()
+    pdf.output(buf)
+    buf.seek(0)
+
+    nome_arquivo = f'Relatorio_Fotografico_{agora.strftime("%Y%m%d_%H%M")}.pdf'
+    return send_file(
+        buf,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=nome_arquivo,
+    )
 
 @identidade_visual_bp.route('/api/salvar-acao/<int:local_id>', methods=['POST'])
 @requires_permission('identidade_visual.editar')
