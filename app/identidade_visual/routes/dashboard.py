@@ -403,7 +403,26 @@ def relatorio_fotografico_pdf():
     MAX_IMG_H = 105                 # altura máxima por foto (mm)
     Y_MAX = 297 - 20                # limite inferior antes do footer
 
-    brasao_path = os.path.join('app', 'static', 'img', 'brasao_piaui.png')
+    brasao_path = os.path.join(current_app.root_path, 'static', 'img',
+                               'brasao_piaui.png')
+
+    # Fonte core do fpdf2 escreve em latin-1: qualquer caractere fora dessa
+    # tabela (travessao, aspas curvas, emoji colados no cadastro) levantaria
+    # UnicodeEncodeError e derrubaria o relatorio inteiro.
+    SUBSTITUTOS = {
+        '–': '-', '—': '-', '‐': '-', '‑': '-',
+        '‘': "'", '’': "'", '“': '"', '”': '"',
+        '…': '...', ' ': ' ', '•': '-',
+    }
+
+    def _txt(valor):
+        """Devolve o texto seguro para a fonte core do PDF."""
+        if valor is None:
+            return ''
+        texto = str(valor)
+        for origem, destino in SUBSTITUTOS.items():
+            texto = texto.replace(origem, destino)
+        return texto.encode('latin-1', 'replace').decode('latin-1')
 
     # ── Subclasse com cabeçalho/rodapé ──
     class _PDF(FPDF):
@@ -560,13 +579,13 @@ def relatorio_fotografico_pdf():
         # Categoria
         pdf.set_font('Helvetica', 'B', 9)
         pdf.set_text_color(*AZUL)
-        pdf.cell(LARG, 5, reg['categoria'].upper(),
+        pdf.cell(LARG, 5, _txt(reg['categoria']).upper(),
                  new_x='LMARGIN', new_y='NEXT')
 
         # Título + Data
         pdf.set_font('Helvetica', 'B', 16)
         pdf.set_text_color(*PRETO)
-        pdf.cell(LARG * 0.6, 9, reg['titulo'])
+        pdf.cell(LARG * 0.6, 9, _txt(reg['titulo']))
 
         data_str = ''
         if reg['data_acao']:
@@ -578,7 +597,7 @@ def relatorio_fotografico_pdf():
                  new_x='LMARGIN', new_y='NEXT')
 
         # Detalhes
-        detalhes = [f'{r}: {v}' for r, v in reg['detalhes'] if v]
+        detalhes = [f'{_txt(r)}: {_txt(v)}' for r, v in reg['detalhes'] if v]
         if detalhes:
             pdf.set_font('Helvetica', '', 10)
             pdf.set_text_color(*CINZA)
@@ -641,7 +660,7 @@ def relatorio_fotografico_pdf():
                 pdf.set_xy(x, y_row + h_img + 1)
                 pdf.set_font('Helvetica', '', 7)
                 pdf.set_text_color(*CINZA)
-                nome_leg = foto['nome']
+                nome_leg = _txt(foto['nome'])
                 if len(nome_leg) > 40:
                     nome_leg = nome_leg[:37] + '...'
                 pdf.cell(COL_W, 4, nome_leg)

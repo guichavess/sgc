@@ -126,6 +126,59 @@ class TestRelatorioFotograficoPDF:
         assert response.data[:4] == b'%PDF'
         assert 'Relatorio_Fotografico_' in response.headers['Content-Disposition']
 
+    def test_pdf_com_caracteres_fora_do_latin1(
+        self, logged_client, db_session, app, tmp_path, monkeypatch
+    ):
+        """Fonte core do fpdf2 só codifica latin-1: travessão/aspas curvas/emoji
+        vindos do cadastro (endereço colado de mapa, por exemplo) derrubavam a
+        rota inteira com UnicodeEncodeError.
+        """
+        from PIL import Image
+        from app.identidade_visual.routes import dashboard as rotas
+
+        monkeypatch.setattr(rotas, 'UPLOAD_FOLDER', str(tmp_path))
+        Image.new('RGB', (800, 600), 'white').save(tmp_path / 'fachada.jpg')
+
+        with app.app_context():
+            local = IdentidadeVisualLocal(
+                cidade='Teresina — PI',
+                tipo_local='Sala da Cidadania',
+                endereco='Av. Frei Serafim, 2222 — “Centro” \U0001f4cd',
+                bairro='Centro',
+                cep='64000-000',
+                data_acao=datetime(2026, 7, 21, 14, 0),
+            )
+            db_session.add(local)
+            db_session.flush()
+            db_session.add(IdentidadeVisualArquivo(
+                local_id=local.id, nome_original='fachada — frente.jpg',
+                nome_servidor='fachada.jpg', tipo='jpg',
+            ))
+            db_session.commit()
+
+        response = logged_client.get('/identidade-visual/relatorio-fotografico/pdf')
+
+        assert response.status_code == 200
+        assert response.data[:4] == b'%PDF'
+
+    def test_pdf_ignora_imagem_corrompida(
+        self, logged_client, db_session, app, tmp_path, monkeypatch
+    ):
+        """Arquivo com extensão de imagem mas conteúdo inválido não pode
+        derrubar o relatório — o registro sai sem aquela foto."""
+        from app.identidade_visual.routes import dashboard as rotas
+
+        monkeypatch.setattr(rotas, 'UPLOAD_FOLDER', str(tmp_path))
+        (tmp_path / 'fachada.jpg').write_bytes(b'isto nao e uma imagem')
+
+        with app.app_context():
+            _criar_realizado(db_session)
+
+        response = logged_client.get('/identidade-visual/relatorio-fotografico/pdf')
+
+        assert response.status_code == 200
+        assert response.data[:4] == b'%PDF'
+
     def test_pdf_sem_registros_nao_quebra(self, logged_client):
         response = logged_client.get('/identidade-visual/relatorio-fotografico/pdf')
 
