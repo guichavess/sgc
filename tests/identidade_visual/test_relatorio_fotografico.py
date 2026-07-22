@@ -1,5 +1,7 @@
 """Testes do relatório fotográfico da Identidade Visual."""
+import re
 from datetime import datetime
+from pathlib import Path
 
 from app.models.identidade_visual import (
     IdentidadeVisualArquivo,
@@ -84,6 +86,22 @@ class TestRelatorioFotografico:
     def test_usuario_nao_admin_nao_visualiza_botao(self, client_editor):
         usuario_html = client_editor.get('/identidade-visual/').get_data(as_text=True)
         assert 'Gerar Relatório Fotográfico' not in usuario_html
+
+
+def test_fstrings_compativeis_com_python_310():
+    """Produção roda Python 3.10, onde backslash dentro de `{}` de f-string é
+    SyntaxError (permitido só a partir do 3.12). O dev roda 3.13 e não acusa —
+    o módulo inteiro quebrava no import, derrubando o Gunicorn com 502.
+    """
+    fonte = Path('app/identidade_visual/routes/dashboard.py').read_text(encoding='utf-8')
+
+    for numero, linha in enumerate(fonte.splitlines(), 1):
+        if "f'" not in linha and 'f"' not in linha:
+            continue
+        for expressao in re.findall(r'\{[^{}]*\}', linha):
+            assert '\\' not in expressao, (
+                f'linha {numero}: backslash em expressão de f-string — {linha.strip()}'
+            )
 
 
 class TestRelatorioFotograficoPDF:

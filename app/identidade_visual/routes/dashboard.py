@@ -525,8 +525,11 @@ def relatorio_fotografico_pdf():
     pdf.set_line_width(0.8)
     pdf.line(MARGEM, y0, MARGEM, y0 + 8)
     pdf.set_xy(MARGEM + 4, y0 + 1)
+    # Formato fora da f-string: producao roda Python 3.10, que nao
+    # aceita backslash dentro da expressao de uma f-string.
+    fmt_data = '%d/%m/%Y \u00e0s %H:%M'
     resumo = (f'{len(registros)} registro(s) realizado(s), gerado em '
-              f'{agora.strftime("%d/%m/%Y \u00e0s %H:%M")}.')
+              f'{agora.strftime(fmt_data)}.')
     pdf.cell(LARG - 4, 6, resumo)
     pdf.set_y(y0 + 14)
 
@@ -567,8 +570,8 @@ def relatorio_fotografico_pdf():
 
         data_str = ''
         if reg['data_acao']:
-            data_str = (f'Realizado em '
-                        f'{reg["data_acao"].strftime("%d/%m/%Y \u00e0s %H:%M")}')
+            data_str = ('Realizado em '
+                        + reg['data_acao'].strftime(fmt_data))
         pdf.set_font('Helvetica', '', 9)
         pdf.set_text_color(*CINZA)
         pdf.cell(LARG * 0.4, 9, data_str, align='R',
