@@ -346,8 +346,8 @@
 {% endblock %}
 
 {% block extra_css %}
-<!-- DataTables -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
+<!-- DataTables (vendorizado localmente — sem dependência de CDN na rede interna) -->
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/datatables/css/dataTables.bootstrap5.min.css') }}">
 <style>
 #tabelaContratos mark.prest-hl {
     background: #fff3a3;
@@ -359,11 +359,10 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- jQuery (requerido pelo DataTables) -->
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<!-- DataTables -->
-<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+<!-- jQuery + DataTables vendorizados localmente (sem CDN — funciona na rede interna) -->
+<script src="{{ url_for('static', filename='vendor/jquery/jquery-3.7.1.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/datatables/js/jquery.dataTables.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/datatables/js/dataTables.bootstrap5.min.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -562,7 +561,7 @@ $(document).ready(function() {
     }
 
     var dataTable = $('#tabelaContratos').DataTable({
-        language: { url: 'https://cdn.datatables.net/plug-ins/1.13.8/i18n/pt-BR.json' },
+        language: { url: '{{ url_for('static', filename='vendor/datatables/i18n/pt-BR.json') }}' },
         order: [],
         pageLength: 25,
         lengthChange: false,
