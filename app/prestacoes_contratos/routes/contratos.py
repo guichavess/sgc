@@ -38,11 +38,9 @@ def dashboard():
     filtro_subitem = [v.strip() for v in request.args.getlist('subitem_despesa') if v.strip()]
     filtro_tipo_patrimonial = [v.strip() for v in request.args.getlist('tipo_patrimonial') if v.strip()]
     filtro_ug = request.args.get('ug', '').strip()
-    page = max(1, request.args.get('page', 1, type=int))
-    per_page = 20
 
-    # Busca paginada com filtros
-    pagination = PrestacaoContratoService.listar_contratos_paginado(
+    # Busca todos os contratos com filtros (busca global client-side)
+    contratos_encontrados = PrestacaoContratoService.listar_contratos(
         codigo=filtro_codigo or None,
         contratado=filtro_contratado or None,
         situacao=filtro_situacao or None,
@@ -54,20 +52,18 @@ def dashboard():
         subitem_despesa=filtro_subitem or None,
         tipo_patrimonial=filtro_tipo_patrimonial or None,
         codigoUG=filtro_ug or None,
-        page=page,
-        per_page=per_page
     )
 
-    # Buscar naturezas múltiplas para todos os contratos da página
-    codigos_pagina = [c.codigo for c in pagination.items]
-    mapa_naturezas = PrestacaoContratoService.buscar_naturezas_por_contratos(codigos_pagina)
+    # Buscar naturezas múltiplas para todos os contratos encontrados
+    codigos_encontrados = [c.codigo for c in contratos_encontrados]
+    mapa_naturezas = PrestacaoContratoService.buscar_naturezas_por_contratos(codigos_encontrados)
 
-    # Buscar classificadores (SubItem + TipoPatrimonial) para contratos da página
-    mapa_classificadores = PrestacaoContratoService.buscar_classificadores_por_contratos(codigos_pagina)
+    # Buscar classificadores (SubItem + TipoPatrimonial) para os contratos encontrados
+    mapa_classificadores = PrestacaoContratoService.buscar_classificadores_por_contratos(codigos_encontrados)
 
     # Monta lista de contratos a partir dos resultados
     contratos = []
-    for contrato in pagination.items:
+    for contrato in contratos_encontrados:
         classif = mapa_classificadores.get(contrato.codigo, {})
         contratos.append({
             'codigo': contrato.codigo,
@@ -104,7 +100,7 @@ def dashboard():
     return render_template(
         'prestacoes_contratos/contratos/index.html',
         contratos=contratos,
-        pagination=pagination,
+        total=len(contratos),
         todas_situacoes=todas_situacoes,
         todos_tipos_execucao=todos_tipos_execucao,
         todos_centros_custo=todos_centros_custo,

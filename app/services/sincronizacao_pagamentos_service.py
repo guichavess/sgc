@@ -34,48 +34,80 @@ SEI_DOCUMENTOS_URL = (
 # FASE 3 — SALDOS EM LOTE (corrige cascata de erros + 1 único commit)
 # =============================================================================
 
-def atualizar_saldos_em_lote(
-    combinacoes: Iterable[Tuple[str, str]],
-    progress_cb=None,
-) -> Tuple[int, int, List[str]]:
-    """
-    Recalcula o saldo de cada (contrato, competência) e grava em lote.
+# Sentinela de cache: (contrato, ano) cujo cálculo já falhou uma vez. Evita
+# reprocessar e re-registrar o mesmo erro para outras competências do par.
+_ERRO_CACHE = object()
 
-    Estratégia em duas etapas para nunca "envenenar" a sessão:
-      1. Cálculo (somente leitura): erro de uma combinação é isolado e apenas
-         registrado — não afeta as demais nem deixa a sessão em estado inválido.
-      2. Gravação: faz upsert de todos os saldos calculados e UM único
-         ``commit()`` no final (atomicidade + performance).
+
+def calcular_saldo_item(
+    contrato: str,
+    competencia: str,
+    cache: Optional[dict] = None,
+) -> Tuple[Optional[float], Optional[str]]:
+    """
+    Calcula o saldo de ``(contrato, competencia)`` com cache por ``(contrato, ano)``.
+
+    O saldo disponível depende apenas de ``(contrato, ano)`` (soma de empenhos e
+    liquidações do exercício) — competências do mesmo ano compartilham o mesmo
+    valor. Reaproveitar o cálculo evita repetir as agregações pesadas no SIAFE
+    (correção da lentidão da Fase 3).
+
+    Falha de cálculo é isolada (read-only, não envenena a sessão).
 
     Args:
-        combinacoes: iterável de tuplas ``(codigo_contrato, competencia)``.
-        progress_cb: callback opcional ``(indice, total)`` para progresso.
+        contrato: código do contrato.
+        competencia: competência ``MM/YYYY``.
+        cache: dict opcional ``(contrato, ano) -> saldo`` reutilizado entre chamadas.
 
     Returns:
-        ``(atualizados, erros, lista_erros)``
+        ``(saldo, erro)``:
+          - ``(float, None)`` em sucesso;
+          - ``(None, str)`` em erro novo (deve ser contabilizado uma vez);
+          - ``(None, None)`` quando o par já falhou antes (ignorar em silêncio).
     """
-    combinacoes = list(combinacoes)
-    total = len(combinacoes)
-    lista_erros: List[str] = []
-    calculados: List[Tuple[str, str, float]] = []
-
-    # --- Etapa 1: cálculo (read-only, falha isolada por item) ---
-    for i, (contrato, competencia) in enumerate(combinacoes):
+    ano = None
+    if competencia and '/' in competencia:
         try:
-            saldo = SaldoService.calcular_saldo_disponivel(contrato, competencia)
-            calculados.append((contrato, competencia, saldo))
-        except Exception as e:  # noqa: BLE001 — erro de um item não pode parar o lote
-            lista_erros.append(f"{contrato}/{competencia}: {e}")
-            current_app.logger.warning(
-                f"[SYNC-SALDOS] Falha ao calcular {contrato}/{competencia}: {e}"
-            )
-        if progress_cb:
-            progress_cb(i + 1, total)
+            ano = int(competencia.split('/')[-1])
+        except (ValueError, IndexError):
+            ano = None
+    chave = (contrato, ano)
 
+    if cache is not None and chave in cache:
+        valor = cache[chave]
+        if valor is _ERRO_CACHE:
+            return None, None  # já contabilizado como erro anteriormente
+        return valor, None
+
+    try:
+        saldo = SaldoService.calcular_saldo_disponivel(contrato, competencia)
+        if cache is not None:
+            cache[chave] = saldo
+        return saldo, None
+    except Exception as e:  # noqa: BLE001 — erro de um item não pode parar o lote
+        if cache is not None:
+            cache[chave] = _ERRO_CACHE
+        current_app.logger.warning(
+            f"[SYNC-SALDOS] Falha ao calcular {contrato}/{competencia}: {e}"
+        )
+        return None, f"{contrato}/{competencia}: {e}"
+
+
+def gravar_saldos_calculados(
+    calculados: List[Tuple[str, str, float]],
+) -> Tuple[int, List[str]]:
+    """
+    Faz upsert em lote dos saldos já calculados com UM único ``commit()``.
+
+    Args:
+        calculados: lista de tuplas ``(contrato, competencia, saldo)``.
+
+    Returns:
+        ``(atualizados, lista_erros)``. Em falha de gravação: ``(0, [erro])``.
+    """
     if not calculados:
-        return 0, len(lista_erros), lista_erros
+        return 0, []
 
-    # --- Etapa 2: gravação em lote (upsert) + 1 commit ---
     try:
         # Pré-carrega os saldos existentes mais recentes (evita N+1)
         pares = [(c, comp) for c, comp, _ in calculados]
@@ -104,12 +136,56 @@ def atualizar_saldos_em_lote(
                 ))
 
         db.session.commit()
-        atualizados = len(calculados)
+        return len(calculados), []
     except Exception as e:  # noqa: BLE001
         db.session.rollback()
         current_app.logger.error(f"[SYNC-SALDOS] Erro ao gravar lote de saldos: {e}")
-        lista_erros.append(f"Gravação em lote: {e}")
-        atualizados = 0
+        return 0, [f"Gravação em lote: {e}"]
+
+
+def atualizar_saldos_em_lote(
+    combinacoes: Iterable[Tuple[str, str]],
+    progress_cb=None,
+) -> Tuple[int, int, List[str]]:
+    """
+    Recalcula o saldo de cada (contrato, competência) e grava em lote.
+
+    Estratégia em duas etapas para nunca "envenenar" a sessão:
+      1. Cálculo (somente leitura, com cache por ``(contrato, ano)``): erro de
+         uma combinação é isolado e apenas registrado — não afeta as demais nem
+         deixa a sessão em estado inválido.
+      2. Gravação: faz upsert de todos os saldos calculados e UM único
+         ``commit()`` no final (atomicidade + performance).
+
+    Args:
+        combinacoes: iterável de tuplas ``(codigo_contrato, competencia)``.
+        progress_cb: callback opcional ``(indice, total)`` para progresso.
+
+    Returns:
+        ``(atualizados, erros, lista_erros)``
+    """
+    combinacoes = list(combinacoes)
+    total = len(combinacoes)
+    lista_erros: List[str] = []
+    calculados: List[Tuple[str, str, float]] = []
+    cache: dict = {}
+
+    # --- Etapa 1: cálculo (read-only, cache por contrato/ano, falha isolada) ---
+    for i, (contrato, competencia) in enumerate(combinacoes):
+        saldo, erro = calcular_saldo_item(contrato, competencia, cache)
+        if erro:
+            lista_erros.append(erro)
+        elif saldo is not None:
+            calculados.append((contrato, competencia, saldo))
+        if progress_cb:
+            progress_cb(i + 1, total)
+
+    if not calculados:
+        return 0, len(lista_erros), lista_erros
+
+    # --- Etapa 2: gravação em lote (upsert) + 1 commit ---
+    atualizados, erros_gravacao = gravar_saldos_calculados(calculados)
+    lista_erros.extend(erros_gravacao)
 
     return atualizados, len(lista_erros), lista_erros
 

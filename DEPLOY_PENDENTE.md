@@ -17,208 +17,39 @@
 
 ## Pendências
 
-### Tabela de log de sincronização — Pagamentos (2026-06-23)
+### Índices para acelerar a Fase 3 (Saldos) — Pagamentos (2026-07-24)
 
-- [ ] **Criar tabela `sis_sincronizacao_log`**
-  - Contexto: o módulo de Pagamentos passou a registrar cada execução da rotina
-    "Sincronizar Tudo (SEI + Etapas + Saldos)" — tanto a manual (botão) quanto a nova
-    automática (job agendado 00:30/06:30/12:30/18:30). Essa tabela é a fonte única e
-    confiável da data de "Atualização Geral" exibida no dashboard de solicitações
-    (antes derivada do maior `SaldoEmpenho.data` apenas da página atual, por isso
-    sumia). Sem a tabela, a aplicação quebra ao abrir o dashboard.
+- [ ] **Criar índices em `empenho` e `liquidacao`**
+  - Contexto: a Fase 3 do "Sincronizar Tudo" (e o cálculo de saldo em geral)
+    agrega `empenho`/`liquidacao` filtrando por `codigoUG`, `statusDocumento`,
+    `dataEmissao` e `codContrato`. Sem índice composto essas colunas, cada
+    agregação é um full scan → lentidão. O código já foi otimizado para calcular
+    1x por `(contrato, ano)` (dedup por competência), mas o índice reduz o custo
+    de cada agregação restante. Somente performance — não altera resultado.
   - SQL (executar no Workbench):
   ```sql
-  CREATE TABLE sis_sincronizacao_log (
-    id                 INT AUTO_INCREMENT PRIMARY KEY,
-    iniciado_em        DATETIME NOT NULL,
-    finalizado_em      DATETIME NULL,
-    status             VARCHAR(20) NOT NULL DEFAULT 'em_andamento',
-    origem             VARCHAR(20) NOT NULL DEFAULT 'manual',
-    docs_atualizados   INT DEFAULT 0,
-    etapas_avancadas   INT DEFAULT 0,
-    saldos_atualizados INT DEFAULT 0,
-    erros              INT DEFAULT 0,
-    usuario_id         INT NULL,
-    INDEX idx_sync_finalizado (finalizado_em),
-    INDEX idx_sync_usuario (usuario_id)
-  );
+  CREATE INDEX idx_empenho_saldo   ON empenho   (codContrato, codigoUG, statusDocumento, dataEmissao);
+  CREATE INDEX idx_liquidacao_saldo ON liquidacao (codContrato, codigoUG, statusDocumento, dataEmissao);
   ```
-  - Observação: o job agendado `sincronizar_pagamentos_sei` roda automaticamente após
-    o deploy (4x ao dia). Nenhuma dependência Python nova (usa APScheduler já instalado).
 
-### Competência em Empenhos, Liquidações e OBs — Financeiro (2026-06-08)
+### Competência em Empenhos e Liquidações — Financeiro (2026-06-08)
 
-- [ ] **Adicionar coluna `competencia` em `empenho`, `liquidacao` e `ob`**
-  - Contexto: a aba Financeiro do gerenciamento de contrato passou a exibir a coluna Competência nas 4 sub-abas (Empenhos, Liquidações, PDs, Pagamentos/OB). Em produção, apenas a tabela `pd` tinha a coluna `competencia` — porque a API SIAFE de PD devolve o campo direto na resposta. Os endpoints de empenho/liquidação/OB **não** retornam `competencia` direto — confirmado via teste de produção. Os scripts agora extraem a competência dos classificadores `codigoTipoClassificador` 81 (Ano) e 502 (Mês), formato `MM/YYYY` (mesma lógica que `atualizar_liquidacao.py` já usava). Para OB foi adicionada extração recursiva (classificadores podem estar aninhados).
-  - SQL (executar no Workbench):
-  ```sql
-  ALTER TABLE empenho    ADD COLUMN competencia VARCHAR(7) NULL;
-  ALTER TABLE liquidacao ADD COLUMN competencia VARCHAR(7) NULL;
-  ALTER TABLE ob         ADD COLUMN competencia VARCHAR(7) NULL;
-  ```
-  - Observacao 2026-06-08: `codFonte` agora e normalizado antes do cast numerico nos scripts `atualizar_empenho.py`, `atualizar_liquidacao.py`, `atualizar_pd.py`, `atualizar_ob.py` e `atualizar_reserva.py`, evitando que fontes no formato SIAFE/classificador (`7.55`, `5.00`) sejam gravadas fora do padrao (`755`, `500`). Reexecutar os scripts listados abaixo corrige os registros recarregados por ano/UG; o backfill reverso preenche `empenho.competencia` restante via NL -> PD -> OB.
-  - Após o ALTER, re-rodar os scripts em produção para popular o histórico:
+- [ ] **Rodar backfill de `competencia` em `empenho` e `liquidacao`** (colunas e `ob`/`pd` já OK)
+  - Status verificado em produção (2026-07-24): colunas já existem nas 3 tabelas
+    (`empenho`/`liquidacao` = `VARCHAR(7)`, `ob` = `TEXT` — igual ao model `app/models/ob.py`,
+    não é divergência). `ob` (4.398/4.398) e `pd` (6.891/6.891) já estão 100% preenchidos.
+    **Faltam popular**: `empenho` (2.355/7.053 = 33%) e `liquidacao` (4.435/262.597 = 1,7%).
+  - Rodar em produção:
   ```bash
   python scripts/atualizar_empenho.py
   python scripts/atualizar_liquidacao.py
-  python scripts/atualizar_pd.py
-  python scripts/atualizar_ob.py
-  python scripts/atualizar_reserva.py
   python scripts/backfill_competencia_empenho.py --executar
   ```
-  - Validação pós-backfill (deve retornar >0 em todas):
+  - Validação pós-backfill:
   ```sql
   SELECT COUNT(*) AS total, COUNT(competencia) AS com_competencia FROM empenho;
   SELECT COUNT(*) AS total, COUNT(competencia) AS com_competencia FROM liquidacao;
-  SELECT COUNT(*) AS total, COUNT(competencia) AS com_competencia FROM ob;
-  SELECT COUNT(*) AS total, COUNT(competencia) AS com_competencia FROM pd;
   ```
-  - Observação: até o backfill rodar, a coluna Competência das três sub-abas vai aparecer como `—` para registros antigos. PD não precisa de ALTER (coluna já existe), só do deploy do model atualizado.
-
-### Módulo Identidade Visual — Fachadas (2026-06-25)
-
-- [ ] **Criar tabela `identidade_visual_locais` e importar dados**
-  - Contexto: módulo temporário para acompanhamento de fachadas dos Espaços/Salas da Cidadania.
-  - SQL (executar no Workbench):
-  ```sql
-  CREATE TABLE identidade_visual_locais (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    cidade          VARCHAR(100) NOT NULL,
-    tipo_local      VARCHAR(200) NOT NULL,
-    endereco        VARCHAR(500),
-    bairro          VARCHAR(200),
-    cep             VARCHAR(10),
-    custo           DECIMAL(12,2),
-    data_acao       DATETIME NULL,
-    arquivo_nome    VARCHAR(255),
-    arquivo_caminho VARCHAR(500),
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-  ```
-  - Script de importação (após criar a tabela):
-  ```bash
-  python scripts/importar_identidade_visual.py --executar
-  ```
-  - Observação: copiar `Acompanhamento Fachada.xlsx` para `~/Downloads/` no servidor antes de rodar, ou usar `--arquivo caminho/do/arquivo.xlsx`.
-- [ ] **Criar tabela `identidade_visual_arquivos`** (múltiplos arquivos por local)
-  ```sql
-  CREATE TABLE identidade_visual_arquivos (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    local_id        INT NOT NULL,
-    nome_original   VARCHAR(255) NOT NULL,
-    nome_servidor   VARCHAR(500) NOT NULL,
-    tipo            VARCHAR(10) NOT NULL,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_iv_arq_local (local_id),
-    FOREIGN KEY (local_id) REFERENCES identidade_visual_locais(id) ON DELETE CASCADE
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-  ```
-  - Observação: criar pasta de uploads no servidor: `mkdir -p app/static/uploads/identidade_visual`
-
-- [ ] **Criar tabela `municipios_pi` e adicionar coluna `municipio_id` em `identidade_visual_locais`**
-  - Contexto: campo Cidade agora é um select pesquisável vinculado à tabela de municípios do IBGE. Tipo Local validado contra lista fixa. Campos Endereço, Bairro e CEP agora são obrigatórios.
-  - Script (executa tudo: cria tabela, adiciona coluna, importa 224 municípios, associa registros existentes):
-  ```bash
-  python scripts/importar_municipios_pi.py --executar
-  ```
-  - Observação: o CSV do IBGE já está em `/tmp/1ea51a9afb80a30312ac5186a4804b80.csv` no servidor.
-
-- [ ] **Padronizar tipo_local para apenas "Espaço da Cidadania" e "Sala da Cidadania"**
-  - Contexto: as variações "(Auto Mall)" e "(Pi Center Moda)" foram removidas da lista de tipos válidos.
-  - SQL (executar no Workbench após o deploy):
-  ```sql
-  UPDATE identidade_visual_locais
-  SET tipo_local = 'Espaço da Cidadania'
-  WHERE tipo_local LIKE 'Espaço da Cidadania%'
-    AND tipo_local != 'Espaço da Cidadania';
-  ```
-
-### Auditoria + Exclusão — Identidade Visual (2026-06-26)
-
-- [ ] **Adicionar colunas de autoria em `identidade_visual_locais` e criar tabela de log `identidade_visual_log`**
-  - Contexto: o módulo passou a (1) registrar o usuário que criou/atualizou cada local,
-    (2) ordenar a listagem com os PENDENTES primeiro, e (3) permitir exclusão de registros
-    **apenas** para usuários com acesso full ao módulo (permissão `identidade_visual.excluir`
-    ou `is_admin`). Toda criação/edição/exclusão é gravada em `identidade_visual_log`.
-    As colunas novas são `deferred` no model, então a listagem continua funcionando antes
-    do ALTER; mas criar/editar/excluir só funcionam após rodar o SQL abaixo.
-  - SQL (executar no Workbench):
-  ```sql
-  ALTER TABLE identidade_visual_locais
-    ADD COLUMN criado_por_id     BIGINT NULL,
-    ADD COLUMN atualizado_por_id BIGINT NULL;
-
-  CREATE TABLE identidade_visual_log (
-    id           INT AUTO_INCREMENT PRIMARY KEY,
-    local_id     INT NULL,
-    acao         VARCHAR(20) NOT NULL,          -- CRIAR | EDITAR | EXCLUIR
-    descricao    VARCHAR(500) NULL,
-    usuario_id   BIGINT NULL,
-    usuario_nome VARCHAR(255) NULL,
-    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_iv_log_local (local_id),
-    INDEX idx_iv_log_usuario (usuario_id),
-    INDEX idx_iv_log_data (created_at)
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-  ```
-  - Permissões (perfis): a ação `excluir` já existe na lista `ACOES`. Para liberar a exclusão
-    a um perfil, marcar a permissão **Identidade Visual → Excluir** na tela de Perfis. Papéis
-    sugeridos dentro do módulo:
-    - **Visualizador**: `identidade_visual.visualizar` (vê e exporta).
-    - **Operador**: `visualizar` + `editar` (cria locais, registra ações, anexa/remove arquivos).
-    - **Gestor / Full**: `visualizar` + `editar` + `excluir` (tudo + exclusão). `is_admin` tem tudo.
-  - Observação: nenhuma dependência Python nova.
-
-### Categoria "Veículo" — Identidade Visual (2026-07-02)
-
-- [ ] **Adicionar colunas de veículo em `identidade_visual_locais` e tornar `cidade` opcional**
-  - Contexto: o módulo passou a aceitar registros do tipo **Veículo** (carros adesivados),
-    além dos locais físicos (Espaço/Sala da Cidadania). Um veículo não tem cidade/endereço:
-    o usuário informa só a **placa** e os dados (tipo do veículo, marca/modelo e cor) são
-    buscados automaticamente no gateway DETRAN-SEAD. As colunas novas são `deferred` no
-    model (ficam fora do SELECT da listagem), então a listagem continua funcionando antes
-    do ALTER; mas **criar/editar veículos** só funciona após rodar o SQL abaixo. Também é
-    necessário tornar `cidade` NULL (veículo não preenche cidade).
-  - SQL (executar no Workbench — aplicar em produção; o localhost `sgc` já tem
-    o esquema antigo com `marca_modelo`, ver mini-migração logo abaixo):
-  ```sql
-  ALTER TABLE identidade_visual_locais
-    MODIFY COLUMN cidade      VARCHAR(100) NULL,
-    ADD COLUMN placa          VARCHAR(10)  NULL,
-    ADD COLUMN tipo_veiculo   VARCHAR(100) NULL,
-    ADD COLUMN marca          VARCHAR(60)  NULL,
-    ADD COLUMN modelo         VARCHAR(200) NULL,
-    ADD COLUMN cor            VARCHAR(60)  NULL;
-  ```
-  - **Mini-migração localhost `sgc`** (só necessária no dev, que já tinha
-    `marca_modelo` — divide os valores existentes em `marca/modelo` no primeiro `/`):
-  ```sql
-  ALTER TABLE identidade_visual_locais
-    ADD COLUMN marca  VARCHAR(60)  NULL AFTER tipo_veiculo,
-    ADD COLUMN modelo VARCHAR(200) NULL AFTER marca;
-
-  UPDATE identidade_visual_locais
-     SET marca  = TRIM(SUBSTRING_INDEX(marca_modelo, '/', 1)),
-         modelo = TRIM(SUBSTRING(marca_modelo, LOCATE('/', marca_modelo) + 1))
-   WHERE marca_modelo IS NOT NULL AND marca_modelo LIKE '%/%';
-
-  UPDATE identidade_visual_locais
-     SET marca = TRIM(marca_modelo)
-   WHERE marca_modelo IS NOT NULL AND marca_modelo NOT LIKE '%/%';
-
-  ALTER TABLE identidade_visual_locais DROP COLUMN marca_modelo;
-  ```
-  - Config/ambiente (`.env` de produção): adicionar as variáveis do gateway DETRAN
-    (a chave NÃO vai para o front-end — a consulta é feita no servidor):
-    ```
-    DETRAN_API_URL=https://pidigital.pi.gov.br/api/api-gateway-detran-sead
-    DETRAN_API_KEY=033f58e8-e2d8-4533-8004-ae3ca3ad3105
-    ```
-  - Endpoint usado: `GET {DETRAN_API_URL}/sead/renavam/consulta-veiculo-local?placa=XXX`
-    com header `X-Api-Key`. Só `tipoVeiculo/marcaModelo/cor/placa` são persistidos; os
-    dados do proprietário retornados pela API (nome/CPF/endereço) são descartados.
-  - Observação: nenhuma dependência Python nova (`requests`/`urllib3` já usados).
 
 ### Hierarquia de Autorização — Diárias (2026-05-05)
 

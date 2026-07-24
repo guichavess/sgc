@@ -70,6 +70,91 @@ def test_atualizar_saldos_em_lote_nao_cascateia(app, db_session, monkeypatch):
     assert SaldoEmpenho.get_saldo_atual('C1', '01/2026') is None
 
 
+def test_atualizar_saldos_em_lote_deduplica_por_contrato_ano(app, db_session, monkeypatch):
+    """
+    O saldo depende apenas de (contrato, ano). Várias competências do mesmo
+    contrato/ano NÃO devem recalcular os totais SIAFE repetidamente — o cálculo
+    pesado roda 1x por (contrato, ano) e é reaproveitado (correção da lentidão).
+    """
+    from app.services import sincronizacao_pagamentos_service as svc
+    from app.services.saldo_service import SaldoService
+    from app.models import SaldoEmpenho
+
+    chamadas = []
+
+    def fake_calc(codigo_contrato, competencia, ano=None):
+        chamadas.append((codigo_contrato, competencia))
+        return 500.0
+
+    monkeypatch.setattr(
+        SaldoService, 'calcular_saldo_disponivel', staticmethod(fake_calc)
+    )
+
+    # 3 competências do MESMO contrato/ano + 1 de outro ano
+    combinacoes = [
+        ('C7', '01/2026'), ('C7', '02/2026'), ('C7', '03/2026'),
+        ('C7', '01/2025'),
+    ]
+
+    atualizados, erros, _ = svc.atualizar_saldos_em_lote(combinacoes)
+
+    # Todas as 4 combinações são persistidas...
+    assert atualizados == 4
+    assert erros == 0
+    # ...mas o cálculo pesado rodou só 2x (C7/2026 e C7/2025), não 4x.
+    assert len(chamadas) == 2
+    for comp in ('01/2026', '02/2026', '03/2026', '01/2025'):
+        assert float(SaldoEmpenho.get_saldo_atual('C7', comp).saldo) == 500.0
+
+
+def test_gravar_saldos_calculados_upsert(app, db_session):
+    """gravar_saldos_calculados persiste a lista de calculados em 1 commit."""
+    from app.services import sincronizacao_pagamentos_service as svc
+    from app.models import SaldoEmpenho
+
+    existente = SaldoEmpenho(
+        cod_contrato='C4', competencia='07/2026',
+        saldo=1, data=datetime.now() - timedelta(days=2),
+    )
+    db_session.add(existente)
+    db_session.commit()
+
+    calculados = [('C4', '07/2026', 999.0), ('C5', '07/2026', 123.0)]
+    atualizados, lista_erros = svc.gravar_saldos_calculados(calculados)
+
+    assert atualizados == 2
+    assert lista_erros == []
+    # Atualiza o existente (sem duplicar) e cria o novo
+    linhas_c4 = SaldoEmpenho.query.filter_by(cod_contrato='C4', competencia='07/2026').all()
+    assert len(linhas_c4) == 1
+    assert float(linhas_c4[0].saldo) == 999.0
+    assert float(SaldoEmpenho.get_saldo_atual('C5', '07/2026').saldo) == 123.0
+
+
+def test_calcular_saldo_item_usa_cache(app, db_session, monkeypatch):
+    """calcular_saldo_item reaproveita o cache por (contrato, ano)."""
+    from app.services import sincronizacao_pagamentos_service as svc
+    from app.services.saldo_service import SaldoService
+
+    chamadas = []
+
+    def fake_calc(codigo_contrato, competencia, ano=None):
+        chamadas.append(competencia)
+        return 42.0
+
+    monkeypatch.setattr(
+        SaldoService, 'calcular_saldo_disponivel', staticmethod(fake_calc)
+    )
+
+    cache = {}
+    s1, e1 = svc.calcular_saldo_item('C1', '01/2026', cache)
+    s2, e2 = svc.calcular_saldo_item('C1', '11/2026', cache)  # mesmo ano → cache
+
+    assert (s1, e1) == (42.0, None)
+    assert (s2, e2) == (42.0, None)
+    assert len(chamadas) == 1  # só a primeira competência chamou o cálculo pesado
+
+
 def test_atualizar_saldos_em_lote_atualiza_registro_existente(app, db_session, monkeypatch):
     """Combinação já existente é atualizada (não duplica linha)."""
     from app.services import sincronizacao_pagamentos_service as svc

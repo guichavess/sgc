@@ -89,6 +89,27 @@ class PrestacaoContratoService:
         )
 
     @staticmethod
+    def listar_contratos(codigo=None, contratado=None, situacao=None,
+                          natureza_codigo=None, tipo_execucao_id=None,
+                          centro_de_custo_id=None, tipo_contrato=None,
+                          pdm_id=None, subitem_despesa=None,
+                          tipo_patrimonial=None, codigoUG=None):
+        """Lista TODOS os contratos com filtros, sem paginar (busca client-side)."""
+        return InfoContratoRepository.listar_todos_com_filtros(
+            codigo=codigo,
+            contratado=contratado,
+            situacao=situacao,
+            natureza_codigo=natureza_codigo,
+            tipo_execucao_id=tipo_execucao_id,
+            centro_de_custo_id=centro_de_custo_id,
+            tipo_contrato=tipo_contrato,
+            pdm_id=pdm_id,
+            subitem_despesa=subitem_despesa,
+            tipo_patrimonial=tipo_patrimonial,
+            codigoUG=codigoUG,
+        )
+
+    @staticmethod
     def listar_codigos_filtrados(**filtros):
         """Retorna apenas os códigos dos contratos filtrados (query leve)."""
         return InfoContratoRepository.listar_codigos_filtrados(**filtros)

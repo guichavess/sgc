@@ -22,7 +22,7 @@ class InfoContratoRepository(BaseRepository[Contrato]):
         return cls.model.query.filter_by(codigo=codigo).first()
 
     @classmethod
-    def listar_com_filtros(
+    def _query_com_filtros(
         cls,
         codigo: Optional[str] = None,
         contratado: Optional[str] = None,
@@ -35,10 +35,9 @@ class InfoContratoRepository(BaseRepository[Contrato]):
         subitem_despesa: Optional[str] = None,
         tipo_patrimonial: Optional[str] = None,
         codigoUG: Optional[str] = None,
-        page: int = 1,
-        per_page: int = 20
     ):
-        """Lista contratos paginados com filtros."""
+        """Monta a query de contratos com os filtros informados (sem paginar/ordenar).
+        Compartilhada por listar_com_filtros() e listar_todos_com_filtros()."""
         query = db.session.query(Contrato).options(
             joinedload(Contrato.centro_de_custo),
             joinedload(Contrato.nat_despesa),
@@ -151,9 +150,59 @@ class InfoContratoRepository(BaseRepository[Contrato]):
                 )
             )
 
-        query = query.order_by(Contrato.codigo.desc())
+        return query.order_by(Contrato.codigo.desc())
 
+    @classmethod
+    def listar_com_filtros(
+        cls,
+        codigo: Optional[str] = None,
+        contratado: Optional[str] = None,
+        situacao: Optional[str] = None,
+        natureza_codigo: Optional[int] = None,
+        tipo_execucao_id: Optional[int] = None,
+        centro_de_custo_id: Optional[int] = None,
+        tipo_contrato: Optional[str] = None,
+        pdm_id: Optional[int] = None,
+        subitem_despesa: Optional[str] = None,
+        tipo_patrimonial: Optional[str] = None,
+        codigoUG: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 20
+    ):
+        """Lista contratos paginados com filtros."""
+        query = cls._query_com_filtros(
+            codigo=codigo, contratado=contratado, situacao=situacao,
+            natureza_codigo=natureza_codigo, tipo_execucao_id=tipo_execucao_id,
+            centro_de_custo_id=centro_de_custo_id, tipo_contrato=tipo_contrato,
+            pdm_id=pdm_id, subitem_despesa=subitem_despesa,
+            tipo_patrimonial=tipo_patrimonial, codigoUG=codigoUG,
+        )
         return query.paginate(page=page, per_page=per_page, error_out=False)
+
+    @classmethod
+    def listar_todos_com_filtros(
+        cls,
+        codigo: Optional[str] = None,
+        contratado: Optional[str] = None,
+        situacao: Optional[str] = None,
+        natureza_codigo: Optional[int] = None,
+        tipo_execucao_id: Optional[int] = None,
+        centro_de_custo_id: Optional[int] = None,
+        tipo_contrato: Optional[str] = None,
+        pdm_id: Optional[int] = None,
+        subitem_despesa: Optional[str] = None,
+        tipo_patrimonial: Optional[str] = None,
+        codigoUG: Optional[str] = None,
+    ) -> List[Contrato]:
+        """Lista TODOS os contratos com filtros, sem paginar (para busca client-side)."""
+        query = cls._query_com_filtros(
+            codigo=codigo, contratado=contratado, situacao=situacao,
+            natureza_codigo=natureza_codigo, tipo_execucao_id=tipo_execucao_id,
+            centro_de_custo_id=centro_de_custo_id, tipo_contrato=tipo_contrato,
+            pdm_id=pdm_id, subitem_despesa=subitem_despesa,
+            tipo_patrimonial=tipo_patrimonial, codigoUG=codigoUG,
+        )
+        return query.all()
 
     @classmethod
     def listar_codigos_filtrados(

@@ -9,8 +9,8 @@
  <div class="d-flex justify-content-between align-items-center mb-4">
  <h2 class="mb-0">Lista de Contratos</h2>
  <div class="d-flex align-items-center gap-2">
- {% if pagination.total > 0 %}
- <span class="badge bg-primary fs-6 px-3 py-2">Total: {{ pagination.total }} contratos</span>
+ {% if total > 0 %}
+ <span class="badge bg-primary fs-6 px-3 py-2">Total: {{ total }} contratos</span>
  {% endif %}
  <a href="{{ url_for('prestacoes_contratos.api_relatorio_contratos') }}"
  class="btn btn-success btn-sm shadow-sm">
@@ -250,11 +250,20 @@
  </div>
  </div>
 
+ {# ===== BUSCA GLOBAL ===== #}
+ <div class="input-group input-group-sm mb-3" style="max-width: 420px;">
+ <span class="input-group-text bg-transparent border-end-0">
+ <i class="bi bi-search text-muted"></i>
+ </span>
+ <input type="text" id="searchGlobalContratos" class="form-control border-start-0"
+ placeholder="Digite para pesquisar...">
+ </div>
+
  {# ===== TABELA ===== #}
- <div class="card">
+ <div class="card table-card">
  <div class="card-body p-0">
  <div class="table-responsive table-rounded">
- <table class="table table-striped table-hover table-contratos mb-0">
+ <table id="tabelaContratos" class="table table-hover table-sm table-contratos mb-0">
  <thead>
  <tr>
  <th>Código</th>
@@ -341,56 +350,29 @@
  </table>
  </div>
  </div>
-
- {# ===== PAGINAÇÃO ===== #}
- {% if pagination.pages > 1 %}
- <div class="card-footer bg-white border-top py-3">
- <div class="d-flex justify-content-between align-items-center">
- <div class="text-muted small">
- Mostrando <strong>{{ contratos|length }}</strong> de <strong>{{ pagination.total }}</strong> contratos
- </div>
-
- <nav aria-label="Navegação de páginas">
- <ul class="pagination pagination-sm mb-0">
- {# Botão Anterior #}
- <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
- <a class="page-link"
- href="{{ url_for('prestacoes_contratos.dashboard', **dict(request.args, page=pagination.prev_num)) if pagination.has_prev else '#' }}">
- <i class="bi bi-chevron-left"></i>
- </a>
- </li>
-
- {# Números das Páginas #}
- {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
- {% if page_num %}
- <li class="page-item {{ 'active' if page_num == pagination.page }}">
- <a class="page-link"
- href="{{ url_for('prestacoes_contratos.dashboard', **dict(request.args, page=page_num)) }}">
- {{ page_num }}
- </a>
- </li>
- {% else %}
- <li class="page-item disabled"><span class="page-link">...</span></li>
- {% endif %}
- {% endfor %}
-
- {# Botão Próximo #}
- <li class="page-item {{ 'disabled' if not pagination.has_next }}">
- <a class="page-link"
- href="{{ url_for('prestacoes_contratos.dashboard', **dict(request.args, page=pagination.next_num)) if pagination.has_next else '#' }}">
- <i class="bi bi-chevron-right"></i>
- </a>
- </li>
- </ul>
- </nav>
- </div>
- </div>
- {% endif %}
  </div>
 </div>
 {% endblock %}
 
+{% block extra_css %}
+<!-- DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
+<style>
+#tabelaContratos mark.prest-hl {
+    background: #fff3a3;
+    color: inherit;
+    padding: 0 1px;
+    border-radius: 2px;
+}
+</style>
+{% endblock %}
+
 {% block extra_js %}
+<!-- jQuery (requerido pelo DataTables) -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<!-- DataTables -->
+<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -470,6 +452,165 @@ document.addEventListener('DOMContentLoaded', function() {
  initCbDropdown('cbTipoPatrimonial');
  initCbDropdown('cbSubItem');
 
+});
+
+/* ===== Busca global + destaque (DataTable client-side, estilo CGFR) ===== */
+$(document).ready(function() {
+    var searchTokens = [];
+    var searchRegexes = [];
+
+    /* Retira acentos, lowercase, remove pontuação e colapsa espaços —
+       assim "contratacao" bate com "Contratação". */
+    function normalizeSearch(s) {
+        if (s == null || s === '') return '';
+        return String(s)
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .toLowerCase()
+            .replace(/[.\/\-()]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    function tokenizeSearch(s) {
+        var n = normalizeSearch(s);
+        if (!n) return [];
+        return n.split(' ').filter(function(t) { return t.length > 0; });
+    }
+    var _accentClass = {
+        'a': '[aáàâãäå]', 'e': '[eéèêë]', 'i': '[iíìîï]',
+        'o': '[oóòôõö]', 'u': '[uúùûü]', 'c': '[cç]', 'n': '[nñ]'
+    };
+    function buildAccentRegex(token) {
+        if (!token || token.length < 2) return null;
+        var pattern = '';
+        for (var i = 0; i < token.length; i++) {
+            var ch = token[i];
+            if (_accentClass[ch]) {
+                pattern += _accentClass[ch];
+            } else if (/[a-z0-9]/.test(ch)) {
+                pattern += ch;
+            } else {
+                pattern += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+        }
+        try { return new RegExp(pattern, 'gi'); } catch (e) { return null; }
+    }
+
+    function applyHighlight() {
+        var tbody = document.querySelector('#tabelaContratos tbody');
+        if (!tbody) return;
+
+        var oldMarks = tbody.querySelectorAll('mark.prest-hl');
+        for (var i = 0; i < oldMarks.length; i++) {
+            var m = oldMarks[i];
+            var parent = m.parentNode;
+            while (m.firstChild) parent.insertBefore(m.firstChild, m);
+            parent.removeChild(m);
+            parent.normalize();
+        }
+
+        if (!searchRegexes.length) return;
+
+        var walker = document.createTreeWalker(tbody, NodeFilter.SHOW_TEXT, {
+            acceptNode: function(n) {
+                var p = n.parentNode;
+                if (!p) return NodeFilter.FILTER_REJECT;
+                var tag = p.tagName;
+                if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'MARK') {
+                    return NodeFilter.FILTER_REJECT;
+                }
+                if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        });
+        var nodes = [];
+        var node;
+        while ((node = walker.nextNode())) nodes.push(node);
+
+        nodes.forEach(function(n) {
+            var text = n.nodeValue;
+            var ranges = [];
+            for (var r = 0; r < searchRegexes.length; r++) {
+                var re = searchRegexes[r];
+                re.lastIndex = 0;
+                var m;
+                while ((m = re.exec(text)) !== null) {
+                    if (m[0].length === 0) { re.lastIndex++; continue; }
+                    ranges.push({ start: m.index, end: m.index + m[0].length });
+                }
+            }
+            if (!ranges.length) return;
+
+            ranges.sort(function(a, b) { return a.start - b.start; });
+            var merged = [ranges[0]];
+            for (var k = 1; k < ranges.length; k++) {
+                var prev = merged[merged.length - 1];
+                if (ranges[k].start <= prev.end) {
+                    if (ranges[k].end > prev.end) prev.end = ranges[k].end;
+                } else {
+                    merged.push(ranges[k]);
+                }
+            }
+
+            var frag = document.createDocumentFragment();
+            var pos = 0;
+            merged.forEach(function(rng) {
+                if (rng.start > pos) {
+                    frag.appendChild(document.createTextNode(text.substring(pos, rng.start)));
+                }
+                var mark = document.createElement('mark');
+                mark.className = 'prest-hl';
+                mark.appendChild(document.createTextNode(text.substring(rng.start, rng.end)));
+                frag.appendChild(mark);
+                pos = rng.end;
+            });
+            if (pos < text.length) {
+                frag.appendChild(document.createTextNode(text.substring(pos)));
+            }
+            n.parentNode.replaceChild(frag, n);
+        });
+    }
+
+    var dataTable = $('#tabelaContratos').DataTable({
+        language: { url: 'https://cdn.datatables.net/plug-ins/1.13.8/i18n/pt-BR.json' },
+        order: [],
+        pageLength: 25,
+        lengthChange: false,
+        serverSide: false,
+        searching: true,
+        deferRender: true,
+        columnDefs: [
+            { targets: -1, orderable: false, searchable: false }
+        ],
+        dom: 'rt<"d-flex justify-content-between align-items-center mt-2 px-2"ip>',
+    });
+
+    /* Filtro textual client-side — tokenizado, AND entre tokens, accent/punct-insensitive */
+    $.fn.dataTable.ext.search.push(function(settings, searchData) {
+        if (settings.nTable.id !== 'tabelaContratos') return true;
+        if (!searchTokens.length) return true;
+        var haystack = normalizeSearch(searchData.join(' '));
+        for (var ti = 0; ti < searchTokens.length; ti++) {
+            if (haystack.indexOf(searchTokens[ti]) === -1) return false;
+        }
+        return true;
+    });
+
+    dataTable.on('draw', function() {
+        applyHighlight();
+    });
+
+    var timer;
+    $('#searchGlobalContratos').on('input', function() {
+        var self = this;
+        clearTimeout(timer);
+        timer = setTimeout(function() {
+            searchTokens = tokenizeSearch(self.value.trim());
+            searchRegexes = searchTokens
+                .map(buildAccentRegex)
+                .filter(function(r) { return r !== null; });
+            dataTable.draw();
+        }, 150);
+    });
 });
 </script>
 {% endblock %}

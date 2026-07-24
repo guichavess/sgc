@@ -12,6 +12,42 @@
     overflow: hidden;
 }
 
+/* ---------- Estilo CGFR: tabela compacta + busca destacada ---------- */
+.table-card {
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+}
+
+.table-card .card-header {
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#tabelaContratos th {
+    white-space: normal;
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+    padding: 6px 5px;
+}
+
+#tabelaContratos td {
+    font-size: var(--font-size-sm);
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    vertical-align: middle;
+    line-height: 1.35;
+    padding: 6px;
+}
+
+.table-card .dataTables_info { font-size: var(--font-size-sm); color: var(--color-text-muted); padding-top: 8px; }
+.table-card .dataTables_paginate { padding-top: 4px; }
+.table-card .dataTables_paginate .paginate_button { font-size: var(--font-size-sm); }
+
 /* Colunas específicas do módulo */
 .table-contratos .col-contratado {
     max-width: 250px;

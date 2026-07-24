@@ -981,7 +981,9 @@ def api_atualizar_todos_saldos():
 
     def generate():
         with app_real.app_context():
-            from app.services.sincronizacao_pagamentos_service import atualizar_saldos_em_lote
+            from app.services.sincronizacao_pagamentos_service import (
+                calcular_saldo_item, gravar_saldos_calculados
+            )
 
             yield f"data: {json.dumps({'msg': 'Atualizando saldos...', 'progresso': 5})}\n\n"
 
@@ -1002,29 +1004,41 @@ def api_atualizar_todos_saldos():
 
                 yield f"data: {json.dumps({'msg': f'Calculando saldos de {total} combinações...', 'progresso': 10})}\n\n"
 
-                # Buffer de progresso: o callback roda dentro do lote (não pode dar yield),
-                # então acumulamos eventos e emitimos a cada bloco de 10.
-                eventos = []
+                # Cálculo em streaming: emite progresso continuamente (a cada 5
+                # itens OU a cada 5s) para manter a conexão viva. Sem isso, o
+                # cálculo bloqueante deixava o SSE em silêncio e o ALB (idle
+                # timeout 60s) derrubava a conexão em produção → "falha na Fase 3".
+                # Cache por (contrato, ano) evita recalcular meses do mesmo ano.
+                cache = {}
+                calculados = []
+                lista_erros = []
+                ultimo_yield = time.time()
 
-                def progresso_cb(indice, tot):
-                    if indice % 10 == 0 or indice == tot:
-                        pct = 10 + int((indice / tot) * 85)
-                        eventos.append({'msg': f'Calculando saldos {indice}/{tot}...', 'progresso': pct})
+                for i, (contrato, competencia) in enumerate(combinacoes):
+                    saldo, erro = calcular_saldo_item(contrato, competencia, cache)
+                    if erro:
+                        lista_erros.append(erro)
+                    elif saldo is not None:
+                        calculados.append((contrato, competencia, saldo))
 
-                atualizados, erros, lista_erros = atualizar_saldos_em_lote(
-                    combinacoes, progress_cb=progresso_cb
-                )
+                    agora = time.time()
+                    if (i + 1) % 5 == 0 or (agora - ultimo_yield) > 5 or (i + 1) == total:
+                        pct = 10 + int(((i + 1) / total) * 80)
+                        yield f"data: {json.dumps({'msg': f'Calculando saldos {i + 1}/{total}...', 'progresso': pct})}\n\n"
+                        ultimo_yield = agora
 
-                for ev in eventos:
-                    yield f"data: {json.dumps(ev)}\n\n"
+                # Gravação em lote (upsert) + 1 único commit
+                yield f"data: {json.dumps({'msg': 'Gravando saldos...', 'progresso': 92})}\n\n"
+                atualizados, erros_gravacao = gravar_saldos_calculados(calculados)
+                lista_erros.extend(erros_gravacao)
 
                 # Detalha os erros no stream (front coleta itens com '[ALERTA]')
                 for msg_erro in lista_erros[:50]:
                     yield f"data: {json.dumps({'progresso': 98, 'msg': f'[ALERTA] Saldo {msg_erro}'})}\n\n"
 
                 msg_final = f'Concluído! {atualizados} saldos atualizados.'
-                if erros:
-                    msg_final += f' ({erros} erros)'
+                if lista_erros:
+                    msg_final += f' ({len(lista_erros)} erros)'
                 yield f"data: {json.dumps({'msg': msg_final, 'progresso': 100, 'concluido': True})}\n\n"
 
             except Exception as e:

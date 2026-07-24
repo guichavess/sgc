@@ -717,15 +717,29 @@
  const response = await fetch('/solicitacoes/api/atualizar-todos-saldos', { method: 'POST' });
  const reader = response.body.getReader();
  const decoder = new TextDecoder("utf-8");
+ let buffer = '';
 
  while (true) {
  const { done, value } = await reader.read();
  if (done) break;
 
- const lines = decoder.decode(value).split('\n\n');
- for (const line of lines) {
- if (line.startsWith('data: ')) {
- const dados = JSON.parse(line.replace('data: ', ''));
+ // Acumula em buffer: um evento SSE (data: ...\n\n) pode ser cortado
+ // entre dois chunks. Só processa eventos completos; guarda o resto.
+ buffer += decoder.decode(value, { stream: true });
+ const eventos = buffer.split('\n\n');
+ buffer = eventos.pop(); // último pedaço pode estar incompleto
+
+ for (const evento of eventos) {
+ const linhaData = evento.split('\n').find(l => l.startsWith('data: '));
+ if (!linhaData) continue;
+
+ let dados;
+ try {
+ dados = JSON.parse(linhaData.slice(6));
+ } catch (e) {
+ continue; // evento malformado — ignora sem derrubar a fase
+ }
+
  atualizarProgresso(barra, msg, dados.progresso, "[Saldos] " + dados.msg);
 
  // Coleta erros/alertas da Fase 3
@@ -735,7 +749,6 @@
 
  if (dados.concluido) {
  finalizarTudo(barra, msg, logDiv, btnFechar, titulo);
- }
  }
  }
  }
