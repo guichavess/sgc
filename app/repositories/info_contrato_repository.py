@@ -47,9 +47,16 @@ class InfoContratoRepository(BaseRepository[Contrato]):
         if codigoUG:
             query = query.filter(Contrato.codigoUG == codigoUG)
 
-        # Filtro por código do contrato
+        # Filtro por código do contrato — casa com o código interno OU com o
+        # "número original" (que é o que o usuário vê e busca na listagem).
         if codigo:
-            query = query.filter(Contrato.codigo.ilike(f'%{codigo}%'))
+            termo_cod = f'%{codigo}%'
+            query = query.filter(
+                db.or_(
+                    Contrato.codigo.ilike(termo_cod),
+                    Contrato.numeroOriginal.ilike(termo_cod)
+                )
+            )
 
         # Filtro por nome do contratado
         if contratado:
@@ -221,7 +228,11 @@ class InfoContratoRepository(BaseRepository[Contrato]):
             query = query.filter(Contrato.codigoUG == codigoUG)
 
         if codigo:
-            query = query.filter(Contrato.codigo.ilike(f'%{codigo}%'))
+            termo_cod = f'%{codigo}%'
+            query = query.filter(db.or_(
+                Contrato.codigo.ilike(termo_cod),
+                Contrato.numeroOriginal.ilike(termo_cod)
+            ))
         if contratado:
             termo = f'%{contratado}%'
             query = query.filter(db.or_(

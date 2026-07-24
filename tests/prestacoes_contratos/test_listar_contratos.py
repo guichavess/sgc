@@ -57,6 +57,22 @@ def test_listar_todos_com_filtros_respeita_filtro_codigo(db_session, contratos_v
     assert resultado[0].codigo == 'C002'
 
 
+def test_listar_todos_com_filtros_codigo_casa_numero_original(db_session):
+    """O filtro `codigo` deve casar também com o numeroOriginal (o número que o
+    usuário vê na listagem), não só com o código interno."""
+    c = Contrato(
+        codigo='26102008', numeroOriginal='08/2026',
+        situacao='EM_VIGOR', nomeContratado='Empresa Delta', codigoUG='210101',
+    )
+    db_session.add(c)
+    db_session.flush()
+
+    resultado = InfoContratoRepository.listar_todos_com_filtros(codigo='08/2026')
+
+    assert len(resultado) == 1
+    assert resultado[0].codigo == '26102008'
+
+
 def test_listar_todos_com_filtros_respeita_filtro_ug(db_session, contratos_variados):
     resultado = InfoContratoRepository.listar_todos_com_filtros(codigoUG='210102')
 
@@ -140,3 +156,20 @@ def test_dashboard_route_200_sem_paginacao(client, db_session, contratos_variado
 def test_dashboard_route_401_sem_login(client, db_session, contratos_variados):
     resp = client.get('/prestacoes-contratos/contratos')
     assert resp.status_code in (302, 401)
+
+
+def test_dashboard_route_ignora_filtro_numerico_invalido(client, db_session, contratos_variados):
+    """Params numéricos inválidos (URL/link antigo) não devem derrubar a página
+    com 500 — devem ser ignorados silenciosamente."""
+    _criar_tabela_ug(db_session)
+    _login_admin(client, db_session)
+
+    resp = client.get(
+        '/prestacoes-contratos/contratos'
+        '?tipo_execucao=abc&natureza=xyz&pdm=foo&centro_custo=bar'
+    )
+
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    # Sem filtro válido aplicado, todos os contratos aparecem.
+    assert 'C001' in body and 'C002' in body and 'C003' in body

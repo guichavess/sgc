@@ -20,6 +20,21 @@ SITUACAO_LABELS = {
 }
 
 
+def _ints_from_args(valores):
+    """Converte uma lista de valores de query string em inteiros, ignorando
+    entradas vazias ou não-numéricas (evita 500 por URL/param inválido)."""
+    resultado = []
+    for v in valores:
+        v = (v or '').strip()
+        if not v:
+            continue
+        try:
+            resultado.append(int(v))
+        except (ValueError, TypeError):
+            continue
+    return resultado
+
+
 @prestacoes_contratos_bp.route('/')
 @prestacoes_contratos_bp.route('/contratos')
 @login_required
@@ -30,11 +45,11 @@ def dashboard():
     filtro_codigo = request.args.get('codigo', '').strip()
     filtro_contratado = request.args.get('contratado', '').strip()
     filtro_situacao = [v.strip() for v in request.args.getlist('situacao') if v.strip()]
-    filtro_natureza = [int(v) for v in request.args.getlist('natureza') if v.strip()]
-    filtro_tipo_execucao = [int(v) for v in request.args.getlist('tipo_execucao') if v.strip()]
-    filtro_centro_custo = [int(v) for v in request.args.getlist('centro_custo') if v.strip()]
+    filtro_natureza = _ints_from_args(request.args.getlist('natureza'))
+    filtro_tipo_execucao = _ints_from_args(request.args.getlist('tipo_execucao'))
+    filtro_centro_custo = _ints_from_args(request.args.getlist('centro_custo'))
     filtro_tipo_contrato = [v.strip() for v in request.args.getlist('tipo_contrato') if v.strip()]
-    filtro_pdm = [int(v) for v in request.args.getlist('pdm') if v.strip()]
+    filtro_pdm = _ints_from_args(request.args.getlist('pdm'))
     filtro_subitem = [v.strip() for v in request.args.getlist('subitem_despesa') if v.strip()]
     filtro_tipo_patrimonial = [v.strip() for v in request.args.getlist('tipo_patrimonial') if v.strip()]
     filtro_ug = request.args.get('ug', '').strip()
