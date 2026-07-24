@@ -278,7 +278,6 @@
  </tr>
  </thead>
  <tbody>
- {% if contratos %}
  {% for contrato in contratos %}
  <tr>
  <td><strong>{{ contrato.codigo }}</strong></td>
@@ -338,14 +337,6 @@
  </td>
  </tr>
  {% endfor %}
- {% else %}
- <tr>
- <td colspan="9" class="text-center text-muted py-4">
- <i class="bi bi-inbox fs-3 d-block mb-2"></i>
- Nenhum contrato encontrado
- </td>
- </tr>
- {% endif %}
  </tbody>
  </table>
  </div>
