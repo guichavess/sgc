@@ -803,6 +803,10 @@ def api_sincronizar_documentos():
             inicio_fase1 = time.time()
             last_heartbeat = time.time()
 
+            # Intervalo de heartbeat: precisa ser < idle timeout do ALB de produção (60s).
+            # Mantido baixo (15s) para sobreviver a qualquer proxy intermediário.
+            HEARTBEAT_INTERVALO = 15
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=7) as executor:
                 future_to_prot = {}
                 for idx, s in enumerate(solicitacoes_pendentes):
@@ -814,20 +818,25 @@ def api_sincronizar_documentos():
                         base_url
                     )
                     future_to_prot[future] = s.protocolo_gerado_sei
-                    # Rate limiting: pausa 1s a cada 3 submissões para não sobrecarregar a API SEI
+                    # Rate limiting: pausa 1s a cada 3 submissões para não sobrecarregar a API SEI.
+                    # Com muitos protocolos essa fase pode passar de 60s; emite heartbeat por
+                    # relógio de parede para não estourar o idle timeout do ALB durante a submissão.
                     if idx % 3 == 2:
                         time.sleep(1)
+                        if time.time() - last_heartbeat > HEARTBEAT_INTERVALO:
+                            yield ": heartbeat\n\n"
+                            last_heartbeat = time.time()
 
                 completed = 0
                 sucessos = 0
                 timeout_atingido = False
+                pendentes = set(future_to_prot.keys())
 
-                for future in concurrent.futures.as_completed(future_to_prot, timeout=TIMEOUT_GLOBAL):
-                    # Heartbeat: envia comentário SSE a cada 20s para manter conexão viva
+                # Usa wait(timeout=...) em vez de as_completed() para retomar o controle a cada
+                # HEARTBEAT_INTERVALO mesmo quando NENHUM future concluiu — a API SEI é lenta
+                # (timeout 60s + retry 3x), então o bloqueio de as_completed derrubaria a conexão.
+                while pendentes:
                     agora = time.time()
-                    if agora - last_heartbeat > 20:
-                        yield ": heartbeat\n\n"
-                        last_heartbeat = agora
 
                     # Timeout global: encerra graciosamente
                     if agora - inicio_fase1 > TIMEOUT_GLOBAL:
@@ -835,29 +844,44 @@ def api_sincronizar_documentos():
                         app_real.logger.warning(f'Fase 1: timeout global de {TIMEOUT_GLOBAL}s atingido com {completed}/{total} processados')
                         break
 
-                    protocolo = future_to_prot[future]
-                    completed += 1
-                    percentual = 15 + int((completed / total) * 85)
+                    concluidos, pendentes = concurrent.futures.wait(
+                        pendentes,
+                        timeout=HEARTBEAT_INTERVALO,
+                        return_when=concurrent.futures.FIRST_COMPLETED
+                    )
 
-                    try:
-                        sucesso, mensagem = future.result(timeout=5)
+                    # Nada concluiu na janela: mantém a conexão viva e volta ao topo do loop
+                    if not concluidos:
+                        yield ": heartbeat\n\n"
+                        last_heartbeat = time.time()
+                        continue
 
-                        if sucesso:
-                            sucessos += 1
-                            if completed % 5 == 0:
-                                yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Baixando... ({completed}/{total})'})}\n\n"
-                        else:
-                            # Detecta erro 422 (processo inexistente no SEI)
-                            if mensagem.startswith('422:'):
-                                prot_422 = mensagem.split(':', 1)[1]
-                                link_sei = mapa_link_sei.get(prot_422, '')
-                                protocolos_422.append({'protocolo': prot_422, 'link_sei': link_sei})
-                                yield f"data: {json.dumps({'progresso': percentual, 'msg': f'[422] Processo inexistente: {prot_422}', 'tipo': 'processo_inexistente', 'protocolo': prot_422, 'link_sei': link_sei})}\n\n"
+                    for future in concluidos:
+                        protocolo = future_to_prot[future]
+                        completed += 1
+                        percentual = 15 + int((completed / total) * 85)
+
+                        try:
+                            sucesso, mensagem = future.result(timeout=5)
+
+                            if sucesso:
+                                sucessos += 1
+                                if completed % 5 == 0:
+                                    yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Baixando... ({completed}/{total})'})}\n\n"
                             else:
-                                yield f"data: {json.dumps({'progresso': percentual, 'msg': f'[ALERTA] {mensagem}'})}\n\n"
+                                # Detecta erro 422 (processo inexistente no SEI)
+                                if mensagem.startswith('422:'):
+                                    prot_422 = mensagem.split(':', 1)[1]
+                                    link_sei = mapa_link_sei.get(prot_422, '')
+                                    protocolos_422.append({'protocolo': prot_422, 'link_sei': link_sei})
+                                    yield f"data: {json.dumps({'progresso': percentual, 'msg': f'[422] Processo inexistente: {prot_422}', 'tipo': 'processo_inexistente', 'protocolo': prot_422, 'link_sei': link_sei})}\n\n"
+                                else:
+                                    yield f"data: {json.dumps({'progresso': percentual, 'msg': f'[ALERTA] {mensagem}'})}\n\n"
 
-                    except Exception as exc:
-                        yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Erro thread {protocolo}: {str(exc)}'})}\n\n"
+                        except Exception as exc:
+                            yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Erro thread {protocolo}: {str(exc)}'})}\n\n"
+
+                    last_heartbeat = time.time()
 
             # Evento final com lista de 422s
             msg_final = f'Download concluído! {sucessos}/{total} protocolos atualizados.'
@@ -922,6 +946,9 @@ def api_atualizar_etapas():
 
             token_sei = session.get('sei_token')
 
+            # Heartbeat < idle timeout do ALB de produção (60s) para não derrubar o SSE.
+            HEARTBEAT_INTERVALO = 15
+
             # Threads paralelas para processar etapas
             with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
                 future_to_id = {
@@ -937,24 +964,40 @@ def api_atualizar_etapas():
 
                 completed_count = 0
                 atualizados_count = 0
+                pendentes = set(future_to_id.keys())
 
-                for future in concurrent.futures.as_completed(future_to_id):
-                    completed_count += 1
-                    percentual = int((completed_count / total) * 100)
+                # wait(timeout=...) em vez de as_completed() para retomar o controle a cada
+                # HEARTBEAT_INTERVALO mesmo quando nenhum future concluiu — processar_item_sei
+                # chama a API SEI (lenta), então o bloqueio de as_completed derrubaria a conexão.
+                while pendentes:
+                    concluidos, pendentes = concurrent.futures.wait(
+                        pendentes,
+                        timeout=HEARTBEAT_INTERVALO,
+                        return_when=concurrent.futures.FIRST_COMPLETED
+                    )
 
-                    try:
-                        resultado = future.result()
-                        if resultado:
-                            atualizados_count += 1
-                            msg = f"Movimentado: {resultado}"
-                            yield f"data: {json.dumps({'progresso': percentual, 'msg': msg})}\n\n"
-                        else:
-                            if completed_count % 5 == 0:
-                                yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Analisando... {completed_count}/{total}'})}\n\n"
+                    # Nada concluiu na janela: mantém a conexão viva e continua
+                    if not concluidos:
+                        yield ": heartbeat\n\n"
+                        continue
 
-                    except Exception as exc:
-                        app_real.logger.error(f"Erro na thread de processamento SEI: {exc}")
-                        yield f"data: {json.dumps({'progresso': percentual, 'msg': 'Erro ao processar um item.'})}\n\n"
+                    for future in concluidos:
+                        completed_count += 1
+                        percentual = int((completed_count / total) * 100)
+
+                        try:
+                            resultado = future.result()
+                            if resultado:
+                                atualizados_count += 1
+                                msg = f"Movimentado: {resultado}"
+                                yield f"data: {json.dumps({'progresso': percentual, 'msg': msg})}\n\n"
+                            else:
+                                if completed_count % 5 == 0:
+                                    yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Analisando... {completed_count}/{total}'})}\n\n"
+
+                        except Exception as exc:
+                            app_real.logger.error(f"Erro na thread de processamento SEI: {exc}")
+                            yield f"data: {json.dumps({'progresso': percentual, 'msg': 'Erro ao processar um item.'})}\n\n"
 
             yield f"data: {json.dumps({'progresso': 100, 'msg': f'Concluído! {atualizados_count} processos avançaram de etapa.', 'concluido': True})}\n\n"
 
