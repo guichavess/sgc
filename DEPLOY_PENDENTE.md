@@ -26,10 +26,16 @@
     agregação é um full scan → lentidão. O código já foi otimizado para calcular
     1x por `(contrato, ano)` (dedup por competência), mas o índice reduz o custo
     de cada agregação restante. Somente performance — não altera resultado.
-  - SQL (executar no Workbench):
+  - SQL (executar no Workbench). **Atenção — os tipos diferem entre as tabelas**
+    (schema real de produção, verificado em 2026-07-24):
+    - `empenho`: `codigoUG` e `statusDocumento` são `TEXT` → ambos exigem prefixo.
+    - `liquidacao`: `codigoUG` é `VARCHAR(10)` (entra sem prefixo); só
+      `statusDocumento` é `TEXT` (exige prefixo).
+    - Prefixo em coluna numérica/data ou maior que a coluna → erro 1089;
+      coluna `TEXT` sem prefixo → erro 1170.
   ```sql
-  CREATE INDEX idx_empenho_saldo   ON empenho   (codContrato, codigoUG, statusDocumento, dataEmissao);
-  CREATE INDEX idx_liquidacao_saldo ON liquidacao (codContrato, codigoUG, statusDocumento, dataEmissao);
+  CREATE INDEX idx_empenho_saldo    ON empenho    (codContrato, codigoUG(20), statusDocumento(30), dataEmissao);
+  CREATE INDEX idx_liquidacao_saldo ON liquidacao (codContrato, codigoUG,     statusDocumento(30), dataEmissao);
   ```
 
 ### Competência em Empenhos e Liquidações — Financeiro (2026-06-08)
