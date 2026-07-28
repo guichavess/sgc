@@ -1,62 +1,201 @@
-import requests
-import json
+"""
+Autenticacao SEI — token admin com cache e autenticacao de usuario.
+
+O token SEI expira a meia-noite (00:00 Brasilia) do dia do login.
+
+gerar_token_sei_admin() e chamada em ~40+ pontos do codigo (diarias,
+financeiro, CGFR). Sem cache, cada chamada fazia um POST sincrono a
+API SEI. Com o cache abaixo, o token e obtido 1 vez por dia e servido
+da memoria ate meia-noite de Brasilia.
+
+Mecanismos de protecao (mesmos do sei_token.py para o token de usuario):
+- **Cache**: token armazenado em variavel de modulo, por processo/worker.
+- **Coalescencia**: threads concorrentes esperam e reusam o resultado
+  de uma unica chamada a API (double-check locking).
+- **Backoff**: apos uma falha, novas tentativas sao suprimidas por
+  SEI_ADMIN_RETRY_BACKOFF segundos.
+"""
 import os
+import threading
+import time
+from datetime import datetime, timedelta
+
+import requests
 import urllib3
 from flask import current_app
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+_SEI_LOGIN_URL = "https://api.sei.pi.gov.br/v1/orgaos/usuarios/login"
+
+# Janela de silencio apos uma falha na renovacao do token admin (segundos).
+SEI_ADMIN_RETRY_BACKOFF = int(os.getenv('SEI_TOKEN_RETRY_BACKOFF', '60'))
+
+# Margem de seguranca antes da meia-noite (segundos).
+# Token expira a meia-noite; invalidamos o cache 5 min antes.
+SEI_ADMIN_MARGEM = int(os.getenv('SEI_TOKEN_MARGEM', '300'))
+
+# ── Estado compartilhado entre threads do worker ──────────────────────────────
+_admin_lock = threading.Lock()
+_admin_token = None
+_admin_obtido_em = 0       # timestamp UNIX de quando o token foi obtido
+_admin_falha_em = 0        # timestamp UNIX da ultima falha
+
+
+def limpar_cache_admin():
+    """Zera cache e backoff do token admin. Usado pelos testes."""
+    global _admin_token, _admin_obtido_em, _admin_falha_em
+    with _admin_lock:
+        _admin_token = None
+        _admin_obtido_em = 0
+        _admin_falha_em = 0
+
+
+def _meia_noite_brasilia(referencia_ts=None):
+    """Retorna o timestamp UNIX da meia-noite de Brasilia do dia de referencia.
+
+    Se referencia_ts nao for fornecido, usa o momento atual.
+    A meia-noite retornada e a do *fim* do dia (00:00 do dia seguinte).
+    """
+    tz = ZoneInfo("America/Sao_Paulo")
+    if referencia_ts:
+        dt = datetime.fromtimestamp(referencia_ts, tz=tz)
+    else:
+        dt = datetime.now(tz)
+    meia_noite = dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    return meia_noite.timestamp()
+
+
+def _admin_token_valido():
+    """True se o token admin em cache ainda e valido (antes da meia-noite)."""
+    if not _admin_token or not _admin_obtido_em:
+        return False
+    expira_em = _meia_noite_brasilia(_admin_obtido_em) - SEI_ADMIN_MARGEM
+    return time.time() < expira_em
+
+
+def _admin_em_backoff():
+    """True se a ultima renovacao falhou dentro da janela de backoff."""
+    if not _admin_falha_em:
+        return False
+    return (time.time() - _admin_falha_em) < SEI_ADMIN_RETRY_BACKOFF
+
 
 def gerar_token_sei_admin():
     """
     Gera um token de acesso ao SEI utilizando credenciais administrativas.
-    Tenta ler do ambiente (OS) ou da configuração do Flask.
-    """
-    url_auth = "https://api.sei.pi.gov.br/v1/orgaos/usuarios/login"
-    
-    # 1. Tenta pegar do Sistema Operacional OU da Configuração do Flask
-    usuario = os.getenv("SEI_USER") or current_app.config.get("SEI_USER")
-    senha = os.getenv("SEI_PASSWORD") or current_app.config.get("SEI_PASSWORD")
-    orgao = os.getenv("SEI_ORGAO", "SEAD-PI") # Default para SEAD-PI se não definido
 
-    if not usuario or not senha:
-        current_app.logger.error("❌ ERRO SEI AUTH: Credenciais (SEI_USER/SEI_PASSWORD) não encontradas no .env ou config.")
+    O token e cacheado em memoria ate meia-noite de Brasilia (menos margem
+    de seguranca). Chamadas concorrentes de threads diferentes esperam e
+    reusam o resultado de uma unica chamada a API (coalescencia).
+
+    Apos uma falha, novas tentativas sao suprimidas por
+    SEI_ADMIN_RETRY_BACKOFF segundos (backoff).
+
+    Returns:
+        str: Token SEI ou None em caso de falha.
+    """
+    global _admin_token, _admin_obtido_em, _admin_falha_em
+
+    # 1. Cache valido? Retorna direto (leitura sem lock — otimista)
+    if _admin_token_valido():
+        return _admin_token
+
+    # 2. Em backoff apos falha? Retorna None sem tocar a rede
+    if _admin_em_backoff():
+        current_app.logger.debug(
+            "[SEI_AUTH] Token admin em backoff — suprimindo nova tentativa."
+        )
         return None
 
-    payload = {
-        "Usuario": usuario,
-        "Senha": senha,
-        "Orgao": orgao
-    }
-    
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
+    # 3. Credenciais disponiveis?
+    usuario = os.getenv("SEI_USER") or current_app.config.get("SEI_USER")
+    senha = os.getenv("SEI_PASSWORD") or current_app.config.get("SEI_PASSWORD")
+    orgao = os.getenv("SEI_ORGAO", "SEAD-PI")
+
+    if not usuario or not senha:
+        current_app.logger.error(
+            "[SEI_AUTH] Credenciais (SEI_USER/SEI_PASSWORD) nao encontradas."
+        )
+        return None
+
+    # 4. Lock + double-check + chamada API
+    with _admin_lock:
+        # Re-check: outra thread pode ter renovado enquanto esperavamos o lock
+        if _admin_token_valido():
+            return _admin_token
+
+        if _admin_em_backoff():
+            return None
+
+        return _renovar_token_admin(usuario, senha, orgao)
+
+
+def _renovar_token_admin(usuario, senha, orgao):
+    """Chamada efetiva ao SEI. Sempre executada sob _admin_lock."""
+    global _admin_token, _admin_obtido_em, _admin_falha_em
+
+    payload = {"Usuario": usuario, "Senha": senha, "Orgao": orgao}
+    headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
 
     try:
-        response = requests.post(url_auth, json=payload, headers=headers, timeout=120, verify=False)
-        
+        response = requests.post(
+            _SEI_LOGIN_URL, json=payload, headers=headers,
+            timeout=30, verify=False,
+        )
+
         if response.status_code == 200:
             dados = response.json()
-            
-            # 2. Tenta extrair token de várias chaves possíveis do JSON
-            token = dados.get('IdSession') or dados.get('token') or dados.get('Token')
-            
-            # 3. Se não veio no JSON, tenta pegar dos Headers
+
+            token = (
+                dados.get('IdSession')
+                or dados.get('token')
+                or dados.get('Token')
+            )
+
             if not token:
-                token = response.headers.get('token') or response.headers.get('Token')
-                
+                token = (
+                    response.headers.get('token')
+                    or response.headers.get('Token')
+                )
+
             if token:
+                _admin_token = token
+                _admin_obtido_em = time.time()
+                _admin_falha_em = 0
+                current_app.logger.info(
+                    "[SEI_AUTH] Token admin renovado com sucesso. "
+                    f"Valido ate meia-noite de Brasilia."
+                )
                 return token
             else:
-                current_app.logger.error(f"❌ ERRO SEI AUTH: Token não encontrado na resposta. Dados: {dados}")
+                _admin_falha_em = time.time()
+                current_app.logger.error(
+                    f"[SEI_AUTH] Token nao encontrado na resposta. Dados: {dados}"
+                )
                 return None
         else:
-            current_app.logger.error(f"❌ ERRO SEI AUTH: Status {response.status_code}. Resposta: {response.text}")
+            _admin_falha_em = time.time()
+            current_app.logger.error(
+                f"[SEI_AUTH] Renovacao falhou — status {response.status_code}. "
+                f"Novas tentativas suspensas por {SEI_ADMIN_RETRY_BACKOFF}s."
+            )
             return None
-            
+
+    except requests.exceptions.Timeout:
+        _admin_falha_em = time.time()
+        current_app.logger.warning(
+            "[SEI_AUTH] Timeout na renovacao do token admin."
+        )
+        return None
     except Exception as e:
-        current_app.logger.error(f"❌ EXCEÇÃO SEI AUTH: {str(e)}")
+        _admin_falha_em = time.time()
+        current_app.logger.error(f"[SEI_AUTH] Erro na renovacao: {e}")
         return None
 
 
