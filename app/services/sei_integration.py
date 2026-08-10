@@ -23,6 +23,41 @@ def formatar_mes_competencia(competencia_mm_aaaa):
     except:
         return competencia_mm_aaaa
 
+ESPECIFICACAO_MAX_CHARS = 250
+
+
+def _nome_contratado(dados_contrato):
+    """Nome do contratado para a especificacao, sem o prefixo do CNPJ.
+
+    Prefere 'nomeContratadoResumido'. Sem ele, usa 'nomeContratado', que vem
+    do SIAFE no formato "CNPJ - RAZAO SOCIAL" — so a razao social interessa.
+    """
+    resumido = str(dados_contrato.get('nomeContratadoResumido') or '').strip()
+    if resumido:
+        return resumido
+
+    completo = str(dados_contrato.get('nomeContratado') or '').strip()
+    return completo.split(' - ', 1)[-1].strip()
+
+
+def montar_especificacao_pagamento(dados_contrato, competencia):
+    """Monta a especificacao do processo de pagamento no SEI.
+
+    Formato: "PAGAMENTO DE CONTRATO <num> - <contratado> - <codigo> - <comp>".
+    Campos vazios sao omitidos (nada de separadores orfaos) e o resultado e
+    truncado no limite do campo no SEI.
+    """
+    partes = [
+        str(dados_contrato.get('numeroOriginal') or '').strip(),
+        _nome_contratado(dados_contrato),
+        str(dados_contrato.get('codigo') or '').strip(),
+        str(competencia or '').strip(),
+    ]
+    corpo = ' - '.join(p for p in partes if p)
+    especificacao = f"PAGAMENTO DE CONTRATO {corpo}".strip()
+    return especificacao[:ESPECIFICACAO_MAX_CHARS]
+
+
 def criar_procedimento_pagamento(token, unidade_id, dados_contrato, competencia):
     """
     Etapa 1: Cria o processo de pagamento no SEI.
@@ -32,16 +67,10 @@ def criar_procedimento_pagamento(token, unidade_id, dados_contrato, competencia)
         return None
 
     url = f"{BASE_URL}/v1/unidades/{unidade_id}/procedimentos"
-    
-    # Sanitização
-    num_orig = str(dados_contrato.get('numeroOriginal', '')).strip()
-    nome_contr = str(dados_contrato.get('nomeContratadoResumido', '')).strip()
-    cod_contr = str(dados_contrato.get('codigo', '')).strip()
-    
-    especificacao_formatada = f"PAGAMENTO DE CONTRATO {num_orig}-{nome_contr[18:]}-{cod_contr}-{competencia}"
-    
-    if len(especificacao_formatada) > 250:
-        especificacao_formatada = especificacao_formatada[:250]
+
+    especificacao_formatada = montar_especificacao_pagamento(
+        dados_contrato, competencia
+    )
 
     payload = {
         "procedimento": {
