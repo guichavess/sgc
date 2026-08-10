@@ -17,6 +17,79 @@
 
 ## Pendências
 
+### Especificação dos processos de pagamento — Solicitações (2026-08-10)
+
+- [ ] **Rodar `deploy/fix_especificacao_solicitacoes.sql` em produção**
+  - Contexto: `criar_procedimento_pagamento()` montava a especificação com
+    `nomeContratadoResumido[18:]` — corte pensado para `nomeContratado`
+    ("CNPJ - RAZAO SOCIAL") mas aplicado ao campo resumido, que não tem prefixo.
+    Reportado por usuária no processo `00002.007489/2026-78`:
+    "TAILANDIA ADMINISTRACAO" virava **RACAO** na especificação. Nomes com até
+    18 chars geravam hífen duplo (`04/2025--25014138-07/2026`).
+    Código corrigido no commit `e40a105`; este SQL conserta os registros já
+    gravados em `sis_solicitacoes.especificacao`.
+  - SQL (Workbench, nesta ordem). O filtro compara a especificação gravada com
+    a **reconstrução exata** do que o código bugado produziria a partir do
+    contrato (`SUBSTRING(..., 19)` = `[18:]` do Python) — assim não toca nos
+    processos importados do Excel nem nos criados à mão. O `BINARY` força
+    comparação case-sensitive (o import usava `Pagamento de Contrato ...`).
+
+  ```sql
+  USE sgc;
+
+  -- 0) Backup das linhas que serão tocadas
+  DROP TABLE IF EXISTS bkp_especificacao_20260810;
+  CREATE TABLE bkp_especificacao_20260810 AS
+  SELECT s.id, s.especificacao, NOW() AS backup_em
+  FROM sis_solicitacoes s JOIN contratos c ON c.codigo = s.codigo_contrato
+  WHERE BINARY s.especificacao = LEFT(CONCAT('PAGAMENTO DE CONTRATO ',
+          COALESCE(TRIM(c.numeroOriginal),''), '-',
+          SUBSTRING(COALESCE(TRIM(c.nomeContratadoResumido),''), 19), '-',
+          COALESCE(TRIM(c.codigo),''), '-', COALESCE(TRIM(s.competencia),'')), 250);
+
+  -- 1) Prévia + 2) contagem
+  SELECT COUNT(*) AS total_a_corrigir FROM bkp_especificacao_20260810;
+  SELECT b.id, b.especificacao AS antes, s.codigo_contrato, s.protocolo_gerado_sei
+  FROM bkp_especificacao_20260810 b JOIN sis_solicitacoes s ON s.id = b.id
+  ORDER BY b.id;
+
+  -- 3) Correção (confira as linhas afetadas antes do COMMIT)
+  SET SQL_SAFE_UPDATES = 0;
+  START TRANSACTION;
+  UPDATE sis_solicitacoes s
+  JOIN contratos c ON c.codigo = s.codigo_contrato
+  JOIN bkp_especificacao_20260810 b ON b.id = s.id
+  SET s.especificacao = LEFT(CONCAT('PAGAMENTO DE CONTRATO ', CONCAT_WS(' - ',
+        NULLIF(TRIM(COALESCE(c.numeroOriginal,'')),''),
+        NULLIF(COALESCE(NULLIF(TRIM(COALESCE(c.nomeContratadoResumido,'')),''),
+               TRIM(CASE WHEN LOCATE(' - ', COALESCE(c.nomeContratado,'')) > 0
+                         THEN SUBSTRING(c.nomeContratado, LOCATE(' - ', c.nomeContratado) + 3)
+                         ELSE COALESCE(c.nomeContratado,'') END)),''),
+        NULLIF(TRIM(COALESCE(c.codigo,'')),''),
+        NULLIF(TRIM(COALESCE(s.competencia,'')),'')
+      )), 250);
+  COMMIT;   -- ou ROLLBACK se o número de linhas não bater
+  SET SQL_SAFE_UPDATES = 1;
+
+  -- 4) Conferência (o que sobrar tem cadastro de contrato alterado desde a criação)
+  SELECT id, codigo_contrato, especificacao FROM sis_solicitacoes
+  WHERE BINARY especificacao REGEXP '^PAGAMENTO DE CONTRATO [^ ]*-' ORDER BY id;
+
+  -- Rollback tardio (depois do COMMIT):
+  -- UPDATE sis_solicitacoes s JOIN bkp_especificacao_20260810 b ON b.id = s.id
+  -- SET s.especificacao = b.especificacao;
+  ```
+  - Observação: **não** altera schema e **não** altera os processos no SEI — lá
+    a especificação só muda manualmente ou via API, um a um. No banco de dev
+    foram 142 linhas (19 com fragmento no nome, 123 com hífen duplo); em
+    produção o número será maior. As linhas que sobrarem no passo 4 são
+    residuais cujo cadastro do contrato mudou depois da criação do processo
+    (reescrevê-las trocaria também o número do contrato pelo valor atual) —
+    conferir uma a uma antes de decidir. Versão completa e comentada do script
+    em `deploy/fix_especificacao_solicitacoes.sql` (não versionado: o
+    `.gitignore` ignora `*.sql`).
+  - Após aplicar: apagar `bkp_especificacao_20260810` e remover este item.
+
 ### Índices para acelerar a Fase 3 (Saldos) — Pagamentos (2026-07-24)
 
 - [ ] **Criar índices em `empenho` e `liquidacao`**
