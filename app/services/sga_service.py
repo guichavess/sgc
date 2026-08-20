@@ -6,6 +6,8 @@ import requests
 import urllib3
 from flask import current_app
 
+from app.utils.cpf import formatar_cpf
+
 # Desabilita warnings de SSL (certificado autoassinado, mesmo padrão SIAFE)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -19,7 +21,7 @@ class SGAService:
         Busca dados de um servidor pelo CPF na API pessoaSGA.
 
         Args:
-            cpf (str): CPF do servidor (11 dígitos, sem formatação).
+            cpf (str): CPF do servidor, com ou sem formatação.
 
         Returns:
             dict: Dados do servidor com campos:
@@ -28,10 +30,11 @@ class SGAService:
                 - vinculo, cod_sefaz_orgao
             None: Se o servidor não for encontrado ou em caso de erro.
         """
-        # Limpa CPF (remove pontos, traços, espaços)
-        cpf_limpo = ''.join(c for c in cpf if c.isdigit())
-
-        if len(cpf_limpo) != 11:
+        # A API pessoaSGA só responde com o CPF FORMATADO ('999.999.999-99').
+        # Enviando apenas dígitos ela devolve HTTP 200 com corpo '[]', o que é
+        # indistinguível de "não encontrado" — o erro passa silencioso.
+        cpf_formatado = formatar_cpf(cpf)
+        if not cpf_formatado:
             return None
 
         url = current_app.config.get('SGA_API_URL', 'https://gestor.sead.pi.gov.br/api/pessoaSGA')
@@ -42,7 +45,7 @@ class SGAService:
             return None
 
         headers = {'hashkey': hashkey}
-        payload = {'cpf': cpf_limpo}
+        payload = {'cpf': cpf_formatado}
 
         try:
             response = requests.post(
@@ -58,20 +61,23 @@ class SGAService:
 
             # API retorna [] quando não encontra
             if not data or (isinstance(data, list) and len(data) == 0):
+                current_app.logger.info(
+                    f'[SGA] Nenhuma pessoa retornada para o CPF {cpf_formatado}.'
+                )
                 return None
 
             # API retorna objeto direto quando encontra
             if isinstance(data, dict):
                 return {
-                    'matricula': data.get('matricula', ''),
-                    'cpf': data.get('cpf', cpf_limpo),
-                    'nome': data.get('nome', ''),
-                    'cargo': data.get('cargo', ''),
-                    'setor': data.get('setor', ''),
-                    'orgao': data.get('orgao', ''),
-                    'superintendencia': data.get('superintendencia', ''),
-                    'banco_agencia': data.get('banco_agencia', ''),
-                    'banco_conta': data.get('banco_conta', ''),
+                    'matricula': data.get('matricula') or '',
+                    'cpf': data.get('cpf') or cpf_formatado,
+                    'nome': data.get('nome') or '',
+                    'cargo': data.get('cargo') or '',
+                    'setor': data.get('setor') or '',
+                    'orgao': data.get('orgao') or '',
+                    'superintendencia': data.get('superintendencia') or '',
+                    'banco_agencia': data.get('banco_agencia') or '',
+                    'banco_conta': data.get('banco_conta') or '',
                     'vinculo': data.get('vinculo') or '',
                     'cod_sefaz_orgao': data.get('cod_sefaz_orgao'),
                 }
@@ -80,15 +86,15 @@ class SGAService:
             if isinstance(data, list) and len(data) > 0:
                 item = data[0]
                 return {
-                    'matricula': item.get('matricula', ''),
-                    'cpf': item.get('cpf', cpf_limpo),
-                    'nome': item.get('nome', ''),
-                    'cargo': item.get('cargo', ''),
-                    'setor': item.get('setor', ''),
-                    'orgao': item.get('orgao', ''),
-                    'superintendencia': item.get('superintendencia', ''),
-                    'banco_agencia': item.get('banco_agencia', ''),
-                    'banco_conta': item.get('banco_conta', ''),
+                    'matricula': item.get('matricula') or '',
+                    'cpf': item.get('cpf') or cpf_formatado,
+                    'nome': item.get('nome') or '',
+                    'cargo': item.get('cargo') or '',
+                    'setor': item.get('setor') or '',
+                    'orgao': item.get('orgao') or '',
+                    'superintendencia': item.get('superintendencia') or '',
+                    'banco_agencia': item.get('banco_agencia') or '',
+                    'banco_conta': item.get('banco_conta') or '',
                     'vinculo': item.get('vinculo') or '',
                     'cod_sefaz_orgao': item.get('cod_sefaz_orgao'),
                 }

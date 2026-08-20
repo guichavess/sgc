@@ -17,6 +17,46 @@
 
 ## Pendências
 
+### Normalizar CPFs de `diarias_servidores` (2026-08-20)
+
+- [ ] **Padronizar `diarias_servidores.cpf` no formato `999.999.999-99`**
+  - Contexto: a busca de servidor por CPF (`/diarias/api/buscar-pessoa`) parou
+    de encontrar qualquer pessoa. Duas causas: (a) a API pessoaSGA do Gestor
+    SEAD só responde com o CPF **formatado** — enviando só dígitos ela devolve
+    HTTP 200 com corpo `[]`, indistinguível de "não encontrado"; (b) a busca
+    local comparava `cpf = <só dígitos>` contra registros gravados formatados.
+    O código já foi corrigido para consultar os dois formatos
+    (`app/utils/cpf.variantes_cpf`) e gravar sempre formatado, então este SQL é
+    apenas **limpeza** — não bloqueia o deploy.
+  - SQL (Workbench):
+
+  ```sql
+  USE sgc;
+
+  -- 0) Conferir quantos estão fora do padrão
+  SELECT COUNT(*) FROM diarias_servidores WHERE cpf NOT LIKE '___.___.___-__';
+
+  -- 1) Backup
+  CREATE TABLE diarias_servidores_bkp_20260820 AS SELECT * FROM diarias_servidores;
+
+  -- 2) Formatar os que estão só com dígitos (11 chars numéricos)
+  UPDATE diarias_servidores
+     SET cpf = CONCAT(SUBSTRING(cpf,1,3), '.', SUBSTRING(cpf,4,3), '.',
+                      SUBSTRING(cpf,7,3), '-', SUBSTRING(cpf,10,2))
+   WHERE CHAR_LENGTH(cpf) = 11 AND cpf REGEXP '^[0-9]{11}$';
+  ```
+
+  - Atenção: `cpf` é UNIQUE. Se a mesma pessoa existir nos dois formatos, o
+    UPDATE falha — nesse caso remover a duplicata mais antiga antes:
+
+  ```sql
+  SELECT cpf, nome, id FROM diarias_servidores
+   WHERE REPLACE(REPLACE(cpf,'.',''),'-','') IN (
+         SELECT REPLACE(REPLACE(cpf,'.',''),'-','') FROM diarias_servidores
+          GROUP BY 1 HAVING COUNT(*) > 1)
+   ORDER BY 1, id;
+  ```
+
 ### Especificação dos processos de pagamento — Solicitações (2026-08-10)
 
 - [ ] **Rodar `deploy/fix_especificacao_solicitacoes.sql` em produção**

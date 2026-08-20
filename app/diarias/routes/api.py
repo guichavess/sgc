@@ -11,6 +11,19 @@ from app.services.diaria_service import DiariaService
 from app.services.sga_service import SGAService
 from app.models.diaria import Municipio, Setor, Orgao, DiariasServidor
 from app.utils.text_encoding import corrigir_mojibake_cp850
+from app.utils.cpf import formatar_cpf, variantes_cpf
+
+
+def _proximo_idpessoa():
+    """
+    Gera um idpessoa para cadastro manual.
+
+    A coluna é NOT NULL UNIQUE e normalmente vem do SGA; quem é cadastrado
+    à mão não tem esse ID, então usamos o próximo valor livre acima do maior
+    já gravado.
+    """
+    maior = db.session.query(db.func.max(DiariasServidor.idpessoa)).scalar() or 0
+    return maior + 1
 
 
 @diarias_bp.route('/api/buscar-pessoa')
@@ -24,14 +37,16 @@ def api_buscar_pessoa_cpf():
     """
     cpf = request.args.get('cpf', '').strip()
 
-    # Limpa formatação do CPF
-    cpf_limpo = ''.join(c for c in cpf if c.isdigit())
-
-    if len(cpf_limpo) != 11:
+    cpf_formatado = formatar_cpf(cpf)
+    if not cpf_formatado:
         return jsonify({'encontrado': False, 'erro': 'CPF deve conter 11 dígitos.'}), 400
 
-    # 1. Busca na tabela local
-    servidor_local = DiariasServidor.query.filter_by(cpf=cpf_limpo).first()
+    # 1. Busca na tabela local. Os CPFs foram gravados nos dois formatos ao
+    # longo do tempo (formatado na importação, só dígitos no cadastro manual),
+    # então a consulta precisa casar com ambos.
+    servidor_local = DiariasServidor.query.filter(
+        DiariasServidor.cpf.in_(variantes_cpf(cpf))
+    ).order_by(DiariasServidor.id.desc()).first()
     if servidor_local and servidor_local.nome:
         return jsonify({
             'encontrado': True,
@@ -49,7 +64,7 @@ def api_buscar_pessoa_cpf():
         })
 
     # 2. Busca na API externa
-    pessoa = SGAService.buscar_pessoa_por_cpf(cpf_limpo)
+    pessoa = SGAService.buscar_pessoa_por_cpf(cpf_formatado)
 
     if not pessoa:
         return jsonify({'encontrado': False})
@@ -58,7 +73,7 @@ def api_buscar_pessoa_cpf():
         'encontrado': True,
         'origem': 'api',
         'matricula': pessoa.get('matricula', ''),
-        'cpf': pessoa.get('cpf', cpf_limpo),
+        'cpf': pessoa.get('cpf') or cpf_formatado,
         'nome': pessoa.get('nome', ''),
         'cargo': pessoa.get('cargo', ''),
         'setor': pessoa.get('setor', ''),
@@ -79,19 +94,23 @@ def api_salvar_servidor():
     if not data:
         return jsonify({'error': 'Dados inválidos.'}), 400
 
-    cpf = ''.join(c for c in (data.get('cpf') or '') if c.isdigit())
+    cpf = formatar_cpf(data.get('cpf'))
     nome = (data.get('nome') or '').strip()
 
-    if not cpf or len(cpf) != 11:
+    if not cpf:
         return jsonify({'error': 'CPF inválido.'}), 400
     if not nome:
         return jsonify({'error': 'Nome é obrigatório.'}), 400
 
     try:
-        # Verifica se já existe por CPF
-        existente = DiariasServidor.query.filter_by(cpf=cpf).first()
+        # Verifica se já existe por CPF — nos dois formatos gravados no banco,
+        # senão o cadastro duplica a mesma pessoa.
+        existente = DiariasServidor.query.filter(
+            DiariasServidor.cpf.in_(variantes_cpf(cpf))
+        ).order_by(DiariasServidor.id.desc()).first()
         if existente:
             # Atualiza dados
+            existente.cpf = cpf  # converge registros legados para o formatado
             existente.nome = nome
             existente.matricula = (data.get('matricula') or '').strip() or existente.matricula
             existente.cargo = (data.get('cargo') or '').strip() or existente.cargo
@@ -107,6 +126,7 @@ def api_salvar_servidor():
             servidor = DiariasServidor(
                 nome=nome,
                 cpf=cpf,
+                idpessoa=_proximo_idpessoa(),
                 matricula=(data.get('matricula') or '').strip() or None,
                 cargo=(data.get('cargo') or '').strip() or None,
                 setor=(data.get('setor') or '').strip() or None,
