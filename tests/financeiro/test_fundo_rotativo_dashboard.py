@@ -222,6 +222,8 @@ class TestFundoRotativoDashboardService:
         assert dashboard['kpis']['reservado'] == pytest.approx(900.0)
         assert dashboard['kpis']['liquidado'] == pytest.approx(250.0)
         assert dashboard['kpis']['pago'] == pytest.approx(200.0)
+        # SD = ST - (R - P) = 1500 - (900 - 200)
+        assert dashboard['kpis']['disponivel'] == pytest.approx(800.0)
 
         rows = {row['contrato']: row for row in dashboard['rows']}
         assert set(rows) == {'123', '456'}
@@ -356,7 +358,35 @@ class TestFundoRotativoDashboardService:
 
         assert dashboard['kpis']['saldo_total'] == pytest.approx(350.0)
         assert dashboard['kpis']['reservado'] == pytest.approx(300.0)
+        # Nenhuma OB em fevereiro: P = 0, entao SD = ST - (R - 0)
+        assert dashboard['kpis']['pago'] == pytest.approx(0.0)
         assert dashboard['kpis']['disponivel'] == pytest.approx(50.0)
+
+    def test_disponivel_devolve_o_que_ja_foi_pago_da_reserva(self, app, db_session):
+        """SD = ST - (R - P): o valor pago sai da reserva e volta a compor o disponivel."""
+        from app.models.ob import OB
+        from app.services.fundo_rotativo_service import obter_dashboard_fundo_rotativo
+
+        _seed_dashboard_data(db_session)
+        ano_atual = datetime.now().year
+        db_session.add(OB(
+            statusDocumento='CONTABILIZADO',
+            codigoUG='210102',
+            valor=150.0,
+            codContrato='123',
+            codFonte=755,
+            codNatureza=339030,
+            dataEmissao=datetime(ano_atual, 1, 22),
+        ))
+        db_session.flush()
+
+        with app.app_context():
+            dashboard = obter_dashboard_fundo_rotativo()
+
+        assert dashboard['kpis']['saldo_total'] == pytest.approx(1500.0)
+        assert dashboard['kpis']['reservado'] == pytest.approx(900.0)
+        assert dashboard['kpis']['pago'] == pytest.approx(350.0)
+        assert dashboard['kpis']['disponivel'] == pytest.approx(950.0)
 
     def test_saldo_total_acumulativo_pega_snapshot_anterior_quando_mes_filtrado_nao_tem(self, app, db_session):
         from app.services.fundo_rotativo_service import obter_dashboard_fundo_rotativo
@@ -400,10 +430,11 @@ class TestFundoRotativoDashboardRotas:
         assert resp.status_code == 200
         html = resp.data.decode('utf-8', errors='replace')
         assert 'Fundo Rotativo — Dashboard' in html
-        assert 'Saldo Total' in html
-        assert 'Reservado' in html
-        assert 'Liquidado' in html
-        assert 'Pago' in html
+        assert 'Saldo Total (ST)' in html
+        assert 'Reservado (R)' in html
+        assert 'Saldo Disponível (SD)' in html
+        assert 'Liquidado (L)' in html
+        assert 'Pago (P)' in html
         assert 'Execução por Contrato' in html
         assert 'Exportar Excel' in html
         assert 'Fornecedor Fundo' in html

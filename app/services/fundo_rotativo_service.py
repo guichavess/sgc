@@ -1128,17 +1128,19 @@ def obter_dashboard_fundo_rotativo(ano=None, mes=None, fonte_codigo=None, nature
     rows.sort(key=lambda row: row['empenho'], reverse=True)
 
     reservado = _soma_ug(Reserva, sinalizado_por='tipoAlteracao', filtros=filtros)
+    pago = _soma_ug(OB, filtros=filtros)
 
     return {
         'kpis': {
             'saldo_total': round(saldo_total, 2),
             'reservado': round(reservado, 2),
-            'disponivel': round(saldo_total - reservado, 2),
+            # SD = ST - (R - P): o que ja foi pago sai da reserva e volta ao disponivel.
+            'disponivel': round(saldo_total - (reservado - pago), 2),
             'liquidado': round(
                 _soma_ug(Liquidacao, sinalizado_por='tipoAlteracao', filtros=filtros),
                 2,
             ),
-            'pago': round(_soma_ug(OB, filtros=filtros), 2),
+            'pago': round(pago, 2),
         },
         'rows': rows,
     }
