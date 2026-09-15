@@ -78,6 +78,7 @@ response_procedimento_*.json
 
 # Deploy local (nao vai pro servidor)
 deploy-prod.bat
+DEPLOY_PENDENTE.md
 
 # Gunicorn runtime
 sgc.pid
