@@ -275,7 +275,7 @@ function selecionarContrato(codigo) {
         .then(response => response.json())
         .then(data => {
             if(data.sucesso) {
-                // Sucesso: Redireciona para o Dashboard com mensagem
+                // Sucesso: Redireciona para a lista de Solicitações com mensagem
                 window.location.href = "{{ url_for('solicitacoes.dashboard') }}";
             } else {
                 // Erro: Mostra mensagem e reabilita botão
