@@ -73,7 +73,8 @@ def create_app(config_class=None):
     @app.route('/hub')
     @login_required
     def hub():
-        return render_template('hub.html')
+        from app.services.hub_service import montar_hub
+        return render_template('hub.html', hub=montar_hub(current_user))
 
     # Rota para atualizar SIAFE (apenas Pedro Alexandre)
     # Grupos: SIAFE (execução sequencial interna, paralela entre grupos) e LOA (separado)

@@ -10,6 +10,7 @@
    ========================================================================== */
 @import 'base/variables.css';
 @import 'base/reset.css';
+@import 'base/motion.css';
 
 /* ==========================================================================
    COMPONENTES - Elementos reutilizáveis

@@ -1,0 +1,29 @@
+/**
+ * Tokens de movimento — personalidade "Corporate" (motion-design-skill).
+ * Curva assinatura (.2,0,0,1); entrada ease-out, saída ease-in (~70% da entrada).
+ * Os mesmos valores existem em JS em app/static/js/sgc-motion.js (GSAP).
+ */
+:root {
+    --motion-speed: 1;
+    --ease-standard: cubic-bezier(.2, 0, 0, 1);
+    --ease-enter: cubic-bezier(.05, .7, .1, 1);
+    --ease-exit: cubic-bezier(.3, 0, 1, 1);
+    --ease-in-out: cubic-bezier(.4, 0, .2, 1);
+    --dur-press: calc(60ms / var(--motion-speed));
+    --dur-hover-in: calc(90ms / var(--motion-speed));
+    --dur-hover-out: calc(180ms / var(--motion-speed));
+    --dur-quick: calc(200ms / var(--motion-speed));
+    --dur-standard: calc(300ms / var(--motion-speed));
+    --dur-slow: calc(450ms / var(--motion-speed));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --dur-press: 1ms;
+        --dur-hover-in: 1ms;
+        --dur-hover-out: 1ms;
+        --dur-quick: 1ms;
+        --dur-standard: 1ms;
+        --dur-slow: 1ms;
+    }
+}
