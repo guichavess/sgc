@@ -270,11 +270,16 @@ def dados_metricas(filtros: FiltrosPainel, page_matriz, per_page=25):
 # =============================================================================
 
 def indicador_por_fase(filtros: FiltrosPainel):
-    """Quantidade de processos por fase — série para gráfico de barras."""
+    """Quantidade de processos por fase — série para gráfico de barras.
+
+    Ordenada da maior para a menor quantidade (empates mantêm a ordem do fluxo),
+    que é a visualização padrão do gráfico no Painel.
+    """
     series = [
         {'nome': r['nome'], 'cor': r['cor'], 'qtd': r['qtd']}
         for r in resumo_por_fase(filtros)
     ]
+    series.sort(key=lambda s: s['qtd'], reverse=True)
     return {'series': series, 'total': sum(s['qtd'] for s in series)}
 
 

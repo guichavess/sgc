@@ -217,3 +217,27 @@ def test_api_painel_exige_login(client, dados):
 
 def test_api_painel_indicador_inexistente_404(cliente_leitor):
     assert cliente_leitor.get('/solicitacoes/api/painel/nao-existe').status_code == 404
+
+
+def test_painel_grafico_por_fase_maior_no_topo(cliente_leitor):
+    html = cliente_leitor.get('/solicitacoes/painel').get_data(as_text=True)
+
+    assert '(a, b) => b.qtd - a.qtd' in html   # decrescente => maior barra no topo
+
+
+def test_api_painel_por_fase_ordena_por_quantidade_decrescente(cliente_leitor, db_session):
+    from app.models import Solicitacao
+
+    db_session.add(Solicitacao(
+        id=3, codigo_contrato='C2', id_usuario_solicitante=1, etapa_atual_id=12,
+        competencia='09/2026', id_tipo_pagamento=1, data_solicitacao=datetime(2026, 3, 2),
+        protocolo_gerado_sei='00002.000003/2026-03',
+    ))
+    db_session.commit()
+
+    series = cliente_leitor.get('/solicitacoes/api/painel/por-fase').get_json()['series']
+    qtds = [s['qtd'] for s in series]
+
+    assert qtds == sorted(qtds, reverse=True)
+    assert series[0]['nome'] == 'Atesto e Fiscalização'
+    assert series[0]['qtd'] == 2
