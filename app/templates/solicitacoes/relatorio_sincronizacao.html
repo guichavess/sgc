@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório da Sincronização — SGC Pagamentos</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base/fonts.css') }}">
+    <style>
+        :root {
+            --rel-primary: #343990;
+            --rel-text: #1a1d2e;
+            --rel-muted: #5f6577;
+            --rel-border: #e8eaed;
+            --rel-bg: #f5f6f8;
+            --rel-sucesso: #16a34a;
+            --rel-alerta: #d97706;
+            --rel-erro: #dc2626;
+            --rel-pendente: #8b8fa3;
+        }
+        body { background: var(--rel-bg); color: var(--rel-text); font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; }
+        .rel-pagina { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+        .rel-folha { background: #fff; border: 1px solid var(--rel-border); border-radius: 12px; padding: 36px 40px; }
+        .rel-topo { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; border-bottom: 3px solid var(--rel-primary); padding-bottom: 18px; margin-bottom: 24px; }
+        .rel-sistema { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--rel-muted); font-weight: 600; }
+        .rel-titulo { font-size: 24px; font-weight: 700; margin: 4px 0 6px; color: var(--rel-primary); }
+        .rel-meta { color: var(--rel-muted); font-size: 13px; }
+        .rel-status { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; font-weight: 600; font-size: 13px; white-space: nowrap; border: 1px solid currentColor; }
+        .rel-status-sucesso { color: var(--rel-sucesso); background: #f0fdf4; }
+        .rel-status-alerta { color: var(--rel-alerta); background: #fffbeb; }
+        .rel-status-erro { color: var(--rel-erro); background: #fef2f2; }
+        .rel-status-pendente { color: var(--rel-pendente); background: #f5f6f8; }
+        h2.rel-secao { font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--rel-primary); margin: 32px 0 12px; display: flex; align-items: center; gap: 8px; }
+        .rel-resumo p { margin-bottom: 8px; line-height: 1.6; }
+        .rel-numeros { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; }
+        .rel-numero { border: 1px solid var(--rel-border); border-radius: 10px; padding: 14px 16px; }
+        .rel-numero .valor { font-size: 26px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+        .rel-numero .rotulo { color: var(--rel-muted); font-size: 12px; margin-top: 4px; }
+        .rel-timeline { list-style: none; padding: 0; margin: 0; position: relative; }
+        .rel-timeline li { position: relative; padding: 0 0 22px 48px; }
+        .rel-timeline li::before { content: ''; position: absolute; left: 15px; top: 32px; bottom: 0; width: 2px; background: var(--rel-border); }
+        .rel-timeline li:last-child::before { display: none; }
+        .rel-marcador { position: absolute; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 14px; }
+        .rel-marcador-sucesso { background: var(--rel-sucesso); }
+        .rel-marcador-alerta { background: var(--rel-alerta); }
+        .rel-marcador-erro { background: var(--rel-erro); }
+        .rel-marcador-pendente { background: var(--rel-pendente); }
+        .rel-fase-nome { font-weight: 600; font-size: 15px; }
+        .rel-fase-desc { color: var(--rel-muted); font-size: 13px; margin: 2px 0 6px; }
+        .rel-fase-resultado { font-size: 13px; }
+        .rel-grupo { border: 1px solid var(--rel-border); border-left: 4px solid var(--rel-alerta); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; break-inside: avoid; }
+        .rel-grupo-processo_inexistente, .rel-grupo-acesso_negado { border-left-color: var(--rel-erro); }
+        .rel-grupo h3 { font-size: 15px; font-weight: 700; margin: 0 0 8px; }
+        .rel-bloco { font-size: 13px; line-height: 1.55; margin-bottom: 6px; }
+        .rel-bloco strong { color: var(--rel-text); }
+        .rel-tabela { font-size: 13px; margin: 10px 0 0; }
+        .rel-tabela th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--rel-muted); font-weight: 600; background: #fafbfc !important; }
+        .rel-tabela td { vertical-align: middle; }
+        .rel-mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; }
+        .rel-lista-mov { columns: 3 220px; margin: 0; padding-left: 18px; }
+        .rel-log { max-height: 420px; overflow: auto; background: #fafbfc; border: 1px solid var(--rel-border); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; }
+        .rel-glossario dt { font-weight: 600; }
+        .rel-glossario dd { color: var(--rel-muted); margin-bottom: 8px; }
+        .rel-rodape { margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--rel-border); color: var(--rel-muted); font-size: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .rel-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
+        @media (max-width: 640px) {
+            .rel-folha { padding: 20px 16px; }
+            .rel-topo { flex-direction: column; }
+            .rel-titulo { font-size: 20px; }
+        }
+        @media print {
+            @page { size: A4; margin: 14mm; }
+            body { background: #fff; font-size: 12px; }
+            .rel-pagina { padding: 0; max-width: none; }
+            .rel-folha { border: 0; padding: 0; }
+            .rel-acoes { display: none !important; }
+            .rel-log { max-height: none; overflow: visible; }
+            details { display: block; }
+            details > summary { list-style: none; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+{% set n = r.numeros %}
+<div class="rel-pagina">
+    <div class="rel-acoes">
+        <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i> Imprimir / Salvar PDF
+        </button>
+    </div>
+
+    <article class="rel-folha">
+        <header class="rel-topo">
+            <div>
+                <div class="rel-sistema">SGC · Pagamentos · Sincronização Unificada</div>
+                <h1 class="rel-titulo">Relatório da Sincronização</h1>
+                <div class="rel-meta">
+                    {% if r.iniciado_em %}Executada em {{ r.iniciado_em.strftime('%d/%m/%Y às %H:%M:%S') }}{% endif %}
+                    {% if r.duracao_total %} · duração {{ r.duracao_total }}{% endif %}
+                    {% if r.usuario %}<br>Responsável: {{ r.usuario }}{% endif %}
+                </div>
+            </div>
+            <span class="rel-status rel-status-{{ r.status }}">
+                <i class="bi {{ {'sucesso': 'bi-check-circle-fill', 'alerta': 'bi-exclamation-triangle-fill', 'erro': 'bi-x-octagon-fill'}[r.status] }}"></i>
+                {{ r.status_rotulo }}
+            </span>
+        </header>
+
+        <section class="rel-resumo">
+            <h2 class="rel-secao" style="margin-top:0"><i class="bi bi-card-text"></i> Resumo executivo</h2>
+            {% for p in r.resumo_paragrafos %}<p>{{ p }}</p>{% endfor %}
+
+            <div class="rel-numeros">
+                {% for valor, rotulo in [
+                    (n.processos_verificados, 'Processos verificados no SEI'),
+                    (n.processos_atualizados, 'Processos atualizados'),
+                    (n.processos_nao_consultados, 'Não consultados'),
+                    (n.etapas_avancadas, 'Avançaram de etapa'),
+                    (n.saldos_atualizados, 'Saldos recalculados'),
+                    (n.total_pendencias, 'Pendências registradas'),
+                ] %}
+                <div class="rel-numero">
+                    <div class="valor">{{ valor if valor is not none else '—' }}</div>
+                    <div class="rotulo">{{ rotulo }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section>
+            <h2 class="rel-secao"><i class="bi bi-diagram-3"></i> Linha do tempo das fases</h2>
+            <ol class="rel-timeline">
+                {% set rotulos_fase = {'sucesso': 'Concluída', 'alerta': 'Concluída com alertas', 'erro': 'Interrompida', 'pendente': 'Não executada'} %}
+                {% for f in r.fases %}
+                <li>
+                    <span class="rel-marcador rel-marcador-{{ f.status }}">{{ f.numero }}</span>
+                    <div class="d-flex justify-content-between flex-wrap gap-2">
+                        <span class="rel-fase-nome">{{ f.nome }}</span>
+                        <span class="rel-status rel-status-{{ f.status }}" style="padding:2px 10px;font-size:12px">{{ rotulos_fase[f.status] }}</span>
+                    </div>
+                    <div class="rel-fase-desc">{{ f.descricao }}</div>
+                    <div class="rel-fase-resultado">
+                        {% if f.msg_final %}<strong>Resultado:</strong> {{ f.msg_final }}{% endif %}
+                        {% if f.inicio %}<br><span class="text-muted">Início {{ f.inicio.strftime('%H:%M:%S') }}{% if f.fim %} · Fim {{ f.fim.strftime('%H:%M:%S') }}{% endif %}{% if f.duracao %} · {{ f.duracao }}{% endif %}</span>{% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ol>
+        </section>
+
+        <section>
+            <h2 class="rel-secao"><i class="bi bi-exclamation-diamond"></i> Pendências e orientações</h2>
+            {% if not r.grupos %}
+                <p class="text-muted mb-0">Nenhuma pendência registrada nesta execução.</p>
+            {% endif %}
+            {% for g in r.grupos %}
+            <div class="rel-grupo rel-grupo-{{ g.tipo }}">
+                <h3>{{ g.titulo }} <span class="badge text-bg-secondary ms-1">{{ g.itens|length }}</span></h3>
+                <div class="rel-bloco"><strong>O que aconteceu:</strong> {{ g.explicacao }}</div>
+                <div class="rel-bloco"><strong>O que fazer:</strong> {{ g.orientacao }}</div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered rel-tabela mb-0">
+                        <thead>
+                            <tr><th style="width:36px">#</th><th>Processo SEI</th><th>Contrato</th><th>Fase</th><th>Mensagem técnica</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for i in g.itens %}
+                            <tr>
+                                <td class="text-muted">{{ loop.index }}</td>
+                                <td class="rel-mono">
+                                    {% if i.protocolo and i.link_sei %}
+                                        <a href="{{ i.link_sei }}" target="_blank" rel="noopener">{{ i.protocolo }}</a>
+                                    {% else %}{{ i.protocolo or '—' }}{% endif %}
+                                </td>
+                                <td>{{ i.contrato or '—' }}</td>
+                                <td>{{ i.fase or '—' }}</td>
+                                <td class="rel-mono text-muted">{{ i.mensagem_tecnica }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </section>
+
+        {% set movimentados = r.fases[1].movimentados %}
+        <section>
+            <h2 class="rel-secao"><i class="bi bi-arrow-right-circle"></i> Processos que avançaram de etapa</h2>
+            {% if movimentados %}
+                <ol class="rel-lista-mov rel-mono">
+                    {% for m in movimentados %}<li>{{ m }}</li>{% endfor %}
+                </ol>
+            {% else %}
+                <p class="text-muted mb-0">Nenhum processo mudou de etapa nesta execução.</p>
+            {% endif %}
+        </section>
+
+        <section>
+            <h2 class="rel-secao"><i class="bi bi-book"></i> Glossário</h2>
+            <dl class="rel-glossario mb-0">
+                <dt>SEI</dt><dd>Sistema Eletrônico de Informações, onde tramitam os processos de pagamento e seus documentos.</dd>
+                <dt>SIAFE</dt><dd>Sistema Integrado de Administração Financeira, fonte dos empenhos, liquidações e pagamentos.</dd>
+                <dt>Etapa</dt><dd>Posição do processo no fluxo de pagamento (Criada → Em Análise → Aguardando NE → NE Inserida → Em Execução → Concluída).</dd>
+                <dt>NE / NL / PD / OB</dt><dd>Nota de Empenho, Nota de Liquidação, Preparação de Pagamento e Ordem Bancária.</dd>
+                <dt>Erro 504</dt><dd>Código técnico indicando que o servidor desistiu de aguardar a resposta por excesso de tempo.</dd>
+            </dl>
+        </section>
+
+        {% if r.log %}
+        <section>
+            <h2 class="rel-secao"><i class="bi bi-terminal"></i> Registro técnico da execução</h2>
+            <details>
+                <summary class="text-muted mb-2" style="cursor:pointer">Exibir {{ r.log|length }} linha(s) do registro</summary>
+                <div class="rel-log rel-mono">{% for linha in r.log %}{{ linha }}
+{% endfor %}</div>
+            </details>
+        </section>
+        {% endif %}
+
+        <footer class="rel-rodape">
+            <span>SEAD · Sistema de Gestão de Contratos (SGC)</span>
+            <span>Relatório gerado em {{ r.gerado_em.strftime('%d/%m/%Y às %H:%M:%S') }}</span>
+        </footer>
+    </article>
+</div>
+</body>
+</html>

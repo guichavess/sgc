@@ -55,27 +55,75 @@
  </div>
 </div>
 
-<div class="modal fade" id="modalSyncSei" tabindex="-1" data-bs-backdrop="static">
- <div class="modal-dialog modal-dialog-centered">
- <div class="modal-content shadow-lg border-0">
- <div class="modal-header bg-light text-dark">
- <h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>Sincronização Unificada</h5>
+<div class="modal fade modal-sync-sei" id="modalSyncSei" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="tituloModalSyncSei">
+ <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable modal-fullscreen-md-down">
+ <div class="modal-content border-0 shadow-lg">
+ <div class="modal-header sync-header">
+ <div class="sync-header-texto">
+ <h5 class="modal-title" id="tituloModalSyncSei"><i class="bi bi-arrow-repeat me-2"></i>Sincronização Unificada</h5>
+ <div id="tituloFaseSei" class="sync-header-status" data-estado="pendente" aria-live="polite">Preparando...</div>
  </div>
- <div class="modal-body">
- <h6 id="tituloFaseSei" class="fw-bold text-primary mb-2">Preparando...</h6>
- 
- <div class="progress mb-3" style="height: 25px;">
- <div id="barraProgressoSei" class="progress-bar progress-bar-striped progress-bar-animated bg-info" 
- role="progressbar" style="width: 0%;">0%</div>
+ <div class="sync-header-progresso">
+ <div class="d-flex justify-content-between">
+ <span>Progresso geral</span>
+ <span><strong id="pctProgressoSei">0%</strong> · <span id="tempoTotalSync">0 s</span></span>
  </div>
- 
- <p id="msgProgressoSei" class="text-center text-muted small mb-2">Aguardando início...</p>
- 
- <div id="logDetalhesSei" class="border rounded p-2 bg-light" 
- style="height: 150px; overflow-y: auto; font-size: 11px; font-family: monospace;">
+ <div class="progress sync-progress-geral" role="progressbar" aria-label="Progresso geral da sincronização">
+ <div id="barraProgressoSei" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%;"></div>
  </div>
  </div>
- <div class="modal-footer bg-light">
+ </div>
+
+ <div class="modal-body sync-body">
+ <aside class="sync-coluna-fases" aria-label="Fases da sincronização">
+ <div class="sync-coluna-titulo">Fases</div>
+ <ol class="sync-timeline">
+ {% for numero, nome, descricao in [
+ (1, 'Download de documentos SEI', 'Baixa a lista atualizada de documentos de cada processo em aberto.'),
+ (2, 'Cálculo de etapas', 'Analisa NE, NL, PD, OB e atestos e avança cada processo de etapa.'),
+ (3, 'Atualização de saldos SIAFE', 'Recalcula o saldo de empenho de cada contrato/competência.'),
+ ] %}
+ <li class="sync-fase" data-fase="{{ numero }}" data-estado="pendente" data-marcador="{{ numero }}">
+ <span class="sync-fase-marcador" aria-hidden="true">{{ numero }}</span>
+ <div>
+ <div class="sync-fase-topo">
+ <span class="sync-fase-nome">{{ nome }}</span>
+ <span class="sync-fase-estado">Aguardando</span>
+ </div>
+ <div class="sync-fase-desc">{{ descricao }}</div>
+ <div class="progress sync-fase-barra"><div class="progress-bar" style="width: 0%;"></div></div>
+ <div class="sync-fase-msg"></div>
+ <div class="sync-fase-meta"><span class="sync-fase-contadores"></span><span class="sync-fase-tempo"></span></div>
+ </div>
+ </li>
+ {% endfor %}
+ <li class="sync-fase" data-fase="final" data-estado="pendente" data-icone="bi-flag">
+ <span class="sync-fase-marcador" aria-hidden="true"><i class="bi bi-flag"></i></span>
+ <div>
+ <div class="sync-fase-topo">
+ <span class="sync-fase-nome">Conclusão</span>
+ <span class="sync-fase-estado">Aguardando</span>
+ </div>
+ <div class="sync-fase-desc">Resumo das pendências e geração do relatório da atualização.</div>
+ <div class="sync-fase-msg"></div>
+ </div>
+ </li>
+ </ol>
+ </aside>
+
+ <section class="sync-coluna-log" aria-label="Registro da execução">
+ <div class="sync-coluna-titulo">Registro da execução</div>
+ <p id="msgProgressoSei" class="sync-msg-atual">Aguardando início...</p>
+ <div id="logDetalhesSei" class="sync-log"></div>
+ <div id="painelPendenciasSei" class="sync-pendencias" hidden></div>
+ </section>
+ </div>
+
+ <div class="modal-footer">
+ <span class="sync-footer-dica">O relatório fica disponível ao final da sincronização.</span>
+ <button type="button" class="btn btn-outline-primary" id="btnRelatorioSync" onclick="gerarRelatorioSync()" disabled>
+ <i class="bi bi-file-earmark-text me-1"></i> Gerar Relatório
+ </button>
  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled id="btnFecharModalSei">
  Aguarde...
  </button>
@@ -84,7 +132,10 @@
  </div>
 </div>
 
-
+{# Relatório abre em nova aba via POST (payload = resumo coletado pelo JS) #}
+<form id="formRelatorioSync" method="POST" action="{{ url_for('solicitacoes.api_relatorio_sincronizacao') }}" target="_blank" hidden>
+ <input type="hidden" name="payload">
+</form>
 
 <div class="card mb-4 " style="overflow: visible; position: relative; z-index: 10;">
 <div class="card-body p-3" style="overflow: visible;">
@@ -588,62 +639,106 @@
 
  /* ==========================================================================
  2. SINCRONIZAÇÃO UNIFICADA (3 FASES: Docs -> Etapas -> Saldos)
+    Timeline de fases + registro da execução + relatório ao final.
  ========================================================================== */
- 
+
  // Acumuladores globais durante sincronização
  var errosSincronizacao = [];
  var protocolos422 = []; // Processos inexistentes no SEI (422)
+ var relatorioSync = null; // Resumo enviado para /api/relatorio-sincronizacao
+ var progressoFases = { 1: 0, 2: 0, 3: 0 };
+ var alertasFase = { 1: 0, 2: 0, 3: 0 };
+ var inicioFaseMs = {};
+ var inicioSyncMs = null;
+ var timerSync = null;
+
+ // Peso de cada fase no progresso geral (download SEI é a mais longa)
+ var PESO_FASE_SYNC = { 1: 0.6, 2: 0.15, 3: 0.25 };
+ var LIMITE_LOG_SYNC = 2000;
+ var RE_PROTOCOLO_SEI = /\d{5}\.\d{6}\/\d{4}-\d{2}/;
+ var ESTADOS_FASE_SYNC = {
+ pendente: { rotulo: 'Aguardando', icone: null },
+ andamento: { rotulo: 'Em andamento', icone: null },
+ sucesso: { rotulo: 'Concluída', icone: 'bi-check-lg' },
+ alerta: { rotulo: 'Com alertas', icone: 'bi-exclamation' },
+ erro: { rotulo: 'Interrompida', icone: 'bi-x-lg' }
+ };
 
  function iniciarSincronizacaoUnificada() {
+ var modalEl = document.getElementById('modalSyncSei');
+ if (!modalEl) { alert("Erro: Modal 'modalSyncSei' não encontrado no HTML."); return; }
+
  // Limpa dados de execuções anteriores
  errosSincronizacao = [];
  protocolos422 = [];
+ progressoFases = { 1: 0, 2: 0, 3: 0 };
+ alertasFase = { 1: 0, 2: 0, 3: 0 };
+ inicioFaseMs = {};
+ inicioSyncMs = Date.now();
+ relatorioSync = {
+ iniciado_em: agoraLocalIso(),
+ finalizado_em: null,
+ fases: [1, 2, 3].map(function (n) {
+ return { numero: n, status: 'pendente', inicio: null, fim: null, msg_final: '', movimentados: [] };
+ }),
+ alertas: [],
+ protocolos_422: [],
+ log: []
+ };
 
- // Elementos do Modal
- var modalEl = document.getElementById('modalSyncSei');
+ [1, 2, 3].forEach(function (n) {
+ setFaseEstado(n, 'pendente', { msg: '' });
+ var el = faseEl(n);
+ el.querySelector('.sync-fase-barra .progress-bar').style.width = '0%';
+ el.querySelector('.sync-fase-contadores').textContent = '';
+ el.querySelector('.sync-fase-tempo').textContent = '';
+ });
+ setFaseEstado('final', 'pendente', { msg: '' });
+
+ document.getElementById('logDetalhesSei').innerHTML = '';
+ var painel = document.getElementById('painelPendenciasSei');
+ painel.innerHTML = '';
+ painel.hidden = true;
+
  var barra = document.getElementById('barraProgressoSei');
- var msg = document.getElementById('msgProgressoSei');
- var logDiv = document.getElementById('logDetalhesSei');
+ barra.className = 'progress-bar progress-bar-striped progress-bar-animated';
+ atualizarProgressoGlobal(1, 0);
+ setTituloSync('Fase 1 de 3 · Baixando documentos do SEI', 'andamento');
+ document.getElementById('msgProgressoSei').textContent = 'Conectando ao SEI...';
+
  var btnFechar = document.getElementById('btnFecharModalSei');
- var titulo = document.getElementById('tituloFaseSei');
-
- // Validação
- if (!modalEl) { alert("Erro: Modal 'modalSyncSei' não encontrado no HTML."); return; }
-
- var modal = new bootstrap.Modal(modalEl);
-
- // --- FASE 1: PREPARAÇÃO VISUAL ---
- titulo.innerText = "Fase 1/3: Baixando Documentos SEI";
- titulo.className = "fw-bold text-primary mb-2";
- barra.className = "progress-bar progress-bar-striped progress-bar-animated bg-info";
- barra.style.width = '0%';
- barra.innerText = '0%';
- msg.innerText = "Conectando ao SEI...";
- logDiv.innerHTML = '<div class="text-primary fw-bold">--- INÍCIO: DOWNLOAD DE DOCUMENTOS ---</div>';
-
  btnFechar.setAttribute('disabled', 'true');
- btnFechar.innerText = 'Processando...';
+ btnFechar.textContent = 'Processando...';
  btnFechar.className = 'btn btn-secondary';
+ btnFechar.onclick = null;
+ document.getElementById('btnRelatorioSync').setAttribute('disabled', 'true');
 
- modal.show();
+ clearInterval(timerSync);
+ timerSync = setInterval(atualizarTemposSync, 1000);
+ atualizarTemposSync();
 
- // --- EXECUÇÃO FASE 1 (EventSource) ---
+ bootstrap.Modal.getOrCreateInstance(modalEl).show();
+ iniciarFase1();
+ }
+
+ // --- FASE 1: DOCUMENTOS SEI ---
+ function iniciarFase1() {
+ setFaseEstado(1, 'andamento', { msg: 'Conectando ao SEI...' });
+ logSeparador('Fase 1 · Download de documentos SEI');
+
  var sourceDocs = new EventSource("{{ url_for('solicitacoes.api_sincronizar_documentos') }}");
 
- sourceDocs.onmessage = function(event) {
- var dados = JSON.parse(event.data);
-
- // Chama a função auxiliar corrigida
- atualizarProgresso(barra, msg, dados.progresso, "[Docs] " + dados.msg);
- logarDetalhe(logDiv, dados.msg);
+ sourceDocs.onmessage = function (event) {
+ var dados;
+ try { dados = JSON.parse(event.data); } catch (e) { return; }
 
  // Coleta processos 422 (inexistentes no SEI) separadamente
  if (dados.tipo === 'processo_inexistente') {
  protocolos422.push({ protocolo: dados.protocolo, link_sei: dados.link_sei });
  }
  // Coleta outros erros/alertas da Fase 1
- else if (dados.msg && (dados.msg.includes('[ALERTA]') || dados.msg.includes('Erro'))) {
- errosSincronizacao.push({ fase: 'Download SEI', msg: dados.msg });
+ else if (ehAlerta(dados.msg, false)) {
+ registrarAlerta(1, 'Download SEI', dados.msg);
  }
 
  // Coleta lista de 422 do evento final (caso tenha)
@@ -651,75 +746,74 @@
  protocolos422 = dados.protocolos_422;
  }
 
+ atualizarFase(1, dados.progresso, dados.msg);
+ if (deveLogar(dados.msg)) {
+ logSync(dados.msg, ehAlerta(dados.msg, false) || dados.tipo === 'processo_inexistente' ? 'sync-log-alerta' : '');
+ }
+
  if (dados.concluido) {
  sourceDocs.close();
- logDiv.innerHTML += '<div class="text-success fw-bold mt-2">--- FIM FASE 1 ---</div>';
-
- // Dispara Fase 2 após 1 segundo
- setTimeout(() => iniciarFase2(barra, msg, logDiv, btnFechar, titulo), 1000);
+ concluirFase(1, dados.msg, alertasFase[1] + protocolos422.length);
+ setTimeout(iniciarFase2, 1000);
  }
  };
 
- sourceDocs.onerror = erroGenerico(sourceDocs, msg, barra, btnFechar, logDiv, "Fase 1");
+ sourceDocs.onerror = erroGenerico(sourceDocs, 1, 'Fase 1');
  }
 
  // --- FASE 2: ETAPAS ---
- function iniciarFase2(barra, msg, logDiv, btnFechar, titulo) {
- // Setup Visual
- titulo.innerText = "Fase 2/3: Processando Etapas";
- titulo.className = "fw-bold text-warning mb-2";
- barra.className = "progress-bar progress-bar-striped progress-bar-animated bg-warning";
- barra.style.width = '0%';
- barra.innerText = '0%';
- msg.innerText = "Analisando histórico...";
- logDiv.innerHTML += '<div class="text-warning fw-bold mt-3">--- INÍCIO: CÁLCULO DE ETAPAS ---</div>';
+ function iniciarFase2() {
+ setFaseEstado(2, 'andamento', { msg: 'Analisando histórico...' });
+ setTituloSync('Fase 2 de 3 · Calculando etapas', 'andamento');
+ logSeparador('Fase 2 · Cálculo de etapas');
 
- // Execução
  var sourceEtapas = new EventSource("{{ url_for('solicitacoes.api_atualizar_etapas') }}");
 
- sourceEtapas.onmessage = function(event) {
- var dados = JSON.parse(event.data);
- atualizarProgresso(barra, msg, dados.progresso, "[Etapas] " + dados.msg);
+ sourceEtapas.onmessage = function (event) {
+ var dados;
+ try { dados = JSON.parse(event.data); } catch (e) { return; }
+ var texto = dados.msg || '';
 
- if (dados.msg.includes("Movimentado")) {
- logarDetalhe(logDiv, dados.msg);
+ if (texto.indexOf('Movimentado') !== -1) {
+ var prot = texto.match(RE_PROTOCOLO_SEI);
+ faseRelatorio(2).movimentados.push(prot ? prot[0] : texto);
+ logSync(texto);
  }
 
  // Coleta erros/alertas da Fase 2
- if (dados.msg && (dados.msg.includes('[ALERTA]') || dados.msg.includes('Erro'))) {
- errosSincronizacao.push({ fase: 'Etapas', msg: dados.msg });
+ if (ehAlerta(texto, false)) {
+ registrarAlerta(2, 'Etapas', texto);
+ logSync(texto, 'sync-log-alerta');
  }
+
+ atualizarFase(2, dados.progresso, texto);
 
  if (dados.concluido) {
  sourceEtapas.close();
- logDiv.innerHTML += '<div class="text-success fw-bold mt-2">--- FIM FASE 2 ---</div>';
-
- // Dispara Fase 3
- setTimeout(() => iniciarFase3(barra, msg, logDiv, btnFechar, titulo), 1000);
+ concluirFase(2, texto, alertasFase[2]);
+ setTimeout(iniciarFase3, 1000);
  }
  };
 
- sourceEtapas.onerror = erroGenerico(sourceEtapas, msg, barra, btnFechar, logDiv, "Fase 2");
+ sourceEtapas.onerror = erroGenerico(sourceEtapas, 2, 'Fase 2');
  }
 
  // --- FASE 3: SALDOS ---
- async function iniciarFase3(barra, msg, logDiv, btnFechar, titulo) {
- // Setup Visual
- titulo.innerText = "Fase 3/3: Atualizando Saldos SIAFE";
- titulo.className = "fw-bold text-success mb-2";
- barra.className = "progress-bar progress-bar-striped progress-bar-animated bg-success";
- barra.style.width = '0%';
- barra.innerText = '0%';
- msg.innerText = "Calculando saldos...";
- logDiv.innerHTML += '<div class="text-success fw-bold mt-3">--- INÍCIO: ATUALIZAÇÃO DE SALDOS ---</div>';
+ async function iniciarFase3() {
+ setFaseEstado(3, 'andamento', { msg: 'Calculando saldos...' });
+ setTituloSync('Fase 3 de 3 · Atualizando saldos SIAFE', 'andamento');
+ logSeparador('Fase 3 · Atualização de saldos SIAFE');
 
+ var concluido = false;
  try {
  const response = await fetch('/solicitacoes/api/atualizar-todos-saldos', { method: 'POST' });
+ if (!response.ok) throw new Error('o servidor respondeu com HTTP ' + response.status);
+
  const reader = response.body.getReader();
  const decoder = new TextDecoder("utf-8");
  let buffer = '';
 
- while (true) {
+ while (!concluido) {
  const { done, value } = await reader.read();
  if (done) break;
 
@@ -740,30 +834,32 @@
  continue; // evento malformado — ignora sem derrubar a fase
  }
 
- atualizarProgresso(barra, msg, dados.progresso, "[Saldos] " + dados.msg);
-
  // Coleta erros/alertas da Fase 3
- if (dados.msg && (dados.msg.includes('[ALERTA]') || dados.msg.includes('Erro') || dados.msg.includes('erro'))) {
- errosSincronizacao.push({ fase: 'Saldos', msg: dados.msg });
+ if (ehAlerta(dados.msg, true)) {
+ registrarAlerta(3, 'Saldos', dados.msg);
+ logSync(dados.msg, 'sync-log-alerta');
  }
+
+ atualizarFase(3, dados.progresso, dados.msg);
 
  if (dados.concluido) {
- finalizarTudo(barra, msg, logDiv, btnFechar, titulo);
+ concluido = true;
+ concluirFase(3, dados.msg, alertasFase[3]);
+ finalizarTudo();
+ break;
  }
  }
  }
+
+ if (!concluido) throw new Error('a conexão foi encerrada antes do fim da atualização de saldos');
  } catch (err) {
  console.error(err);
- msg.innerText = "Erro ao atualizar saldos.";
- barra.classList.add('bg-danger');
- logDiv.innerHTML += `<div class="text-danger fw-bold">ERRO FASE 3: ${err.message}</div>`;
- btnFechar.removeAttribute('disabled');
- btnFechar.innerText = 'Fechar (Erro)';
+ if (!concluido) falharSincronizacao(3, 'Erro ao atualizar saldos: ' + err.message + '.');
  }
  }
 
  // --- FINALIZAÇÃO ---
- function finalizarTudo(barra, msg, logDiv, btnFechar, titulo) {
+ function finalizarTudo() {
  var temErros = errosSincronizacao.length > 0;
  var tem422 = protocolos422.length > 0;
  var temProblemas = temErros || tem422;
@@ -780,79 +876,314 @@
  }).catch(function () { /* não bloqueia a UI */ });
  } catch (e) { /* ignora */ }
 
- titulo.innerText = temProblemas ? "Sincronização Concluída (com alertas)" : "Sincronização Completa!";
- titulo.className = temProblemas ? "fw-bold text-warning mb-2" : "fw-bold text-success mb-2";
+ var painel = document.getElementById('painelPendenciasSei');
+ var html = '';
 
- barra.className = temProblemas ? "progress-bar bg-warning" : "progress-bar bg-success";
- barra.style.width = '100%';
- barra.innerText = '100%';
-
- // --- POPUP DE PROCESSOS INEXISTENTES NO SEI (422) ---
+ // --- PROCESSOS INEXISTENTES NO SEI (422) ---
  if (tem422) {
  var total422 = protocolos422.length;
- msg.innerText = total422 + " processo(s) não existem mais no SEI.";
+ html += '<div class="sync-pendencia-bloco is-erro">';
+ html += '<div class="sync-pendencia-titulo text-danger"><i class="bi bi-file-earmark-x"></i> Processos inexistentes no SEI (' + total422 + ')</div>';
+ html += '<div id="lista422" class="sync-pendencia-lista custom-scrollbar">';
 
- var html422 = '<div class="mt-3 p-3 border border-danger rounded bg-white">';
- html422 += '<div class="fw-bold text-danger mb-2"><i class="bi bi-trash me-1"></i> Processos inexistentes no SEI (' + total422 + '):</div>';
- html422 += '<div id="lista422" style="max-height: 200px; overflow-y: auto;" class="custom-scrollbar">';
-
- protocolos422.forEach(function(item, idx) {
+ protocolos422.forEach(function (item, idx) {
  var prot = escapeHtml(item.protocolo);
  var link = escapeHtml(item.link_sei || '');
- html422 += '<div class="small py-2 border-bottom d-flex align-items-center justify-content-between" id="item422_' + idx + '">';
- html422 += '<div class="d-flex align-items-center">';
- html422 += '<i class="bi bi-file-earmark-x text-danger me-2"></i>';
+ html += '<div class="sync-pendencia-item" id="item422_' + idx + '">';
  if (item.link_sei) {
- html422 += '<a href="' + link + '" target="_blank" class="text-primary text-decoration-none fw-semibold">' + prot + ' <i class="bi bi-box-arrow-up-right" style="font-size:0.7rem;"></i></a>';
+ html += '<a href="' + link + '" target="_blank" rel="noopener" class="sync-pendencia-msg text-primary text-decoration-none fw-semibold">' + prot + ' <i class="bi bi-box-arrow-up-right" style="font-size:0.7rem;"></i></a>';
  } else {
- html422 += '<span class="fw-semibold">' + prot + '</span>';
+ html += '<span class="sync-pendencia-msg fw-semibold">' + prot + '</span>';
  }
- html422 += '</div>';
- html422 += '<button class="btn btn-outline-danger btn-sm px-2 py-0" data-protocolo="' + prot + '" data-idx="' + idx + '" onclick="excluirSolicitacao422(this.dataset.protocolo, parseInt(this.dataset.idx))" title="Excluir do banco">';
- html422 += '<i class="bi bi-trash"></i> Excluir</button>';
- html422 += '</div>';
+ html += '<button class="btn btn-outline-danger btn-sm px-2 py-0" data-protocolo="' + prot + '" data-idx="' + idx + '" onclick="excluirSolicitacao422(this.dataset.protocolo, parseInt(this.dataset.idx))" title="Excluir do banco">';
+ html += '<i class="bi bi-trash"></i> Excluir</button>';
+ html += '</div>';
  });
 
- html422 += '</div>';
- html422 += '<button class="btn btn-danger btn-sm w-100 mt-2 fw-bold" onclick="excluirTodos422()" id="btnExcluirTodos422">';
- html422 += '<i class="bi bi-trash me-1"></i> Excluir Todos (' + total422 + ')</button>';
- html422 += '</div>';
-
- logDiv.innerHTML += html422;
+ html += '</div>';
+ html += '<button class="btn btn-danger btn-sm w-100 mt-2 fw-bold" onclick="excluirTodos422()" id="btnExcluirTodos422">';
+ html += '<i class="bi bi-trash me-1"></i> Excluir Todos (' + total422 + ')</button>';
+ html += '</div>';
  }
 
- // --- ERROS GENÉRICOS ---
+ // --- OUTROS ALERTAS ---
  if (temErros) {
- if (!tem422) {
- msg.innerText = errosSincronizacao.length + " processo(s) não foram atualizados.";
- }
-
- var htmlErros = '<div class="mt-3 p-2 border border-warning rounded bg-white">';
- htmlErros += '<div class="fw-bold text-warning mb-2"><i class="bi bi-exclamation-triangle me-1"></i> Outros alertas (' + errosSincronizacao.length + '):</div>';
- htmlErros += '<div style="max-height: 120px; overflow-y: auto;" class="custom-scrollbar">';
-
- errosSincronizacao.forEach(function(erro) {
- htmlErros += '<div class="small py-1 border-bottom d-flex align-items-start">';
- htmlErros += '<span class="badge bg-secondary me-2 flex-shrink-0" style="font-size: 0.65rem;">' + erro.fase + '</span>';
- htmlErros += '<span class="text-danger">' + erro.msg + '</span>';
- htmlErros += '</div>';
+ html += '<div class="sync-pendencia-bloco">';
+ html += '<div class="sync-pendencia-titulo"><i class="bi bi-exclamation-triangle text-warning"></i> Outros alertas (' + errosSincronizacao.length + ')</div>';
+ html += '<div class="sync-pendencia-lista custom-scrollbar">';
+ errosSincronizacao.forEach(function (erro) {
+ html += '<div class="sync-pendencia-item justify-content-start">';
+ html += '<span class="badge bg-secondary flex-shrink-0" style="font-size: 0.65rem;">' + escapeHtml(erro.fase) + '</span>';
+ html += '<span class="sync-pendencia-msg">' + escapeHtml(erro.msg) + '</span>';
+ html += '</div>';
  });
-
- htmlErros += '</div></div>';
- logDiv.innerHTML += htmlErros;
+ html += '</div>';
+ html += '<div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Use <strong>Gerar Relatório</strong> para ver o que cada alerta significa e o que fazer.</div>';
+ html += '</div>';
  }
 
  if (!temProblemas) {
- msg.innerText = "Processo finalizado com sucesso.";
- logDiv.innerHTML += '<div class="text-success fw-bold mt-3 p-2 border border-success rounded bg-white">TUDO ATUALIZADO!</div>';
+ html += '<div class="sync-pendencia-bloco is-sucesso"><div class="sync-pendencia-titulo text-success mb-0"><i class="bi bi-check-circle-fill"></i> Tudo atualizado, nenhuma pendência registrada.</div></div>';
  }
 
+ painel.innerHTML = html;
+ painel.hidden = false;
+
+ var resumo;
+ if (tem422 && temErros) {
+ resumo = protocolos422.length + ' processo(s) não existem mais no SEI e ' + errosSincronizacao.length + ' alerta(s) foram registrados.';
+ } else if (tem422) {
+ resumo = protocolos422.length + ' processo(s) não existem mais no SEI.';
+ } else if (temErros) {
+ resumo = errosSincronizacao.length + ' alerta(s) registrados. Alguns processos não foram atualizados.';
+ } else {
+ resumo = 'Processo finalizado com sucesso.';
+ }
+
+ encerrarSincronizacao(temProblemas ? 'alerta' : 'sucesso', resumo);
+
+ var btnFechar = document.getElementById('btnFecharModalSei');
+ btnFechar.className = temProblemas ? 'btn btn-warning fw-bold' : 'btn btn-success fw-bold';
+ btnFechar.textContent = 'Concluir e Atualizar Página';
+ btnFechar.onclick = function () { window.location.reload(); };
+ }
+
+ function falharSincronizacao(n, texto) {
+ faseRelatorio(n).msg_final = texto;
+ setFaseEstado(n, 'erro', { msg: texto });
+ logSync(texto, 'sync-log-erro');
+ encerrarSincronizacao('erro', texto);
+
+ var btnFechar = document.getElementById('btnFecharModalSei');
+ btnFechar.className = 'btn btn-outline-secondary';
+ btnFechar.textContent = 'Fechar';
+ }
+
+ function encerrarSincronizacao(status, resumo) {
+ clearInterval(timerSync);
+ atualizarTemposSync();
+ relatorioSync.finalizado_em = agoraLocalIso();
+
+ var titulos = {
+ sucesso: 'Sincronização concluída com sucesso',
+ alerta: 'Sincronização concluída com alertas',
+ erro: 'Sincronização interrompida'
+ };
+ setTituloSync(titulos[status], status);
+ setFaseEstado('final', status, { msg: resumo });
+ document.getElementById('msgProgressoSei').textContent = resumo;
+
+ var barra = document.getElementById('barraProgressoSei');
+ barra.className = 'progress-bar is-' + status;
+ if (status !== 'erro') {
+ [1, 2, 3].forEach(function (n) { progressoFases[n] = 100; });
+ atualizarProgressoGlobal(3, 100);
+ }
+
+ var logDiv = document.getElementById('logDetalhesSei');
  logDiv.scrollTop = logDiv.scrollHeight;
 
- btnFechar.removeAttribute('disabled');
- btnFechar.className = temProblemas ? 'btn btn-warning fw-bold w-100' : 'btn btn-success fw-bold w-100';
- btnFechar.innerText = 'Concluir e Atualizar Página';
- btnFechar.onclick = function() { window.location.reload(); };
+ document.getElementById('btnFecharModalSei').removeAttribute('disabled');
+ document.getElementById('btnRelatorioSync').removeAttribute('disabled');
+ }
+
+ // --- RELATÓRIO ---
+ function gerarRelatorioSync() {
+ if (!relatorioSync) return;
+ relatorioSync.alertas = errosSincronizacao.slice();
+ relatorioSync.protocolos_422 = protocolos422.map(function (p) {
+ return { protocolo: p.protocolo, link_sei: p.link_sei || null };
+ });
+ var form = document.getElementById('formRelatorioSync');
+ form.elements.payload.value = JSON.stringify(relatorioSync);
+ form.submit();
+ }
+
+ // --- TIMELINE DE FASES ---
+
+ function faseEl(n) {
+ return document.querySelector('#modalSyncSei .sync-fase[data-fase="' + n + '"]');
+ }
+
+ function faseRelatorio(n) {
+ return relatorioSync.fases[n - 1];
+ }
+
+ function setFaseEstado(n, estado, opts) {
+ opts = opts || {};
+ var el = faseEl(n);
+ if (!el) return;
+ var info = ESTADOS_FASE_SYNC[estado];
+
+ if (el.dataset.estado !== estado || estado === 'pendente') {
+ el.dataset.estado = estado;
+ el.querySelector('.sync-fase-estado').textContent = info.rotulo;
+ var marcador = el.querySelector('.sync-fase-marcador');
+ if (estado === 'andamento') {
+ marcador.innerHTML = '<span class="spinner-border" aria-hidden="true"></span>';
+ } else if (info.icone) {
+ marcador.innerHTML = '<i class="bi ' + info.icone + '"></i>';
+ } else if (el.dataset.icone) {
+ marcador.innerHTML = '<i class="bi ' + el.dataset.icone + '"></i>';
+ } else {
+ marcador.textContent = el.dataset.marcador;
+ }
+ }
+ if (opts.msg !== undefined) el.querySelector('.sync-fase-msg').textContent = opts.msg;
+
+ if (typeof n !== 'number') return; // passo "Conclusão" não entra no relatório
+
+ var fase = faseRelatorio(n);
+ fase.status = estado;
+ if (estado === 'andamento' && !fase.inicio) {
+ fase.inicio = agoraLocalIso();
+ inicioFaseMs[n] = Date.now();
+ }
+ if ((estado === 'sucesso' || estado === 'alerta' || estado === 'erro') && fase.inicio) {
+ fase.fim = agoraLocalIso();
+ el.querySelector('.sync-fase-tempo').textContent = formatarDuracaoSync(Date.now() - inicioFaseMs[n]);
+ }
+ }
+
+ function atualizarFase(n, pct, texto) {
+ var el = faseEl(n);
+ if (pct !== undefined && pct !== null && !isNaN(Number(pct))) {
+ var p = Math.max(0, Math.min(100, Number(pct)));
+ el.querySelector('.sync-fase-barra .progress-bar').style.width = p + '%';
+ atualizarProgressoGlobal(n, p);
+ }
+ if (texto) {
+ el.querySelector('.sync-fase-msg').textContent = texto;
+ document.getElementById('msgProgressoSei').textContent = texto;
+ }
+ el.querySelector('.sync-fase-contadores').textContent = textoContadores(n);
+ }
+
+ function concluirFase(n, msgFinal, qtdProblemas) {
+ faseRelatorio(n).msg_final = msgFinal || '';
+ atualizarFase(n, 100, msgFinal);
+ setFaseEstado(n, qtdProblemas > 0 ? 'alerta' : 'sucesso', { msg: msgFinal || '' });
+ logSync('✓ Fase ' + n + ' concluída' + (msgFinal ? ' — ' + msgFinal : ''), 'sync-log-ok');
+ }
+
+ function registrarAlerta(n, faseNome, texto) {
+ errosSincronizacao.push({ fase: faseNome, msg: texto });
+ alertasFase[n]++;
+ }
+
+ function textoContadores(n) {
+ var partes = [];
+ var a = alertasFase[n];
+ if (a) partes.push(a + (a === 1 ? ' alerta' : ' alertas'));
+ if (n === 1 && protocolos422.length) partes.push(protocolos422.length + ' inexistente(s) no SEI');
+ if (n === 2 && relatorioSync) {
+ var m = faseRelatorio(2).movimentados.length;
+ if (m) partes.push(m + (m === 1 ? ' processo movimentado' : ' processos movimentados'));
+ }
+ return partes.join(' · ');
+ }
+
+ function atualizarProgressoGlobal(n, pct) {
+ progressoFases[n] = pct;
+ var total = 0;
+ for (var k in PESO_FASE_SYNC) total += PESO_FASE_SYNC[k] * (progressoFases[k] || 0);
+ var v = Math.round(total);
+ document.getElementById('barraProgressoSei').style.width = v + '%';
+ document.getElementById('pctProgressoSei').textContent = v + '%';
+ }
+
+ function setTituloSync(texto, estado) {
+ var t = document.getElementById('tituloFaseSei');
+ t.textContent = texto;
+ t.dataset.estado = estado;
+ }
+
+ function atualizarTemposSync() {
+ if (inicioSyncMs) {
+ document.getElementById('tempoTotalSync').textContent = formatarDuracaoSync(Date.now() - inicioSyncMs);
+ }
+ [1, 2, 3].forEach(function (n) {
+ var el = faseEl(n);
+ if (el && el.dataset.estado === 'andamento' && inicioFaseMs[n]) {
+ el.querySelector('.sync-fase-tempo').textContent = formatarDuracaoSync(Date.now() - inicioFaseMs[n]);
+ }
+ });
+ }
+
+ // --- REGISTRO (LOG) ---
+
+ function logSync(texto, classe) {
+ if (!texto) return;
+ var logDiv = document.getElementById('logDetalhesSei');
+ // Só acompanha o fim se o usuário não rolou para cima para ler algo
+ var noFim = logDiv.scrollHeight - logDiv.scrollTop - logDiv.clientHeight < 40;
+ var linha = document.createElement('div');
+ linha.className = 'sync-log-linha' + (classe ? ' ' + classe : '');
+ linha.textContent = texto;
+ logDiv.appendChild(linha);
+ if (noFim) logDiv.scrollTop = logDiv.scrollHeight;
+ if (relatorioSync && relatorioSync.log.length < LIMITE_LOG_SYNC) relatorioSync.log.push(texto);
+ }
+
+ function logSeparador(texto) {
+ var logDiv = document.getElementById('logDetalhesSei');
+ var sep = document.createElement('div');
+ sep.className = 'sync-log-sep';
+ sep.textContent = texto;
+ logDiv.appendChild(sep);
+ logDiv.scrollTop = logDiv.scrollHeight;
+ if (relatorioSync && relatorioSync.log.length < LIMITE_LOG_SYNC) relatorioSync.log.push('--- ' + texto + ' ---');
+ }
+
+ function deveLogar(texto) {
+ return !!texto && !/Baixando\.\.\.|Analisando\.\.\.|Processando/.test(texto);
+ }
+
+ function ehAlerta(texto, incluirMinusculo) {
+ if (!texto) return false;
+ return texto.indexOf('[ALERTA]') !== -1 || texto.indexOf('Erro') !== -1 ||
+ (incluirMinusculo && texto.indexOf('erro') !== -1);
+ }
+
+ // --- HELPERS ---
+
+ function agoraLocalIso() {
+ // Hora local do navegador (sem fuso) — o servidor pode estar em UTC
+ var d = new Date();
+ function p(v) { return String(v).padStart(2, '0'); }
+ return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+ 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+ }
+
+ function formatarDuracaoSync(ms) {
+ var s = Math.max(0, Math.round(ms / 1000));
+ var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), seg = s % 60;
+ if (h) return h + ' h ' + m + ' min';
+ if (m) return m + ' min ' + seg + ' s';
+ return seg + ' s';
+ }
+
+ function escapeHtml(str) {
+ var div = document.createElement('div');
+ div.appendChild(document.createTextNode(str == null ? '' : String(str)));
+ return div.innerHTML;
+ }
+
+ function erroGenerico(source, n, faseNome) {
+ var tentouReconectar = false;
+ return function (event) {
+ // EventSource dispara onerror em qualquer queda de conexão.
+ // Antes de declarar erro crítico, tenta ignorar 1x (reconexão automática do browser)
+ if (!tentouReconectar && source.readyState !== 2) {
+ tentouReconectar = true;
+ console.warn(`Conexão ${faseNome} instável, aguardando reconexão automática...`);
+ logSync(`⚠ Conexão instável na ${faseNome}, tentando reconectar...`, 'sync-log-alerta');
+ return; // Deixa o EventSource tentar reconectar sozinho
+ }
+ if (source) source.close();
+ console.error(`Erro ${faseNome}:`, event);
+ falharSincronizacao(n, `Conexão perdida na ${faseNome}. Recarregue a página e tente novamente.`);
+ };
  }
 
  // --- FUNÇÕES DE EXCLUSÃO DE PROCESSOS 422 ---
@@ -930,49 +1261,6 @@
  alert('Erro: ' + err.message);
  }
  }
-
- // --- HELPERS ---
-
- function escapeHtml(str) {
- var div = document.createElement('div');
- div.appendChild(document.createTextNode(str));
- return div.innerHTML;
- }
-
- function atualizarProgresso(barra, msgEl, pct, texto) {
- barra.style.width = pct + '%';
- barra.innerText = pct + '%';
- msgEl.innerText = texto;
- }
-
- function logarDetalhe(div, texto) {
- if(!texto.includes("Baixando...") && !texto.includes("Analisando...") && !texto.includes("Processando")) {
- div.innerHTML += `<div class="small border-bottom py-1">${texto}</div>`;
- div.scrollTop = div.scrollHeight;
- }
- }
-
- function erroGenerico(source, msgEl, barra, btn, logDiv, faseNome) {
- var tentouReconectar = false;
- return function(event) {
- // EventSource dispara onerror em qualquer queda de conexão.
- // Antes de declarar erro crítico, tenta ignorar 1x (reconexão automática do browser)
- if (!tentouReconectar && source.readyState !== 2) {
- tentouReconectar = true;
- console.warn(`Conexão ${faseNome} instável, aguardando reconexão automática...`);
- logDiv.innerHTML += `<div class="text-warning small">⚠ Conexão instável na ${faseNome}, tentando reconectar...</div>`;
- return; // Deixa o EventSource tentar reconectar sozinho
- }
- if(source) source.close();
- console.error(`Erro ${faseNome}:`, event);
- msgEl.innerText = `Conexão perdida na ${faseNome}. Tente novamente.`;
- barra.className = "progress-bar bg-danger";
- logDiv.innerHTML += `<div class="text-danger fw-bold mt-2">❌ Conexão perdida na ${faseNome.toUpperCase()}. Recarregue a página e tente novamente.</div>`;
- btn.removeAttribute('disabled');
- btn.innerText = 'Fechar';
- };
- }
-
 
 // --- Lógica para o Filtro de Competência ---
 

@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Iterable, Optional, Tuple, List
 
 import concurrent.futures
+import re
 
 from flask import current_app
 
@@ -230,6 +231,382 @@ def obter_ultima_sincronizacao() -> Optional[SincronizacaoLog]:
         .order_by(SincronizacaoLog.finalizado_em.desc())
         .first()
     )
+
+
+# =============================================================================
+# RELATÓRIO DA SINCRONIZAÇÃO MANUAL (linguagem explicativa)
+# =============================================================================
+
+_RE_PROTOCOLO = re.compile(r'\d{5}\.\d{6}/\d{4}-\d{2}')
+_RE_STATUS_HTTP = re.compile(r':\s*(\d{3})\s*$')
+_RE_FALHA_REDE = re.compile(r'Timeout|ConnectionError|SSLError|ConnectionReset', re.I)
+
+LIMITE_LINHAS_LOG = 2000
+
+FASES_SINCRONIZACAO = [
+    (1, 'Download de documentos SEI',
+     'Consulta o SEI e baixa a lista atualizada de documentos de cada processo '
+     'de pagamento em aberto.'),
+    (2, 'Cálculo de etapas',
+     'Analisa os documentos baixados (NE, NL, PD, OB, atestos...) e avança cada '
+     'processo para a etapa correspondente do fluxo de pagamento.'),
+    (3, 'Atualização de saldos SIAFE',
+     'Recalcula o saldo de empenho de cada contrato/competência com base nos '
+     'dados do SIAFE.'),
+]
+
+TIPOS_ALERTA = {
+    'tempo_limite_sei': {
+        'ordem': 1,
+        'titulo': 'Tempo limite de resposta do SEI excedido (erro 504)',
+        'explicacao': (
+            'O SEI demorou mais do que o permitido para devolver a lista de documentos '
+            'e encerrou a consulta. Isso costuma acontecer com processos que possuem '
+            'muitos documentos ou em horários de maior carga no SEI. Nenhum dado foi '
+            'perdido: as informações anteriores desses processos foram preservadas.'
+        ),
+        'orientacao': (
+            'Tente atualizar esses processos individualmente, de preferência fora do '
+            'horário de pico. Se o erro persistir, o processo pode exigir tratamento '
+            'técnico específico por causa do seu volume de documentos.'
+        ),
+    },
+    'sei_indisponivel': {
+        'ordem': 2,
+        'titulo': 'SEI temporariamente indisponível (erro 502/503)',
+        'explicacao': (
+            'O SEI não conseguiu atender a consulta naquele momento, geralmente por '
+            'instabilidade ou manutenção no próprio sistema. Os dados anteriores dos '
+            'processos foram preservados.'
+        ),
+        'orientacao': 'Aguarde alguns minutos e execute a sincronização novamente.',
+    },
+    'falha_rede': {
+        'ordem': 3,
+        'titulo': 'Falha de comunicação com o SEI',
+        'explicacao': (
+            'A conexão com o SEI caiu ou não respondeu mesmo após 3 tentativas '
+            'automáticas com tempo de espera crescente. Os dados anteriores dos '
+            'processos foram preservados.'
+        ),
+        'orientacao': (
+            'Verifique a conectividade da rede e tente novamente. Se afetar muitos '
+            'processos, acione a equipe de infraestrutura.'
+        ),
+    },
+    'processo_inexistente': {
+        'ordem': 4,
+        'titulo': 'Processo não encontrado no SEI (erro 422)',
+        'explicacao': (
+            'O SEI informou que o número de protocolo não existe mais — normalmente '
+            'porque o processo foi excluído, anulado ou digitado incorretamente.'
+        ),
+        'orientacao': (
+            'Confirme a situação do processo no SEI. Se ele realmente não existir, a '
+            'solicitação pode ser excluída do SGC pela própria tela de sincronização.'
+        ),
+    },
+    'acesso_negado': {
+        'ordem': 5,
+        'titulo': 'Acesso negado pelo SEI (erro 401/403)',
+        'explicacao': (
+            'O SEI recusou a consulta por falta de autorização: o token de acesso '
+            'expirou ou a unidade não tem permissão sobre o processo.'
+        ),
+        'orientacao': 'Saia e entre novamente no sistema e repita a sincronização.',
+    },
+    'saldo_siafe': {
+        'ordem': 6,
+        'titulo': 'Falha no cálculo de saldo (SIAFE)',
+        'explicacao': (
+            'Não foi possível recalcular o saldo de empenho deste contrato/competência, '
+            'geralmente por lentidão ou indisponibilidade da API do SIAFE. O último '
+            'saldo calculado continua valendo.'
+        ),
+        'orientacao': 'Execute novamente a sincronização mais tarde.',
+    },
+    'nao_classificado': {
+        'ordem': 7,
+        'titulo': 'Outras ocorrências',
+        'explicacao': (
+            'Ocorrência não identificada automaticamente. A mensagem técnica original '
+            'está registrada para análise.'
+        ),
+        'orientacao': 'Encaminhe este relatório à equipe técnica do SGC.',
+    },
+}
+
+STATUS_ROTULOS = {
+    'sucesso': 'Concluída com sucesso',
+    'alerta': 'Concluída com alertas',
+    'erro': 'Interrompida',
+}
+
+_STATUS_FASE_VALIDOS = {'sucesso', 'alerta', 'erro', 'pendente'}
+
+
+def _tipo_alerta(msg: str) -> str:
+    if msg.startswith('[422]') or 'inexistente' in msg.lower():
+        return 'processo_inexistente'
+    if msg.startswith('[ALERTA] Saldo'):
+        return 'saldo_siafe'
+
+    status = _RE_STATUS_HTTP.search(msg)
+    if status:
+        codigo = status.group(1)
+        if codigo == '504':
+            return 'tempo_limite_sei'
+        if codigo in ('502', '503'):
+            return 'sei_indisponivel'
+        if codigo in ('401', '403'):
+            return 'acesso_negado'
+        if codigo == '422':
+            return 'processo_inexistente'
+
+    if _RE_FALHA_REDE.search(msg):
+        return 'falha_rede'
+    return 'nao_classificado'
+
+
+def classificar_alerta(mensagem) -> dict:
+    """Traduz uma mensagem técnica da sincronização em explicação + orientação."""
+    msg = mensagem if isinstance(mensagem, str) else ''
+    tipo = _tipo_alerta(msg)
+    info = TIPOS_ALERTA[tipo]
+    protocolo = _RE_PROTOCOLO.search(msg)
+    return {
+        'tipo': tipo,
+        'titulo': info['titulo'],
+        'explicacao': info['explicacao'],
+        'orientacao': info['orientacao'],
+        'protocolo': protocolo.group(0) if protocolo else None,
+        'mensagem_tecnica': msg,
+    }
+
+
+def _parse_datahora(valor) -> Optional[datetime]:
+    if not isinstance(valor, str) or not valor:
+        return None
+    try:
+        dt = datetime.fromisoformat(valor.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone().replace(tzinfo=None)
+    return dt
+
+
+def _formatar_duracao(inicio: Optional[datetime], fim: Optional[datetime]) -> Optional[str]:
+    if not inicio or not fim or fim < inicio:
+        return None
+    segundos = int((fim - inicio).total_seconds())
+    horas, resto = divmod(segundos, 3600)
+    minutos, seg = divmod(resto, 60)
+    if horas:
+        return f'{horas} h {minutos} min'
+    if minutos:
+        return f'{minutos} min {seg} s'
+    return f'{seg} s'
+
+
+def _link_seguro(link) -> Optional[str]:
+    if isinstance(link, str) and link.lower().startswith(('http://', 'https://')):
+        return link
+    return None
+
+
+def _extrair_int(padrao: str, texto: str, grupo: int = 1) -> Optional[int]:
+    m = re.search(padrao, texto or '')
+    return int(m.group(grupo)) if m else None
+
+
+def _dados_solicitacoes_por_protocolo(protocolos) -> dict:
+    """Batch load de contrato e link SEI para os protocolos citados no relatório."""
+    if not protocolos:
+        return {}
+    try:
+        linhas = (
+            db.session.query(
+                Solicitacao.protocolo_gerado_sei,
+                Solicitacao.codigo_contrato,
+                Solicitacao.link_processo_sei,
+            )
+            .filter(Solicitacao.protocolo_gerado_sei.in_(list(protocolos)))
+            .order_by(Solicitacao.id.desc())
+            .all()
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.warning(f'[SINCRONIZACAO] Relatório sem dados de contrato: {e}')
+        return {}
+
+    mapa = {}
+    for protocolo, contrato, link in linhas:
+        mapa.setdefault(protocolo, {'contrato': contrato, 'link_sei': link})
+    return mapa
+
+
+def montar_relatorio_sincronizacao(dados: dict, usuario_nome: Optional[str] = None) -> dict:
+    """
+    Monta o relatório explicativo da sincronização manual a partir do resumo
+    coletado pelo front (fases, alertas, processos 422 e log). Tolera payload
+    incompleto/malformado: ignora itens inválidos em vez de falhar.
+    """
+    dados = dados if isinstance(dados, dict) else {}
+
+    # --- Fases ---
+    fases_payload = dados.get('fases') if isinstance(dados.get('fases'), list) else []
+    por_numero = {
+        f.get('numero'): f for f in fases_payload if isinstance(f, dict)
+    }
+
+    fases = []
+    for numero, nome, descricao in FASES_SINCRONIZACAO:
+        bruto = por_numero.get(numero, {})
+        inicio = _parse_datahora(bruto.get('inicio'))
+        fim = _parse_datahora(bruto.get('fim'))
+        status = bruto.get('status') if bruto.get('status') in _STATUS_FASE_VALIDOS else 'pendente'
+        movimentados = bruto.get('movimentados') if isinstance(bruto.get('movimentados'), list) else []
+        fases.append({
+            'numero': numero,
+            'nome': nome,
+            'descricao': descricao,
+            'status': status,
+            'inicio': inicio,
+            'fim': fim,
+            'duracao': _formatar_duracao(inicio, fim),
+            'msg_final': bruto.get('msg_final') if isinstance(bruto.get('msg_final'), str) else '',
+            'movimentados': [m for m in movimentados if isinstance(m, str)],
+        })
+
+    # --- Pendências (alertas + 422) ---
+    classificados = []
+    alertas = dados.get('alertas') if isinstance(dados.get('alertas'), list) else []
+    for alerta in alertas:
+        if not isinstance(alerta, dict) or not isinstance(alerta.get('msg'), str):
+            continue
+        item = classificar_alerta(alerta['msg'])
+        item['fase'] = alerta.get('fase') if isinstance(alerta.get('fase'), str) else ''
+        classificados.append(item)
+
+    lista_422 = dados.get('protocolos_422') if isinstance(dados.get('protocolos_422'), list) else []
+    for p in lista_422:
+        if not isinstance(p, dict) or not isinstance(p.get('protocolo'), str):
+            continue
+        item = classificar_alerta(f"[422] Processo inexistente: {p['protocolo']}")
+        item['protocolo'] = p['protocolo']
+        item['fase'] = 'Download SEI'
+        item['link_sei'] = _link_seguro(p.get('link_sei'))
+        classificados.append(item)
+
+    vistos = set()
+    unicos = []
+    for item in classificados:
+        chave = (item['tipo'], item['protocolo'], item['mensagem_tecnica'])
+        if chave not in vistos:
+            vistos.add(chave)
+            unicos.append(item)
+
+    mapa_sol = _dados_solicitacoes_por_protocolo({i['protocolo'] for i in unicos if i['protocolo']})
+
+    grupos_por_tipo = {}
+    for item in unicos:
+        extra = mapa_sol.get(item['protocolo'], {})
+        item['contrato'] = extra.get('contrato')
+        item['link_sei'] = item.get('link_sei') or _link_seguro(extra.get('link_sei'))
+        info = TIPOS_ALERTA[item['tipo']]
+        grupo = grupos_por_tipo.setdefault(item['tipo'], {
+            'tipo': item['tipo'],
+            'ordem': info['ordem'],
+            'titulo': info['titulo'],
+            'explicacao': info['explicacao'],
+            'orientacao': info['orientacao'],
+            'itens': [],
+        })
+        grupo['itens'].append(item)
+    grupos = sorted(grupos_por_tipo.values(), key=lambda g: g['ordem'])
+
+    # --- Números ---
+    msg_f1, msg_f2, msg_f3 = (f['msg_final'] for f in fases)
+    atualizados = _extrair_int(r'(\d+)\s*/\s*(\d+)', msg_f1, 1)
+    verificados = _extrair_int(r'(\d+)\s*/\s*(\d+)', msg_f1, 2)
+    etapas_avancadas = _extrair_int(r'(\d+)\s+processos?\s+avançaram', msg_f2)
+    if etapas_avancadas is None and fases[1]['movimentados']:
+        # Fase 2 interrompida não envia o total final: conta o que foi movimentado até a queda
+        etapas_avancadas = len(fases[1]['movimentados'])
+    numeros = {
+        'processos_verificados': verificados,
+        'processos_atualizados': atualizados,
+        'processos_nao_consultados': (
+            verificados - atualizados if verificados is not None and atualizados is not None else None
+        ),
+        'etapas_avancadas': etapas_avancadas,
+        'saldos_atualizados': _extrair_int(r'(\d+)\s+saldos?\s+atualizados', msg_f3),
+        'total_pendencias': len(unicos),
+    }
+
+    # --- Status geral ---
+    if any(f['status'] in ('erro', 'pendente') for f in fases):
+        status = 'erro'
+    elif unicos or any(f['status'] == 'alerta' for f in fases):
+        status = 'alerta'
+    else:
+        status = 'sucesso'
+
+    iniciado_em = _parse_datahora(dados.get('iniciado_em'))
+    finalizado_em = _parse_datahora(dados.get('finalizado_em'))
+    duracao_total = _formatar_duracao(iniciado_em, finalizado_em)
+
+    # --- Resumo executivo ---
+    paragrafos = []
+    if iniciado_em:
+        frase = f"A sincronização foi iniciada em {iniciado_em.strftime('%d/%m/%Y')} às {iniciado_em.strftime('%H:%M:%S')}"
+        paragrafos.append(frase + (f' e durou {duracao_total}.' if duracao_total else '.'))
+    if verificados is not None:
+        frase = (
+            f'Foram verificados {verificados} processos de pagamento em aberto no SEI: '
+            f'{atualizados} tiveram seus documentos atualizados'
+        )
+        nao = numeros['processos_nao_consultados']
+        frase += f' e {nao} não puderam ser consultados nesta execução.' if nao else '.'
+        paragrafos.append(frase)
+    if numeros['etapas_avancadas'] is not None:
+        paragrafos.append(
+            f"Com base nos documentos obtidos, {numeros['etapas_avancadas']} processo(s) avançaram de etapa no fluxo de pagamento."
+        )
+    if numeros['saldos_atualizados'] is not None:
+        paragrafos.append(f"{numeros['saldos_atualizados']} saldo(s) de empenho foram recalculados com dados do SIAFE.")
+    if status == 'erro':
+        paragrafos.append(
+            'A execução não chegou ao fim: ao menos uma fase foi interrompida. Os dados já '
+            'gravados permanecem válidos; recomenda-se executar a sincronização novamente.'
+        )
+    if unicos:
+        paragrafos.append(
+            f'Foram registradas {len(unicos)} pendência(s), detalhadas abaixo com o significado '
+            'de cada caso e a ação recomendada.'
+        )
+    elif status == 'sucesso':
+        paragrafos.append('Nenhuma pendência foi registrada: todas as etapas foram concluídas normalmente.')
+
+    log = dados.get('log') if isinstance(dados.get('log'), list) else []
+    log = [linha for linha in log if isinstance(linha, str)][:LIMITE_LINHAS_LOG]
+
+    return {
+        'status': status,
+        'status_rotulo': STATUS_ROTULOS[status],
+        'iniciado_em': iniciado_em,
+        'finalizado_em': finalizado_em,
+        'duracao_total': duracao_total,
+        'gerado_em': datetime.now(),
+        'usuario': usuario_nome,
+        'resumo': ' '.join(paragrafos),
+        'resumo_paragrafos': paragrafos,
+        'numeros': numeros,
+        'fases': fases,
+        'grupos': grupos,
+        'log': log,
+    }
 
 
 # =============================================================================

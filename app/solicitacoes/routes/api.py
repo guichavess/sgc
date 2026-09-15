@@ -1,7 +1,7 @@
 """
 Rotas de API - Endpoints AJAX/JSON.
 """
-from flask import request, jsonify, session, redirect, url_for, Response, stream_with_context, current_app
+from flask import request, jsonify, session, redirect, url_for, Response, stream_with_context, current_app, render_template
 from flask_login import login_required, current_user
 from sqlalchemy import or_
 from datetime import datetime
@@ -1147,6 +1147,36 @@ def api_registrar_sincronizacao():
         db.session.rollback()
         current_app.logger.error(f'Erro ao registrar sincronização: {e}')
         return jsonify({'sucesso': False, 'msg': str(e)}), 500
+
+
+# =============================================================================
+# RELATÓRIO DA SINCRONIZAÇÃO MANUAL
+# =============================================================================
+
+@solicitacoes_bp.route('/api/relatorio-sincronizacao', methods=['POST'])
+@login_required
+@requires_permission('solicitacoes.aprovar')
+def api_relatorio_sincronizacao():
+    """
+    Gera o relatório explicativo (HTML imprimível) da sincronização manual.
+
+    Recebe o resumo coletado pelo front (finalizarTudo) como JSON ou no campo
+    ``payload`` de um form (aberto em nova aba).
+    """
+    from app.services.sincronizacao_pagamentos_service import montar_relatorio_sincronizacao
+
+    dados = request.get_json(silent=True)
+    if dados is None and request.form.get('payload'):
+        try:
+            dados = json.loads(request.form['payload'])
+        except ValueError:
+            dados = None
+
+    if not isinstance(dados, dict):
+        return jsonify({'sucesso': False, 'msg': 'Dados do relatório inválidos.'}), 400
+
+    relatorio = montar_relatorio_sincronizacao(dados, usuario_nome=getattr(current_user, 'nome', None))
+    return render_template('solicitacoes/relatorio_sincronizacao.html', r=relatorio)
 
 
 # =============================================================================
