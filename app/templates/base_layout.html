@@ -59,7 +59,7 @@
                             <span class="d-none d-md-inline">{{ nome_curto }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                            {% if current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper() %}
+                            {% if current_user.is_alta_gestao %}
                             <li>
                                 <a class="dropdown-item d-flex align-items-center" href="#" id="btn-atualizar-siafe">
                                     <i class="bi bi-arrow-repeat me-2 text-primary"></i> Atualizar SIAFE
@@ -128,7 +128,7 @@
     {% include 'components/notification_scripts.html' %}
 
     {# SIAFE Modal #}
-    {% if current_user is defined and current_user.is_authenticated and current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper() %}
+    {% if current_user is defined and current_user.is_authenticated and current_user.is_alta_gestao %}
     {% include 'components/siafe_modal.html' %}
     {% endif %}
 

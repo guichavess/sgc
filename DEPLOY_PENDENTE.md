@@ -17,6 +17,71 @@
 
 ## Pendências
 
+### Permissões por página no Financeiro + alta gestão (2026-09-14)
+
+Branch `feat/permissoes-por-pagina`. Financeiro passa a ter uma permissão por
+página (`perfil_permissoes.pagina`), o antigo módulo `fundo_rotativo` vira a
+página `financeiro/fundo_rotativo`, e Orçamento, Planejamento e "Atualizar SIAFE"
+passam a depender de `sis_usuarios.is_alta_gestao` (antes: nome contendo
+"PEDRO ALEXANDRE"). Ninguém ganha nem perde acesso; a única diferença prevista é
+que quem tem só `criar`/`excluir` passa a receber notificações.
+
+- [ ] **Fase A — ANTES do `git pull`** (compatível com o código antigo: só adiciona)
+
+  ```sql
+  USE sgc;
+
+  -- 0) Backup
+  CREATE TABLE perfil_permissoes_bkp_20260914 AS SELECT * FROM perfil_permissoes;
+
+  -- 1) Conferir o nome da UNIQUE atual (esperado: uq_perfil_modulo_acao)
+  SHOW INDEX FROM perfil_permissoes;
+
+  -- 2) Coluna pagina ('' = módulo inteiro). NOT NULL: com NULL a UNIQUE aceitaria duplicatas
+  ALTER TABLE perfil_permissoes
+    ADD COLUMN pagina VARCHAR(50) NOT NULL DEFAULT '' AFTER modulo;
+
+  -- 3) UNIQUE nova (DROP e ADD no mesmo ALTER: a FK de perfil_id continua com índice)
+  ALTER TABLE perfil_permissoes
+    DROP INDEX uq_perfil_modulo_acao,
+    ADD UNIQUE KEY uq_perfil_modulo_pagina_acao (perfil_id, modulo, pagina, acao);
+
+  -- 4) financeiro (módulo inteiro) -> as 4 páginas que ele liberava
+  INSERT IGNORE INTO perfil_permissoes (perfil_id, modulo, pagina, acao)
+  SELECT p.perfil_id, 'financeiro', pg.pagina, p.acao
+    FROM perfil_permissoes p
+    JOIN (SELECT 'insercao_ne' AS pagina UNION ALL SELECT 'diarias'
+          UNION ALL SELECT 'fornecedores' UNION ALL SELECT 'execucoes') pg
+   WHERE p.modulo = 'financeiro' AND p.pagina = '';
+
+  -- 5) fundo_rotativo (módulo) -> página de financeiro
+  INSERT IGNORE INTO perfil_permissoes (perfil_id, modulo, pagina, acao)
+  SELECT perfil_id, 'financeiro', 'fundo_rotativo', acao
+    FROM perfil_permissoes
+   WHERE modulo = 'fundo_rotativo';
+
+  -- 6) Alta gestão
+  ALTER TABLE sis_usuarios ADD COLUMN is_alta_gestao TINYINT(1) NOT NULL DEFAULT 0;
+
+  SELECT id, nome, cargo_gestao, is_admin
+    FROM sis_usuarios
+   WHERE UPPER(nome) LIKE '%PEDRO ALEXANDRE%';
+
+  -- Conferir o id acima (atenção a homônimos) antes de rodar:
+  UPDATE sis_usuarios SET is_alta_gestao = 1 WHERE id = <id conferido acima>;
+  ```
+
+- [ ] **`git pull` + restart**; conferir: hub, `/financeiro/` com um usuário só de
+  Fundo Rotativo, tela de perfil (sublinhas do Financeiro) e botão "Atualizar SIAFE".
+
+- [ ] **Fase B — DEPOIS de validar o deploy** (linhas antigas que o código novo ignora)
+
+  ```sql
+  USE sgc;
+  DELETE FROM perfil_permissoes
+   WHERE (modulo = 'financeiro' AND pagina = '') OR modulo = 'fundo_rotativo';
+  ```
+
 ### Normalizar CPFs de `diarias_servidores` (2026-08-20)
 
 - [ ] **Padronizar `diarias_servidores.cpf` no formato `999.999.999-99`**

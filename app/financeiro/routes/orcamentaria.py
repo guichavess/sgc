@@ -1,6 +1,6 @@
 """
 Rotas do módulo Orçamentário (Financeiro).
-Tela principal de gerenciamento orçamentário — admins + Pedro Alexandre.
+Tela principal de gerenciamento orçamentário — admins + alta gestão.
 """
 import logging
 from collections import defaultdict
@@ -9,7 +9,8 @@ from flask import render_template, request, jsonify, flash, redirect, url_for
 from sqlalchemy import text
 from flask_login import login_required, current_user
 
-from app.financeiro.routes import financeiro_bp, requires_admin_or_pedro
+from app.financeiro.routes import financeiro_bp
+from app.utils.permissions import requires_permission
 from app.extensions import db
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ def _pct(parte, total):
 # =============================================================================
 @financeiro_bp.route('/orcamentaria')
 @login_required
-@requires_admin_or_pedro
+@requires_permission('financeiro.orcamento')
 def orcamentaria():
     ano = request.args.get('ano', 2026, type=int)
     mes = request.args.get('mes', type=int)
@@ -1060,7 +1061,7 @@ def _listar_fontes_filtradas(ano, mes, acao, natureza, fonte):
 # =============================================================================
 @financeiro_bp.route('/api/orcamentaria/filtros/<int:ano>')
 @login_required
-@requires_admin_or_pedro
+@requires_permission('financeiro.orcamento')
 def api_orcamentaria_filtros(ano):
     """Retorna opções de filtro disponíveis para um dado ano."""
     meses = _listar_meses(ano)
@@ -1081,7 +1082,7 @@ def api_orcamentaria_filtros(ano):
 # =============================================================================
 @financeiro_bp.route('/api/orcamentaria/filtros-dependentes')
 @login_required
-@requires_admin_or_pedro
+@requires_permission('financeiro.orcamento')
 def api_filtros_dependentes():
     """Retorna opções disponíveis para cada filtro, filtradas pelos OUTROS filtros selecionados."""
     try:
@@ -1165,7 +1166,7 @@ def api_filtros_dependentes():
 # =============================================================================
 @financeiro_bp.route('/api/orcamentaria/naturezas/<acao>')
 @login_required
-@requires_admin_or_pedro
+@requires_permission('financeiro.orcamento')
 def api_orcamentaria_naturezas(acao):
     """Retorna naturezas de despesa agrupadas para uma ação."""
     ano = request.args.get('ano', 2026, type=int)
@@ -1265,7 +1266,7 @@ def api_orcamentaria_naturezas(acao):
 
 @financeiro_bp.route('/api/orcamentaria/contratos/<acao>/<natureza>')
 @login_required
-@requires_admin_or_pedro
+@requires_permission('financeiro.orcamento')
 def api_orcamentaria_contratos(acao, natureza):
     """Retorna contratos filtrados por ação + natureza + fonte,
     com valores de execução (empenho/liquidação/PD/OB)."""

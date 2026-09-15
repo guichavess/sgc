@@ -23,7 +23,6 @@ from flask import current_app
 from app.extensions import db
 from app.models.notificacao import NotificacaoTipo, Notificacao, NotificacaoPreferencia
 from app.models.usuario import Usuario
-from app.models.perfil import PerfilPermissao
 from app.repositories.notificacao_repository import NotificacaoRepository
 
 
@@ -268,7 +267,8 @@ class NotificationEngine:
             Lista de usuario_ids unicos.
         """
         from sqlalchemy import text
-        from app.models.perfil import Perfil
+        from app.constants import PAGINA_POR_TIPO_NOTIFICACAO
+        from app.services.permissao_service import usuarios_com_acesso
 
         ids = set()
         tipo = NotificacaoTipo.query.filter_by(codigo=tipo_codigo).first()
@@ -299,20 +299,10 @@ class NotificationEngine:
             except Exception as e:
                 current_app.logger.warning(f'Erro ao buscar fiscais: {e}')
 
-        # 3. Usuarios com permissao no modulo
+        # 3. Usuarios com acesso ao modulo (em modulos com paginas, a pagina do tipo)
         try:
-            usuarios_modulo = Usuario.query.join(
-                Perfil, Usuario.perfil_id == Perfil.id
-            ).join(
-                PerfilPermissao, PerfilPermissao.perfil_id == Perfil.id
-            ).filter(
-                PerfilPermissao.modulo == modulo,
-                PerfilPermissao.acao == 'visualizar',
-                Usuario.ativo == True,
-            ).all()
-
-            for u in usuarios_modulo:
-                ids.add(u.id)
+            pagina = PAGINA_POR_TIPO_NOTIFICACAO.get(tipo_codigo, '')
+            ids.update(usuarios_com_acesso(modulo, pagina))
         except Exception as e:
             current_app.logger.warning(f'Erro ao buscar usuarios do modulo: {e}')
 

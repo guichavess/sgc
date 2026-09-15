@@ -1,7 +1,7 @@
 """
 Rotas da aba "Saldo" e dashboard do modulo Gestao do Fundo Rotativo.
 
-Sub-secao do modulo Financeiro. Permissoes: fundo_rotativo.visualizar / criar.
+Sub-secao do modulo Financeiro. Permissoes: financeiro.fundo_rotativo.visualizar / criar.
 """
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -20,7 +20,7 @@ from app.utils.permissions import requires_permission
 
 @financeiro_bp.route('/fundo-rotativo/saldo')
 @login_required
-@requires_permission('fundo_rotativo.visualizar')
+@requires_permission('financeiro.fundo_rotativo.visualizar')
 def fundo_rotativo_saldo_lista():
     page = max(1, request.args.get('page', 1, type=int) or 1)
     busca = request.args.get('busca', '').strip()
@@ -73,7 +73,7 @@ def fundo_rotativo_saldo_lista():
 
 @financeiro_bp.route('/fundo-rotativo/saldo/sincronizar-inicial', methods=['POST'])
 @login_required
-@requires_permission('fundo_rotativo.criar')
+@requires_permission('financeiro.fundo_rotativo.criar')
 def fundo_rotativo_saldo_sincronizar_inicial():
     try:
         resultado = sincronizar_saldos_inicial(usuario_id=current_user.id)
@@ -89,7 +89,7 @@ def fundo_rotativo_saldo_sincronizar_inicial():
 
 @financeiro_bp.route('/fundo-rotativo/saldo/sincronizar', methods=['POST'])
 @login_required
-@requires_permission('fundo_rotativo.criar')
+@requires_permission('financeiro.fundo_rotativo.criar')
 def fundo_rotativo_saldo_sincronizar():
     try:
         resultado = sincronizar_saldos_mes_atual(usuario_id=current_user.id)
@@ -105,7 +105,7 @@ def fundo_rotativo_saldo_sincronizar():
 
 @financeiro_bp.route('/fundo-rotativo/dashboard')
 @login_required
-@requires_permission('fundo_rotativo.visualizar')
+@requires_permission('financeiro.fundo_rotativo.visualizar')
 def fundo_rotativo_dashboard():
     anos_filtro = [v for v in request.args.getlist('ano') if v]
     meses_filtro = [v for v in request.args.getlist('mes') if v]

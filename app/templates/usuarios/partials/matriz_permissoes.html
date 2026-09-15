@@ -1,0 +1,150 @@
+{#
+    Matriz de permissões por módulo e página — formulários de perfil e de usuário.
+
+    Variáveis: modulos, acoes, paginas_modulo ({modulo: [PaginaModulo]} liberáveis),
+    paginas_alta_gestao, permissoes_atuais ({'modulo' ou 'modulo:pagina': [acoes]}).
+    Checkboxes: name="perm:{modulo}:{pagina}:{acao}" (pagina vazia = módulo inteiro),
+    lidos por UsuarioService.extrair_permissoes_form.
+#}
+{% set icones_modulo = {
+    'dashboards': 'bi-speedometer2', 'solicitacoes': 'bi-cash-stack', 'financeiro': 'bi-bank',
+    'prestacoes_contratos': 'bi-clipboard-check', 'diarias': 'bi-airplane',
+    'cgfr': 'bi-file-earmark-bar-graph', 'identidade_visual': 'bi-shop'
+} %}
+<style>
+ .perm-table .perm-row-modulo-paginas td { background-color: #f8f9fa; }
+ .perm-table .perm-row-pagina td:first-child { padding-left: 2.25rem; font-size: 0.9rem; }
+</style>
+
+<div class="table-responsive mb-2" style="border-radius: 0.5rem; overflow: hidden;">
+ <table class="table table-bordered perm-table mb-0">
+ <thead>
+ <tr>
+ <th class="ps-3" style="width: 30%;">Módulo</th>
+ {% for acao_key, acao_label in acoes %}
+ <th class="text-center">{{ acao_label }}</th>
+ {% endfor %}
+ <th class="text-center" style="width: 10%;">Todos</th>
+ </tr>
+ </thead>
+ <tbody>
+ {% for modulo_key, modulo_label in modulos %}
+ {% set paginas = paginas_modulo.get(modulo_key) %}
+ <tr class="{{ 'perm-row-modulo-paginas' if paginas }}">
+ <td class="ps-3 perm-module-name">
+ <i class="bi {{ icones_modulo.get(modulo_key, 'bi-folder2') }} me-1"></i> {{ modulo_label }}
+ </td>
+ {% if paginas %}
+ <td colspan="{{ acoes|length }}" class="small text-muted">Permissões por página</td>
+ {% else %}
+ {% for acao_key, acao_label in acoes %}
+ {% set is_checked = acao_key in permissoes_atuais.get(modulo_key, []) %}
+ <td class="text-center {{ 'perm-cell-active' if is_checked }}">
+ <div class="form-check d-flex justify-content-center mb-0">
+ <input class="form-check-input perm-checkbox perm-{{ modulo_key }}"
+ type="checkbox"
+ name="perm:{{ modulo_key }}::{{ acao_key }}"
+ value="1"
+ id="perm-{{ modulo_key }}-{{ acao_key }}"
+ aria-label="{{ modulo_label }}: {{ acao_label }}"
+ {{ 'checked' if is_checked }}>
+ </div>
+ </td>
+ {% endfor %}
+ {% endif %}
+ <td class="text-center" style="background-color: #f8f9fa;">
+ <div class="form-check form-switch d-flex justify-content-center mb-0">
+ <input class="form-check-input perm-toggle"
+ type="checkbox"
+ role="switch"
+ data-alvo="perm-{{ modulo_key }}"
+ title="Marcar/desmarcar todas"
+ aria-label="Todas as permissões de {{ modulo_label }}">
+ </div>
+ </td>
+ </tr>
+ {% for pagina in paginas or [] %}
+ {% set chave = modulo_key ~ ':' ~ pagina.chave %}
+ <tr class="perm-row-pagina">
+ <td>
+ <i class="bi {{ pagina.icone }} me-1 text-muted"></i> {{ pagina.rotulo }}
+ </td>
+ {% for acao_key, acao_label in acoes %}
+ {% set is_checked = acao_key in permissoes_atuais.get(chave, []) %}
+ <td class="text-center {{ 'perm-cell-active' if is_checked }}">
+ <div class="form-check d-flex justify-content-center mb-0">
+ <input class="form-check-input perm-checkbox perm-{{ modulo_key }} perm-{{ modulo_key }}-{{ pagina.chave }}"
+ type="checkbox"
+ name="perm:{{ modulo_key }}:{{ pagina.chave }}:{{ acao_key }}"
+ value="1"
+ id="perm-{{ modulo_key }}-{{ pagina.chave }}-{{ acao_key }}"
+ aria-label="{{ modulo_label }} / {{ pagina.rotulo }}: {{ acao_label }}"
+ {{ 'checked' if is_checked }}>
+ </div>
+ </td>
+ {% endfor %}
+ <td class="text-center" style="background-color: #f8f9fa;">
+ <div class="form-check form-switch d-flex justify-content-center mb-0">
+ <input class="form-check-input perm-toggle"
+ type="checkbox"
+ role="switch"
+ data-alvo="perm-{{ modulo_key }}-{{ pagina.chave }}"
+ title="Marcar/desmarcar todas"
+ aria-label="Todas as permissões de {{ pagina.rotulo }}">
+ </div>
+ </td>
+ </tr>
+ {% endfor %}
+ {% endfor %}
+ </tbody>
+ </table>
+</div>
+{% if paginas_alta_gestao %}
+<p class="form-text mb-4">
+ <i class="bi bi-info-circle me-1"></i>
+ {{ paginas_alta_gestao|map(attribute='rotulo')|join(' e ') }}: exclusivo da alta gestão (marcado na tela do usuário).
+</p>
+{% endif %}
+
+<script>
+ (function() {
+ var toggles = document.querySelectorAll('.perm-toggle');
+
+ function caixas(toggle) {
+ return document.querySelectorAll('.perm-checkbox.' + toggle.dataset.alvo);
+ }
+
+ // Destaque visual da célula conforme estado do checkbox
+ function marcarCelula(checkbox) {
+ var td = checkbox.closest('td');
+ if (td) td.classList.toggle('perm-cell-active', checkbox.checked);
+ }
+
+ // "Todos" fica marcado quando todas as caixas do seu grupo estão marcadas
+ function sincronizar() {
+ toggles.forEach(function(toggle) {
+ var cbs = caixas(toggle);
+ toggle.checked = cbs.length > 0 && Array.from(cbs).every(function(c) { return c.checked; });
+ });
+ }
+
+ toggles.forEach(function(toggle) {
+ toggle.addEventListener('change', function() {
+ caixas(toggle).forEach(function(cb) {
+ cb.checked = toggle.checked;
+ marcarCelula(cb);
+ });
+ sincronizar();
+ });
+ });
+
+ document.querySelectorAll('.perm-checkbox').forEach(function(cb) {
+ cb.addEventListener('change', function() {
+ marcarCelula(cb);
+ sincronizar();
+ });
+ });
+
+ sincronizar();
+ })();
+</script>

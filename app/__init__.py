@@ -76,7 +76,7 @@ def create_app(config_class=None):
         from app.services.hub_service import montar_hub
         return render_template('hub.html', hub=montar_hub(current_user))
 
-    # Rota para atualizar SIAFE (apenas Pedro Alexandre)
+    # Rota para atualizar SIAFE (apenas alta gestão: sis_usuarios.is_alta_gestao, sem bypass de admin)
     # Grupos: SIAFE (execução sequencial interna, paralela entre grupos) e LOA (separado)
     SIAFE_SCRIPTS = [
         {'id': 'reserva',     'arquivo': 'atualizar_reserva.py',     'nome': 'Reservas',     'grupo': 'siafe', 'args': []},
@@ -153,7 +153,7 @@ def create_app(config_class=None):
     @login_required
     def atualizar_siafe():
         from flask import request as req
-        if not current_user.nome or 'PEDRO ALEXANDRE' not in current_user.nome.upper():
+        if not current_user.is_alta_gestao:
             return jsonify({'erro': 'Acesso negado'}), 403
 
         with _siafe_lock:
@@ -186,7 +186,7 @@ def create_app(config_class=None):
     @app.route('/api/atualizar-siafe/status')
     @login_required
     def atualizar_siafe_status():
-        if not current_user.nome or 'PEDRO ALEXANDRE' not in current_user.nome.upper():
+        if not current_user.is_alta_gestao:
             return jsonify({'erro': 'Acesso negado'}), 403
         status = _read_siafe_status()
         return jsonify({

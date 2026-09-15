@@ -73,49 +73,7 @@
  <i class="bi bi-key me-1"></i> Permissões por Módulo
  </h6>
 
- <div class="table-responsive mb-4" style="border-radius: 0.5rem; overflow: hidden;">
- <table class="table table-bordered perm-table mb-0">
- <thead>
- <tr>
- <th class="ps-3" style="width: 30%;">Módulo</th>
- {% for acao_key, acao_label in acoes %}
- <th class="text-center" style="width: {{ 70 // acoes|length }}%;">{{ acao_label }}</th>
- {% endfor %}
- <th class="text-center" style="width: 10%;">Todos</th>
- </tr>
- </thead>
- <tbody>
- {% for modulo_key, modulo_label in modulos %}
- <tr>
- <td class="ps-3 perm-module-name">
- <i class="bi bi-folder2 me-1"></i> {{ modulo_label }}
- </td>
- {% for acao_key, acao_label in acoes %}
- <td class="text-center">
- <div class="form-check d-flex justify-content-center mb-0">
- <input class="form-check-input perm-checkbox perm-{{ modulo_key }}"
- type="checkbox"
- name="perm_{{ modulo_key }}_{{ acao_key }}"
- value="1"
- id="perm_{{ modulo_key }}_{{ acao_key }}"
- data-modulo="{{ modulo_key }}"
- {{ 'checked' if acao_key in permissoes_atuais.get(modulo_key, []) }}>
- </div>
- </td>
- {% endfor %}
- <td class="text-center">
- <div class="form-check d-flex justify-content-center mb-0">
- <input class="form-check-input toggle-all-modulo"
- type="checkbox"
- data-modulo="{{ modulo_key }}"
- title="Marcar/desmarcar todas">
- </div>
- </td>
- </tr>
- {% endfor %}
- </tbody>
- </table>
- </div>
+ {% include 'usuarios/partials/matriz_permissoes.html' %}
 
  <div class="d-flex gap-2">
  <button type="submit" class="btn btn-primary fw-bold px-4">
@@ -130,28 +88,4 @@
  </div>
  </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
- // Toggle all permissões de um módulo
- document.querySelectorAll('.toggle-all-modulo').forEach(function(toggle) {
- const modulo = toggle.dataset.modulo;
- const checkboxes = document.querySelectorAll('.perm-' + modulo);
-
- // Inicializa estado do "todos"
- toggle.checked = Array.from(checkboxes).every(cb => cb.checked);
-
- toggle.addEventListener('change', function() {
- checkboxes.forEach(cb => cb.checked = toggle.checked);
- });
-
- // Atualiza "todos" quando checkboxes individuais mudam
- checkboxes.forEach(function(cb) {
- cb.addEventListener('change', function() {
- toggle.checked = Array.from(checkboxes).every(c => c.checked);
- });
- });
- });
-</script>
 {% endblock %}

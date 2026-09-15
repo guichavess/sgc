@@ -107,7 +107,7 @@ def _contadores_filtro(query_base):
 
 @financeiro_bp.route('/diarias')
 @login_required
-@requires_permission('financeiro.visualizar')
+@requires_permission('financeiro.diarias.visualizar')
 def diarias_lista():
     """Lista solicitações de diárias na etapa financeira ou posterior (etapa >= 2)."""
     busca = request.args.get('q', '').strip()
@@ -193,7 +193,7 @@ def _pode_ver_despachos():
 
 @financeiro_bp.route('/diarias/despachos')
 @login_required
-@requires_permission('financeiro.visualizar')
+@requires_permission('financeiro.diarias.visualizar')
 def diarias_despachos():
     """Lista processos de diárias pendentes de despacho do Diretor DFIN."""
     if not _pode_ver_despachos():
@@ -239,7 +239,7 @@ def diarias_despachos():
 
 @financeiro_bp.route('/diarias/<int:id>/despachar-dfin', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def despachar_dfin(id):
     """Diretor DFIN gera e assina o despacho no SEI — gate para inserção de NR.
 
@@ -373,7 +373,7 @@ def despachar_dfin(id):
 
 @financeiro_bp.route('/diarias/<int:id>')
 @login_required
-@requires_permission('financeiro.visualizar')
+@requires_permission('financeiro.diarias.visualizar')
 def diarias_detalhe(id):
     """Exibe detalhes de uma solicitação de diária para o financeiro."""
     dados = DiariaService.get_itinerario_completo(id)
@@ -488,7 +488,7 @@ def diarias_detalhe(id):
 
 @financeiro_bp.route('/diarias/<int:id>/inserir-nr', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def inserir_nr(id):
     """Insere Nota de Reserva individual para um servidor da solicitação.
 
@@ -644,7 +644,7 @@ def _parse_valor_brl(valor_str):
 
 @financeiro_bp.route('/diarias/<int:id>/inserir-quadro-orcamentario', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def inserir_quadro_orcamentario(id):
     """Insere Quadro Orçamentário em uma solicitação de diária.
 
@@ -793,7 +793,7 @@ def inserir_quadro_orcamentario(id):
 
 @financeiro_bp.route('/diarias/<int:id>/despacho-geo-quadro', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def despacho_geo_quadro(id):
     """Gerente GEO gera despacho após quadro orçamentário — gate para SCDP.
 
@@ -923,7 +923,7 @@ def despacho_geo_quadro(id):
 
 @financeiro_bp.route('/diarias/<int:id>/gerar-analise-habilitacao', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def gerar_analise_habilitacao(id):
     """Gera documento de Análise de Habilitação (IdSerie 7) no SEI.
 
@@ -1074,7 +1074,7 @@ def gerar_analise_habilitacao(id):
 
 @financeiro_bp.route('/diarias/<int:id>/upload-scdp', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def upload_autorizacao_scdp(id):
     """Upload do PDF 'Autorização SOLICITAÇÃO APROVADA SCDP' ao processo SEI."""
     itinerario = DiariasItinerario.query.get_or_404(id)
@@ -1143,7 +1143,7 @@ def upload_autorizacao_scdp(id):
 
 @financeiro_bp.route('/diarias/<int:id>/inserir-nota-empenho', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def inserir_nota_empenho(id):
     """Insere Nota de Empenho individual para um servidor da solicitação.
 
@@ -1315,7 +1315,7 @@ def inserir_nota_empenho(id):
 
 @financeiro_bp.route('/diarias/<int:id>/despacho-ccdp', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def despacho_ccdp(id):
     """Gera Despacho CCDP (idSerie 754) após Nota de Empenho — envia para SGA.
 
@@ -1470,7 +1470,7 @@ def despacho_ccdp(id):
 
 @financeiro_bp.route('/diarias/<int:id>/confirmar-analise-nci', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def confirmar_analise_nci(id):
     """Etapa Análise NCI: VERIFICA documentos no SEI e gera despachos automáticos.
 
@@ -1631,7 +1631,7 @@ def confirmar_analise_nci(id):
 
 @financeiro_bp.route('/diarias/<int:id>/despacho-apoio', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def despacho_apoio(id):
     """Gera Despacho SGA (idSerie 2987) — encaminha ao NCI.
 
@@ -1735,7 +1735,7 @@ def despacho_apoio(id):
 
 @financeiro_bp.route('/diarias/<int:id>/despacho-diretor', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def despacho_diretor(id):
     """Gera Despacho do Diretor DFIN (idSerie 754) — encaminha para GEO.
 
@@ -1884,7 +1884,7 @@ def despacho_diretor(id):
 
 @financeiro_bp.route('/diarias/<int:id>/despacho-geo', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def despacho_geo(id):
     """Gera Despacho GEO (idSerie 754) — encaminha para CCDP.
 
@@ -2172,7 +2172,7 @@ def _inserir_doc_financeiro_servidor(itinerario, modelo, tipo_agregado, id_serie
 
 @financeiro_bp.route('/diarias/<int:id>/inserir-nl', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def inserir_nl(id):
     """Insere NL - Nota de Liquidacao (idSerie 420) no processo SEI, 1 por servidor."""
     from app.models.diaria import DiariasNotaLiquidacao
@@ -2202,7 +2202,7 @@ def inserir_nl(id):
 
 @financeiro_bp.route('/diarias/<int:id>/inserir-pd', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def inserir_pd(id):
     """Insere PD - Programacao de Desembolso (idSerie 421) no processo SEI, 1 por servidor."""
     from app.models.diaria import DiariasProgramacaoDesembolso, DiariasNotaLiquidacao, DiariasItemItinerario
@@ -2249,7 +2249,7 @@ def inserir_pd(id):
 
 @financeiro_bp.route('/diarias/<int:id>/inserir-ob', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def inserir_ob(id):
     """Insere OB - Ordem Bancaria (idSerie 422) no processo SEI, 1 por servidor.
 
@@ -2328,7 +2328,7 @@ def inserir_ob(id):
 
 @financeiro_bp.route('/diarias/<int:id>/inserir-np', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def inserir_np(id):
     """Insere NP - Nota Patrimonial (idSerie 423) no processo SEI, 1 por servidor."""
     from app.models.diaria import DiariasNotaPatrimonial
@@ -2355,7 +2355,7 @@ def inserir_np(id):
 
 @financeiro_bp.route('/diarias/<int:id>/upload-prestacao-scdp', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def upload_prestacao_scdp(id):
     """Upload do Documento de Prestação SCDP (idSerie 264, externo) ao processo SEI."""
     itinerario = DiariasItinerario.query.get_or_404(id)
@@ -2424,7 +2424,7 @@ def upload_prestacao_scdp(id):
 
 @financeiro_bp.route('/diarias/<int:id>/despacho-final', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def despacho_final(id):
     """Gera Despacho Final CCDP (idSerie 754) - 'Processo pago e concluído nesta unidade.'"""
     itinerario = DiariasItinerario.query.get_or_404(id)
@@ -2531,7 +2531,7 @@ def despacho_final(id):
 
 @financeiro_bp.route('/diarias/<int:id>/assinar-despacho-ccdp', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def assinar_despacho_ccdp(id):
     """Retry de assinatura do Despacho CCDP quando o documento já foi criado no SEI
     mas a assinatura falhou anteriormente.
@@ -2640,7 +2640,7 @@ def assinar_despacho_ccdp(id):
 
 @financeiro_bp.route('/diarias/<int:id>/assinar-despacho-diretor', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def assinar_despacho_diretor(id):
     """Retry de assinatura do Despacho do Diretor quando o documento já foi criado
     no SEI mas a assinatura falhou anteriormente."""
@@ -2736,7 +2736,7 @@ def assinar_despacho_diretor(id):
 
 @financeiro_bp.route('/diarias/<int:id>/assinar-despacho-geo', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.diarias.criar')
 def assinar_despacho_geo(id):
     """Retry de assinatura do Despacho GEO quando o documento já foi criado
     no SEI mas a assinatura falhou anteriormente."""

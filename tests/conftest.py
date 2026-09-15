@@ -186,6 +186,51 @@ def usuario_admin(db_session, app):
 
 
 @pytest.fixture()
+def usuario_com_permissoes(db_session):
+    """Fábrica: usuario_com_permissoes(uid, permissoes=(), **campos_do_usuario).
+
+    permissoes: tuplas (modulo, pagina, acao); pagina '' = módulo inteiro.
+    Sem permissões o usuário é criado sem perfil.
+    """
+    from app.models.usuario import Usuario
+    from app.models.perfil import Perfil, PerfilPermissao
+
+    def _criar(uid, permissoes=(), **campos):
+        perfil_id = None
+        if permissoes:
+            perfil = Perfil(nome=f'Perfil teste {uid}', ativo=True)
+            db_session.add(perfil)
+            db_session.flush()
+            for modulo, pagina, acao in permissoes:
+                db_session.add(PerfilPermissao(
+                    perfil_id=perfil.id, modulo=modulo, pagina=pagina, acao=acao,
+                ))
+            perfil_id = perfil.id
+        dados = dict(
+            id=uid, id_usuario_sei=f'perm_{uid}', nome=f'USUARIO PERM {uid}',
+            sigla_login=f'perm_{uid}', is_admin=False, ativo=True, perfil_id=perfil_id,
+        )
+        dados.update(campos)
+        u = Usuario(**dados)
+        db_session.add(u)
+        db_session.commit()
+        return u
+    return _criar
+
+
+@pytest.fixture()
+def logar(client):
+    """logar(usuario) — autentica o client de teste como o usuário."""
+    def _logar(usuario):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(usuario.id)
+            sess['_fresh'] = True
+            sess['usuario_nome'] = usuario.nome
+        return client
+    return _logar
+
+
+@pytest.fixture()
 def usuario_comum(db_session, app):
     """Cria e retorna um usuário sem admin para testes de permissão."""
     with app.app_context():

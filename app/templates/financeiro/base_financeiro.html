@@ -4,26 +4,51 @@
 {% block module_name %}Financeiro{% endblock %}
 
 {% block sidebar_links %}
+{# Cada bloco checa a própria página (PAGINAS_MODULO['financeiro'] em app/models/perfil.py) #}
+{% set paginas_fin = current_user.paginas_acessiveis('financeiro')|map(attribute='chave')|list %}
+{% set ep = request.endpoint or '' %}
+
+{% if 'orcamento' in paginas_fin or 'insercao_ne' in paginas_fin or 'fornecedores' in paginas_fin or 'execucoes' in paginas_fin %}
 <div class="sidebar-section-label">Financeiro</div>
 <ul class="sidebar-menu">
-    {% if current_user.is_admin or (current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper()) %}
+    {% if 'orcamento' in paginas_fin %}
     <li>
-        <a class="sidebar-link {{ 'active' if request.endpoint == 'financeiro.orcamentaria' }}"
+        <a class="sidebar-link {{ 'active' if ep == 'financeiro.orcamentaria' }}"
            href="{{ url_for('financeiro.orcamentaria') }}">
             <i class="bi bi-wallet2"></i> Orçamento
         </a>
     </li>
     {% endif %}
+    {% if 'insercao_ne' in paginas_fin %}
     <li>
-        <a class="sidebar-link {{ 'active' if request.endpoint == 'financeiro.pendencias_ne' }}"
+        <a class="sidebar-link {{ 'active' if ep == 'financeiro.pendencias_ne' }}"
            href="{{ url_for('financeiro.pendencias_ne') }}">
             <i class="bi bi-pencil-square"></i> Inserir NEs
         </a>
     </li>
-    </ul>
+    {% endif %}
+    {% if 'fornecedores' in paginas_fin %}
+    <li>
+        <a class="sidebar-link {{ 'active' if ep.startswith('financeiro.fornecedores') }}"
+           href="{{ url_for('financeiro.fornecedores_lista') }}">
+            <i class="bi bi-building"></i> Fornecedores
+        </a>
+    </li>
+    {% endif %}
+    {% if 'execucoes' in paginas_fin %}
+    <li>
+        <a class="sidebar-link {{ 'active' if ep.startswith('financeiro.execucoes') }}"
+           href="{{ url_for('financeiro.execucoes_lista') }}">
+            <i class="bi bi-clipboard-data"></i> Execuções
+        </a>
+    </li>
+    {% endif %}
+</ul>
+{% endif %}
 
 {# Diárias — accordion colapsável #}
-{% set is_diarias_active = (request.endpoint and request.endpoint.startswith('financeiro.diarias')) %}
+{% if 'diarias' in paginas_fin %}
+{% set is_diarias_active = ep.startswith('financeiro.diarias') %}
 <div class="sidebar-section-label">Diárias</div>
 <ul class="sidebar-menu">
     <li>
@@ -37,14 +62,15 @@
         <div class="collapse {{ 'show' if is_diarias_active }}" id="sidebarDiarias">
             <ul class="sidebar-submenu">
                 <li>
-                    <a class="sidebar-link sidebar-sublink {{ 'active' if request.endpoint == 'financeiro.diarias_lista' or request.endpoint == 'financeiro.diarias_detalhe' }}"
+                    <a class="sidebar-link sidebar-sublink {{ 'active' if ep in ('financeiro.diarias_lista', 'financeiro.diarias_detalhe') }}"
                        href="{{ url_for('financeiro.diarias_lista') }}">
                         <i class="bi bi-list-ul"></i> Diárias
                     </a>
                 </li>
-                {% if current_user.is_admin or (current_user.cargo_gestao is defined and current_user.cargo_gestao == 'diretor_dfin') or (current_user.is_superintendente and current_user.superintendencia_sigla == 'SGACG') %}
+                {# Mesma regra de _pode_ver_despachos (financeiro/routes/diarias.py) #}
+                {% if current_user.is_admin or current_user.cargo_gestao == 'diretor_dfin' or (current_user.is_superintendente and current_user.superintendencia_sigla == 'SGACG') %}
                 <li>
-                    <a class="sidebar-link sidebar-sublink {{ 'active' if request.endpoint == 'financeiro.diarias_despachos' }}"
+                    <a class="sidebar-link sidebar-sublink {{ 'active' if ep == 'financeiro.diarias_despachos' }}"
                        href="{{ url_for('financeiro.diarias_despachos') }}">
                         <i class="bi bi-send-check"></i> Despachos e Autorizações
                     </a>
@@ -54,10 +80,11 @@
         </div>
     </li>
 </ul>
+{% endif %}
 
 {# Fundo Rotativo — accordion colapsável #}
-{% if current_user.is_admin or current_user.tem_permissao('fundo_rotativo', 'visualizar') %}
-{% set is_fundo_rotativo_active = (request.endpoint and request.endpoint.startswith('financeiro.fundo_rotativo')) %}
+{% if 'fundo_rotativo' in paginas_fin %}
+{% set is_fundo_rotativo_active = ep.startswith('financeiro.fundo_rotativo') %}
 <div class="sidebar-section-label">Fundo Rotativo</div>
 <ul class="sidebar-menu">
     <li>
@@ -71,13 +98,13 @@
         <div class="collapse {{ 'show' if is_fundo_rotativo_active }}" id="sidebarFundoRotativo">
             <ul class="sidebar-submenu">
                 <li>
-                    <a class="sidebar-link sidebar-sublink {{ 'active' if request.endpoint == 'financeiro.fundo_rotativo_dashboard' }}"
+                    <a class="sidebar-link sidebar-sublink {{ 'active' if ep == 'financeiro.fundo_rotativo_dashboard' }}"
                        href="{{ url_for('financeiro.fundo_rotativo_dashboard') }}">
                         <i class="bi bi-bar-chart-line"></i> Dashboard
                     </a>
                 </li>
                 <li>
-                    <a class="sidebar-link sidebar-sublink {{ 'active' if request.endpoint == 'financeiro.fundo_rotativo_saldo_lista' }}"
+                    <a class="sidebar-link sidebar-sublink {{ 'active' if ep == 'financeiro.fundo_rotativo_saldo_lista' }}"
                        href="{{ url_for('financeiro.fundo_rotativo_saldo_lista') }}">
                         <i class="bi bi-wallet-fill"></i> Saldo
                     </a>
@@ -89,8 +116,8 @@
 {% endif %}
 
 {# Planejamento Orçamentário — accordion colapsável #}
-{% if current_user.is_admin or (current_user.nome and 'PEDRO ALEXANDRE' in current_user.nome.upper()) %}
-{% set is_planejamento_active = (request.endpoint and request.endpoint.startswith('financeiro.planejamento')) %}
+{% if 'planejamento' in paginas_fin %}
+{% set is_planejamento_active = ep.startswith('financeiro.planejamento') %}
 <div class="sidebar-section-label">Planejamento</div>
 <ul class="sidebar-menu">
     <li>
@@ -104,13 +131,13 @@
         <div class="collapse {{ 'show' if is_planejamento_active }}" id="sidebarPlanejamento">
             <ul class="sidebar-submenu">
                 <li>
-                    <a class="sidebar-link sidebar-sublink {{ 'active' if request.endpoint == 'financeiro.planejamento_relatorio' }}"
+                    <a class="sidebar-link sidebar-sublink {{ 'active' if ep == 'financeiro.planejamento_relatorio' }}"
                        href="{{ url_for('financeiro.planejamento_relatorio') }}">
                         <i class="bi bi-bar-chart-line"></i> Relatório de Execução
                     </a>
                 </li>
                 <li>
-                    <a class="sidebar-link sidebar-sublink {{ 'active' if request.endpoint == 'financeiro.planejamento_index' }}"
+                    <a class="sidebar-link sidebar-sublink {{ 'active' if ep == 'financeiro.planejamento_index' }}"
                        href="{{ url_for('financeiro.planejamento_index') }}">
                         <i class="bi bi-pencil-square"></i> Lançar Planejamento
                     </a>

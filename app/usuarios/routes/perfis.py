@@ -38,8 +38,8 @@ def perfil_novo():
         nome = request.form.get('nome', '').strip()
         descricao = request.form.get('descricao', '').strip()
 
-        # Coleta permissões do form (checkboxes: perm_modulo_acao)
-        permissoes = _extrair_permissoes_form(request.form)
+        # Coleta permissões do form (checkboxes: perm:modulo:pagina:acao)
+        permissoes = UsuarioService.extrair_permissoes_form(request.form)
 
         if not nome:
             flash('O nome do perfil é obrigatório.', 'danger')
@@ -55,15 +55,11 @@ def perfil_novo():
             except ValueError as e:
                 flash(str(e), 'danger')
 
-    modulos = UsuarioService.get_modulos()
-    acoes = UsuarioService.get_acoes()
-
     return render_template(
         'usuarios/perfis/form.html',
         perfil=None,
-        modulos=modulos,
-        acoes=acoes,
-        permissoes_atuais={}
+        permissoes_atuais={},
+        **_contexto_matriz()
     )
 
 
@@ -82,7 +78,7 @@ def perfil_editar(perfil_id):
         descricao = request.form.get('descricao', '').strip()
         ativo = request.form.get('ativo') == '1'
 
-        permissoes = _extrair_permissoes_form(request.form)
+        permissoes = UsuarioService.extrair_permissoes_form(request.form)
 
         if not nome:
             flash('O nome do perfil é obrigatório.', 'danger')
@@ -100,16 +96,11 @@ def perfil_editar(perfil_id):
             except ValueError as e:
                 flash(str(e), 'danger')
 
-    modulos = UsuarioService.get_modulos()
-    acoes = UsuarioService.get_acoes()
-    permissoes_atuais = perfil.listar_permissoes_dict()
-
     return render_template(
         'usuarios/perfis/form.html',
         perfil=perfil,
-        modulos=modulos,
-        acoes=acoes,
-        permissoes_atuais=permissoes_atuais
+        permissoes_atuais=perfil.listar_permissoes_dict(),
+        **_contexto_matriz()
     )
 
 
@@ -127,16 +118,11 @@ def perfil_excluir(perfil_id):
     return redirect(url_for('usuarios.perfis_index'))
 
 
-def _extrair_permissoes_form(form):
-    """Extrai permissões dos checkboxes do formulário.
-
-    Formato dos checkboxes: name="perm_{modulo}_{acao}" value="1"
-    """
-    permissoes = []
-    for key in form:
-        if key.startswith('perm_'):
-            partes = key[5:].rsplit('_', 1)
-            if len(partes) == 2:
-                modulo, acao = partes
-                permissoes.append({'modulo': modulo, 'acao': acao})
-    return permissoes
+def _contexto_matriz():
+    """Variáveis da matriz de permissões (usuarios/partials/matriz_permissoes.html)."""
+    return {
+        'modulos': UsuarioService.get_modulos(),
+        'acoes': UsuarioService.get_acoes(),
+        'paginas_modulo': UsuarioService.get_paginas_liberaveis(),
+        'paginas_alta_gestao': UsuarioService.get_paginas_alta_gestao(),
+    }

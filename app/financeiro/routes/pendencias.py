@@ -14,7 +14,7 @@ from app.utils.permissions import requires_permission
 
 @financeiro_bp.route('/pendencias_ne')
 @login_required
-@requires_permission('financeiro.visualizar')
+@requires_permission('financeiro.insercao_ne.visualizar')
 def pendencias_ne():
     """Lista solicitações pendentes de inserção de NE."""
     filtro_contratado = request.args.getlist('filtro_contratado')
@@ -87,7 +87,7 @@ def pendencias_ne():
 
 @financeiro_bp.route('/inserir_ne/<int:empenho_id>', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.insercao_ne.criar')
 def inserir_ne(empenho_id):
     """Insere NE em uma solicitação de empenho específica."""
     ne = request.form.get('ne', '').strip()

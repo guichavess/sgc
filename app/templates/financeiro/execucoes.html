@@ -7,7 +7,7 @@
  <p class="text-muted mb-0">Cadastro e vinculação de execuções a contratos.</p>
  </div>
  <div>
- {% if current_user.tem_permissao('financeiro', 'criar') %}
+ {% if current_user.pode('financeiro.execucoes.criar') %}
  <button class="btn btn-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCadastro">
  <i class="bi bi-plus-lg me-1"></i> Nova Execução
  </button>
@@ -97,7 +97,7 @@
  {% endif %}
  </td>
  <td class="text-center">
- {% if current_user.tem_permissao('financeiro', 'criar') and not e.vinculada %}
+ {% if current_user.pode('financeiro.execucoes.criar') and not e.vinculada %}
  <button class="btn btn-outline-primary btn-sm"
  onclick="abrirModalVincular({{ e.id }}, {{ e.fornecedor_id }}, '{{ e.fornecedor.descricao }}')"
  title="Vincular Contrato">

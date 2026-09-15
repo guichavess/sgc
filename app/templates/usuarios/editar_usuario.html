@@ -207,6 +207,7 @@
  <option value="secretario" {{ 'selected' if usuario.cargo_gestao == 'secretario' }}>Secretario (Titular)</option>
  <option value="secretario_exercicio" {{ 'selected' if usuario.cargo_gestao == 'secretario_exercicio' }}>Secretario em Exercicio</option>
  <option value="superintendente" {{ 'selected' if usuario.cargo_gestao == 'superintendente' }}>Superintendente</option>
+ <option value="diretor_dfin" {{ 'selected' if usuario.cargo_gestao == 'diretor_dfin' }}>Diretor DFIN</option>
  </select>
  <div class="form-text">
  Define quem assina/autoriza nos fluxos de diarias.<br>
@@ -237,6 +238,17 @@
  {% endfor %}
  </select>
  <div class="form-text">Setor/Diretoria/Gerência/Coordenação específico.</div>
+ </div>
+ </div>
+
+ {# Alta gestão — independe do perfil e do nome #}
+ <div class="form-check form-switch mb-4">
+ <input class="form-check-input" type="checkbox" role="switch"
+ name="is_alta_gestao" value="1" id="is_alta_gestao"
+ {{ 'checked' if usuario.is_alta_gestao }}>
+ <label class="form-check-label fw-semibold" for="is_alta_gestao">Alta gestão</label>
+ <div class="form-text">
+ Libera {{ paginas_alta_gestao|map(attribute='rotulo')|join(', ') }} e o botão "Atualizar SIAFE".
  </div>
  </div>
 
@@ -286,62 +298,7 @@
  Defina quais módulos este usuário pode acessar e quais ações pode realizar em cada um.
  </p>
 
- <div class="table-responsive mb-4" style="border-radius: 0.5rem; overflow: hidden;">
- <table class="table table-bordered perm-table mb-0">
- <thead>
- <tr>
- <th class="ps-3" style="width: 30%;">Módulo</th>
- {% for acao_key, acao_label in acoes %}
- <th class="text-center">{{ acao_label }}</th>
- {% endfor %}
- <th class="text-center" style="width: 10%;">Todos</th>
- </tr>
- </thead>
- <tbody>
- {% for modulo_key, modulo_label in modulos %}
- <tr>
- <td class="ps-3 perm-module-name">
- {% if modulo_key == 'dashboards' %}
- <i class="bi bi-speedometer2 me-1"></i>
- {% elif modulo_key == 'solicitacoes' %}
- <i class="bi bi-cash-stack me-1"></i>
- {% elif modulo_key == 'financeiro' %}
- <i class="bi bi-bank me-1"></i>
- {% elif modulo_key == 'prestacoes_contratos' %}
- <i class="bi bi-clipboard-check me-1"></i>
- {% else %}
- <i class="bi bi-folder2 me-1"></i>
- {% endif %}
- {{ modulo_label }}
- </td>
- {% for acao_key, acao_label in acoes %}
- {% set is_checked = acao_key in permissoes_atuais.get(modulo_key, []) %}
- <td class="text-center {{ 'perm-cell-active' if is_checked }}">
- <div class="form-check d-flex justify-content-center mb-0">
- <input class="form-check-input perm-checkbox perm-{{ modulo_key }}"
- type="checkbox"
- name="perm_{{ modulo_key }}_{{ acao_key }}"
- value="1"
- id="perm_{{ modulo_key }}_{{ acao_key }}"
- data-modulo="{{ modulo_key }}"
- {{ 'checked' if is_checked }}>
- </div>
- </td>
- {% endfor %}
- <td class="text-center" style="background-color: #f8f9fa;">
- <div class="form-check form-switch d-flex justify-content-center mb-0">
- <input class="form-check-input toggle-all-modulo"
- type="checkbox"
- data-modulo="{{ modulo_key }}"
- role="switch"
- title="Marcar/desmarcar todas">
- </div>
- </td>
- </tr>
- {% endfor %}
- </tbody>
- </table>
- </div>
+ {% include 'usuarios/partials/matriz_permissoes.html' %}
  {% else %}
  <div class="alert alert-info mb-4">
  <i class="bi bi-info-circle me-2"></i>
@@ -427,44 +384,4 @@
  </div>
  </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
- // Atualiza o destaque visual da célula conforme estado do checkbox
- function atualizarCelula(checkbox) {
- var td = checkbox.closest('td');
- if (td) {
- if (checkbox.checked) {
- td.classList.add('perm-cell-active');
- } else {
- td.classList.remove('perm-cell-active');
- }
- }
- }
-
- // Toggle all permissões de um módulo
- document.querySelectorAll('.toggle-all-modulo').forEach(function(toggle) {
- var modulo = toggle.dataset.modulo;
- var checkboxes = document.querySelectorAll('.perm-' + modulo);
-
- // Inicializa estado do "todos"
- toggle.checked = Array.from(checkboxes).every(function(cb) { return cb.checked; }) && checkboxes.length > 0;
-
- toggle.addEventListener('change', function() {
- checkboxes.forEach(function(cb) {
- cb.checked = toggle.checked;
- atualizarCelula(cb);
- });
- });
-
- // Atualiza "todos" quando checkboxes individuais mudam
- checkboxes.forEach(function(cb) {
- cb.addEventListener('change', function() {
- toggle.checked = Array.from(checkboxes).every(function(c) { return c.checked; });
- atualizarCelula(cb);
- });
- });
- });
-</script>
 {% endblock %}

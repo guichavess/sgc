@@ -13,7 +13,7 @@ from app.utils.permissions import requires_permission
 
 @financeiro_bp.route('/api/validar-ne', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.insercao_ne.criar')
 def api_validar_ne():
     """Valida NE no SIAFE."""
     data = request.get_json() or {}
@@ -28,7 +28,7 @@ def api_validar_ne():
 
 @financeiro_bp.route('/api/salvar-ne', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.insercao_ne.criar')
 def api_salvar_ne():
     """Salva NE em uma solicitação (via AJAX)."""
     data = request.get_json() or {}

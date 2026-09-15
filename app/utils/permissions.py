@@ -10,6 +10,8 @@ from functools import wraps
 from flask import flash, redirect, url_for, session
 from flask_login import current_user
 
+from app.models.perfil import parse_permissao
+
 
 def requires_admin(f):
     """Decorator para rotas exclusivas de administradores (is_admin=True).
@@ -32,27 +34,24 @@ def requires_admin(f):
 def requires_permission(permissao):
     """Decorator para proteger rotas por permissão de perfil.
 
-    Formato da permissão: 'modulo.acao'
-    Exemplo: @requires_permission('prestacoes_contratos.editar')
+    Formatos da permissão:
+      'modulo.acao'          → @requires_permission('prestacoes_contratos.editar')
+      'modulo.pagina.acao'   → @requires_permission('financeiro.fundo_rotativo.criar')
+      'modulo.pagina'        → @requires_permission('financeiro.orcamento')
+      'modulo'               → qualquer ação no módulo
 
-    Se apenas o módulo for passado (sem ação), verifica acesso ao módulo
-    com qualquer ação (ex: 'financeiro').
-
-    Nota: Admins (is_admin=True) passam automaticamente — a verificação
-    está no método Usuario.tem_permissao().
+    Nota: Admins (is_admin=True) passam automaticamente e páginas da alta gestão
+    seguem `is_alta_gestao` — a verificação está em Usuario.tem_permissao().
     """
+    modulo, pagina, acao = parse_permissao(permissao)
+
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
                 return redirect(url_for('auth.login'))
 
-            # Parse modulo.acao
-            partes = permissao.split('.', 1)
-            modulo = partes[0]
-            acao = partes[1] if len(partes) > 1 else None
-
-            if not current_user.tem_permissao(modulo, acao):
+            if not current_user.tem_permissao(modulo, acao, pagina):
                 flash('Você não tem permissão para acessar esta funcionalidade.', 'danger')
                 return redirect(url_for('hub'))
 

@@ -55,10 +55,46 @@ class TestMontarHub:
 
         assert hub == {'modulos': [], 'admin': [], 'total': 0}
 
-    def test_permissao_de_modulo_sem_card_nao_conta(self, app, novo_usuario):
-        u = novo_usuario(2005, permissoes={'fundo_rotativo': ['visualizar']})
+    def test_so_fundo_rotativo_mostra_o_card_de_financeiro(self, app, novo_usuario):
+        u = novo_usuario(2005, permissoes={'financeiro:fundo_rotativo': ['visualizar', 'criar']})
+        with app.test_request_context():
+            hub = montar_hub(u)
+
+        assert _ids(hub['modulos']) == ['financeiro']
+        assert hub['modulos'][0]['url'] == '/financeiro/'
+        assert hub['modulos'][0]['acesso'] == 'Fundo Rotativo: visualizar e criar'
+
+    def test_linha_antiga_de_financeiro_inteiro_nao_mostra_card(self, app, novo_usuario):
+        u = novo_usuario(2008, permissoes={'financeiro': ['excluir']})
         with app.test_request_context():
             assert montar_hub(u)['total'] == 0
+
+    def test_seu_acesso_lista_as_paginas_na_ordem_do_menu(self, app, novo_usuario):
+        u = novo_usuario(2009, permissoes={
+            'financeiro:fundo_rotativo': ['criar'],
+            'financeiro:insercao_ne': ['visualizar'],
+        })
+        with app.test_request_context():
+            acesso = montar_hub(u)['modulos'][0]['acesso']
+
+        assert acesso == 'Inserir NEs: somente visualizar; Fundo Rotativo: visualizar e criar'
+
+    def test_seu_acesso_total_exceto_paginas_da_alta_gestao(self, app, novo_usuario):
+        completas = {f'financeiro:{p}': ['excluir', 'aprovar']
+                     for p in ('insercao_ne', 'diarias', 'fornecedores', 'execucoes', 'fundo_rotativo')}
+        comum = novo_usuario(2010, permissoes=completas)
+        alta = novo_usuario(2011, permissoes=completas, is_alta_gestao=True)
+        with app.test_request_context():
+            assert montar_hub(comum)['modulos'][0]['acesso'] == 'Acesso total, exceto Orçamento e Planejamento'
+            assert montar_hub(alta)['modulos'][0]['acesso'] == 'Acesso total'
+
+    def test_alta_gestao_sem_perfil_ve_financeiro(self, app, novo_usuario):
+        u = novo_usuario(2012, is_alta_gestao=True)
+        with app.test_request_context():
+            hub = montar_hub(u)
+
+        assert _ids(hub['modulos']) == ['financeiro']
+        assert hub['modulos'][0]['acesso'] == 'Orçamento: acesso total; Planejamento: acesso total'
 
     def test_cada_card_tem_os_detalhes_da_expansao(self, app, novo_usuario):
         u = novo_usuario(2006, is_admin=True)
@@ -76,7 +112,7 @@ class TestMontarHub:
 
     def test_permissoes_carregadas_sem_query_por_modulo(self, app, db_session, novo_usuario):
         """O hub antigo fazia uma query por card (tem_permissao em cada módulo)."""
-        u = novo_usuario(2007, permissoes={'solicitacoes': ['visualizar'], 'financeiro': ['editar'], 'cgfr': ['visualizar']})
+        u = novo_usuario(2007, permissoes={'solicitacoes': ['visualizar'], 'financeiro:insercao_ne': ['editar'], 'cgfr': ['visualizar']})
         db_session.expire_all()
         u = db_session.get(type(u), 2007)
 

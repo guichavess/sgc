@@ -402,3 +402,15 @@ class Mensagens:
     SUCESSO_SALVO = 'Registro salvo com sucesso!'
     ERRO_PERMISSAO = 'Você não tem permissão para realizar esta ação.'
     ERRO_NAO_ENCONTRADO = 'Registro não encontrado.'
+
+# =============================================================================
+# NOTIFICAÇÕES
+# =============================================================================
+# Página (PAGINAS_MODULO em app/models/perfil.py) cujos usuários recebem cada tipo
+# de notificação de um módulo com páginas. Tipos de módulos sem páginas não entram
+# aqui: usam o módulo inteiro.
+PAGINA_POR_TIPO_NOTIFICACAO = {
+    'financeiro.nova_solicitacao': 'insercao_ne',
+    'financeiro.ne_pendente': 'insercao_ne',
+    'financeiro.etapa_avancou': 'insercao_ne',
+}

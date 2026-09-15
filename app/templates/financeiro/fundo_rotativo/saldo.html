@@ -242,7 +242,7 @@
         <h3 class="fw-bold text-dark mb-1">Fundo Rotativo — Extrato de Saldos</h3>
         <p class="text-muted mb-0">Snapshots contábeis do SIAFE para a UG 210102.</p>
     </div>
-    {% if current_user.is_admin or current_user.tem_permissao('fundo_rotativo', 'criar') %}
+    {% if current_user.pode('financeiro.fundo_rotativo.criar') %}
     <div class="fr-sync-actions">
         <form method="post" action="{{ url_for('financeiro.fundo_rotativo_saldo_sincronizar') }}">
             <button type="submit" class="btn btn-primary btn-sm">

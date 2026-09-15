@@ -16,7 +16,7 @@ from app.utils.permissions import requires_permission
 # =============================================================================
 @financeiro_bp.route('/execucoes')
 @login_required
-@requires_permission('financeiro.visualizar')
+@requires_permission('financeiro.execucoes.visualizar')
 def execucoes_lista():
     page = request.args.get('page', 1, type=int)
     busca = request.args.get('busca', '').strip()
@@ -58,7 +58,7 @@ def execucoes_lista():
 # =============================================================================
 @financeiro_bp.route('/execucoes/cadastrar', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.execucoes.criar')
 def execucoes_cadastrar():
     fornecedor_id = request.form.get('fornecedor_id', type=int)
     descricao = request.form.get('descricao', '').strip()
@@ -118,7 +118,7 @@ def execucoes_cadastrar():
 # =============================================================================
 @financeiro_bp.route('/execucoes/<int:id>/vincular-contrato', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.execucoes.criar')
 def execucoes_vincular_contrato(id):
     execucao = ExecucaoOrcamentaria.query.get_or_404(id)
     cod_contrato = request.form.get('cod_contrato', '').strip()

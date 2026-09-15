@@ -12,8 +12,8 @@ from typing import Optional
 from flask import current_app
 
 from app.services.notification_engine import NotificationEngine
+from app.services.permissao_service import usuarios_com_acesso
 from app.models.usuario import Usuario
-from app.models.perfil import PerfilPermissao, Perfil
 from app.extensions import db
 
 
@@ -51,36 +51,18 @@ class DiariasNotifier:
 
     @staticmethod
     def _resolver_usuarios_financeiro() -> list:
-        """Retorna IDs de usuarios com permissao financeiro.visualizar."""
+        """Retorna IDs de usuarios com acesso a pagina Diarias do Financeiro."""
         try:
-            usuarios = Usuario.query.join(
-                Perfil, Usuario.perfil_id == Perfil.id
-            ).join(
-                PerfilPermissao, PerfilPermissao.perfil_id == Perfil.id
-            ).filter(
-                PerfilPermissao.modulo == 'financeiro',
-                PerfilPermissao.acao == 'visualizar',
-                Usuario.ativo == True,
-            ).all()
-            return [u.id for u in usuarios]
+            return usuarios_com_acesso('financeiro', 'diarias')
         except Exception as e:
             current_app.logger.warning(f'[DIARIAS] Falha ao resolver usuarios financeiro: {e}')
             return []
 
     @staticmethod
     def _resolver_usuarios_diarias() -> list:
-        """Retorna IDs de usuarios com permissao diarias.visualizar."""
+        """Retorna IDs de usuarios com acesso ao modulo Diarias."""
         try:
-            usuarios = Usuario.query.join(
-                Perfil, Usuario.perfil_id == Perfil.id
-            ).join(
-                PerfilPermissao, PerfilPermissao.perfil_id == Perfil.id
-            ).filter(
-                PerfilPermissao.modulo == 'diarias',
-                PerfilPermissao.acao == 'visualizar',
-                Usuario.ativo == True,
-            ).all()
-            return [u.id for u in usuarios]
+            return usuarios_com_acesso('diarias')
         except Exception as e:
             current_app.logger.warning(f'[DIARIAS] Falha ao resolver usuarios diarias: {e}')
             return []

@@ -7,7 +7,7 @@
  <p class="text-muted mb-0">Cadastro de fornecedores e vinculação de contratos.</p>
  </div>
  <div>
- {% if current_user.tem_permissao('financeiro', 'criar') %}
+ {% if current_user.pode('financeiro.fornecedores.criar') %}
  <button class="btn btn-primary btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalCadastro">
  <i class="bi bi-plus-lg me-1"></i> Novo Fornecedor
  </button>
@@ -76,7 +76,7 @@
  {% for c in f.contratos %}
  <span class="badge bg-light text-dark border me-1">
  {{ c.cod_contrato }}
- {% if current_user.tem_permissao('financeiro', 'criar') %}
+ {% if current_user.pode('financeiro.fornecedores.criar') %}
  <form method="post" action="{{ url_for('financeiro.fornecedores_remover_contrato', id=c.id) }}" class="d-inline" onsubmit="return confirm('Remover vínculo com contrato {{ c.cod_contrato }}?');">
  <button type="submit" class="btn-close btn-close-sm ms-1" style="font-size: 0.5rem;" title="Remover vínculo"></button>
  </form>
@@ -96,7 +96,7 @@
  </span>
  </td>
  <td class="text-center">
- {% if current_user.tem_permissao('financeiro', 'criar') %}
+ {% if current_user.pode('financeiro.fornecedores.criar') %}
  <button class="btn btn-outline-primary btn-sm"
  data-bs-toggle="modal"
  data-bs-target="#modalVincular{{ f.id }}"

@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
 from app.extensions import db
-from app.models.perfil import Perfil, PerfilPermissao, MODULOS, ACOES
+from app.models.perfil import Perfil, PerfilPermissao, todas_permissoes_liberaveis
 from app.models.usuario import Usuario
 
 
@@ -84,18 +84,20 @@ def seed_perfil_padrao():
     db.session.add(perfil)
     db.session.flush()
 
-    for modulo_key, _ in MODULOS:
-        for acao_key, _ in ACOES:
-            perm = PerfilPermissao(
-                perfil_id=perfil.id,
-                modulo=modulo_key,
-                acao=acao_key
-            )
-            db.session.add(perm)
+    # Módulos sem páginas: pagina=''; módulos com páginas: uma linha por página
+    # liberável (Orçamento e Planejamento são da alta gestão, fora do perfil).
+    permissoes = todas_permissoes_liberaveis()
+    for modulo, pagina, acao in permissoes:
+        db.session.add(PerfilPermissao(
+            perfil_id=perfil.id,
+            modulo=modulo,
+            pagina=pagina,
+            acao=acao
+        ))
 
     db.session.commit()
     print('[OK] Perfil "Acesso Total" criado com %d permissões (id=%d).' % (
-        len(MODULOS) * len(ACOES), perfil.id
+        len(permissoes), perfil.id
     ))
     return perfil
 

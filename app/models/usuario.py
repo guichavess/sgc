@@ -4,6 +4,7 @@ Modelo de Usuário do sistema.
 from datetime import datetime
 from flask_login import UserMixin
 from app.extensions import db, login_manager
+from app.models.perfil import PAGINAS_MODULO, REGRA_ALTA_GESTAO, pagina_do_modulo, parse_permissao
 
 
 class Usuario(db.Model, UserMixin):
@@ -28,6 +29,9 @@ class Usuario(db.Model, UserMixin):
     ativo = db.Column(db.Boolean, default=True)
     perfil_id = db.Column(db.Integer, db.ForeignKey('perfis.id'), nullable=True)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    # Alta gestão (marcada pelo admin): Orçamento, Planejamento e "Atualizar SIAFE".
+    # O login não altera este campo.
+    is_alta_gestao = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
 
     # Cargo de gestão (definido manualmente pelo admin)
     # Valores: 'secretario', 'secretario_exercicio', 'superintendente', 'diretor_dfin', ou NULL
@@ -114,17 +118,33 @@ class Usuario(db.Model, UserMixin):
             return False
         return 'superintendente' in self.cargo.lower()
 
-    def tem_permissao(self, modulo, acao=None):
-        """Verifica se o usuário tem permissão para módulo/ação.
+    def tem_permissao(self, modulo, acao=None, pagina=None):
+        """Verifica se o usuário tem permissão para módulo/ação (e página).
 
-        Admins têm acesso total a todos os módulos automaticamente.
-        Para os demais, verifica via perfil vinculado.
+        - admin: acesso total;
+        - módulo com páginas sem página informada: basta uma página acessível;
+        - página de regra 'alta_gestao': só `is_alta_gestao` (nunca pelo perfil);
+        - demais: perfil vinculado, com a hierarquia de ações por página.
         """
         if self.is_admin:
             return True
+        if pagina is None and modulo in PAGINAS_MODULO:
+            return any(self.tem_permissao(modulo, acao, p.chave) for p in PAGINAS_MODULO[modulo])
+        info = pagina_do_modulo(modulo, pagina) if pagina else None
+        if info and info.regra == REGRA_ALTA_GESTAO:
+            return bool(self.is_alta_gestao)
         if not self.perfil:
             return False
-        return self.perfil.tem_permissao(modulo, acao)
+        return self.perfil.tem_permissao(modulo, acao, pagina)
+
+    def paginas_acessiveis(self, modulo):
+        """Páginas do módulo liberadas para o usuário, na ordem de PAGINAS_MODULO."""
+        return [p for p in PAGINAS_MODULO.get(modulo, []) if self.tem_permissao(modulo, pagina=p.chave)]
+
+    def pode(self, permissao):
+        """`tem_permissao` a partir de 'modulo.acao' ou 'modulo.pagina.acao' (uso em templates)."""
+        modulo, pagina, acao = parse_permissao(permissao)
+        return self.tem_permissao(modulo, acao, pagina)
 
     def __repr__(self):
         return f'<Usuario {self.nome}>'

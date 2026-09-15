@@ -2,10 +2,10 @@
 import pytest
 
 
-def criar_usuario(db_session, uid, permissoes=None, is_admin=False):
+def criar_usuario(db_session, uid, permissoes=None, is_admin=False, is_alta_gestao=False):
     """Cria um usuário (opcionalmente com perfil) e devolve o objeto.
 
-    permissoes: dict {modulo: [acoes]} — None cria o usuário sem perfil.
+    permissoes: dict {'modulo' ou 'modulo:pagina': [acoes]} — None cria o usuário sem perfil.
     """
     from app.models.usuario import Usuario
     from app.models.perfil import Perfil, PerfilPermissao
@@ -15,9 +15,10 @@ def criar_usuario(db_session, uid, permissoes=None, is_admin=False):
         perfil = Perfil(nome=f'Perfil Hub {uid}', descricao='teste', ativo=True)
         db_session.add(perfil)
         db_session.flush()
-        for modulo, acoes in permissoes.items():
+        for chave, acoes in permissoes.items():
+            modulo, _, pagina = chave.partition(':')
             for acao in acoes:
-                db_session.add(PerfilPermissao(perfil_id=perfil.id, modulo=modulo, acao=acao))
+                db_session.add(PerfilPermissao(perfil_id=perfil.id, modulo=modulo, pagina=pagina, acao=acao))
         perfil_id = perfil.id
 
     u = Usuario(
@@ -26,6 +27,7 @@ def criar_usuario(db_session, uid, permissoes=None, is_admin=False):
         nome=f'USUARIO HUB {uid}',
         sigla_login=f'hub_user_{uid}',
         is_admin=is_admin,
+        is_alta_gestao=is_alta_gestao,
         ativo=True,
         perfil_id=perfil_id,
     )
@@ -43,7 +45,7 @@ def logar(client, usuario):
 
 @pytest.fixture()
 def novo_usuario(db_session):
-    """Fábrica: novo_usuario(uid, permissoes=None, is_admin=False)."""
-    def _criar(uid, permissoes=None, is_admin=False):
-        return criar_usuario(db_session, uid, permissoes, is_admin)
+    """Fábrica: novo_usuario(uid, permissoes=None, is_admin=False, is_alta_gestao=False)."""
+    def _criar(uid, permissoes=None, is_admin=False, is_alta_gestao=False):
+        return criar_usuario(db_session, uid, permissoes, is_admin, is_alta_gestao)
     return _criar

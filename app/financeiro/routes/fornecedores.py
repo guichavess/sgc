@@ -42,7 +42,7 @@ def _validar_cnpj(cnpj_str):
 # =============================================================================
 @financeiro_bp.route('/fornecedores')
 @login_required
-@requires_permission('financeiro.visualizar')
+@requires_permission('financeiro.fornecedores.visualizar')
 def fornecedores_lista():
     page = request.args.get('page', 1, type=int)
     busca = request.args.get('busca', '').strip()
@@ -74,7 +74,7 @@ def fornecedores_lista():
 # =============================================================================
 @financeiro_bp.route('/fornecedores/cadastrar', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.fornecedores.criar')
 def fornecedores_cadastrar():
     descricao = request.form.get('descricao', '').strip()
     cnpj = request.form.get('cnpj', '').strip()
@@ -113,7 +113,7 @@ def fornecedores_cadastrar():
 # =============================================================================
 @financeiro_bp.route('/fornecedores/<int:id>/vincular-contrato', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.fornecedores.criar')
 def fornecedores_vincular_contrato(id):
     fornecedor = FornecedorSemContrato.query.get_or_404(id)
     cod_contrato = request.form.get('cod_contrato', '').strip()
@@ -150,7 +150,7 @@ def fornecedores_vincular_contrato(id):
 # =============================================================================
 @financeiro_bp.route('/fornecedores/contrato/<int:id>/remover', methods=['POST'])
 @login_required
-@requires_permission('financeiro.criar')
+@requires_permission('financeiro.fornecedores.criar')
 def fornecedores_remover_contrato(id):
     vinculo = FornecedorContrato.query.get_or_404(id)
     cod = vinculo.cod_contrato
@@ -169,7 +169,7 @@ def fornecedores_remover_contrato(id):
 # =============================================================================
 @financeiro_bp.route('/api/fornecedores/<int:id>/contratos')
 @login_required
-@requires_permission('financeiro.visualizar')
+@requires_permission('financeiro.fornecedores.visualizar')
 def api_fornecedor_contratos(id):
     fornecedor = FornecedorSemContrato.query.get_or_404(id)
     contratos = [

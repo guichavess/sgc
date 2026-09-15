@@ -40,11 +40,9 @@ def dashboard():
 
     tem_filtro = any([filtro_nome, filtro_perfil, filtro_ativo])
 
-    # Pré-carrega permissões de cada usuário para exibir badges na tabela
+    # Permissões de todos os usuários da página em uma consulta (badges da tabela)
     modulos = UsuarioService.get_modulos()
-    permissoes_por_usuario = {}
-    for usuario in pagination.items:
-        permissoes_por_usuario[usuario.id] = UsuarioService.obter_permissoes_usuario(usuario)
+    permissoes_por_usuario = UsuarioService.resumo_permissoes_por_usuario(pagination.items)
 
     return render_template(
         'usuarios/dashboard.html',
@@ -76,25 +74,25 @@ def editar_usuario(usuario_id):
     if request.method == 'POST':
         ativo = request.form.get('ativo') == '1'
 
-        # Extrai permissões dos checkboxes (perm_modulo_acao)
-        permissoes = _extrair_permissoes_form(request.form)
+        # Extrai permissões dos checkboxes (perm:modulo:pagina:acao)
+        permissoes = UsuarioService.extrair_permissoes_form(request.form)
 
         try:
-            UsuarioService.atualizar_usuario(
-                usuario_id=usuario_id,
-                ativo=ativo,
-                permissoes=permissoes
-            )
-
-            # Cargo de gestão e setor vinculado
+            # Cargo de gestão, alta gestão e setor — gravados no mesmo commit
+            # das permissões (atualizar_usuario)
             usuario.cargo_gestao = request.form.get('cargo_gestao') or None
+            usuario.is_alta_gestao = request.form.get('is_alta_gestao') == '1'
             usuario.setor_vinculado = request.form.get('setor_vinculado', '').strip() or None
 
             # Vinculação estruturada ao setor
             setor_id_raw = request.form.get('setor_id', '').strip()
             usuario.setor_id = int(setor_id_raw) if setor_id_raw else None
 
-            db.session.commit()
+            UsuarioService.atualizar_usuario(
+                usuario_id=usuario_id,
+                ativo=ativo,
+                permissoes=permissoes
+            )
 
             # Salva preferencias de notificacao
             _salvar_preferencias_notificacao(usuario_id, request.form, db)
@@ -139,27 +137,14 @@ def editar_usuario(usuario_id):
         usuario=usuario,
         modulos=modulos,
         acoes=acoes,
+        paginas_modulo=UsuarioService.get_paginas_liberaveis(),
+        paginas_alta_gestao=UsuarioService.get_paginas_alta_gestao(),
         permissoes_atuais=permissoes_atuais,
         notif_tipos=notif_tipos,
         superintendencias=superintendencias,
         setores_atuais=setores_atuais,
         superintendencia_atual_id=superintendencia_atual_id,
     )
-
-
-def _extrair_permissoes_form(form):
-    """Extrai permissões dos checkboxes do formulário.
-
-    Formato dos checkboxes: name="perm_{modulo}_{acao}" value="1"
-    """
-    permissoes = []
-    for key in form:
-        if key.startswith('perm_'):
-            partes = key[5:].rsplit('_', 1)
-            if len(partes) == 2:
-                modulo, acao = partes
-                permissoes.append({'modulo': modulo, 'acao': acao})
-    return permissoes
 
 
 def _carregar_preferencias_notificacao(usuario_id):

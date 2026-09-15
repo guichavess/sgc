@@ -119,7 +119,7 @@
  {% for modulo_key, modulo_label in modulos %}
  {% if modulo_key in perms %}
  <span class="badge rounded-pill bg-primary bg-opacity-75 badge-modulo me-1"
- title="{{ perms[modulo_key]|join(', ') }}">
+ title="{{ perms[modulo_key]|join('; ') }}">
  {% if modulo_key == 'solicitacoes' %}
  <i class="bi bi-cash-stack me-1"></i>
  {% elif modulo_key == 'financeiro' %}

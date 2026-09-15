@@ -10,7 +10,8 @@ from flask import render_template, request, jsonify, redirect, url_for, flash, s
 from flask_login import login_required, current_user
 from sqlalchemy import func, case, extract, text
 
-from app.financeiro.routes import financeiro_bp, requires_admin_or_pedro
+from app.financeiro.routes import financeiro_bp
+from app.utils.permissions import requires_permission
 from app.extensions import db
 from app.models.empenho import Empenho
 from app.models.empenho_item import EmpenhoItem, ClassSubItemDespesa
@@ -119,7 +120,7 @@ def _decimal(val):
 
 @financeiro_bp.route('/planejamento')
 @login_required
-@requires_admin_or_pedro
+@requires_permission('financeiro.planejamento')
 def planejamento_index():
     """Página principal — Lançar Planejamento Orçamentário."""
     ano = datetime.now().year
@@ -663,7 +664,7 @@ def _query_dotacao_por_natureza(ano):
 
 @financeiro_bp.route('/planejamento/relatorio')
 @login_required
-@requires_admin_or_pedro
+@requires_permission('financeiro.planejamento')
 def planejamento_relatorio():
     """Dashboard — Relatório Planejado vs. Liquidado (estilo Power BI)."""
     ano = request.args.get('ano', datetime.now().year, type=int)
@@ -1094,7 +1095,7 @@ def planejamento_relatorio():
 
 @financeiro_bp.route('/api/planejamento/salvar', methods=['POST'])
 @login_required
-@requires_admin_or_pedro
+@requires_permission('financeiro.planejamento')
 def api_planejamento_salvar():
     """Salva respostas do planejamento orçamentário para um contrato."""
     data = request.get_json() or {}
@@ -1350,7 +1351,7 @@ def _make_xlsx(headers, rows, sheet_name='Dados'):
 
 @financeiro_bp.route('/planejamento/relatorio/export/natureza')
 @login_required
-@requires_admin_or_pedro
+@requires_permission('financeiro.planejamento')
 def export_natureza_xlsx():
     """Exporta tabela Planejado vs. Liquidado por Natureza como XLSX."""
     ano = request.args.get('ano', datetime.now().year, type=int)
@@ -1380,7 +1381,7 @@ def export_natureza_xlsx():
 
 @financeiro_bp.route('/planejamento/relatorio/export/contratos')
 @login_required
-@requires_admin_or_pedro
+@requires_permission('financeiro.planejamento')
 def export_contratos_xlsx():
     """Exporta tabela Planejado vs. Liquidado por Contrato como XLSX (todos)."""
     ano = request.args.get('ano', datetime.now().year, type=int)

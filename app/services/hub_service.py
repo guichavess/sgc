@@ -3,13 +3,13 @@ Catálogo do Hub de módulos (/hub).
 
 Monta, para o usuário logado, os cards do hub já filtrados por permissão —
 mesmas regras de `Usuario.tem_permissao` (qualquer ação no módulo libera o
-card; `is_admin` libera tudo) — com os textos exibidos na expansão do card e
-o rótulo "Seu acesso". As permissões do perfil são lidas em uma única query.
+card; em módulos com páginas, qualquer página; `is_admin` libera tudo) — com os
+textos exibidos na expansão do card e o rótulo "Seu acesso". As permissões do
+perfil são lidas em uma única query (índice do `Perfil`).
 """
 from flask import url_for
 
-from app.extensions import db
-from app.models.perfil import HIERARQUIA_ACOES, PerfilPermissao
+from app.models.perfil import HIERARQUIA_ACOES, PAGINAS_MODULO, REGRA_ALTA_GESTAO
 
 SECAO_MODULOS = 'modulos'
 SECAO_ADMIN = 'admin'
@@ -105,6 +105,13 @@ CATALOGO_HUB = [
 _CHAVES_CARD = ('id', 'nome', 'descricao', 'cor', 'icone', 'resumo', 'recursos', 'fluxo')
 
 
+def _juntar(partes):
+    """'a' · 'a e b' · 'a, b e c'."""
+    if len(partes) <= 1:
+        return ''.join(partes)
+    return ', '.join(partes[:-1]) + ' e ' + partes[-1]
+
+
 def rotulo_acesso(acoes):
     """Rótulo "Seu acesso" a partir das ações concedidas no módulo.
 
@@ -115,29 +122,44 @@ def rotulo_acesso(acoes):
     nivel = max((HIERARQUIA_ACOES.get(a, 0) for a in acoes), default=0)
     aprovar = 'aprovar' in acoes
     if nivel == HIERARQUIA_ACOES['excluir'] and aprovar:
-        return 'Acesso total'
+        return ROTULO_ADMIN_TOTAL
 
     partes = ['Visualizar'] + [a for a in ('criar', 'editar', 'excluir') if HIERARQUIA_ACOES[a] <= nivel]
     if aprovar:
         partes.append('aprovar')
     if len(partes) == 1:
         return 'Somente visualizar'
-    return ', '.join(partes[:-1]) + ' e ' + partes[-1]
+    return _juntar(partes)
 
 
-def _permissoes_por_modulo(usuario):
-    """{modulo: {acoes}} do perfil do usuário, em uma query."""
-    if not usuario.perfil_id:
+def _rotulo_paginas(usuario, modulo, indice):
+    """"Seu acesso" de um módulo com páginas.
+
+    "Acesso total" com todas as páginas completas; "Acesso total, exceto …" quando
+    só faltam páginas da alta gestão; senão, página a página na ordem do menu.
+    """
+    rotulos = []
+    for pagina in usuario.paginas_acessiveis(modulo):
+        if pagina.regra == REGRA_ALTA_GESTAO:
+            rotulo = ROTULO_ADMIN_TOTAL
+        else:
+            rotulo = rotulo_acesso(indice.get((modulo, pagina.chave), ()))
+        rotulos.append((pagina, rotulo))
+
+    completas = {p.chave for p, rotulo in rotulos if rotulo == ROTULO_ADMIN_TOTAL}
+    faltando = [p for p in PAGINAS_MODULO[modulo] if p.chave not in completas]
+    if not faltando:
+        return ROTULO_ADMIN_TOTAL
+    if all(p.regra == REGRA_ALTA_GESTAO for p in faltando):
+        return f'{ROTULO_ADMIN_TOTAL}, exceto ' + _juntar([p.rotulo for p in faltando])
+    return '; '.join(f'{p.rotulo}: {rotulo[0].lower()}{rotulo[1:]}' for p, rotulo in rotulos)
+
+
+def _permissoes_indexadas(usuario):
+    """{(modulo, pagina): {acoes}} do perfil do usuário, em uma query."""
+    if not usuario.perfil_id or not usuario.perfil:
         return {}
-    linhas = (
-        db.session.query(PerfilPermissao.modulo, PerfilPermissao.acao)
-        .filter(PerfilPermissao.perfil_id == usuario.perfil_id)
-        .all()
-    )
-    resultado = {}
-    for modulo, acao in linhas:
-        resultado.setdefault(modulo, set()).add(acao)
-    return resultado
+    return usuario.perfil.permissoes_indexadas()
 
 
 def montar_hub(usuario):
@@ -147,7 +169,7 @@ def montar_hub(usuario):
         {'modulos': [card], 'admin': [card], 'total': int}, onde card tem
         id, nome, descricao, cor, icone, resumo, recursos, fluxo, url e acesso.
     """
-    concedidas = None if usuario.is_admin else _permissoes_por_modulo(usuario)
+    indice = {} if usuario.is_admin else _permissoes_indexadas(usuario)
 
     modulos, admin = [], []
     for item in CATALOGO_HUB:
@@ -155,10 +177,14 @@ def montar_hub(usuario):
             if not usuario.is_admin:
                 continue
             acesso = ROTULO_EXCLUSIVO_ADMIN
-        elif concedidas is None:
+        elif usuario.is_admin:
             acesso = ROTULO_ADMIN_TOTAL
-        elif item['id'] in concedidas:
-            acesso = rotulo_acesso(concedidas[item['id']])
+        elif item['id'] in PAGINAS_MODULO:
+            if not usuario.paginas_acessiveis(item['id']):
+                continue
+            acesso = _rotulo_paginas(usuario, item['id'], indice)
+        elif (item['id'], '') in indice:
+            acesso = rotulo_acesso(indice[(item['id'], '')])
         else:
             continue
 
