@@ -17,7 +17,23 @@
     --dur-slow: calc(450ms / var(--motion-speed));
 }
 
+/* Utilitários de ícone (substituem spin/2x/3x do Font Awesome, removido) */
+.icon-2x { font-size: 2em; }
+.icon-3x { font-size: 3em; }
+
+.icon-spin {
+    display: inline-block;
+    animation: icon-spin 1s linear infinite;
+}
+
+@keyframes icon-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
+    .icon-spin { animation-duration: 3s; }
+
     :root {
         --dur-press: 1ms;
         --dur-hover-in: 1ms;

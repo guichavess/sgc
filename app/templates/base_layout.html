@@ -6,10 +6,9 @@
     <title>{% block title %}SGC - Gestão de Contratos{% endblock %}</title>
     <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/x-icon">
 
-    {# CDN - Bibliotecas externas #}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    {# Bibliotecas locais (app/static/vendor — sem CDN) #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.css') }}">
 
     {# CSS Principal #}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -118,7 +117,7 @@
     {% include 'components/contact_collection_modal.html' %}
 
     {# Scripts Bootstrap #}
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
 
     {# Vite #}
     {% if vite_dev_mode %}
@@ -149,6 +148,9 @@
                 body.classList.add('transitions-ready');
             });
         });
+
+        // Hub e login não têm sidebar
+        if (!toggle || !overlay || !sidebar) return;
 
         toggle.addEventListener('click', function() {
             if (isMobile()) {

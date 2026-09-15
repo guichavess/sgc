@@ -1,7 +1,6 @@
 /* pagamentos/app/static/css/style.css */
 
-/* --- Importação de Fonte --- */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+/* --- Fonte Inter: local, em base/fonts.css (via main.css) --- */
 
 /* --- Configurações Globais --- */
 body {

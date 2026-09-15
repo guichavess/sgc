@@ -582,7 +582,7 @@ $(document).ready(function() {
                     $(row).addClass('row-pending');
                 }
             },
-            language: { url: 'https://cdn.datatables.net/plug-ins/1.13.8/i18n/pt-BR.json' },
+            language: { url: '{{ url_for('static', filename='vendor/datatables/i18n/pt-BR.json') }}' },
             order: [],
             pageLength: 10,
             lengthChange: false,

@@ -2435,7 +2435,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 {# === Chart.js — Donut por Sub-Item do Detalhamento === #}
 {% if sub_aba_tipo == 'detalhamento' and detalhamento_financeiro and detalhamento_financeiro.tem_dados %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/chart.js/chart.umd.min.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
  const COR_PRIMARIA = '#343990';

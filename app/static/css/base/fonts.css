@@ -1,0 +1,35 @@
+/**
+ * Fonte Inter servida localmente (@fontsource/inter 5.3.0, subset latin).
+ * Substitui o @import do Google Fonts — a intranet pode bloquear CDNs.
+ */
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 300;
+    src: url('../../vendor/inter/inter-latin-300-normal.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
+    src: url('../../vendor/inter/inter-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 600;
+    src: url('../../vendor/inter/inter-latin-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 700;
+    src: url('../../vendor/inter/inter-latin-700-normal.woff2') format('woff2');
+}

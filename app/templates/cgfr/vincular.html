@@ -298,7 +298,7 @@
 {% endblock %}
 
 {% block cgfr_js %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/jquery-mask/jquery.mask.min.js') }}"></script>
 <script>
 $(document).ready(function() {
     // Mascara monetaria

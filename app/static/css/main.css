@@ -9,6 +9,7 @@
    BASE - Variáveis e configurações globais
    ========================================================================== */
 @import 'base/variables.css';
+@import 'base/fonts.css';
 @import 'base/reset.css';
 @import 'base/motion.css';
 

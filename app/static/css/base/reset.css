@@ -2,8 +2,7 @@
  * Reset e Configurações Globais
  */
 
-/* Importação de Fonte */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+/* Fonte Inter: local, em base/fonts.css (importado antes deste arquivo em main.css) */
 
 /* Reset básico */
 *,
