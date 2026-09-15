@@ -11,4 +11,5 @@ solicitacoes_bp = Blueprint('solicitacoes', __name__)
 from app.solicitacoes.routes import dashboard
 from app.solicitacoes.routes import crud
 from app.solicitacoes.routes import reports
+from app.solicitacoes.routes import painel
 from app.solicitacoes.routes import api
