@@ -26,6 +26,7 @@ from app.services.sei_integration import (
 from app.services.sei_auth import gerar_token_sei_admin
 from app.constants import SerieDocumentoSEI
 from app.utils.permissions import requires_permission
+from app.utils.sei_datas import data_primeiro_documento_sei
 
 
 @solicitacoes_bp.route('/nova-lote')
@@ -197,6 +198,13 @@ def vincular_solicitacao():
             return redirect(url_for('solicitacoes.vincular_solicitacao'))
 
         try:
+            # Documentos do processo: o início real é a data do 1º documento SEI,
+            # não a data da vinculação (fallback: agora, se nenhum doc tiver data)
+            protocolo_formatado = resultado_sei['protocolo_formatado']
+            resultado_docs = listar_documentos_procedimento_sei(token_sei, protocolo_formatado)
+            documentos_sei = resultado_docs.get('documentos', [])
+            data_inicio = data_primeiro_documento_sei(documentos_sei) or datetime.now()
+
             # 1. Cria a solicitação no banco
             nova_sol = Solicitacao(
                 codigo_contrato=codigo_contrato,
@@ -210,26 +218,23 @@ def vincular_solicitacao():
                 id_tipo_pagamento=id_tipo_pagamento,
                 descricao=f'Processo vinculado - {competencia}',
                 status_geral='ABERTO',
-                data_solicitacao=datetime.now()
+                data_solicitacao=data_inicio
             )
             db.session.add(nova_sol)
             db.session.flush()
 
-            # 2. Registra histórico inicial
+            # 2. Registra histórico inicial (etapa 1 = início do processo)
             historico = HistoricoMovimentacao(
                 id_solicitacao=nova_sol.id,
                 id_etapa_nova=1,
                 id_usuario_responsavel=current_user.id,
-                data_movimentacao=datetime.now(),
+                data_movimentacao=data_inicio,
                 comentario='Processo SEI existente vinculado ao sistema'
             )
             db.session.add(historico)
             db.session.commit()
 
-            # 3. Lista e baixa documentos do SEI para tabela seimovimentacao
-            protocolo_formatado = resultado_sei['protocolo_formatado']
-            resultado_docs = listar_documentos_procedimento_sei(token_sei, protocolo_formatado)
-            documentos_sei = resultado_docs.get('documentos', [])
+            # 3. Baixa documentos do SEI para tabela seimovimentacao
             if documentos_sei:
                 _baixar_documentos_sei(
                     token_sei, protocolo_formatado, documentos_sei
@@ -242,15 +247,6 @@ def vincular_solicitacao():
                 app_obj, nova_sol.id, token_sei,
                 current_user.id, {e.id: e.ordem for e in Etapa.query.all()}
             )
-
-            # 4.1 Atualiza data_solicitacao com a data real da primeira movimentação
-            # (para que o cálculo de tempo reflita a duração real do processo)
-            primeiro_hist = HistoricoMovimentacao.query.filter_by(
-                id_solicitacao=nova_sol.id
-            ).order_by(HistoricoMovimentacao.data_movimentacao.asc()).first()
-            if primeiro_hist and primeiro_hist.data_movimentacao:
-                nova_sol.data_solicitacao = primeiro_hist.data_movimentacao
-                db.session.commit()
 
             # 5. Registra valor do empenho (se informado)
             if valor_empenho_raw:

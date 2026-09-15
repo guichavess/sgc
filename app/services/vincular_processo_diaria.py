@@ -40,6 +40,7 @@ from app.services.diarias_sei_integration import (
 )
 from app.services.requisicao_parser import parsear_html_requisicao_diarias
 from app.constants import DiariasEtapaID, TIPOS_COM_PASSAGENS
+from app.utils.sei_datas import data_primeiro_documento_sei
 
 # cod_ibge do Piauí (viagem dentro do Piauí = Estadual)
 COD_IBGE_PIAUI = 22
@@ -143,7 +144,7 @@ def vincular_processo_sei(itinerario_id, protocolo_sei, etapa_id, usuario_id):
         DiariasHistoricoMovimentacao,
     )
 
-    resultado = {'sucesso': False, 'msgs': [], 'erro': None}
+    resultado = {'sucesso': False, 'msgs': [], 'erro': None, 'data_primeiro_documento': None}
 
     # ── 1. Autenticação SEI ──────────────────────────────────────────────────
     token = gerar_token_sei_admin()
@@ -178,6 +179,7 @@ def vincular_processo_sei(itinerario_id, protocolo_sei, etapa_id, usuario_id):
     documentos = []
     if docs_result.get('sucesso') and docs_result.get('documentos'):
         documentos = docs_result['documentos']
+    resultado['data_primeiro_documento'] = data_primeiro_documento_sei(documentos)
 
     # ── 6. Criar DiariasDocumentoSei para cada doc mapeado ───────────────────
     requisicao_id_doc = None  # IdDocumento da Requisição de Diárias (IdSerie 532)
@@ -361,7 +363,9 @@ def importar_processo_sei_como_novo(
         qtd_diarias_solicitadas=0,
         etapa_atual_id=etapa_id,
         status_id=1,
-        data_solicitacao=datetime.now(),
+        data_solicitacao=date.today(),  # substituída pela data do 1º documento SEI
+        data_viagem=datetime.now(),     # NOT NULL; ajustadas pelo parse da Requisição
+        data_retorno=datetime.now(),
         sei_protocolo=protocolo_formatado,
         sei_id_procedimento=verif.get('id_procedimento', ''),
         link_processo_sei=verif.get('link_acesso', ''),
@@ -381,6 +385,10 @@ def importar_processo_sei_como_novo(
     )
 
     resultado['msgs'].extend(vinc.get('msgs', []))
+
+    # Início real do processo = data do 1º documento SEI (não a data da importação)
+    if vinc.get('data_primeiro_documento'):
+        novo.data_solicitacao = vinc['data_primeiro_documento'].date()
 
     if not vinc.get('sucesso'):
         # Problema ao buscar documentos/integrantes — não aborta, apenas avisa
@@ -662,6 +670,7 @@ def sincronizar_processos_bloco_diarias(
             else:
                 tipo_solicitacao_id = 1
             etapa_id = _inferir_etapa_por_documentos(tipos_encontrados, tipo_solicitacao_id)
+            data_inicio = data_primeiro_documento_sei(documentos)
 
             novo = DiariasItinerario(
                 usuario_gerador=usuario_gerador,
@@ -670,7 +679,7 @@ def sincronizar_processos_bloco_diarias(
                 qtd_diarias_solicitadas=Decimal('0'),
                 etapa_atual_id=etapa_id,
                 status_id=1,
-                data_solicitacao=date.today(),
+                data_solicitacao=data_inicio.date() if data_inicio else date.today(),
                 data_viagem=datetime.now(),
                 data_retorno=datetime.now(),
                 sei_protocolo=proc.get('protocolo_formatado') or protocolo,

@@ -657,7 +657,10 @@ def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem, inlin
             # --- D. OUTRAS ETAPAS ---
             if SERIE_SOLICITACAO in ids_series:
                 d = next(d for d in docs if str(d.id_serie) == SERIE_SOLICITACAO)
-                if registrar_historico_forcado(1, extrair_data_segura(d), "Solicitação Criada"):
+                # Etapa 1 = início do processo: data do 1º documento (não só do doc Solicitação)
+                datas_docs = [dt for dt in (extrair_data_segura(doc) for doc in docs) if dt]
+                data_inicio = min(datas_docs) if datas_docs else extrair_data_segura(d)
+                if registrar_historico_forcado(1, data_inicio, "Solicitação Criada"):
                     mudou = True
                     tentar_avancar_status(1)
 
