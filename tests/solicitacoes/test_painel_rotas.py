@@ -107,6 +107,14 @@ def test_sidebar_tem_solicitacoes_painel_relatorios(cliente_leitor):
     assert '> Dashboard' not in html
 
 
+def test_painel_grafico_por_fase_em_barras_horizontais_com_escala_log(cliente_leitor):
+    html = cliente_leitor.get('/solicitacoes/painel').get_data(as_text=True)
+
+    assert 'data-indicador="por-fase" data-tipo="barras_log"' in html
+    assert 'escala logarítmica' in html
+    assert 'horizontal: true' in html
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Relatórios (central)
 # ──────────────────────────────────────────────────────────────────────────────

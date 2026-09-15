@@ -134,11 +134,14 @@
  <div class="row g-3 mb-4" id="painelIndicadores">
  <div class="col-12">
  <div class="card h-100">
- <div class="card-header bg-white py-3">
- <h6 class="m-0 fw-bold text-primary"><i class="bi bi-bar-chart me-2"></i>Processos por fase</h6>
+ <div class="card-header bg-white py-3 d-flex flex-wrap gap-2 justify-content-between align-items-center">
+ <h6 class="m-0 fw-bold text-primary"><i class="bi bi-bar-chart-steps me-2"></i>Processos por fase</h6>
+ <small class="text-muted" title="Cada marca do eixo vale 10 vezes a anterior, para que fases com poucos processos continuem visíveis ao lado das que têm centenas.">
+ <i class="bi bi-info-circle me-1"></i>escala logarítmica
+ </small>
  </div>
  <div class="card-body">
- <div data-indicador="por-fase" data-tipo="barras" style="min-height: 280px;">
+ <div data-indicador="por-fase" data-tipo="barras_log" style="min-height: 280px;">
  <div class="text-muted small text-center py-5">Carregando…</div>
  </div>
  </div>
@@ -423,23 +426,51 @@
  const URL_API_PAINEL = "{{ url_for('solicitacoes.api_painel_indicador', indicador='__IND__') }}";
 
  const RENDERIZADORES_PAINEL = {
- barras(el, dados) {
+ // Barras horizontais em escala log10: a discrepância entre fases (ex.: 6 x 824)
+ // achatava as menores. O valor plotado é log10(qtd)+1 (0 = nenhum processo),
+ // então a marca k do eixo vale 10^(k-1); rótulos e tooltip mostram a quantidade real.
+ barras_log(el, dados) {
  const series = dados.series || [];
  if (!series.length || !dados.total) {
  el.innerHTML = '<div class="text-muted small text-center py-5">Nenhum processo nos filtros atuais.</div>';
  return;
  }
+ const qtds = series.map(s => s.qtd);
+ const maxEixo = Math.floor(Math.log10(Math.max(1, ...qtds))) + 2;
+ const formatarQtd = q => Number(q).toLocaleString('pt-BR');
+ const rotuloEixo = v => {
+ const k = Math.round(Number(v));
+ if (Number.isNaN(k)) return v;
+ return k <= 0 ? '0' : formatarQtd(Math.pow(10, k - 1));
+ };
  el.innerHTML = '';
  new ApexCharts(el, {
- chart: { type: 'bar', height: 280, toolbar: { show: false }, fontFamily: 'inherit' },
- series: [{ name: 'Processos', data: series.map(s => s.qtd) }],
- xaxis: { categories: series.map(s => s.nome), labels: { style: { fontSize: '11px' } } },
+ chart: { type: 'bar', height: Math.max(240, series.length * 42 + 60), toolbar: { show: false }, fontFamily: 'inherit' },
+ series: [{ name: 'Processos', data: qtds.map(q => (q > 0 ? Math.log10(q) + 1 : 0)) }],
+ xaxis: {
+ categories: series.map(s => s.nome),
+ min: 0, max: maxEixo, tickAmount: maxEixo,
+ labels: { formatter: rotuloEixo, style: { fontSize: '11px' } },
+ },
+ yaxis: { labels: { maxWidth: 240, style: { fontSize: '12px' } } },
  colors: series.map(s => s.cor),
- plotOptions: { bar: { distributed: true, borderRadius: 4, columnWidth: '55%' } },
- dataLabels: { enabled: true },
+ plotOptions: { bar: { horizontal: true, distributed: true, borderRadius: 4, barHeight: '65%', dataLabels: { position: 'top' } } },
+ dataLabels: {
+ enabled: true,
+ formatter: (v, opts) => formatarQtd(qtds[opts.dataPointIndex]),
+ offsetX: 28,
+ style: { colors: ['#212529'], fontSize: '12px', fontWeight: 600 },
+ },
  legend: { show: false },
- grid: { strokeDashArray: 3 },
- tooltip: { y: { formatter: v => `${v} processo${v === 1 ? '' : 's'}` } },
+ grid: { strokeDashArray: 3, xaxis: { lines: { show: true } }, yaxis: { lines: { show: false } } },
+ tooltip: {
+ y: {
+ formatter: (v, opts) => {
+ const q = qtds[opts.dataPointIndex];
+ return `${formatarQtd(q)} processo${q === 1 ? '' : 's'}`;
+ },
+ },
+ },
  }).render();
  },
  };
