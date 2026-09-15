@@ -9,7 +9,7 @@
 - **Usuário**: `sead` (não-root; `sudo` exige senha)
 - **Diretório do app**: `/home/sead/sgc_novo`
 - **Porta**: 8081
-- **WSGI**: Gunicorn (gthread, 2 workers × 4 threads, timeout 300s)
+- **WSGI**: Gunicorn (gthread, 4 workers × 8 threads, timeout 300s, `--max-requests 1000 --max-requests-jitter 100`)
 - **venv**: `.venv` · **Logs**: `logs/gunicorn.log` · **PID**: `sgc.pid`
 - **Branch remota**: `master` espelha `origin/main` · **Repo**: github.com/guichavess/sgc
 - **Banco**: MySQL local no servidor, schema `sgc`
@@ -25,7 +25,7 @@
 4. No servidor via Bitvise (SSH):
 
 ```bash
-cd /home/sead/sgc_novo && source .venv/bin/activate && git pull origin main:master && rm -f sgc.pid && fuser -k 8081/tcp 2>/dev/null; sleep 2 && nohup gunicorn --bind 0.0.0.0:8081 --workers 2 --threads 4 --worker-class gthread --timeout 300 --pid sgc.pid 'app:create_app()' > logs/gunicorn.log 2>&1 & sleep 5 && tail -20 logs/gunicorn.log
+cd /home/sead/sgc_novo && source .venv/bin/activate && git pull origin main:master && rm -f sgc.pid && fuser -k 8081/tcp 2>/dev/null; sleep 2 && nohup gunicorn --bind 0.0.0.0:8081 --workers 4 --threads 8 --worker-class gthread --timeout 300 --max-requests 1000 --max-requests-jitter 100 --pid sgc.pid 'app:create_app()' > logs/gunicorn.log 2>&1 & sleep 5 && tail -20 logs/gunicorn.log
 ```
 
 ## Comandos avulsos úteis
@@ -34,7 +34,8 @@ cd /home/sead/sgc_novo && source .venv/bin/activate && git pull origin main:mast
 | Versão no ar | `cd /home/sead/sgc_novo && git log --oneline -1` |
 | Ver logs | `tail -50 /home/sead/sgc_novo/logs/gunicorn.log` |
 | Derrubar | `fuser -k 8081/tcp 2>/dev/null; rm -f sgc.pid` |
-| Subir sem pull | `cd /home/sead/sgc_novo && source .venv/bin/activate && nohup gunicorn --bind 0.0.0.0:8081 --workers 2 --threads 4 --worker-class gthread --timeout 300 --pid sgc.pid 'app:create_app()' > logs/gunicorn.log 2>&1 &` |
+| Subir sem pull | `cd /home/sead/sgc_novo && source .venv/bin/activate && nohup gunicorn --bind 0.0.0.0:8081 --workers 4 --threads 8 --worker-class gthread --timeout 300 --max-requests 1000 --max-requests-jitter 100 --pid sgc.pid 'app:create_app()' > logs/gunicorn.log 2>&1 &` |
+| Validar processos/RAM | `ps aux | grep '[g]unicorn' | wc -l && free -h` (deve mostrar 5 processos: 1 master + 4 workers) |
 
 ## Regras
 - Antes de cada deploy: **ler `DEPLOY_PENDENTE.md`** e executar pendências de banco (SQL/ALTER) **antes** do `git pull`.
