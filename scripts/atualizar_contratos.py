@@ -14,6 +14,8 @@ from urllib3.util.retry import Retry
 from sqlalchemy import text, bindparam, create_engine
 from dotenv import load_dotenv
 
+from contratos_exercicio import escolher_registro, exercicios_a_consultar
+
 # Suprime warnings de SSL (verify=False)
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 import urllib3
@@ -341,17 +343,32 @@ def fetch_contrato(session, cod_contrato: str, token: str, year: int):
         data = resp.json()
         if not data: return cod_contrato, None, elapsed, "no_data"
 
-        fiscais = data.get("responsaveisContrato") or []
-        aditivos = data.get("aditivos") or []
-        
-        # Gera Hashes para comparar mudanças
-        h_contrato = stable_hash({k: data.get(k) for k in COLUMNS_CONTRATO})
-        h_fiscais = stable_hash(fiscais)
-        h_aditivos = stable_hash(aditivos)
-        
-        return cod_contrato, (data, h_contrato, h_fiscais, h_aditivos), elapsed, 200
+        return cod_contrato, (data, *hashes_contrato(data)), elapsed, 200
     except Exception:
         return cod_contrato, None, time.time() - t0, "error"
+
+def hashes_contrato(data):
+    # Gera Hashes para comparar mudanças
+    h_contrato = stable_hash({k: data.get(k) for k in COLUMNS_CONTRATO})
+    h_fiscais = stable_hash(data.get("responsaveisContrato") or [])
+    h_aditivos = stable_hash(data.get("aditivos") or [])
+    return h_contrato, h_fiscais, h_aditivos
+
+def fetch_contrato_melhor_exercicio(session, cod_contrato: str, token: str, ano_corrente: int):
+    """Consulta o ano corrente (e o anterior, se o contrato já existia) e fica
+    com o registro mais completo. Ver scripts/contratos_exercicio.py."""
+    registros = {}
+    for ano in exercicios_a_consultar(cod_contrato, ano_corrente):
+        _, payload, _, _ = fetch_contrato(session, cod_contrato, token, ano)
+        if payload:
+            registros[ano] = payload[0]
+        elif ano == ano_corrente:
+            return cod_contrato, None, None  # falha no ano corrente: não arrisca gravar o anterior
+
+    ano, data = escolher_registro(registros, COLUMNS_CONTRATO, ano_corrente)
+    if data is None:
+        return cod_contrato, None, None
+    return cod_contrato, (data, *hashes_contrato(data)), ano
 
 # =============================================================================
 # 7. FUNÇÕES DE UPSERT (GRAVAÇÃO)
@@ -481,16 +498,19 @@ def main():
     # 3. Consulta API em paralelo
     session = make_session()
     changed_rows, changed_fiscais, changed_aditivos = [], [], []
+    cods_exercicio_anterior = []
     now_ts = datetime.now()
 
-    print(f"Consultando detalhes de {len(cods)} contratos na API...")
+    print(f"Consultando detalhes de {len(cods)} contratos na API (exercícios {YEAR} e {YEAR - 1})...")
     with ThreadPoolExecutor(max_workers=min(24, len(cods))) as ex:
-        futures = [ex.submit(fetch_contrato, session, c, TOKEN, YEAR) for c in cods]
-        
+        futures = [ex.submit(fetch_contrato_melhor_exercicio, session, c, TOKEN, YEAR) for c in cods]
+
         for fut in as_completed(futures):
-            cod, payload, _, _ = fut.result()
+            cod, payload, ano = fut.result()
             if not payload: continue
-            
+            if ano != YEAR:
+                cods_exercicio_anterior.append(str(cod))
+
             data, h_contrato, h_fiscais, h_aditivos = payload
             old = existing.get(str(cod))
             old_hc, old_hf, old_ha = old if old else (None, None, None)
@@ -510,6 +530,10 @@ def main():
                     changed_fiscais.append((str(cod), data.get("responsaveisContrato") or []))
                 if (h_aditivos != old_ha):
                     changed_aditivos.append((str(cod), data.get("aditivos") or []))
+
+    if cods_exercicio_anterior:
+        print(f"Contratos com registro mais completo no exercício {YEAR - 1}: {len(cods_exercicio_anterior)} "
+              f"({', '.join(sorted(cods_exercicio_anterior))})")
 
     # 4. Gravação (apenas do que mudou)
     if changed_rows:
