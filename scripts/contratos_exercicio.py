@@ -1,24 +1,27 @@
 """
-Escolha do exercicio SIAFE usado para atualizar um contrato.
+Mescla dos registros de exercicios SIAFE usados para atualizar um contrato.
 
 O SIAFE mantem um registro do contrato POR EXERCICIO, e eles podem divergir.
-No contrato 25018627 o registro de 2026 ficou "A Contratar" sem contratado
-(planejamento: R$ 2,97 mi, Pregao) enquanto o de 2025 recebeu a contratacao
-(LICITADO, DATEN, contrato 31/2026, R$ 1,33 mi). Os dois tinham a mesma
-quantidade de campos preenchidos: o que distingue e ter contratado.
+No contrato 25018627 o registro de 2026 ficou sem contratado (" - ") enquanto
+o de 2025 recebeu a contratacao (DATEN, contrato 31/2026).
 
-Politica:
+Politica (definida com o usuario em 2026-09-16):
   1) consulta o ano corrente e, se o contrato ja existia antes, o ano anterior
-  2) prefere o registro com contratado identificado (codigoContratado)
-  3) ambos ou nenhum com contratado -> ano corrente
-  4) sem registro do ano corrente (erro na consulta) -> nao escolhe nada, para
-     um erro transitorio nao sobrescrever o banco com dado do ano anterior
+  2) base = ano corrente; campo vazio ("", "-", " - ", None...) e preenchido
+     com o valor do ano anterior
+  3) contratado (tipo, codigo, nome) e um bloco: sem codigo no ano corrente,
+     os tres vem do ano anterior (o SIAFE devolve "PF" como tipo padrao)
+  4) falha no ano corrente -> nao grava; falha transitoria no ano anterior ->
+     nao grava (evita alternar entre dado mesclado e nao mesclado)
 
 Modulo sem efeitos colaterais (atualizar_contratos.py autentica no import).
 """
 
-# Valores que o SIAFE devolve no lugar de um campo vazio
-_VALORES_VAZIOS = {"", "-"}
+# Textos que o SIAFE (ou digitacao) usa no lugar de um campo vazio
+_TEXTOS_VAZIOS = {"null", "none", "n/a", "na", "nan"}
+
+BLOCO_CONTRATADO = ("tipoContratado", "codigoContratado", "nomeContratado")
+LISTAS = ("responsaveisContrato", "aditivos")
 
 
 def exercicios_a_consultar(codigo, ano_corrente):
@@ -32,20 +35,44 @@ def exercicios_a_consultar(codigo, ano_corrente):
     return [ano_corrente]
 
 
-def tem_contratado(data):
-    """True se o registro tem contratado identificado (nao e so planejamento)."""
-    codigo = data.get("codigoContratado")
-    if codigo is None:
-        return False
-    return str(codigo).strip() not in _VALORES_VAZIOS
+def eh_vazio(valor):
+    """None, lista/dict vazio, texto sem letras/numeros ("", "-", " - ") ou "null"/"N/A"."""
+    if valor is None:
+        return True
+    if isinstance(valor, (list, dict)):
+        return len(valor) == 0
+    if isinstance(valor, str):
+        texto = valor.strip()
+        return not any(c.isalnum() for c in texto) or texto.lower() in _TEXTOS_VAZIOS
+    return False
 
 
-def escolher_registro(registros_por_ano, ano_corrente):
-    """Retorna (ano, data) do registro escolhido ou (None, None)."""
-    if ano_corrente not in registros_por_ano:
-        return None, None
-    ano = max(
-        registros_por_ano,
-        key=lambda a: (tem_contratado(registros_por_ano[a]), a == ano_corrente),
-    )
-    return ano, registros_por_ano[ano]
+def falha_transitoria(status):
+    """Erro de rede, timeout, 429 ou 5xx: vale tentar de novo na proxima execucao."""
+    if status == "error":
+        return True
+    return isinstance(status, int) and (status == 429 or status >= 500)
+
+
+def mesclar_registros(atual, anterior, colunas):
+    """Retorna (registro mesclado, campos preenchidos com o ano anterior).
+
+    Nao altera os dicionarios recebidos.
+    """
+    data = dict(atual)
+    campos = []
+
+    if eh_vazio(atual.get("codigoContratado")) and not eh_vazio(anterior.get("codigoContratado")):
+        for c in BLOCO_CONTRATADO:
+            if atual.get(c) != anterior.get(c):
+                data[c] = anterior.get(c)
+                campos.append(c)
+
+    for c in list(colunas) + list(LISTAS):
+        if c in BLOCO_CONTRATADO:
+            continue  # só entra em bloco (acima), para não misturar empresas
+        if eh_vazio(data.get(c)) and not eh_vazio(anterior.get(c)):
+            data[c] = anterior.get(c)
+            campos.append(c)
+
+    return data, campos

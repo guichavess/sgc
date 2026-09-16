@@ -14,7 +14,7 @@ from urllib3.util.retry import Retry
 from sqlalchemy import text, bindparam, create_engine
 from dotenv import load_dotenv
 
-from contratos_exercicio import escolher_registro, exercicios_a_consultar
+from contratos_exercicio import exercicios_a_consultar, falha_transitoria, mesclar_registros
 
 # Suprime warnings de SSL (verify=False)
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
@@ -354,21 +354,28 @@ def hashes_contrato(data):
     h_aditivos = stable_hash(data.get("aditivos") or [])
     return h_contrato, h_fiscais, h_aditivos
 
-def fetch_contrato_melhor_exercicio(session, cod_contrato: str, token: str, ano_corrente: int):
-    """Consulta o ano corrente (e o anterior, se o contrato já existia) e
-    prefere o registro com contratado identificado. Ver scripts/contratos_exercicio.py."""
-    registros = {}
-    for ano in exercicios_a_consultar(cod_contrato, ano_corrente):
-        _, payload, _, _ = fetch_contrato(session, cod_contrato, token, ano)
-        if payload:
-            registros[ano] = payload[0]
-        elif ano == ano_corrente:
-            return cod_contrato, None, None  # falha no ano corrente: não arrisca gravar o anterior
+def fetch_contrato_mesclado(session, cod_contrato: str, token: str, ano_corrente: int):
+    """Consulta o ano corrente e, se o contrato já existia, completa os campos
+    vazios com o ano anterior. Ver scripts/contratos_exercicio.py.
 
-    ano, data = escolher_registro(registros, ano_corrente)
-    if data is None:
-        return cod_contrato, None, None
-    return cod_contrato, (data, *hashes_contrato(data)), ano
+    Retorna (cod, payload | None, campos preenchidos com o ano anterior)."""
+    _, payload, _, _ = fetch_contrato(session, cod_contrato, token, ano_corrente)
+    if not payload:
+        return cod_contrato, None, []  # falha no ano corrente: não grava
+    atual = payload[0]
+
+    anos = exercicios_a_consultar(cod_contrato, ano_corrente)
+    if len(anos) == 1:
+        return cod_contrato, payload, []
+
+    _, payload_ant, _, status_ant = fetch_contrato(session, cod_contrato, token, anos[1])
+    if not payload_ant:
+        if falha_transitoria(status_ant):
+            return cod_contrato, None, []  # tenta de novo na próxima execução
+        return cod_contrato, payload, []  # não existe no ano anterior
+
+    data, campos = mesclar_registros(atual, payload_ant[0], COLUMNS_CONTRATO)
+    return cod_contrato, (data, *hashes_contrato(data)), campos
 
 # =============================================================================
 # 7. FUNÇÕES DE UPSERT (GRAVAÇÃO)
@@ -498,18 +505,18 @@ def main():
     # 3. Consulta API em paralelo
     session = make_session()
     changed_rows, changed_fiscais, changed_aditivos = [], [], []
-    cods_exercicio_anterior = []
+    complementados = {}
     now_ts = datetime.now()
 
     print(f"Consultando detalhes de {len(cods)} contratos na API (exercícios {YEAR} e {YEAR - 1})...")
     with ThreadPoolExecutor(max_workers=min(24, len(cods))) as ex:
-        futures = [ex.submit(fetch_contrato_melhor_exercicio, session, c, TOKEN, YEAR) for c in cods]
+        futures = [ex.submit(fetch_contrato_mesclado, session, c, TOKEN, YEAR) for c in cods]
 
         for fut in as_completed(futures):
-            cod, payload, ano = fut.result()
+            cod, payload, campos = fut.result()
             if not payload: continue
-            if ano != YEAR:
-                cods_exercicio_anterior.append(str(cod))
+            if campos:
+                complementados[str(cod)] = campos
 
             data, h_contrato, h_fiscais, h_aditivos = payload
             old = existing.get(str(cod))
@@ -531,9 +538,10 @@ def main():
                 if (h_aditivos != old_ha):
                     changed_aditivos.append((str(cod), data.get("aditivos") or []))
 
-    if cods_exercicio_anterior:
-        print(f"Contratos com contratado só no exercício {YEAR - 1} (usando {YEAR - 1}):{len(cods_exercicio_anterior)} "
-              f"({', '.join(sorted(cods_exercicio_anterior))})")
+    if complementados:
+        print(f"Contratos com campos vazios em {YEAR} completados com {YEAR - 1}: {len(complementados)}")
+        for cod in sorted(complementados):
+            print(f"  {cod}: {', '.join(complementados[cod])}")
 
     # 4. Gravação (apenas do que mudou)
     if changed_rows:
