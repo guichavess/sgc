@@ -41,15 +41,9 @@
     <div class="card-detail" id="det-{{ m.id }}">
       <span class="detail-rule" aria-hidden="true"></span>
       <p class="detail-summary">{{ m.resumo }}</p>
-      <ul class="detail-features">
-        {% for icone, texto in m.recursos %}<li><i class="bi {{ icone }}" aria-hidden="true"></i><span>{{ texto }}</span></li>{% endfor %}
+      <ul class="detail-features" aria-label="O que da para resolver neste modulo">
+        {% for r in m.recursos %}<li><i class="bi {{ r.icone }}" aria-hidden="true"></i><span>{{ r.texto }}</span></li>{% endfor %}
       </ul>
-      {% if m.fluxo %}
-      <ol class="detail-flow" style="--n: {{ m.fluxo|length }}" aria-label="Etapas do fluxo">
-        <span class="flow-line" aria-hidden="true"></span>
-        {% for etapa in m.fluxo %}<li><span class="flow-dot" aria-hidden="true"></span><span>{{ etapa }}</span></li>{% endfor %}
-      </ol>
-      {% endif %}
       <div class="detail-foot">
         <span class="detail-access"><i class="bi bi-shield-check" aria-hidden="true"></i> {{ m.acesso }}</span>
         <span class="detail-cta">Abrir módulo <kbd>↵</kbd></span>

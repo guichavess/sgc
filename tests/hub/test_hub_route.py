@@ -26,6 +26,16 @@ class TestHubRoute:
         # o caminho da URL não aparece para o usuário
         assert 'detail-path' not in html
 
+    def test_card_resume_o_modulo_e_nao_mostra_a_timeline(self, client, novo_usuario):
+        """O detalhe traz o resumo prático do módulo; o fluxo de etapas saiu."""
+        logar(client, novo_usuario(3006, is_admin=True))
+        html = client.get('/hub').get_data(as_text=True)
+
+        assert 'detail-flow' not in html and 'flow-dot' not in html
+        assert 'detail-features' in html
+        assert 'Acompanhamento de NE, NL, PD e OB em um só lugar' in html
+        assert 'Saldo da LOA por ação, natureza e fonte' in html
+
     def test_gsap_vendorizado_sem_cdn(self, client, novo_usuario):
         logar(client, novo_usuario(3002, is_admin=True))
         html = client.get('/hub').get_data(as_text=True)

@@ -43,7 +43,7 @@
      (saída ≈ 70% da entrada). Interromper no meio é natural: a timeline só muda de direção.
        Ação primária:   altura do card cresce (300ms, ease de entrada) + sombra de elevação
        Secundária:      barra de cor alarga, ícone assenta, seta entra
-       Follow-through:  filete desenha → resumo → recursos em cascata (40ms) → fluxo desenha → rodapé
+       Follow-through:  filete desenha → resumo → funcionalidades em cascata (40ms) → rodapé
      A altura cresce no fluxo da grade, então os cards de baixo são empurrados.
      ===================================================================== */
   const EXPAND_INTENT = .12;           // intenção de hover: evita expandir ao só "passar" o mouse
@@ -56,7 +56,7 @@
     const fullH = card.scrollHeight;   // altura natural com o detalhe
 
     const parts = [card, li, q('.card-elev'), q('.card-accent'), q('.card-tile'), q('.card-arrow'), q('.card-more i'), q('.detail-rule'),
-      q('.detail-summary'), q('.flow-line'), q('.detail-foot'), q('.card-detail'), ...qa('.detail-features li'), ...qa('.detail-flow li')].filter(Boolean);
+      q('.detail-summary'), q('.detail-foot'), q('.card-detail'), ...qa('.detail-features li')].filter(Boolean);
 
     const tl = M.timeline({
       paused: true,
@@ -86,13 +86,8 @@
       .to(q('.card-more i'), { rotation: 180, duration: D.quick }, 0)
       .fromTo(q('.detail-rule'), { scaleX: 0 }, { scaleX: 1, duration: D.slow }, .06)
       .fromTo(q('.detail-summary'), { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: D.quick, ease: 'sgc-enter' }, .1)
-      .fromTo(qa('.detail-features li'), { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: D.quick, ease: 'sgc-enter', stagger: .04 }, .14);
-
-    if (q('.detail-flow')) {
-      tl.fromTo(q('.flow-line'), { scaleX: 0 }, { scaleX: 1, duration: D.slow - .1, ease: 'sgc-inOut' }, .2)
-        .fromTo(qa('.detail-flow li'), { autoAlpha: 0, y: 4 }, { autoAlpha: 1, y: 0, duration: .18, ease: 'sgc-enter', stagger: .045 }, .2);
-    }
-    tl.fromTo(q('.detail-foot'), { autoAlpha: 0 }, { autoAlpha: 1, duration: D.quick }, .3);
+      .fromTo(qa('.detail-features li'), { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: D.quick, ease: 'sgc-enter', stagger: .04 }, .14)
+      .fromTo(q('.detail-foot'), { autoAlpha: 0 }, { autoAlpha: 1, duration: D.quick }, .3);
     return tl;
   }
 

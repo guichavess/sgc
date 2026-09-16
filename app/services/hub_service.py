@@ -7,6 +7,8 @@ card; em módulos com páginas, qualquer página; `is_admin` libera tudo) — co
 textos exibidos na expansão do card e o rótulo "Seu acesso". As permissões do
 perfil são lidas em uma única query (índice do `Perfil`).
 """
+from collections import namedtuple
+
 from flask import url_for
 
 from app.models.perfil import HIERARQUIA_ACOES, PAGINAS_MODULO, REGRA_ALTA_GESTAO
@@ -17,92 +19,104 @@ SECAO_ADMIN = 'admin'
 ROTULO_ADMIN_TOTAL = 'Acesso total'
 ROTULO_EXCLUSIVO_ADMIN = 'Exclusivo para administradores'
 
+Recurso = namedtuple('Recurso', 'icone texto')
+
 # `id` = nome do módulo nas permissões (PerfilPermissao.modulo).
 # `restrito_admin` = só `is_admin` vê (não é liberável por perfil).
+# `resumo` responde "de que este módulo é responsável" e os três `recursos`, "o
+# que dá para resolver aqui" — capacidades em uma linha, não os itens do menu.
 CATALOGO_HUB = [
     {
         'id': 'solicitacoes', 'secao': SECAO_MODULOS, 'endpoint': 'solicitacoes.dashboard', 'restrito_admin': False,
-        'nome': 'Solicitação de Pagamentos', 'descricao': 'NE, NL, PD e OB por contrato',
+        'nome': 'Solicitação de Pagamentos', 'descricao': 'Pagamento de contratos, do pedido à ordem bancária',
         'cor': '#343990', 'icone': 'bi-cash-stack',
-        'resumo': 'Acompanhe o pagamento de cada contrato do pedido à ordem bancária, com etapas atualizadas automaticamente pelo SEI.',
-        'recursos': [('bi-file-earmark-plus', 'Nova solicitação por contrato'),
-                     ('bi-arrow-repeat', 'Sincronização com SEI e SIAFE'),
-                     ('bi-receipt', 'NE, NL, PD e OB no mesmo lugar')],
-        'fluxo': ['Criada', 'Em análise', 'Aguard. NE', 'NE inserida', 'Execução', 'Concluída'],
+        'resumo': 'Registra o pedido de pagamento de cada contrato e acompanha a tramitação até a OB — as etapas avançam sozinhas conforme os documentos entram no processo do SEI.',
+        'recursos': [
+            Recurso('bi-file-earmark-plus', 'Abertura de pedidos por contrato, individual ou em lote'),
+            Recurso('bi-receipt', 'Acompanhamento de NE, NL, PD e OB em um só lugar'),
+            Recurso('bi-graph-up', 'Estoque por fase, tempo de tramitação e relatórios'),
+        ],
     },
     {
         'id': 'financeiro', 'secao': SECAO_MODULOS, 'endpoint': 'financeiro.dashboard', 'restrito_admin': False,
-        'nome': 'Gestão Orçamentária/Financeira', 'descricao': 'Saldos, LOA e Fundo Rotativo',
+        'nome': 'Gestão Orçamentária/Financeira', 'descricao': 'Orçamento, empenho e fundo rotativo',
         'cor': '#1F3A68', 'icone': 'bi-bank',
-        'resumo': 'Execução orçamentária e financeira da secretaria: saldo da LOA por classificação, empenhos do SIAFE e Fundo Rotativo.',
-        'recursos': [('bi-pie-chart', 'Saldos por ação, natureza e fonte'),
-                     ('bi-journal-check', 'Inserção de notas de empenho'),
-                     ('bi-wallet2', 'Fundo Rotativo e fornecedores')],
-        'fluxo': None,
+        'resumo': 'Onde a equipe financeira controla o orçamento disponível, empenha as despesas e mantém o sistema alimentado com os dados do SIAFE.',
+        'recursos': [
+            Recurso('bi-wallet2', 'Saldo da LOA por ação, natureza e fonte'),
+            Recurso('bi-pencil-square', 'Empenho das despesas e conferência das diárias'),
+            Recurso('bi-cash-stack', 'Fundo rotativo, planejamento e despesas sem contrato'),
+        ],
     },
     {
         'id': 'prestacoes_contratos', 'secao': SECAO_MODULOS, 'endpoint': 'prestacoes_contratos.dashboard', 'restrito_admin': False,
-        'nome': 'Execuções de Contratos', 'descricao': 'Registro e atesto de execuções',
+        'nome': 'Execuções de Contratos', 'descricao': 'Contratos vigentes e o que já foi executado',
         'cor': '#0D7A35', 'icone': 'bi-clipboard-check',
-        'resumo': 'Registre o que foi executado em cada contrato, vinculado aos itens do catálogo CATSERV/CATMAT.',
-        'recursos': [('bi-list-check', 'Execuções por item vinculado'),
-                     ('bi-tags', 'Tipificação CATSERV/CATMAT'),
-                     ('bi-patch-check', 'Atesto e fiscalização')],
-        'fluxo': None,
+        'resumo': 'Reúne o que foi contratado, como está classificado no catálogo e quanto já foi executado de cada item, contrato a contrato.',
+        'recursos': [
+            Recurso('bi-file-earmark-text', 'Contratos com situação, vigência e centro de custo'),
+            Recurso('bi-tags', 'Classificação dos itens no catálogo CATSERV/CATMAT'),
+            Recurso('bi-journal-check', 'Execução por item, com quantidade e valor'),
+        ],
     },
     {
         'id': 'diarias', 'secao': SECAO_MODULOS, 'endpoint': 'diarias.dashboard', 'restrito_admin': False,
-        'nome': 'Diárias', 'descricao': 'Itinerários, reservas e prestação de contas',
+        'nome': 'Diárias', 'descricao': 'Viagem a serviço, do pedido à prestação de contas',
         'cor': '#E07A24', 'icone': 'bi-airplane-engines',
-        'resumo': 'Da solicitação da viagem à prestação de contas, com valores calculados por cargo e tipo de itinerário.',
-        'recursos': [('bi-geo-alt', 'Itinerários estaduais e nacionais'),
-                     ('bi-person-badge', 'Dados do servidor via SGA'),
-                     ('bi-file-earmark-text', 'Nota de reserva e empenho')],
-        'fluxo': ['Solicitação', 'Análise', 'Voo', 'NCI', 'Concessão', 'Prestação'],
+        'resumo': 'Viagem a serviço do começo ao fim: o servidor pede, as chefias autorizam, a equipe resolve passagem e empenho, e a prestação de contas encerra o processo.',
+        'recursos': [
+            Recurso('bi-geo-alt', 'Itinerários estaduais e nacionais, com valor por cargo'),
+            Recurso('bi-check2-square', 'Autorização das chefias e assinatura no SEI'),
+            Recurso('bi-receipt', 'Passagens, empenho e prestação de contas da viagem'),
+        ],
     },
     {
         'id': 'identidade_visual', 'secao': SECAO_MODULOS, 'endpoint': 'identidade_visual.dashboard', 'restrito_admin': False,
-        'nome': 'Identidade Visual', 'descricao': 'Fachadas dos Espaços da Cidadania',
+        'nome': 'Identidade Visual', 'descricao': 'Padronização visual das unidades e da frota',
         'cor': '#0891B2', 'icone': 'bi-shop',
-        'resumo': 'Cadastro e acompanhamento das fachadas e veículos dos Espaços e Salas da Cidadania, com fotos e histórico.',
-        'recursos': [('bi-images', 'Fotos e documentos até 25 MB'),
-                     ('bi-car-front', 'Consulta de placa no DETRAN'),
-                     ('bi-clock-history', 'Histórico de alterações')],
-        'fluxo': None,
+        'resumo': 'Acompanha a aplicação da identidade visual do Governo nos Espaços e Salas da Cidadania, no Justo Acesso e nos veículos da secretaria.',
+        'recursos': [
+            Recurso('bi-geo-alt', 'Situação de cada unidade por município'),
+            Recurso('bi-images', 'Registro fotográfico do antes e depois, com custo'),
+            Recurso('bi-car-front', 'Veículos identificados pela placa no DETRAN'),
+        ],
     },
     {
         'id': 'cgfr', 'secao': SECAO_MODULOS, 'endpoint': 'cgfr.dashboard', 'restrito_admin': False,
-        'nome': 'CGFR', 'descricao': 'Gestão financeira e por resultados',
+        'nome': 'CGFR', 'descricao': 'Processos analisados pela comissão',
         'cor': '#4F46E5', 'icone': 'bi-file-earmark-bar-graph',
-        'resumo': 'Comissão de Gestão Financeira e Gestão Por Resultados: documentos e processos do SEI organizados para análise.',
-        'recursos': [('bi-database', 'Consulta à base do SEI'),
-                     ('bi-cloud-arrow-down', 'Sincronização de documentos'),
-                     ('bi-bar-chart', 'Relatórios por processo')],
-        'fluxo': None,
+        'resumo': 'Concentra os processos do SEI submetidos à Comissão de Gestão Financeira e Gestão por Resultados e a deliberação dada a cada um.',
+        'recursos': [
+            Recurso('bi-collection', 'Processos da comissão em uma base única'),
+            Recurso('bi-cloud-arrow-down', 'Documentos e andamentos puxados do SEI'),
+            Recurso('bi-file-earmark-bar-graph', 'Consolidado por natureza em PDF ou Excel'),
+        ],
     },
     {
         'id': 'usuarios', 'secao': SECAO_ADMIN, 'endpoint': 'usuarios.dashboard', 'restrito_admin': True,
-        'nome': 'Admin', 'descricao': 'Usuários, perfis e acessos',
+        'nome': 'Admin', 'descricao': 'Usuários, perfis e permissões de acesso',
         'cor': '#6f42c1', 'icone': 'bi-people',
-        'resumo': 'Controle quem acessa o SGC: cadastro de usuários, perfis e as permissões de cada módulo.',
-        'recursos': [('bi-person-plus', 'Cadastro e ativação de usuários'),
-                     ('bi-shield-lock', 'Perfis com permissões por módulo'),
-                     ('bi-diagram-3', 'Níveis: visualizar a excluir')],
-        'fluxo': None,
+        'resumo': 'Define quem entra no SGC e o que cada um enxerga: o usuário recebe um perfil e o perfil libera os módulos e as ações permitidas.',
+        'recursos': [
+            Recurso('bi-person-plus', 'Cadastro e ativação de servidores'),
+            Recurso('bi-shield-lock', 'Perfis reaproveitados entre vários usuários'),
+            Recurso('bi-sliders', 'Liberação por módulo, por tela e por ação'),
+        ],
     },
     {
         'id': 'dashboards', 'secao': SECAO_ADMIN, 'endpoint': 'dashboards.spa_shell', 'restrito_admin': False,
-        'nome': 'Dashboards', 'descricao': 'Indicadores consolidados',
+        'nome': 'Dashboards', 'descricao': 'Execução orçamentária em gráficos',
         'cor': '#1B998B', 'icone': 'bi-speedometer2',
-        'resumo': 'Indicadores consolidados da secretaria em painéis: pagamentos, execução financeira e contratos.',
-        'recursos': [('bi-graph-up', 'Visão consolidada'),
-                     ('bi-cash-coin', 'Pagamentos e financeiro'),
-                     ('bi-file-earmark-ruled', 'Contratos e execuções')],
-        'fluxo': None,
+        'resumo': 'Leitura gerencial da execução orçamentária da secretaria por exercício, montada sobre os dados que vêm do SIAFE.',
+        'recursos': [
+            Recurso('bi-graph-up', 'Reservado, empenhado, liquidado e pago sobre a dotação'),
+            Recurso('bi-calendar3', 'Evolução mês a mês e por natureza de despesa'),
+            Recurso('bi-cash-stack', 'Programação de desembolso e o que segue em aberto'),
+        ],
     },
 ]
 
-_CHAVES_CARD = ('id', 'nome', 'descricao', 'cor', 'icone', 'resumo', 'recursos', 'fluxo')
+_CHAVES_CARD = ('id', 'nome', 'descricao', 'cor', 'icone', 'resumo', 'recursos')
 
 
 def _juntar(partes):
@@ -167,7 +181,7 @@ def montar_hub(usuario):
 
     Returns:
         {'modulos': [card], 'admin': [card], 'total': int}, onde card tem
-        id, nome, descricao, cor, icone, resumo, recursos, fluxo, url e acesso.
+        id, nome, descricao, cor, icone, resumo, recursos, url e acesso.
     """
     indice = {} if usuario.is_admin else _permissoes_indexadas(usuario)
 

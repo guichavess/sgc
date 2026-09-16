@@ -123,14 +123,11 @@
 .card-detail { padding: 0 18px 16px 24px; }
 .detail-rule { display: block; height: 1px; margin-bottom: 12px; background: linear-gradient(90deg, color-mix(in srgb, var(--c) 45%, transparent), var(--hub-border) 40%); transform-origin: left center; }
 .detail-summary { margin: 0 0 12px; font-size: 13.5px; line-height: 1.5; color: var(--hub-ink-2); max-width: 60ch; }
-.detail-features { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.detail-features li { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.35; color: var(--hub-ink); padding: 9px 10px; background: #f7f8fa; border: 1px solid #eef0f3; border-radius: 6px; }
-.detail-features i { color: var(--c); font-size: 14px; line-height: 1.25; }
-.detail-flow { position: relative; list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: 4px; }
-.flow-line { position: absolute; left: calc(100% / var(--n) / 2); right: calc(100% / var(--n) / 2); top: 4px; height: 2px; background: color-mix(in srgb, var(--c) 30%, var(--hub-border)); transform-origin: left center; }
-.detail-flow li { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--hub-ink-3); text-align: center; line-height: 1.2; }
-.flow-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--hub-surface); border: 2px solid var(--c); }
-.detail-flow li:first-child .flow-dot { background: var(--c); }
+/* Capacidades: uma linha por item — o que da para resolver no modulo, nao o menu dele */
+.detail-features { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.detail-features li { display: flex; gap: 9px; align-items: baseline; font-size: 13px; line-height: 1.4; color: var(--hub-ink-2); }
+.detail-features li > span { min-width: 0; text-wrap: pretty; }
+.detail-features i { flex: none; width: 15px; color: var(--c); font-size: 13px; text-align: center; }
 .detail-foot { display: flex; align-items: center; gap: 14px; margin-top: 14px; font-size: 12px; color: var(--hub-ink-3); }
 .detail-access { display: inline-flex; align-items: center; gap: 6px; color: var(--hub-ink-2); font-weight: 500; }
 .detail-access i { color: var(--pi-green); }
@@ -176,8 +173,7 @@
     .card-tile { width: 38px; height: 38px; font-size: 18px; }
     .card-desc, .card-side kbd, .badge-last { display: none; }
     .card-detail { padding: 0 14px 14px 18px; }
-    .detail-features { grid-template-columns: 1fr; gap: 6px; }
-    .detail-flow li span:last-child { font-size: 10px; }
+    .detail-features { gap: 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
     .module-card::after { display: none; }

@@ -104,11 +104,35 @@ class TestMontarHub:
         for m in hub['modulos'] + hub['admin']:
             assert m['url'].startswith('/'), m['id']
             assert m['nome'] and m['descricao'] and m['resumo'], m['id']
-            assert len(m['recursos']) == 3, m['id']
             assert m['cor'].startswith('#') and m['icone'].startswith('bi-'), m['id']
-        fluxos = {m['id']: m['fluxo'] for m in hub['modulos']}
-        assert fluxos['solicitacoes'][0] == 'Criada' and len(fluxos['solicitacoes']) == 6
-        assert len(fluxos['diarias']) == 6
+            assert 'fluxo' not in m, m['id']
+
+    def test_recursos_sao_resumo_pratico_de_tres_linhas(self, app, novo_usuario):
+        """O card resume o que o módulo resolve — não indexa as páginas do menu."""
+        u = novo_usuario(2013, is_admin=True)
+        with app.test_request_context():
+            hub = montar_hub(u)
+
+        for m in hub['modulos'] + hub['admin']:
+            assert len(m['recursos']) == 3, (m['id'], len(m['recursos']))
+            for r in m['recursos']:
+                assert r.icone.startswith('bi-'), (m['id'], r)
+                # uma linha só: cabe sem quebrar na largura do card
+                assert 0 < len(r.texto) <= 60, (m['id'], r.texto)
+                assert not r.texto.endswith('.'), (m['id'], r.texto)
+                # frase de capacidade, não rótulo de menu
+                assert len(r.texto.split()) >= 4, (m['id'], r.texto)
+
+    def test_resumo_diz_a_responsabilidade_do_modulo(self, app, novo_usuario):
+        """O resumo é uma frase inteira, não a descrição curta repetida."""
+        u = novo_usuario(2014, is_admin=True)
+        with app.test_request_context():
+            hub = montar_hub(u)
+
+        for m in hub['modulos'] + hub['admin']:
+            assert len(m['resumo']) >= 80, (m['id'], m['resumo'])
+            assert m['resumo'] != m['descricao'], m['id']
+            assert len(m['descricao']) <= 56, (m['id'], m['descricao'])
 
     def test_permissoes_carregadas_sem_query_por_modulo(self, app, db_session, novo_usuario):
         """O hub antigo fazia uma query por card (tem_permissao em cada módulo)."""
