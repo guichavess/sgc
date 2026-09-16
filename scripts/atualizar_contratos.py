@@ -355,8 +355,8 @@ def hashes_contrato(data):
     return h_contrato, h_fiscais, h_aditivos
 
 def fetch_contrato_melhor_exercicio(session, cod_contrato: str, token: str, ano_corrente: int):
-    """Consulta o ano corrente (e o anterior, se o contrato já existia) e fica
-    com o registro mais completo. Ver scripts/contratos_exercicio.py."""
+    """Consulta o ano corrente (e o anterior, se o contrato já existia) e
+    prefere o registro com contratado identificado. Ver scripts/contratos_exercicio.py."""
     registros = {}
     for ano in exercicios_a_consultar(cod_contrato, ano_corrente):
         _, payload, _, _ = fetch_contrato(session, cod_contrato, token, ano)
@@ -365,7 +365,7 @@ def fetch_contrato_melhor_exercicio(session, cod_contrato: str, token: str, ano_
         elif ano == ano_corrente:
             return cod_contrato, None, None  # falha no ano corrente: não arrisca gravar o anterior
 
-    ano, data = escolher_registro(registros, COLUMNS_CONTRATO, ano_corrente)
+    ano, data = escolher_registro(registros, ano_corrente)
     if data is None:
         return cod_contrato, None, None
     return cod_contrato, (data, *hashes_contrato(data)), ano
@@ -532,7 +532,7 @@ def main():
                     changed_aditivos.append((str(cod), data.get("aditivos") or []))
 
     if cods_exercicio_anterior:
-        print(f"Contratos com registro mais completo no exercício {YEAR - 1}: {len(cods_exercicio_anterior)} "
+        print(f"Contratos com contratado só no exercício {YEAR - 1} (usando {YEAR - 1}):{len(cods_exercicio_anterior)} "
               f"({', '.join(sorted(cods_exercicio_anterior))})")
 
     # 4. Gravação (apenas do que mudou)
