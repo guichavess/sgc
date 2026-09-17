@@ -103,8 +103,8 @@
     {# ===== Main Content ===== #}
     <main class="main-content">
         <div class="{% block container_class %}container-fluid px-4{% endblock %} py-4">
-            {# Flash messages #}
-            {% include 'components/flash_messages.html' %}
+            {# Flash messages (telas com alerta próprio sobrescrevem o bloco) #}
+            {% block flash_messages %}{% include 'components/flash_messages.html' %}{% endblock %}
 
             {# Page content #}
             {% block content %}{% endblock %}

@@ -21,6 +21,7 @@ from app.services.sei_integration import (
     assinar_documento,
     consultar_procedimento_sei,
     listar_documentos_procedimento_sei,
+    descrever_falha_criacao,
     UNIDADE_SEAD
 )
 from app.services.sei_auth import gerar_token_sei_admin
@@ -54,6 +55,8 @@ def nova_solicitacao():
     modal_abrir = False
     doc_protocolo = ""
     unidade_atual = ""
+    processo_sei = None
+    alerta = None
 
     # Busca tipos de pagamento para o dropdown
     tipos_pagamento = TipoPagamento.query.order_by(TipoPagamento.id).all()
@@ -75,11 +78,26 @@ def nova_solicitacao():
             flash('Contrato não encontrado.', 'danger')
             return redirect(url_for('solicitacoes.nova_solicitacao'))
 
+        # Falhas a partir daqui re-renderizam a tela com o alerta e os dados preenchidos
+        reenvio = {
+            'contrato': _contrato_para_tela(contrato),
+            'competencia': competencia,
+            'id_tipo_pagamento': str(id_tipo_pagamento or ''),
+            'unidade_procedimento': unidade_id,
+        }
+
         token_sei = session.get('sei_token') or gerar_token_sei_admin()
         if not token_sei:
-            flash('Não foi possível autenticar no SEI. Tente novamente.', 'danger')
-            return redirect(url_for('solicitacoes.nova_solicitacao'))
+            current_app.logger.warning('[SOLICITACOES] Nova solicitação sem token SEI (usuário %s)', current_user.id)
+            return _render_nova(tipos_pagamento, reenvio=reenvio, alerta={
+                'tipo': 'erro',
+                'titulo': 'Não foi possível autenticar no SEI',
+                'mensagem': 'O SGC não conseguiu acesso ao SEI para abrir o processo.',
+                'dica': 'Saia do SGC e entre novamente para renovar o acesso ao SEI.',
+                'acao': {'rotulo': 'Sair e entrar novamente', 'href': url_for('auth.logout')},
+            })
 
+        proc_criado = None
         try:
             # Monta dados do contrato para a API SEI
             dados_contrato_api = {
@@ -90,13 +108,22 @@ def nova_solicitacao():
             }
 
             # 1. Cria Processo no SEI
+            detalhe_erro = {}
             proc_criado = criar_procedimento_pagamento(
-                token_sei, unidade_id, dados_contrato_api, competencia
+                token_sei, unidade_id, dados_contrato_api, competencia, detalhe_erro=detalhe_erro
             )
 
             if not proc_criado:
-                flash('Erro ao criar processo no SEI. Tente novamente.', 'danger')
-                return redirect(url_for('solicitacoes.nova_solicitacao'))
+                current_app.logger.warning(
+                    '[SOLICITACOES] SEI não criou o processo (contrato %s, unidade %s): %s',
+                    codigo_contrato, unidade_id, detalhe_erro,
+                )
+                alerta = dict(descrever_falha_criacao(detalhe_erro), tipo='erro')
+                if detalhe_erro.get('status') == 401:
+                    alerta['acao'] = {'rotulo': 'Sair e entrar novamente', 'href': url_for('auth.logout')}
+                else:
+                    alerta['acao'] = {'rotulo': 'Tentar novamente', 'form': 'form-solicitacao'}
+                return _render_nova(tipos_pagamento, reenvio=reenvio, alerta=alerta)
 
             # 2. Gera Documento (Requerimento) vinculado ao processo
             ctx_doc = {
@@ -107,8 +134,9 @@ def nova_solicitacao():
                 'usuario_cargo': session.get('usuario_cargo', 'Colaborador'),
                 'objeto': contrato.objeto or 'Objeto não informado'
             }
+            detalhe_doc = {}
             doc_criado = gerar_documento_pagamento(
-                token_sei, unidade_id, proc_criado['IdProcedimento'], ctx_doc
+                token_sei, unidade_id, proc_criado['IdProcedimento'], ctx_doc, detalhe_erro=detalhe_doc
             )
 
             # 3. Salva solicitação no banco
@@ -130,17 +158,49 @@ def nova_solicitacao():
             db.session.commit()
 
             # 4. Prepara o Modal de Assinatura (não redireciona)
-            modal_abrir = True
-            doc_protocolo = doc_criado.get('DocumentoFormatado', '') if doc_criado else ''
-            unidade_atual = unidade_id
+            doc_protocolo = (doc_criado or {}).get('DocumentoFormatado', '')
             proc_formatado = proc_criado.get('ProcedimentoFormatado', '')
+            if not doc_protocolo:
+                # Sem documento não há o que assinar: o modal abriria com "—" e a assinatura falharia
+                current_app.logger.warning(
+                    '[SOLICITACOES] Processo %s criado sem requisição de pagamento: %s',
+                    proc_formatado, detalhe_doc or 'resposta do SEI sem DocumentoFormatado',
+                )
+                return _render_nova(tipos_pagamento, alerta=_alerta_documento_nao_gerado(proc_criado, detalhe_doc))
 
-            flash(f'Processo {proc_formatado} criado. Insira sua senha para assinar.', 'info')
+            modal_abrir = True
+            unidade_atual = unidade_id
+            processo_sei = _processo_para_tela(proc_criado)
+            alerta = {
+                'tipo': 'sucesso',
+                'titulo': 'Processo aberto no SEI',
+                'mensagem': 'Assine a requisição de pagamento com sua senha do SEI para concluir.',
+                'processo': processo_sei,
+            }
 
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            flash('Erro ao criar solicitação. Tente novamente.', 'danger')
-            return redirect(url_for('solicitacoes.nova_solicitacao'))
+            current_app.logger.exception(
+                '[SOLICITACOES] Falha ao criar solicitação (contrato %s, unidade %s, processo %s)',
+                codigo_contrato, unidade_id, (proc_criado or {}).get('ProcedimentoFormatado'),
+            )
+            if proc_criado:
+                # O processo já existe no SEI: tentar de novo abriria um segundo processo
+                return _render_nova(tipos_pagamento, alerta={
+                    'tipo': 'erro',
+                    'titulo': 'Processo aberto no SEI, mas a solicitação não foi registrada',
+                    'mensagem': 'O processo foi criado no SEI, mas houve uma falha ao gerar o documento ou salvar a solicitação.',
+                    'processo': _processo_para_tela(proc_criado),
+                    'dica': 'Não crie de novo: vincule o processo já aberto para não duplicar.',
+                    'acao': {'rotulo': 'Vincular processo', 'href': url_for('solicitacoes.vincular_solicitacao')},
+                })
+            return _render_nova(tipos_pagamento, reenvio=reenvio, alerta={
+                'tipo': 'erro',
+                'titulo': 'Não foi possível criar a solicitação',
+                'mensagem': 'Ocorreu uma falha inesperada antes de abrir o processo no SEI.',
+                'dica': 'Seus dados continuam aqui. Tente novamente; se continuar, avise o suporte.',
+                'acao': {'rotulo': 'Tentar novamente', 'form': 'form-solicitacao'},
+            })
 
     return render_template(
         'solicitacoes/nova.html',
@@ -148,7 +208,61 @@ def nova_solicitacao():
         modal_abrir=modal_abrir,
         doc_protocolo=doc_protocolo,
         unidade_atual=unidade_atual,
+        processo_sei=processo_sei,
+        alerta=alerta,
         tipos_pagamento=tipos_pagamento
+    )
+
+
+def _alerta_documento_nao_gerado(proc_criado, detalhe_doc):
+    """Alerta de processo aberto (e solicitação salva) sem a requisição de pagamento gerada."""
+    mensagem = 'O processo foi aberto no SEI e a solicitação foi registrada, mas o SEI não gerou o documento de requisição.'
+    do_sei = (detalhe_doc.get('mensagem') or '').strip()
+    if do_sei:
+        mensagem = f'{mensagem} Resposta do SEI: “{do_sei}”'
+    link = proc_criado.get('LinkAcesso')
+    acao = ({'rotulo': 'Abrir processo no SEI', 'href': link, 'externo': True} if link
+            else {'rotulo': 'Ir para as solicitações', 'href': url_for('solicitacoes.dashboard')})
+    return {
+        'tipo': 'aviso',
+        'titulo': 'Processo criado, mas a requisição de pagamento não foi gerada',
+        'mensagem': mensagem,
+        'dica': 'Não crie de novo: inclua a requisição de pagamento direto no processo pelo SEI.',
+        'codigo': descrever_falha_criacao(detalhe_doc)['codigo'],
+        'acao': acao,
+        'processo': _processo_para_tela(proc_criado),
+    }
+
+
+def _processo_para_tela(proc_criado):
+    """Número e link do processo criado, para exibir com link direto ao SEI."""
+    return {'numero': proc_criado.get('ProcedimentoFormatado') or 'sem número',
+            'link': proc_criado.get('LinkAcesso') or ''}
+
+
+def _contrato_para_tela(contrato):
+    """Contrato no mesmo formato da busca (api_buscar_contratos), para refazer o passo 1."""
+    objeto = contrato.objeto or 'Sem objeto'
+    return {
+        'codigo': contrato.codigo,
+        'numeroOriginal': contrato.numeroOriginal,
+        'nomeContratado': contrato.nomeContratado,
+        'objeto': objeto[:100] + '...' if len(objeto) > 100 else objeto,
+        'numProcesso': contrato.numProcesso,
+    }
+
+
+def _render_nova(tipos_pagamento, alerta, reenvio=None):
+    """Re-renderiza a Nova solicitação com o alerta da página (sem redirect: mantém os dados)."""
+    return render_template(
+        'solicitacoes/nova.html',
+        unidades=session.get('unidades', []),
+        modal_abrir=False,
+        doc_protocolo='',
+        unidade_atual='',
+        tipos_pagamento=tipos_pagamento,
+        alerta=alerta,
+        reenvio=reenvio,
     )
 
 

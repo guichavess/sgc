@@ -16,6 +16,7 @@
     --hub-ink-3: #5f687a;
     --hub-radius: 8px;
     --pi-green: #00843d;
+    --pi-red: #e4411b;
     --pi-yellow: #f6c200;
     --pi-blue: #0b3d91;
     --card-h: 96px;
@@ -55,11 +56,13 @@
 .hub-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--hub-ink-3); margin: 0 0 6px; }
 .hub-title { display: flex; align-items: baseline; gap: 12px; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; color: var(--hub-ink); }
 .hub-count { font-size: 13px; font-weight: 500; color: var(--hub-ink-3); letter-spacing: 0; font-variant-numeric: tabular-nums; }
-.hub-signature { display: flex; width: 56px; height: 3px; margin-top: 12px; border-radius: 2px; overflow: hidden; transform-origin: left center; }
+/* Assinatura PI: as 4 cores do logo do Governo do Piauí (verde, vermelho, amarelo, azul) */
+.hub-signature { display: flex; width: 96px; height: 6px; margin-top: 12px; border-radius: 3px; overflow: hidden; transform-origin: left center; }
 .hub-signature span { flex: 1; }
 .hub-signature span:nth-child(1) { background: var(--pi-green); }
-.hub-signature span:nth-child(2) { background: var(--pi-yellow); }
-.hub-signature span:nth-child(3) { background: var(--pi-blue); }
+.hub-signature span:nth-child(2) { background: var(--pi-red); }
+.hub-signature span:nth-child(3) { background: var(--pi-yellow); }
+.hub-signature span:nth-child(4) { background: var(--pi-blue); }
 
 .hub-search { position: relative; width: 340px; }
 .hub-search i.bi-search { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--hub-ink-3); font-size: 14px; pointer-events: none; }

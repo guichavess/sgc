@@ -16,57 +16,123 @@
  {% endif %}
  {% endfor %}
 {% endif %}
-{% block content %}
-<div class="d-flex justify-content-between align-items-end mb-4">
- <div>
- <h3 class="fw-bold text-dark mb-1">Solicitações</h3>
- <p class="text-muted mb-0">Gerencie e acompanhe seus processos de pagamento.</p>
- </div>
- 
- <div class="d-flex flex-column align-items-end">
- {% if ns.maior_data %}
- <small class="text-muted fw-bold mb-1" style="font-size: 0.85rem;">
- <i class="bi bi-clock-history me-1"></i>
- Atualização Geral: {{ ns.maior_data.strftime('%d/%m/%Y %H:%M:%S') }}
- {% if ultima_sincronizacao and ultima_sincronizacao.origem == 'agendada' %}
- <span class="badge bg-secondary ms-1" style="font-size: 0.65rem;" title="Sincronização automática">auto</span>
- {% endif %}
- </small>
- {% else %}
- <small class="text-muted mb-1" style="font-size: 0.85rem;">--</small>
- {% endif %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/solicitacoes-dashboard.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/sgc-datepicker.css') }}">
+{% endblock %}
 
- <div class="d-flex flex-nowrap gap-2">
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/sgc-datepicker.js') }}"></script>
+{% endblock %}
+
+{# Filtro de data: botão + calendário em popover (js/sgc-datepicker.js).
+   Envia AAAA-MM-DD no mesmo campo GET; valor inválido na URL vira vazio. #}
+{% macro date_picker(nome, rotulo, titulo, min_input=none, max_input=none) %}
+{% set bruto = request.args.get(nome, '')|trim %}
+{% set partes = bruto.split('-') %}
+{% set valido = partes|length == 3 and partes[0]|length == 4 and partes[1]|length == 2 and partes[2]|length == 2 and (partes|join).isdigit() %}
+{% set valor = bruto if valido else '' %}
+<div class="sgc-datepicker{{ ' is-preenchido' if valor }}" data-sgc-datepicker{% if min_input %} data-min-input="{{ min_input }}"{% endif %}{% if max_input %} data-max-input="{{ max_input }}"{% endif %}>
+ <label class="sgc-datepicker__rotulo" for="dp_{{ nome }}">{{ rotulo }}</label>
+ <div class="sgc-datepicker__campo">
+ <input type="hidden" name="{{ nome }}" value="{{ valor }}">
+ <button type="button" id="dp_{{ nome }}" class="sgc-datepicker__trigger" aria-haspopup="dialog" aria-expanded="false" title="{{ titulo }}">
+ <span class="sgc-datepicker__valor">{% if valor %}{{ partes[2] }}/{{ partes[1] }}/{{ partes[0] }}{% else %}Selecionar data{% endif %}</span>
+ <i class="bi bi-chevron-down sgc-datepicker__seta" aria-hidden="true"></i>
+ </button>
+ </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+{# Status da última atualização geral: vermelho se a execução anterior falhou
+   (erro total ou parcial, com erros); verde só quando terminou sem erros. #}
+{% set sync_status = ultima_sincronizacao.status if ultima_sincronizacao else none %}
+{% if sync_status == 'erro' %}
+ {% set sync_dot, sync_dot_titulo = 'is-erro', 'A última atualização geral falhou' %}
+{% elif sync_status == 'parcial' %}
+ {% set sync_dot, sync_dot_titulo = 'is-erro', 'A última atualização geral falhou: ' ~ (ultima_sincronizacao.erros or 0) ~ ' erro(s)' %}
+{% elif sync_status == 'sucesso' %}
+ {% set sync_dot, sync_dot_titulo = 'is-ok', 'Atualização geral em dia' %}
+{% else %}
+ {% set sync_dot, sync_dot_titulo = 'is-neutro', 'Sem registro de atualização geral' %}
+{% endif %}
+
+<header class="sol-head">
+ <div>
+ <h3 class="sol-title">Solicitações de Pagamentos</h3>
+ <div class="sol-signature" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+ <p class="sol-subtitle">Gerencie e acompanhe seus processos de pagamento.</p>
+ </div>
+
+ <div class="sol-head-acoes">
+ <div class="sol-sync-status">
+ <span class="sol-sync-dot {{ sync_dot }}" role="img" aria-label="{{ sync_dot_titulo }}" title="{{ sync_dot_titulo }}"></span>
+ {% if ns.maior_data %}
+ <span>Atualização geral: <span class="sol-num">{{ ns.maior_data.strftime('%d/%m/%Y %H:%M:%S') }}</span></span>
+ {% if ultima_sincronizacao and ultima_sincronizacao.origem == 'agendada' %}
+ <span class="sol-sync-auto" title="Sincronização automática">auto</span>
+ {% endif %}
+ {% else %}
+ <span>Atualização geral: --</span>
+ {% endif %}
+ </div>
+
+ <div class="sol-head-botoes">
  {% if current_user.is_admin %}
- <button id="btnSyncUnificado" class="btn btn-primary shadow-sm px-3 fw-bold" onclick="iniciarSincronizacaoUnificada()">
- <i class="bi bi-arrow-repeat me-2"></i> Sincronizar Tudo (SEI + Saldos)
+ <button type="button" id="btnSyncUnificado" class="sgc-mbtn sgc-mbtn--secondary" onclick="iniciarSincronizacaoUnificada()">
+ <span class="sgc-mbtn__fill"></span>
+ <i class="bi bi-arrow-repeat sgc-mbtn__icon sgc-mbtn__icon--girar" aria-hidden="true"></i>
+ <span class="sgc-mbtn__label">Sincronizar tudo (SEI + Saldos)</span>
  </button>
  {% endif %}
 
  {% if current_user.tem_permissao('solicitacoes', 'criar') %}
- <a href="{{ url_for('solicitacoes.vincular_solicitacao') }}" class="btn btn-outline-primary shadow-sm px-3 fw-bold">
- <i class="bi bi-link-45deg me-2"></i> Vincular Processo
+ <a href="{{ url_for('solicitacoes.vincular_solicitacao') }}" class="sgc-mbtn sgc-mbtn--secondary">
+ <span class="sgc-mbtn__fill"></span>
+ <i class="bi bi-link-45deg sgc-mbtn__icon sgc-mbtn__icon--conectar" aria-hidden="true"></i>
+ <span class="sgc-mbtn__label">Vincular processo</span>
  </a>
- <a href="{{ url_for('solicitacoes.nova_solicitacao') }}" class="btn btn-success shadow-sm px-3 fw-bold">
- <i class="bi bi-plus-lg me-2"></i> Nova Solicitação
+ <a href="{{ url_for('solicitacoes.nova_solicitacao') }}" class="sgc-mbtn sgc-mbtn--novo">
+ <span class="sgc-mbtn__fill"></span>
+ <i class="bi bi-plus-lg sgc-mbtn__icon sgc-mbtn__icon--somar" aria-hidden="true"></i>
+ <span class="sgc-mbtn__label">Nova solicitação</span>
  </a>
  {% endif %}
  </div>
  </div>
-</div>
+</header>
 
 <div class="modal fade modal-sync-sei" id="modalSyncSei" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="tituloModalSyncSei">
  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable modal-fullscreen-md-down">
  <div class="modal-content border-0 shadow-lg">
- <div class="modal-header sync-header">
+ <div class="modal-header sync-header" data-estado="pendente">
+ <span class="sync-assinatura" aria-hidden="true"></span>
+ <span class="sync-header-icone" aria-hidden="true">
+ <svg class="sync-ampulheta" viewBox="0 0 100 100" width="28" height="28" focusable="false">
+ <defs>
+ <clipPath id="syncAmpulhetaClipTopo"><path d="M 32 15 C 32 33, 46 43, 50 48 C 54 43, 68 33, 68 15 Z"/></clipPath>
+ <clipPath id="syncAmpulhetaClipBase"><path d="M 32 85 C 32 67, 46 57, 50 52 C 54 57, 68 67, 68 85 Z"/></clipPath>
+ </defs>
+ <g class="sync-ampulheta-corpo" fill="currentColor" stroke="currentColor">
+ <rect x="25" y="10" width="50" height="5" rx="2"/>
+ <rect x="25" y="85" width="50" height="5" rx="2"/>
+ <path fill="none" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M 30 15 C 30 35, 45 45, 50 50 C 55 45, 70 35, 70 15 Z M 30 85 C 30 65, 45 55, 50 50 C 55 55, 70 65, 70 85 Z"/>
+ <g clip-path="url(#syncAmpulhetaClipTopo)"><rect class="sync-ampulheta-areia-topo" x="30" y="15" width="40" height="35" stroke="none"/></g>
+ <g clip-path="url(#syncAmpulhetaClipBase)"><rect class="sync-ampulheta-areia-base" x="30" y="50" width="40" height="35" stroke="none"/></g>
+ <line class="sync-ampulheta-fio" x1="50" y1="50" x2="50" y2="80" stroke-width="2"/>
+ </g>
+ </svg>
+ <i class="bi"></i></span>
  <div class="sync-header-texto">
- <h5 class="modal-title" id="tituloModalSyncSei"><i class="bi bi-arrow-repeat me-2"></i>Sincronização Unificada</h5>
+ <div class="sync-header-eyebrow">Pagamentos · Atualização geral</div>
+ <h5 class="modal-title" id="tituloModalSyncSei">Sincronização unificada</h5>
  <div id="tituloFaseSei" class="sync-header-status" data-estado="pendente" aria-live="polite">Preparando...</div>
  </div>
  <div class="sync-header-progresso">
- <div class="d-flex justify-content-between">
+ <div class="sync-header-progresso-topo">
  <span>Progresso geral</span>
- <span><strong id="pctProgressoSei">0%</strong> · <span id="tempoTotalSync">0 s</span></span>
+ <span class="sync-header-numeros"><strong id="pctProgressoSei">0%</strong><span class="sync-header-sep" aria-hidden="true">·</span><i class="bi bi-stopwatch" aria-hidden="true"></i> <span id="tempoTotalSync">0 s</span></span>
  </div>
  <div class="progress sync-progress-geral" role="progressbar" aria-label="Progresso geral da sincronização">
  <div id="barraProgressoSei" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%;"></div>
@@ -121,11 +187,15 @@
 
  <div class="modal-footer">
  <span class="sync-footer-dica">O relatório fica disponível ao final da sincronização.</span>
- <button type="button" class="btn btn-outline-primary" id="btnRelatorioSync" onclick="gerarRelatorioSync()" disabled>
- <i class="bi bi-file-earmark-text me-1"></i> Gerar Relatório
+ <button type="button" class="sgc-mbtn sgc-mbtn--secondary" id="btnRelatorioSync" onclick="gerarRelatorioSync()" disabled>
+ <span class="sgc-mbtn__fill"></span>
+ <i class="bi bi-file-earmark-text sgc-mbtn__icon" aria-hidden="true"></i>
+ <span class="sgc-mbtn__label">Gerar relatório</span>
  </button>
- <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" disabled id="btnFecharModalSei">
- Aguarde...
+ <button type="button" class="sgc-mbtn sgc-mbtn--secondary" data-bs-dismiss="modal" disabled id="btnFecharModalSei">
+ <span class="sgc-mbtn__fill"></span>
+ <i class="bi bi-hourglass-split sgc-mbtn__icon" aria-hidden="true"></i>
+ <span class="sgc-mbtn__label">Aguarde...</span>
  </button>
  </div>
  </div>
@@ -153,13 +223,9 @@
  </div>
 
  <div class="col-md-auto">
- <div class="input-group">
- <span class="input-group-text bg-white text-muted small px-2">De</span>
- <input type="date" name="data_inicio" class="form-control px-2"
- value="{{ request.args.get('data_inicio', '') }}" title="Data Inicial">
- <span class="input-group-text bg-white text-muted small px-2">Até</span>
- <input type="date" name="data_fim" class="form-control px-2"
- value="{{ request.args.get('data_fim', '') }}" title="Data Final">
+ <div class="sol-periodo">
+ {{ date_picker('data_inicio', 'De', 'Data inicial', max_input='data_fim') }}
+ {{ date_picker('data_fim', 'Até', 'Data final', min_input='data_inicio') }}
  </div>
  </div>
  </div>
@@ -167,13 +233,14 @@
  <!-- Linha 2: Dropdowns (Competência, Etapa, Tipo Pgto) + Botões -->
  <div class="row g-2 align-items-center">
 
+ {% set qtd_comp = request.args.getlist('filtro_competencia')|length %}
  <div class="col-auto">
  <div class="dropdown">
- <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+ <button class="btn sol-filtro-chip dropdown-toggle{{ ' is-ativo' if qtd_comp }}"
  type="button" id="dropdownCompetencia" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
- <i class="bi bi-calendar-event me-1"></i>
+ <i class="bi bi-calendar-event" aria-hidden="true"></i>
  <span id="labelCompetencia">Competência</span>
- <span class="badge bg-primary ms-1" id="badgeCompetencia" style="display: none;">0</span>
+ <span class="sol-filtro-qtd" id="badgeCompetencia"{{ ' hidden' if not qtd_comp }}>{{ qtd_comp }}</span>
  </button>
  <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
  <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
@@ -187,9 +254,9 @@
  value="{{ comp }}" id="comp_{{ loop.index }}"
  {% if request.args.getlist('filtro_competencia') and comp in request.args.getlist('filtro_competencia') %}checked{% endif %}
  onchange="atualizarLabelCompetencia()">
- <label class="form-check-label small d-flex justify-content-between w-100" for="comp_{{ loop.index }}" style="cursor: pointer;">
- {{ comp }}
- <span class="badge bg-light text-muted border ms-2">{{ contagem_competencias.get(comp, 0) }}</span>
+ <label class="form-check-label sol-filtro-item" for="comp_{{ loop.index }}">
+ <span>{{ comp }}</span>
+ <span class="sol-filtro-contagem">{{ contagem_competencias.get(comp, 0) }}</span>
  </label>
  </div>
  {% endfor %}
@@ -200,11 +267,11 @@
 
  <div class="col-auto">
  <div class="dropdown">
- <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+ <button class="btn sol-filtro-chip dropdown-toggle{{ ' is-ativo' if filtro_etapas }}"
  type="button" id="dropdownEtapas" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
- <i class="bi bi-list-task me-1"></i>
+ <i class="bi bi-list-task" aria-hidden="true"></i>
  <span id="labelEtapas">Etapa</span>
- <span class="badge bg-primary ms-1" id="badgeEtapas" style="display: none;">0</span>
+ <span class="sol-filtro-qtd" id="badgeEtapas"{{ ' hidden' if not filtro_etapas }}>{{ filtro_etapas|length }}</span>
  </button>
  <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 250px; z-index: 1060;">
  <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
@@ -218,12 +285,12 @@
  value="{{ etapa.id }}" id="st_{{ loop.index }}"
  {% if etapa.id in filtro_etapas %}checked{% endif %}
  onchange="atualizarLabelEtapa()">
- <label class="form-check-label small d-flex justify-content-between align-items-center w-100" for="st_{{ loop.index }}" style="cursor: pointer;">
+ <label class="form-check-label sol-filtro-item" for="st_{{ loop.index }}">
  <span>
- <span class="d-inline-block rounded-circle me-1" style="width: 10px; height: 10px; background-color: {{ etapa.cor_hex }};"></span>
+ <span class="sol-dot" style="background-color: {{ etapa.cor_hex or '#64748B' }};" aria-hidden="true"></span>
  {{ etapa.nome }}
  </span>
- <span class="badge bg-light text-muted border ms-2">{{ contagem_etapas.get(etapa.id, 0) }}</span>
+ <span class="sol-filtro-contagem">{{ contagem_etapas.get(etapa.id, 0) }}</span>
  </label>
  </div>
  {% endfor %}
@@ -234,11 +301,11 @@
 
  <div class="col-auto">
  <div class="dropdown">
- <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+ <button class="btn sol-filtro-chip dropdown-toggle{{ ' is-ativo' if filtro_tipos }}"
  type="button" id="dropdownTipo" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
- <i class="bi bi-tag me-1"></i>
+ <i class="bi bi-tag" aria-hidden="true"></i>
  <span id="labelTipo">Tipo de Pagamento</span>
- <span class="badge bg-primary ms-1" id="badgeTipo" style="display: none;">0</span>
+ <span class="sol-filtro-qtd" id="badgeTipo"{{ ' hidden' if not filtro_tipos }}>{{ filtro_tipos|length }}</span>
  </button>
  <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
  <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
@@ -251,9 +318,9 @@
  value="{{ tipo.id }}" id="tipo_{{ loop.index }}"
  {% if tipo.id in filtro_tipos %}checked{% endif %}
  onchange="atualizarLabelTipo()">
- <label class="form-check-label small d-flex justify-content-between w-100" for="tipo_{{ loop.index }}" style="cursor: pointer;">
- {{ tipo.nome }}
- <span class="badge bg-light text-muted border ms-2">{{ contagem_tipos.get(tipo.id, 0) }}</span>
+ <label class="form-check-label sol-filtro-item" for="tipo_{{ loop.index }}">
+ <span>{{ tipo.nome }}</span>
+ <span class="sol-filtro-contagem">{{ contagem_tipos.get(tipo.id, 0) }}</span>
  </label>
  </div>
  {% endfor %}
@@ -263,11 +330,11 @@
 
  <div class="col-auto">
  <div class="dropdown">
- <button class="btn btn-outline-secondary text-start d-flex align-items-center dropdown-toggle px-2"
+ <button class="btn sol-filtro-chip dropdown-toggle{{ ' is-ativo' if filtro_status_empenho }}"
  type="button" id="dropdownStatusEmpenho" data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside">
- <i class="bi bi-cash-coin me-1"></i>
+ <i class="bi bi-cash-coin" aria-hidden="true"></i>
  <span id="labelStatusEmpenho">Status Empenho</span>
- <span class="badge bg-primary ms-1" id="badgeStatusEmpenho" style="display: none;">0</span>
+ <span class="sol-filtro-qtd" id="badgeStatusEmpenho"{{ ' hidden' if not filtro_status_empenho }}>{{ filtro_status_empenho|length }}</span>
  </button>
  <div class="dropdown-menu p-3 shadow-lg border-0" style="min-width: 220px; z-index: 1060;">
  <div class="d-flex justify-content-between mb-2 border-bottom pb-2">
@@ -280,9 +347,9 @@
  value="{{ se.id }}" id="se_{{ loop.index }}"
  {% if se.id in filtro_status_empenho %}checked{% endif %}
  onchange="atualizarLabelStatusEmpenho()">
- <label class="form-check-label small d-flex justify-content-between w-100" for="se_{{ loop.index }}" style="cursor: pointer;">
- {{ se.nome }}
- <span class="badge bg-light text-muted border ms-2">{{ contagem_status_empenho.get(se.id, 0) }}</span>
+ <label class="form-check-label sol-filtro-item" for="se_{{ loop.index }}">
+ <span>{{ se.nome }}</span>
+ <span class="sol-filtro-contagem">{{ contagem_status_empenho.get(se.id, 0) }}</span>
  </label>
  </div>
  {% endfor %}
@@ -315,7 +382,9 @@
 <div class="card overflow-hidden">
  <div class="card-body p-0">
  <div class="table-responsive table-rounded">
- <table class="table table-custom table-compact table-hover align-middle mb-0">
+ {# cor_badge (Bootstrap) → cor da tag suave #}
+ {% set COR_STATUS_EMPENHO = {'warning': '#D97706', 'success': '#16A34A', 'danger': '#DC2626', 'info': '#2563EB', 'primary': '#343990', 'dark': '#1B2333'} %}
+ <table class="table table-custom table-compact sol-tabela align-middle mb-0">
  <thead>
  <tr>
  <th class="ps-4">Cód. Contrato</th>
@@ -330,49 +399,41 @@
  </thead>
  <tbody>
  {% for sol in solicitacoes %}
- <tr style="cursor: pointer;" onclick="window.location='{{ url_for('solicitacoes.detalhes_solicitacao', id_solicitacao=sol.id) }}'">
+ <tr class="sol-row" onclick="window.location='{{ url_for('solicitacoes.detalhes_solicitacao', id_solicitacao=sol.id) }}'">
  <td class="ps-4">
- <span class="badge bg-light text-dark border border-secondary">
- {{ sol.codigo_contrato }}
- </span>
+ <span class="sol-mono">{{ sol.codigo_contrato }}</span>
  </td>
  <td>
- <div class="fw-bold text-dark" style="max-width: 280px; word-break: break-word;">{{ sol.contrato.nomeContratado }}</div>
+ <div class="sol-contratado">{{ sol.contrato.nomeContratado }}</div>
  </td>
  <td>
- <span class="badge bg-light text-dark border border-secondary">
- {{ sol.competencia|normalizar_comp }}
- </span>
+ <span class="sol-num">{{ sol.competencia|normalizar_comp }}</span>
  </td>
  <td>
  {% if sol.link_processo_sei %}
- <a href="{{ sol.link_processo_sei }}" target="_blank" class="fw-bold text-primary text-decoration-none" onclick="event.stopPropagation()">
- <i class="bi bi-box-arrow-up-right me-1"></i> {{ sol.protocolo_gerado_sei }}
+ <a href="{{ sol.link_processo_sei }}" target="_blank" rel="noopener" class="sol-protocolo" onclick="event.stopPropagation()">
+ {{ sol.protocolo_gerado_sei }} <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
  </a>
  {% else %}
- <span class="text-muted small">Sem protocolo</span>
+ <span class="sol-meta">Sem protocolo</span>
  {% endif %}
- <div class="mt-1">
+ <div>
  {% if sol.tipo_pagamento %}
- {% if sol.tipo_pagamento.nome == 'DEA: Indenizatório' %}
- <span class="badge bg-danger text-white">{{ sol.tipo_pagamento.nome }}</span>
+ {# DEA (inclusive "DEA: Indenizatório") em vermelho · Indenizatório em laranja · demais neutros #}
+ {% set tipo_nome = sol.tipo_pagamento.nome or '' %}
+ {% set tipo_cor = '#C5221F' if (tipo_nome|upper).startswith('DEA') else ('#C2410C' if 'indeniz' in tipo_nome|lower else '#64748B') %}
+ <span class="sol-tag sol-tag-tipo" style="--tag-cor: {{ tipo_cor }}">{{ tipo_nome }}</span>
  {% else %}
- <span class="badge bg-info text-white">{{ sol.tipo_pagamento.nome }}</span>
- {% endif %}
- {% else %}
- <span class="badge bg-light text-muted border">Sem tipo</span>
+ <span class="sol-meta">Sem tipo</span>
  {% endif %}
  </div>
  </td>
  <td>
- <span class="badge rounded-pill" style="background-color: {{ sol.etapa.cor_hex }}; color: white;">
- {{ sol.etapa.nome }}
- </span>
+ <span class="sol-tag" style="--tag-cor: {{ sol.etapa.cor_hex or '#64748B' }}">{{ sol.etapa.nome }}</span>
  </td>
- 
+
  <td class="text-center text-nowrap">
  {% set tempo = tempos_preloaded.get(sol.id, '--') %}
- 
  {% if tempo and tempo != '--' %}
  {% if sol.tempo_total %}
  {# Caso Finalizado (PAGO) #}
@@ -412,9 +473,9 @@
  ---
  {% endif %}
  </div>
- <span class="badge bg-{{ sol.status_empenho.cor_badge if sol.status_empenho else 'secondary' }} py-1 px-2" style="font-size: 0.7rem;">
- {{ sol.status_empenho.nome }}
- </span>
+ {% if sol.status_empenho %}
+ <span class="sol-tag" style="--tag-cor: {{ COR_STATUS_EMPENHO.get(sol.status_empenho.cor_badge, '#64748B') }}">{{ sol.status_empenho.nome }}</span>
+ {% endif %}
  </div>
  {% else %}
  <div class="input-group input-group-sm">
@@ -552,8 +613,6 @@
  .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
  .custom-scrollbar::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #aaa; }
- 
- .dropdown-toggle::after { margin-left: auto; } /* Joga a setinha para a direita */
 </style>
 <script>
  /* ==========================================================================
@@ -618,7 +677,7 @@
  td.innerHTML = `
  <div class="text-center">
  <div class="fw-bold text-dark small mb-1">R$ ${valor}</div>
- <span class="badge bg-warning py-1 px-2" style="font-size: 0.7rem;">Empenho Solicitado</span>
+ <span class="sol-tag" style="--tag-cor: #D97706">Empenho Solicitado</span>
  </div>`;
  mostrarToast('Sucesso', 'Solicitação de empenho registrada com sucesso.', 'lembrete');
  } else {
@@ -699,6 +758,7 @@
  var painel = document.getElementById('painelPendenciasSei');
  painel.innerHTML = '';
  painel.hidden = true;
+ painel.parentElement.classList.remove('tem-pendencias');
 
  var barra = document.getElementById('barraProgressoSei');
  barra.className = 'progress-bar progress-bar-striped progress-bar-animated';
@@ -706,11 +766,9 @@
  setTituloSync('Fase 1 de 3 · Baixando documentos do SEI', 'andamento');
  document.getElementById('msgProgressoSei').textContent = 'Conectando ao SEI...';
 
- var btnFechar = document.getElementById('btnFecharModalSei');
- btnFechar.setAttribute('disabled', 'true');
- btnFechar.textContent = 'Processando...';
- btnFechar.className = 'btn btn-secondary';
- btnFechar.onclick = null;
+ reexecucaoAtiva = false;
+ setBotaoFecharSync('secondary', 'bi-hourglass-split', 'Processando...', null);
+ document.getElementById('btnFecharModalSei').setAttribute('disabled', 'true');
  document.getElementById('btnRelatorioSync').setAttribute('disabled', 'true');
 
  clearInterval(timerSync);
@@ -736,9 +794,13 @@
  if (dados.tipo === 'processo_inexistente') {
  protocolos422.push({ protocolo: dados.protocolo, link_sei: dados.link_sei });
  }
- // Coleta outros erros/alertas da Fase 1
+ // Erro de um processo: guarda protocolo + link para exibir como link do SEI
+ else if (dados.tipo === 'alerta_processo') {
+ registrarAlerta(1, 'Download SEI', dados.msg, dados.protocolo, dados.link_sei);
+ }
+ // Coleta outros erros/alertas da Fase 1 (protocolo tirado da mensagem, se houver)
  else if (ehAlerta(dados.msg, false)) {
- registrarAlerta(1, 'Download SEI', dados.msg);
+ registrarAlerta(1, 'Download SEI', dados.msg, protocoloDoAlerta(dados), dados.link_sei);
  }
 
  // Coleta lista de 422 do evento final (caso tenha)
@@ -748,7 +810,8 @@
 
  atualizarFase(1, dados.progresso, dados.msg);
  if (deveLogar(dados.msg)) {
- logSync(dados.msg, ehAlerta(dados.msg, false) || dados.tipo === 'processo_inexistente' ? 'sync-log-alerta' : '');
+ var ehProblema = ehAlerta(dados.msg, false) || dados.tipo === 'processo_inexistente' || dados.tipo === 'alerta_processo';
+ logSync(dados.msg, ehProblema ? 'sync-log-alerta' : '', ehProblema ? protocoloDoAlerta(dados) : dados.protocolo, dados.link_sei);
  }
 
  if (dados.concluido) {
@@ -865,16 +928,7 @@
  var temProblemas = temErros || tem422;
 
  // Registra a sincronização (fonte da "Atualização Geral" do dashboard)
- try {
- fetch("{{ url_for('solicitacoes.api_registrar_sincronizacao') }}", {
- method: 'POST',
- headers: { 'Content-Type': 'application/json' },
- body: JSON.stringify({
- erros: errosSincronizacao.length + protocolos422.length,
- status: temProblemas ? 'parcial' : 'sucesso'
- })
- }).catch(function () { /* não bloqueia a UI */ });
- } catch (e) { /* ignora */ }
+ registrarSincronizacaoSync(errosSincronizacao.length + protocolos422.length, temProblemas ? 'parcial' : 'sucesso');
 
  var painel = document.getElementById('painelPendenciasSei');
  var html = '';
@@ -883,51 +937,61 @@
  if (tem422) {
  var total422 = protocolos422.length;
  html += '<div class="sync-pendencia-bloco is-erro">';
- html += '<div class="sync-pendencia-titulo text-danger"><i class="bi bi-file-earmark-x"></i> Processos inexistentes no SEI (' + total422 + ')</div>';
- html += '<div id="lista422" class="sync-pendencia-lista custom-scrollbar">';
+ html += '<div class="sync-pendencia-cabecalho">';
+ html += '<span class="sync-pendencia-icone" aria-hidden="true"><i class="bi bi-file-earmark-x"></i></span>';
+ html += '<div class="sync-pendencia-textos"><div class="sync-pendencia-titulo">Processos inexistentes no SEI <span class="sync-pendencia-qtd">' + total422 + '</span></div>';
+ html += '<div class="sync-pendencia-sub">O SEI não encontrou estes protocolos. Confira no SEI antes de excluir.</div></div>';
+ html += '<button type="button" class="btn sync-btn-excluir-todos" onclick="excluirTodos422()" id="btnExcluirTodos422">';
+ html += '<i class="bi bi-trash me-1"></i> Excluir todos</button>';
+ html += '</div>';
+ html += '<ul id="lista422" class="sync-pendencia-lista custom-scrollbar">';
 
  protocolos422.forEach(function (item, idx) {
- var prot = escapeHtml(item.protocolo);
- var link = escapeHtml(item.link_sei || '');
- html += '<div class="sync-pendencia-item" id="item422_' + idx + '">';
- if (item.link_sei) {
- html += '<a href="' + link + '" target="_blank" rel="noopener" class="sync-pendencia-msg text-primary text-decoration-none fw-semibold">' + prot + ' <i class="bi bi-box-arrow-up-right" style="font-size:0.7rem;"></i></a>';
- } else {
- html += '<span class="sync-pendencia-msg fw-semibold">' + prot + '</span>';
- }
- html += '<button class="btn btn-outline-danger btn-sm px-2 py-0" data-protocolo="' + prot + '" data-idx="' + idx + '" onclick="excluirSolicitacao422(this.dataset.protocolo, parseInt(this.dataset.idx))" title="Excluir do banco">';
+ var prot = escapeAttr(item.protocolo);
+ html += '<li class="sync-pendencia-item" id="item422_' + idx + '">';
+ html += '<span class="sync-pendencia-msg">' + htmlComLinkSei(item.protocolo, item.protocolo, item.link_sei) + '</span>';
+ html += '<button type="button" class="btn sync-btn-excluir" data-protocolo="' + prot + '" data-idx="' + idx + '" onclick="excluirSolicitacao422(this.dataset.protocolo, parseInt(this.dataset.idx))" title="Excluir do banco" aria-label="Excluir ' + prot + ' do banco">';
  html += '<i class="bi bi-trash"></i> Excluir</button>';
- html += '</div>';
+ html += '</li>';
  });
 
- html += '</div>';
- html += '<button class="btn btn-danger btn-sm w-100 mt-2 fw-bold" onclick="excluirTodos422()" id="btnExcluirTodos422">';
- html += '<i class="bi bi-trash me-1"></i> Excluir Todos (' + total422 + ')</button>';
+ html += '</ul>';
  html += '</div>';
  }
 
  // --- OUTROS ALERTAS ---
  if (temErros) {
- html += '<div class="sync-pendencia-bloco">';
- html += '<div class="sync-pendencia-titulo"><i class="bi bi-exclamation-triangle text-warning"></i> Outros alertas (' + errosSincronizacao.length + ')</div>';
- html += '<div class="sync-pendencia-lista custom-scrollbar">';
- errosSincronizacao.forEach(function (erro) {
- html += '<div class="sync-pendencia-item justify-content-start">';
- html += '<span class="badge bg-secondary flex-shrink-0" style="font-size: 0.65rem;">' + escapeHtml(erro.fase) + '</span>';
- html += '<span class="sync-pendencia-msg">' + escapeHtml(erro.msg) + '</span>';
+ var qtdErros = errosSincronizacao.length;
+ html += '<div class="sync-pendencia-bloco is-alerta" id="blocoAlertasSync">';
+ html += '<div class="sync-pendencia-cabecalho">';
+ html += '<span class="sync-pendencia-icone" aria-hidden="true"><i class="bi bi-exclamation-triangle"></i></span>';
+ html += '<div class="sync-pendencia-textos"><div class="sync-pendencia-titulo">' + (qtdErros === 1 ? 'Alerta registrado' : 'Alertas registrados') + ' <span class="sync-pendencia-qtd" id="qtdAlertasSync">' + qtdErros + '</span></div>';
+ html += '<div class="sync-pendencia-sub" id="subAlertasSync">Clique no protocolo para abrir no SEI ou atualize de novo só os processos com erro.</div></div>';
+ html += '<button type="button" class="btn sync-btn-reexecutar" id="btnReexecutarErros" onclick="reexecutarTodosComErro()">';
+ html += '<i class="bi bi-arrow-repeat" aria-hidden="true"></i> Reexecutar com erro <span class="sync-btn-qtd" id="qtdReexecutarErros">0</span></button>';
  html += '</div>';
+ html += '<ul class="sync-pendencia-lista custom-scrollbar" id="listaAlertasSync">';
+ errosSincronizacao.forEach(function (erro, idx) {
+ html += htmlItemAlerta(erro, idx);
  });
- html += '</div>';
- html += '<div class="small text-muted mt-2"><i class="bi bi-info-circle me-1"></i>Use <strong>Gerar Relatório</strong> para ver o que cada alerta significa e o que fazer.</div>';
+ html += '</ul>';
+ html += '<div class="sync-pendencia-dica"><i class="bi bi-info-circle" aria-hidden="true"></i> Use <strong>Gerar relatório</strong> para ver o que cada alerta significa e o que fazer.</div>';
  html += '</div>';
  }
 
  if (!temProblemas) {
- html += '<div class="sync-pendencia-bloco is-sucesso"><div class="sync-pendencia-titulo text-success mb-0"><i class="bi bi-check-circle-fill"></i> Tudo atualizado, nenhuma pendência registrada.</div></div>';
+ html += '<div class="sync-pendencia-bloco is-sucesso">';
+ html += '<div class="sync-pendencia-cabecalho">';
+ html += '<span class="sync-pendencia-icone" aria-hidden="true"><i class="bi bi-check-lg"></i></span>';
+ html += '<div class="sync-pendencia-textos"><div class="sync-pendencia-titulo">Tudo atualizado</div>';
+ html += '<div class="sync-pendencia-sub">Nenhuma pendência registrada nesta sincronização.</div></div>';
+ html += '</div></div>';
  }
 
  painel.innerHTML = html;
  painel.hidden = false;
+ painel.parentElement.classList.add('tem-pendencias'); // log encolhe, pendências ganham espaço
+ atualizarResumoAlertas();
 
  var resumo;
  if (tem422 && temErros) {
@@ -942,10 +1006,259 @@
 
  encerrarSincronizacao(temProblemas ? 'alerta' : 'sucesso', resumo);
 
- var btnFechar = document.getElementById('btnFecharModalSei');
- btnFechar.className = temProblemas ? 'btn btn-warning fw-bold' : 'btn btn-success fw-bold';
- btnFechar.textContent = 'Concluir e Atualizar Página';
- btnFechar.onclick = function () { window.location.reload(); };
+ setBotaoFecharConcluir(temProblemas);
+ completarLinksSei();
+ }
+
+ function setBotaoFecharConcluir(temProblemas) {
+ setBotaoFecharSync(temProblemas ? 'alerta' : 'sucesso', 'bi-arrow-clockwise', 'Concluir e atualizar página',
+ function () { window.location.reload(); });
+ }
+
+ // Rodapé: o botão de fechar é uma pílula (sgc-mbtn) que muda de cor, ícone e texto
+ function setBotaoFecharSync(variante, icone, texto, aoClicar) {
+ var btn = document.getElementById('btnFecharModalSei');
+ btn.className = 'sgc-mbtn sgc-mbtn--' + variante;
+ btn.querySelector('.sgc-mbtn__icon').className = 'bi ' + icone + ' sgc-mbtn__icon';
+ btn.querySelector('.sgc-mbtn__label').textContent = texto;
+ btn.onclick = aoClicar || null;
+ }
+
+ function registrarSincronizacaoSync(erros, status) {
+ try {
+ fetch("{{ url_for('solicitacoes.api_registrar_sincronizacao') }}", {
+ method: 'POST',
+ headers: { 'Content-Type': 'application/json' },
+ body: JSON.stringify({ erros: erros, status: status })
+ }).catch(function () { /* não bloqueia a UI */ });
+ } catch (e) { /* ignora */ }
+ }
+
+ // --- ALERTAS: ITENS E REEXECUÇÃO DOS PROCESSOS COM ERRO ---
+
+ var URL_SYNC_DOCS = "{{ url_for('solicitacoes.api_sincronizar_documentos') }}";
+ var URL_SYNC_ETAPAS = "{{ url_for('solicitacoes.api_atualizar_etapas') }}";
+ var URL_LINKS_SEI = "{{ url_for('solicitacoes.api_links_sei') }}";
+ var reexecucaoAtiva = false;
+
+ // Só erros de download (Fase 1) com protocolo podem ser reexecutados por processo
+ function ehAlertaReexecutavel(erro) {
+ return !!erro.protocolo && erro.fase === 'Download SEI';
+ }
+
+ function htmlItemAlerta(erro, idx) {
+ var estado = erro.estado || 'erro';
+ var reexecutavel = ehAlertaReexecutavel(erro);
+ var textos = {
+ resolvido: 'Processo ' + erro.protocolo + ' atualizado: documentos baixados e etapa recalculada.',
+ inexistente: 'Processo ' + erro.protocolo + ' não existe mais no SEI.',
+ ignorado: 'Processo ' + erro.protocolo + ' não está mais pendente (pago ou cancelado).'
+ };
+ var texto = textos[estado] || textoAlertaLimpo(erro.msg);
+
+ var h = '<li class="sync-pendencia-item is-alerta" id="itemAlerta_' + idx + '" data-estado="' + estado + '">';
+ h += '<span class="sync-pendencia-fase">' + escapeHtml(erro.fase) + '</span>';
+ h += '<span class="sync-pendencia-msg">' + htmlComLinkSei(texto, erro.protocolo, erro.link_sei) + '</span>';
+ if (reexecutavel) {
+ var prot = escapeAttr(erro.protocolo);
+ if (estado === 'erro') {
+ h += '<button type="button" class="btn sync-btn-atualizar" data-protocolo="' + prot + '" onclick="reexecutarProcessos([this.dataset.protocolo])"' +
+ (reexecucaoAtiva ? ' disabled' : '') + ' aria-label="Atualizar o processo ' + prot + ' novamente">' +
+ '<i class="bi bi-arrow-clockwise" aria-hidden="true"></i> ' + (erro.tentativas ? 'Tentar de novo' : 'Atualizar') + '</button>';
+ } else if (estado === 'atualizando') {
+ h += '<button type="button" class="btn sync-btn-atualizar" disabled><span class="spinner-border" aria-hidden="true"></span> Atualizando</button>';
+ } else if (estado === 'resolvido') {
+ h += '<span class="sync-pendencia-selo is-ok"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Atualizado</span>';
+ } else if (estado === 'inexistente') {
+ h += '<span class="sync-pendencia-selo is-erro"><i class="bi bi-file-earmark-x" aria-hidden="true"></i> Inexistente</span>';
+ } else if (estado === 'ignorado') {
+ h += '<span class="sync-pendencia-selo"><i class="bi bi-dash-circle" aria-hidden="true"></i> Fora da fila</span>';
+ }
+ }
+ return h + '</li>';
+ }
+
+ // Aplica mudanças aos alertas de um protocolo e redesenha as linhas
+ function atualizarAlertaProtocolo(protocolo, mudancas) {
+ errosSincronizacao.forEach(function (erro, idx) {
+ if (!ehAlertaReexecutavel(erro) || erro.protocolo !== protocolo) return;
+ if (mudancas.estado) erro.estado = mudancas.estado;
+ if (mudancas.msg) erro.msg = mudancas.msg;
+ if (mudancas.link_sei) erro.link_sei = mudancas.link_sei;
+ if (mudancas.tentou) erro.tentativas = (erro.tentativas || 0) + 1;
+ var item = document.getElementById('itemAlerta_' + idx);
+ if (item) item.outerHTML = htmlItemAlerta(erro, idx);
+ });
+ }
+
+ function alertaDoProtocolo(protocolo) {
+ return errosSincronizacao.find(function (e) { return ehAlertaReexecutavel(e) && e.protocolo === protocolo; });
+ }
+
+ function estadoAlertaProtocolo(protocolo) {
+ var erro = alertaDoProtocolo(protocolo);
+ return erro ? (erro.estado || 'erro') : null;
+ }
+
+ // Alertas que continuam valendo (vão para o relatório e contam como pendência)
+ function alertasPendentes() {
+ return errosSincronizacao.filter(function (e) { return e.estado !== 'resolvido' && e.estado !== 'ignorado'; });
+ }
+
+ function protocolosComErro() {
+ var lista = [];
+ errosSincronizacao.forEach(function (e) {
+ if (ehAlertaReexecutavel(e) && (e.estado || 'erro') === 'erro' && lista.indexOf(e.protocolo) === -1) lista.push(e.protocolo);
+ });
+ return lista;
+ }
+
+ function atualizarResumoAlertas() {
+ var qtd = document.getElementById('qtdAlertasSync');
+ if (!qtd) return;
+ var pendentes = alertasPendentes().length;
+ var comErro = protocolosComErro().length;
+ qtd.textContent = pendentes;
+ var bloco = document.getElementById('blocoAlertasSync');
+ bloco.classList.toggle('is-sucesso', pendentes === 0);
+ bloco.querySelector('.sync-pendencia-icone .bi').className = 'bi ' + (pendentes ? 'bi-exclamation-triangle' : 'bi-check-lg');
+ document.getElementById('subAlertasSync').textContent = pendentes
+ ? 'Clique no protocolo para abrir no SEI ou atualize de novo só os processos com erro.'
+ : 'Todos os processos com erro foram atualizados.';
+ var btn = document.getElementById('btnReexecutarErros');
+ // durante a tentativa o contador mantém quantos processos estão sendo reexecutados
+ if (!reexecucaoAtiva) document.getElementById('qtdReexecutarErros').textContent = comErro;
+ btn.hidden = comErro === 0 && !reexecucaoAtiva;
+ btn.disabled = reexecucaoAtiva || comErro === 0;
+ }
+
+ function reexecutarTodosComErro() {
+ reexecutarProcessos(protocolosComErro());
+ }
+
+ // Nova tentativa só para os protocolos informados: Fase 1 (download) e Fase 2 (etapas)
+ function reexecutarProcessos(protocolos) {
+ protocolos = (protocolos || []).filter(function (p, i, lista) { return p && lista.indexOf(p) === i; });
+ if (reexecucaoAtiva || !protocolos.length) return;
+
+ reexecucaoAtiva = true;
+ var qtdBtn = document.getElementById('qtdReexecutarErros');
+ if (qtdBtn) qtdBtn.textContent = protocolos.length;
+ var rotulo =protocolos.length === 1 ? '1 processo' : protocolos.length + ' processos';
+ protocolos.forEach(function (p) { atualizarAlertaProtocolo(p, { estado: 'atualizando', tentou: true }); });
+ bloquearAcoesSync(true);
+
+ setTituloSync('Nova tentativa · ' + rotulo, 'andamento');
+ document.getElementById('msgProgressoSei').textContent = 'Baixando documentos do SEI de ' + rotulo + '...';
+ logSeparador('Nova tentativa · ' + rotulo);
+
+ var fonteDocs = new EventSource(URL_SYNC_DOCS + '?protocolos=' + encodeURIComponent(protocolos.join(',')));
+
+ fonteDocs.onmessage = function (event) {
+ var dados;
+ try { dados = JSON.parse(event.data); } catch (e) { return; }
+
+ if (dados.tipo === 'processo_ok') {
+ atualizarAlertaProtocolo(dados.protocolo, { link_sei: dados.link_sei });
+ logSync(dados.msg, 'sync-log-ok', dados.protocolo, dados.link_sei);
+ } else if (dados.tipo === 'alerta_processo' || dados.tipo === 'processo_inexistente') {
+ var estado = dados.tipo === 'processo_inexistente' ? 'inexistente' : 'erro';
+ atualizarAlertaProtocolo(dados.protocolo, { estado: estado, msg: dados.msg, link_sei: dados.link_sei });
+ logSync(dados.msg, 'sync-log-alerta', dados.protocolo, dados.link_sei);
+ } else if (dados.msg && !dados.concluido) {
+ document.getElementById('msgProgressoSei').textContent = dados.msg;
+ }
+
+ if (!dados.concluido) return;
+ fonteDocs.close();
+ (dados.ignorados || []).forEach(function (p) { atualizarAlertaProtocolo(p, { estado: 'ignorado' }); });
+ logSync(dados.msg);
+
+ // Sem alerta na nova tentativa = documentos baixados: recalcula as etapas deles
+ var baixados = protocolos.filter(function (p) { return estadoAlertaProtocolo(p) === 'atualizando'; });
+ if (!baixados.length) { concluirReexecucao(protocolos); return; }
+ recalcularEtapasReexecucao(protocolos, baixados);
+ };
+
+ fonteDocs.onerror = function () {
+ fonteDocs.close();
+ falharReexecucao(protocolos, 'Conexão perdida ao baixar os documentos do SEI.');
+ };
+ }
+
+ function recalcularEtapasReexecucao(protocolos, baixados) {
+ document.getElementById('msgProgressoSei').textContent = 'Recalculando etapas...';
+ var fonteEtapas = new EventSource(URL_SYNC_ETAPAS + '?protocolos=' + encodeURIComponent(baixados.join(',')));
+
+ fonteEtapas.onmessage = function (event) {
+ var dados;
+ try { dados = JSON.parse(event.data); } catch (e) { return; }
+ var texto = dados.msg || '';
+ if (texto.indexOf('Movimentado') !== -1) {
+ var prot = texto.match(RE_PROTOCOLO_SEI);
+ if (relatorioSync) faseRelatorio(2).movimentados.push(prot ? prot[0] : texto);
+ var alertaProt = prot ? alertaDoProtocolo(prot[0]) : null;
+ logSync(texto, '', prot ? prot[0] : null, alertaProt ? alertaProt.link_sei : null);
+ } else if (ehAlerta(texto, false)) {
+ logSync(texto, 'sync-log-alerta');
+ }
+ if (!dados.concluido) return;
+ fonteEtapas.close();
+ baixados.forEach(function (p) { atualizarAlertaProtocolo(p, { estado: 'resolvido' }); });
+ concluirReexecucao(protocolos);
+ };
+
+ fonteEtapas.onerror = function () {
+ fonteEtapas.close();
+ falharReexecucao(protocolos, 'Conexão perdida ao recalcular as etapas.');
+ };
+ }
+
+ function falharReexecucao(protocolos, texto) {
+ protocolos.forEach(function (p) {
+ if (estadoAlertaProtocolo(p) === 'atualizando') atualizarAlertaProtocolo(p, { estado: 'erro', msg: texto + ' (' + p + ')' });
+ });
+ logSync(texto, 'sync-log-erro');
+ concluirReexecucao(protocolos);
+ }
+
+ function concluirReexecucao(protocolos) {
+ reexecucaoAtiva = false;
+ var atualizados = protocolos.filter(function (p) {
+ var e = estadoAlertaProtocolo(p);
+ return e === 'resolvido' || e === 'ignorado';
+ }).length;
+ var aindaComErro = protocolosComErro().length;
+ var semPendencias = alertasPendentes().length === 0 && protocolos422.length === 0;
+
+ var resumo = atualizados + ' de ' + protocolos.length + (protocolos.length === 1 ? ' processo atualizado.' : ' processos atualizados.');
+ if (aindaComErro) resumo += ' ' + aindaComErro + ' ainda com erro.';
+ logSync('✓ Nova tentativa concluída — ' + resumo, 'sync-log-ok');
+
+ bloquearAcoesSync(false);
+ atualizarResumoAlertas();
+
+ var estado = semPendencias ? 'sucesso' : 'alerta';
+ setTituloSync(semPendencias ? 'Sincronização concluída com sucesso' : 'Sincronização concluída com alertas', estado);
+ setFaseEstado('final', estado, { msg: resumo });
+ document.getElementById('msgProgressoSei').textContent = resumo;
+ document.getElementById('barraProgressoSei').className = 'progress-bar is-' + estado;
+ setBotaoFecharConcluir(!semPendencias);
+ completarLinksSei();
+
+ // Tudo resolvido: a "Atualização Geral" do dashboard deixa de aparecer como parcial
+ if (semPendencias && atualizados) registrarSincronizacaoSync(0, 'sucesso');
+ }
+
+ function bloquearAcoesSync(bloquear) {
+ ['btnFecharModalSei', 'btnRelatorioSync', 'btnExcluirTodos422'].forEach(function (id) {
+ var el = document.getElementById(id);
+ if (!el || el.classList.contains('is-concluido')) return;
+ el.disabled = bloquear;
+ });
+ document.querySelectorAll('#listaAlertasSync .sync-btn-atualizar[data-protocolo]').forEach(function (b) { b.disabled = bloquear; });
+ if (bloquear) setBotaoFecharSync('secondary', 'bi-hourglass-split', 'Processando...', null);
+ atualizarResumoAlertas();
  }
 
  function falharSincronizacao(n, texto) {
@@ -954,9 +1267,7 @@
  logSync(texto, 'sync-log-erro');
  encerrarSincronizacao('erro', texto);
 
- var btnFechar = document.getElementById('btnFecharModalSei');
- btnFechar.className = 'btn btn-outline-secondary';
- btnFechar.textContent = 'Fechar';
+ setBotaoFecharSync('secondary', 'bi-x-lg', 'Fechar', null);
  }
 
  function encerrarSincronizacao(status, resumo) {
@@ -990,7 +1301,10 @@
  // --- RELATÓRIO ---
  function gerarRelatorioSync() {
  if (!relatorioSync) return;
- relatorioSync.alertas = errosSincronizacao.slice();
+ // Alertas resolvidos numa nova tentativa não entram no relatório
+ relatorioSync.alertas = alertasPendentes().map(function (e) {
+ return { fase: e.fase, msg: e.msg, protocolo: e.protocolo, link_sei: e.link_sei };
+ });
  relatorioSync.protocolos_422 = protocolos422.map(function (p) {
  return { protocolo: p.protocolo, link_sei: p.link_sei || null };
  });
@@ -1066,8 +1380,8 @@
  logSync('✓ Fase ' + n + ' concluída' + (msgFinal ? ' — ' + msgFinal : ''), 'sync-log-ok');
  }
 
- function registrarAlerta(n, faseNome, texto) {
- errosSincronizacao.push({ fase: faseNome, msg: texto });
+ function registrarAlerta(n, faseNome, texto, protocolo, linkSei) {
+ errosSincronizacao.push({ fase: faseNome, msg: texto, protocolo: protocolo || null, link_sei: linkSei || null });
  alertasFase[n]++;
  }
 
@@ -1096,7 +1410,18 @@
  var t = document.getElementById('tituloFaseSei');
  t.textContent = texto;
  t.dataset.estado = estado;
+ var cabecalho = document.querySelector('#modalSyncSei .sync-header');
+ if (!cabecalho) return;
+ cabecalho.dataset.estado = estado;
+ cabecalho.querySelector('.sync-header-icone .bi').className = 'bi ' + (ICONES_CABECALHO_SYNC[estado] || '');
  }
+
+ // Ícone ao lado do título: ampulheta SVG (CSS) enquanto roda, resultado ao terminar
+ var ICONES_CABECALHO_SYNC = {
+ sucesso: 'bi-check-lg',
+ alerta: 'bi-exclamation-lg',
+ erro: 'bi-x-lg'
+ };
 
  function atualizarTemposSync() {
  if (inicioSyncMs) {
@@ -1112,14 +1437,18 @@
 
  // --- REGISTRO (LOG) ---
 
- function logSync(texto, classe) {
+ function logSync(texto, classe, protocolo, linkSei) {
  if (!texto) return;
  var logDiv = document.getElementById('logDetalhesSei');
  // Só acompanha o fim se o usuário não rolou para cima para ler algo
  var noFim = logDiv.scrollHeight - logDiv.scrollTop - logDiv.clientHeight < 40;
  var linha = document.createElement('div');
  linha.className = 'sync-log-linha' + (classe ? ' ' + classe : '');
+ if (protocolo) {
+ linha.innerHTML = htmlComLinkSei(texto, protocolo, linkSei); // conteúdo escapado
+ } else {
  linha.textContent = texto;
+ }
  logDiv.appendChild(linha);
  if (noFim) logDiv.scrollTop = logDiv.scrollHeight;
  if (relatorioSync && relatorioSync.log.length < LIMITE_LOG_SYNC) relatorioSync.log.push(texto);
@@ -1169,6 +1498,84 @@
  return div.innerHTML;
  }
 
+ // Para valores dentro de atributos HTML (escapa também as aspas)
+ function escapeAttr(str) {
+ return escapeHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+ }
+
+ // Protocolo do evento; servidor antigo não manda o campo, então vem da mensagem
+ function protocoloDoAlerta(dados) {
+ if (dados.protocolo) return dados.protocolo;
+ var achado = String(dados.msg || '').match(RE_PROTOCOLO_SEI);
+ return achado ? achado[0] : null;
+ }
+
+ // Texto do alerta sem o prefixo técnico "[ALERTA] " (o painel já indica que é alerta)
+ function textoAlertaLimpo(texto) {
+ return String(texto || '').replace(/^\[ALERTA\]\s*/, '');
+ }
+
+ // Protocolo como link do SEI; sem link, fica marcado (data-protocolo) para completarLinksSei trocar depois
+ function htmlProtocoloSei(protocolo, linkSei) {
+ if (linkSei && /^https?:\/\//i.test(linkSei)) {
+ return '<a href="' + escapeAttr(linkSei) + '" class="sync-link-sei" target="_blank" rel="noopener" title="Abrir processo no SEI">' +
+ escapeHtml(protocolo) + '<i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>' +
+ '<span class="visually-hidden"> (abre o SEI em nova aba)</span></a>';
+ }
+ return '<span class="sync-protocolo" data-protocolo="' + escapeAttr(protocolo) + '">' + escapeHtml(protocolo) + '</span>';
+ }
+
+ // Processos que chegaram sem link: o servidor procura no banco e no SEI, e o modal troca pelo link
+ function completarLinksSei() {
+ var semLink = [];
+ function juntar(protocolo, link) {
+ if (protocolo && !link && semLink.indexOf(protocolo) === -1) semLink.push(protocolo);
+ }
+ errosSincronizacao.forEach(function (e) { juntar(e.protocolo, e.link_sei); });
+ protocolos422.forEach(function (p) { juntar(p.protocolo, p.link_sei); });
+ document.querySelectorAll('#modalSyncSei .sync-protocolo[data-protocolo]').forEach(function (el) {
+ juntar(el.dataset.protocolo, null);
+ });
+ if (!semLink.length) return;
+
+ fetch(URL_LINKS_SEI, {
+ method: 'POST',
+ headers: { 'Content-Type': 'application/json' },
+ body: JSON.stringify({ protocolos: semLink })
+ })
+ .then(function (r) { return r.ok ? r.json() : null; })
+ .then(function (dados) { if (dados && dados.links) aplicarLinksSei(dados.links); })
+ .catch(function () { /* sem link, o protocolo continua em destaque */ });
+ }
+
+ function aplicarLinksSei(links) {
+ function completar(item) {
+ if (item.protocolo && !item.link_sei && links[item.protocolo]) item.link_sei = links[item.protocolo];
+ }
+ errosSincronizacao.forEach(completar);
+ protocolos422.forEach(completar);
+ document.querySelectorAll('#modalSyncSei .sync-protocolo[data-protocolo]').forEach(function (el) {
+ var link = links[el.dataset.protocolo];
+ if (link) el.outerHTML = htmlProtocoloSei(el.dataset.protocolo, link);
+ });
+ }
+
+ // HTML escapado do texto, com o protocolo virando link para o processo no SEI.
+ // Sem link válido (http/https), o protocolo só ganha destaque visual.
+ function htmlComLinkSei(texto, protocolo, linkSei) {
+ texto = String(texto || '');
+ if (!protocolo) {
+ var achado = texto.match(RE_PROTOCOLO_SEI);
+ protocolo = achado ? achado[0] : '';
+ }
+ if (!protocolo) return escapeHtml(texto);
+
+ var protocoloHtml = htmlProtocoloSei(protocolo, linkSei);
+ var pos = texto.indexOf(protocolo);
+ if (pos === -1) return protocoloHtml + ' ' + escapeHtml(texto);
+ return escapeHtml(texto.slice(0, pos)) + protocoloHtml + escapeHtml(texto.slice(pos + protocolo.length));
+ }
+
  function erroGenerico(source, n, faseNome) {
  var tentouReconectar = false;
  return function (event) {
@@ -1188,6 +1595,11 @@
 
  // --- FUNÇÕES DE EXCLUSÃO DE PROCESSOS 422 ---
 
+ function marcarItem422Excluido(item, protocolo) {
+ item.classList.add('is-excluido');
+ item.innerHTML = '<span class="sync-pendencia-msg"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> ' + escapeHtml(protocolo) + ' excluído do banco</span>';
+ }
+
  async function excluirSolicitacao422(protocolo, idx) {
  var item = document.getElementById('item422_' + idx);
  var btn = item ? item.querySelector('button') : null;
@@ -1202,17 +1614,13 @@
  var dados = await resp.json();
 
  if (dados.sucesso || (dados.excluidos && dados.excluidos.length > 0)) {
- if (item) {
- item.style.textDecoration = 'line-through';
- item.style.opacity = '0.5';
- item.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>' + protocolo + ' — excluído</span>';
- }
+ if (item) marcarItem422Excluido(item, protocolo);
  } else {
- if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-trash"></i> Erro'; btn.classList.add('btn-danger'); }
+ if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-trash"></i> Tentar de novo'; btn.classList.add('is-falhou'); }
  alert('Erro ao excluir: ' + (dados.msg || 'erro desconhecido'));
  }
  } catch (err) {
- if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-trash"></i> Erro'; }
+ if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-trash"></i> Tentar de novo'; btn.classList.add('is-falhou'); }
  alert('Erro de conexão: ' + err.message);
  }
  }
@@ -1239,20 +1647,16 @@
  var idx = protocolos422.findIndex(function(p) { return p.protocolo === prot; });
  if (idx >= 0) {
  var item = document.getElementById('item422_' + idx);
- if (item) {
- item.style.textDecoration = 'line-through';
- item.style.opacity = '0.5';
- item.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>' + prot + ' — excluído</span>';
- }
+ if (item) marcarItem422Excluido(item, prot);
  }
  });
 
- btn.className = 'btn btn-success btn-sm w-100 mt-2 fw-bold';
+ btn.classList.add('is-concluido');
  btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> ' + dados.msg;
  }
 
  if (dados.erros && dados.erros.length > 0) {
- btn.className = 'btn btn-warning btn-sm w-100 mt-2 fw-bold';
+ btn.classList.add('is-falhou');
  btn.innerHTML = dados.msg;
  }
  } catch (err) {
@@ -1262,22 +1666,20 @@
  }
  }
 
-// --- Lógica para o Filtro de Competência ---
+// --- Chips de filtro: nome fixo + contador de selecionados + estado ativo ---
+
+ function atualizarChipFiltro(seletorChecks, idBadge) {
+ const count = document.querySelectorAll(seletorChecks + ':checked').length;
+ const badge = document.getElementById(idBadge);
+ badge.textContent = count;
+ badge.hidden = count === 0;
+ badge.closest('.sol-filtro-chip').classList.toggle('is-ativo', count > 0);
+ }
+
+ // --- Lógica para o Filtro de Competência ---
 
  function atualizarLabelCompetencia() {
- const checkboxes = document.querySelectorAll('.filtro-check-competencia:checked');
- const count = checkboxes.length;
- const label = document.getElementById('labelCompetencia');
- const badge = document.getElementById('badgeCompetencia');
-
- if (count > 0) {
- label.innerText = count === 1 ? '1 Selecionada' : `${count} Selecionadas`;
- badge.innerText = count;
- badge.style.display = 'inline-block';
- } else {
- label.innerText = 'Competência';
- badge.style.display = 'none';
- }
+ atualizarChipFiltro('.filtro-check-competencia', 'badgeCompetencia');
  }
 
  function limparSelecaoCompetencia(link) {
@@ -1290,19 +1692,7 @@
  // --- Lógica para o Filtro de Tipo de Pagamento ---
 
  function atualizarLabelTipo() {
- const checkboxes = document.querySelectorAll('.filtro-check-tipo:checked');
- const count = checkboxes.length;
- const label = document.getElementById('labelTipo');
- const badge = document.getElementById('badgeTipo');
-
- if (count > 0) {
- label.innerText = count === 1 ? '1 Selecionado' : `${count} Selecionados`;
- badge.innerText = count;
- badge.style.display = 'inline-block';
- } else {
- label.innerText = 'Tipo de Pagamento';
- badge.style.display = 'none';
- }
+ atualizarChipFiltro('.filtro-check-tipo', 'badgeTipo');
  }
 
  function limparSelecaoTipo(link) {
@@ -1315,19 +1705,7 @@
  // --- Lógica para o Filtro de Etapa ---
 
  function atualizarLabelEtapa() {
- const checkboxes = document.querySelectorAll('.filtro-check-etapa:checked');
- const count = checkboxes.length;
- const label = document.getElementById('labelEtapas');
- const badge = document.getElementById('badgeEtapas');
-
- if (count > 0) {
- label.innerText = count === 1 ? '1 Selecionada' : `${count} Selecionadas`;
- badge.innerText = count;
- badge.style.display = 'inline-block';
- } else {
- label.innerText = 'Etapa';
- badge.style.display = 'none';
- }
+ atualizarChipFiltro('.filtro-check-etapa', 'badgeEtapas');
  }
 
  function limparSelecaoEtapa(link) {
@@ -1340,19 +1718,7 @@
  // --- Lógica para o Filtro de Status Empenho ---
 
  function atualizarLabelStatusEmpenho() {
- const checkboxes = document.querySelectorAll('.filtro-check-status-empenho:checked');
- const count = checkboxes.length;
- const label = document.getElementById('labelStatusEmpenho');
- const badge = document.getElementById('badgeStatusEmpenho');
-
- if (count > 0) {
- label.innerText = count === 1 ? '1 Selecionado' : `${count} Selecionados`;
- badge.innerText = count;
- badge.style.display = 'inline-block';
- } else {
- label.innerText = 'Status Empenho';
- badge.style.display = 'none';
- }
+ atualizarChipFiltro('.filtro-check-status-empenho', 'badgeStatusEmpenho');
  }
 
  function limparSelecaoStatusEmpenho(link) {

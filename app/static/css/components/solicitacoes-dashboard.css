@@ -1,0 +1,142 @@
+/**
+ * Solicitações (/solicitacoes/dashboard) — status do sync, filtros e tabela.
+ * Cabeçalho, assinatura, botões sgc-mbtn, tags e tokens vivem em sgc-ui.css (global).
+ * Referência: docs/ux/mockups/stitch/pagamentos/1-dashboard-editorial.{html,png}
+ * Tokens: docs/design/solicitacoes/DESIGN.md · movimento: base/motion.css
+ * Sidebar e navbar NÃO são estilizadas aqui.
+ */
+
+/* (2) Status da atualização geral */
+.sol-sync-status { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 13px; color: var(--sol-ink-3); }
+.sol-sync-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--sol-border-strong);
+}
+.sol-sync-dot.is-ok { background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, .16); }
+.sol-sync-dot.is-erro { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, .16); }
+.sol-sync-auto {
+    padding: 0 6px;
+    border: 1px solid var(--sol-border);
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--sol-ink-3);
+}
+
+/* Período (De / Até) — date pickers em js/sgc-datepicker.js */
+.sol-periodo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+
+/* ==========================================================================
+   (3) Chips de filtro  ·  (4) contadores dos itens
+   ========================================================================== */
+.sol-filtro-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid var(--sol-border-strong);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--sol-ink);
+    font-size: 14px;
+    transition: border-color var(--dur-quick) var(--ease-standard), background-color var(--dur-quick) var(--ease-standard), color var(--dur-quick) var(--ease-standard);
+}
+.sol-filtro-chip i { color: var(--sol-ink-3); font-size: 14px; }
+/* respiro entre o texto (ou contador) e a seta */
+.sol-filtro-chip.dropdown-toggle::after { margin-left: 6px; color: var(--sol-ink-3); transition: transform var(--dur-quick) var(--ease-standard); }
+.sol-filtro-chip.show::after { transform: rotate(180deg); }
+.sol-filtro-chip:hover { border-color: var(--sol-ink-3); background: #fff; color: var(--sol-ink); }
+.sol-filtro-chip:focus-visible { box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb, 52, 57, 144), .2); }
+.sol-filtro-chip.show { border-color: var(--sol-ink-3); background: #fff; color: var(--sol-ink); }
+
+.sol-filtro-chip.is-ativo,
+.sol-filtro-chip.is-ativo:hover,
+.sol-filtro-chip.is-ativo.show {
+    border-color: var(--color-primary);
+    background: #f0f2fa;
+    color: var(--color-primary);
+    font-weight: 600;
+}
+.sol-filtro-chip.is-ativo i,
+.sol-filtro-chip.is-ativo::after { color: var(--color-primary); }
+
+.sol-filtro-qtd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.sol-filtro-qtd[hidden] { display: none; }
+
+.sol-filtro-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    font-size: 13px;
+    color: var(--sol-ink);
+    cursor: pointer;
+}
+.sol-filtro-contagem {
+    flex: 0 0 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 20px;
+    border: 1px solid var(--sol-border);
+    border-radius: 4px;
+    background: var(--sol-sunken);
+    color: var(--sol-ink-3);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.sol-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; }
+
+/* ==========================================================================
+   Tabela  ·  (5) tags  ·  (6) destaque da linha
+   ========================================================================== */
+.sol-contratado { max-width: 280px; font-weight: 600; color: var(--sol-ink); word-break: break-word; }
+.sol-meta { font-size: 13px; color: var(--sol-ink-3); }
+
+/* tipo de pagamento: mesma tag do status atual, logo abaixo do protocolo */
+.sol-tag-tipo { margin-top: 4px; }
+
+.sol-tabela tbody tr.sol-row { cursor: pointer; }
+.sol-tabela tbody tr.sol-row > td { transition: background-color var(--dur-hover-out) var(--ease-standard); }
+.sol-tabela tbody tr.sol-row:hover > td { background-color: var(--sol-row-hover); transition-duration: var(--dur-hover-in); }
+.sol-tabela tbody tr.sol-row > td:first-child { position: relative; }
+.sol-tabela tbody tr.sol-row > td:first-child::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    background: var(--color-primary);
+    transform: scaleY(0);
+    transition: transform var(--dur-hover-out) var(--ease-exit);
+}
+.sol-tabela tbody tr.sol-row:hover > td:first-child::before,
+.sol-tabela tbody tr.sol-row:focus-within > td:first-child::before {
+    transform: scaleY(1);
+    transition: transform var(--dur-quick) var(--ease-enter);
+}
+

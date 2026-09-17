@@ -1,0 +1,174 @@
+{#
+  SGC UI — macros do padrão visual (CSS em static/css/components/sgc-ui.css e sync-modal.css).
+  Uso: {% import 'components/sgc_ui.html' as ui %}
+#}
+
+{# Assinatura PI: 4 faixas (verde, vermelho, amarelo, azul) sob o título #}
+{% macro assinatura() -%}
+<div class="sol-signature" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+{%- endmacro %}
+
+{# Botão em pílula com círculo de ícone que cresce no hover.
+   variante: secondary | primary | sucesso | novo | alerta
+   gesto do ícone: girar | conectar | somar | voltar
+   href vira <a>; sem href vira <button type="{{ tipo }}">.
+   attrs: dict de atributos extras (True = atributo booleano, False/None = omitido). #}
+{% macro mbtn(variante, icone, rotulo, gesto=none, href=none, tipo='button', attrs={}) -%}
+{%- set extras -%}
+{%- for nome, valor in attrs.items() if valor is not none and valor is not false %} {{ nome }}{% if valor is not true %}="{{ valor }}"{% endif %}{% endfor -%}
+{%- endset -%}
+{%- if href %}<a href="{{ href }}" class="sgc-mbtn sgc-mbtn--{{ variante }}"{{ extras }}>
+{%- else %}<button type="{{ tipo }}" class="sgc-mbtn sgc-mbtn--{{ variante }}"{{ extras }}>
+{%- endif %}
+ <span class="sgc-mbtn__fill"></span>
+ <i class="bi {{ icone }} sgc-mbtn__icon{% if gesto %} sgc-mbtn__icon--{{ gesto }}{% endif %}" aria-hidden="true"></i>
+ <span class="sgc-mbtn__label">{{ rotulo }}</span>
+{% if href %}</a>{% else %}</button>{% endif %}
+{%- endmacro %}
+
+{# Ampulheta animada do sync-header (anima quando o header está data-estado="andamento").
+   prefixo_id deixa os clipPath únicos quando há mais de uma na página. #}
+{% macro ampulheta(prefixo_id) -%}
+<svg class="sync-ampulheta" viewBox="0 0 100 100" width="28" height="28" focusable="false">
+ <defs>
+ <clipPath id="{{ prefixo_id }}ClipTopo"><path d="M 32 15 C 32 33, 46 43, 50 48 C 54 43, 68 33, 68 15 Z"/></clipPath>
+ <clipPath id="{{ prefixo_id }}ClipBase"><path d="M 32 85 C 32 67, 46 57, 50 52 C 54 57, 68 67, 68 85 Z"/></clipPath>
+ </defs>
+ <g class="sync-ampulheta-corpo" fill="currentColor" stroke="currentColor">
+ <rect x="25" y="10" width="50" height="5" rx="2"/>
+ <rect x="25" y="85" width="50" height="5" rx="2"/>
+ <path fill="none" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M 30 15 C 30 35, 45 45, 50 50 C 55 45, 70 35, 70 15 Z M 30 85 C 30 65, 45 55, 50 50 C 55 55, 70 65, 70 85 Z"/>
+ <g clip-path="url(#{{ prefixo_id }}ClipTopo)"><rect class="sync-ampulheta-areia-topo" x="30" y="15" width="40" height="35" stroke="none"/></g>
+ <g clip-path="url(#{{ prefixo_id }}ClipBase)"><rect class="sync-ampulheta-areia-base" x="30" y="50" width="40" height="35" stroke="none"/></g>
+ <line class="sync-ampulheta-fio" x1="50" y1="50" x2="50" y2="80" stroke-width="2"/>
+ </g>
+</svg>
+{%- endmacro %}
+
+{% set ROTULOS_PASSO = {'pendente': 'Aguardando', 'andamento': 'Em andamento', 'sucesso': 'Concluído', 'erro': 'Com erro'} %}
+
+{# Passo de um fluxo guiado: reaproveita marcador, trilho e selo do sync-fase.
+   Estados: pendente (corpo inerte) · andamento · sucesso (recolhe no resumo com "Trocar") · erro.
+   O conteúdo do passo vem do bloco {% call %}. #}
+{% macro passo(numero, titulo, estado='pendente', id=none, descricao=none) -%}
+<li class="sync-fase sgc-passo"{% if id %} id="{{ id }}"{% endif %} data-estado="{{ estado }}" data-passo="{{ numero }}">
+ <span class="sync-fase-marcador" aria-hidden="true">{{ numero }}</span>
+ <div class="sgc-passo-conteudo">
+ <div class="sync-fase-topo">
+ <h2 class="sync-fase-nome sgc-passo-titulo">{{ titulo }}</h2>
+ <span class="sync-fase-estado">{{ ROTULOS_PASSO.get(estado, estado) }}</span>
+ </div>
+ {% if descricao %}<p class="sync-fase-desc sgc-passo-desc">{{ descricao }}</p>{% endif %}
+ <div class="sgc-passo-resumo" hidden>
+ <div class="sgc-passo-resumo-texto"></div>
+ <button type="button" class="sgc-passo-trocar"><i class="bi bi-pencil" aria-hidden="true"></i> Trocar</button>
+ </div>
+ <div class="sgc-passo-corpo"{% if estado == 'pendente' %} inert aria-disabled="true"{% endif %}>
+ {{ caller() }}
+ </div>
+ </div>
+</li>
+{%- endmacro %}
+
+{# Busca de contrato em cartões (Nova solicitação, Vincular processo).
+   Os ids são o contrato com as telas; o comportamento vem de SGCFluxo.buscaContratos(raiz, opções)
+   em js/sgc-fluxo.js, que lê a URL de data-url-busca (GET ?q= → {results:[…]}). #}
+{% macro busca_contrato(url_busca, placeholder='Código, nº do contrato ou nome da empresa') -%}
+<div class="sgc-busca" data-url-busca="{{ url_busca }}">
+ <label class="visually-hidden" for="termo_busca">Buscar contrato</label>
+ <div class="sgc-busca-linha">
+ <div class="sgc-busca-campo">
+ <i class="bi bi-search" aria-hidden="true"></i>
+ <input type="text" class="form-control sgc-input" id="termo_busca" data-busca-termo placeholder="{{ placeholder }}" autocomplete="off" enterkeyhint="search" aria-describedby="termo_busca-erro">
+ </div>
+ {{ mbtn('secondary', 'bi-search', 'Pesquisar', attrs={'id': 'btn-buscar', 'data-busca-botao': true}) }}
+ </div>
+ <div class="sgc-campo-erro" id="termo_busca-erro" hidden></div>
+ <div id="container-resultados" class="sgc-busca-resultados" data-busca-resultados hidden>
+ <p class="sgc-busca-contador" data-busca-contador aria-live="polite"></p>
+ <div id="tabela-corpo" class="sgc-contratos" data-busca-lista role="radiogroup" aria-label="Contratos encontrados"></div>
+ <div id="msg-nenhum-resultado" class="sgc-vazio" data-busca-vazio hidden>
+ <i class="bi bi-file-earmark-x" aria-hidden="true"></i>
+ <p>Nenhum contrato encontrado para “<span data-busca-vazio-termo></span>”. Tente o código, o nº do contrato ou parte do nome.</p>
+ </div>
+ </div>
+</div>
+{%- endmacro %}
+
+{# Painel de resumo sticky de um fluxo guiado.
+   itens: [(chave, rótulo)] → <dd data-resumo="chave"> ("—" até o JS preencher)
+   acontece: frases de "O que vai acontecer" · falta: texto inicial da linha "Falta: …"
+   O botão final vem do bloco {% call %}. #}
+{% macro resumo(itens, acontece=[], falta='') -%}
+<aside class="sgc-resumo" aria-labelledby="sgc-resumo-titulo">
+ <h2 class="sgc-resumo-eyebrow" id="sgc-resumo-titulo">Resumo</h2>
+ <dl class="sgc-resumo-lista">
+ {% for chave, rotulo in itens %}
+ <div class="sgc-resumo-item"><dt>{{ rotulo }}</dt><dd class="is-vazio" data-resumo="{{ chave }}">—</dd></div>
+ {% endfor %}
+ </dl>
+ {% if acontece %}
+ <div class="sgc-resumo-acontece">
+ <h3 class="sgc-resumo-subtitulo">O que vai acontecer</h3>
+ <ul>
+ {% for frase in acontece %}
+ <li><i class="bi bi-check2" aria-hidden="true"></i><span>{{ frase }}</span></li>
+ {% endfor %}
+ </ul>
+ </div>
+ {% endif %}
+ <div class="sgc-resumo-acao">{{ caller() }}</div>
+ <p class="sgc-resumo-falta" data-resumo-falta aria-live="polite">{{ falta }}</p>
+</aside>
+{%- endmacro %}
+
+{# Retorno à tela anterior, acima do título do sol-head (não compete com as ações em pílula).
+   destino: nome visível da tela de volta ("Solicitações") → aria-label "Voltar para {destino}". #}
+{% macro voltar(href, destino) -%}
+<a href="{{ href }}" class="sgc-voltar" aria-label="Voltar para {{ destino }}">
+ <span class="sgc-voltar__icone" aria-hidden="true"><i class="bi bi-arrow-left"></i></span>
+ <span class="sgc-voltar__rotulo">{{ destino }}</span>
+</a>
+{%- endmacro %}
+
+{# Número do processo que abre o processo no SEI em nova aba; sem link http(s) válido, só o número. #}
+{% macro processo_link(numero, link=none) -%}
+{%- if link is string and (link.startswith('https://') or link.startswith('http://')) -%}
+<a class="sgc-processo-link" href="{{ link }}" target="_blank" rel="noopener" aria-label="Abrir o processo {{ numero }} no SEI (nova aba)"><span>{{ numero }}</span><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>
+{%- else -%}
+<span class="sol-mono">{{ numero }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{# Alerta da página: logo abaixo do sol-head, no lugar da faixa de flash do topo.
+   tipo: erro · aviso · sucesso · info. acao (opcional): {rotulo, href} vira link;
+   {rotulo, form} vira botão que reenvia aquele formulário. processo (opcional): {numero, link}
+   mostra o processo com link para o SEI. Comportamento: SGCFluxo.alerta(el). #}
+{% set ICONES_ALERTA = {'erro': 'bi-x-octagon-fill', 'aviso': 'bi-exclamation-triangle-fill', 'sucesso': 'bi-check-circle-fill', 'info': 'bi-info-circle-fill'} %}
+{% macro alerta(tipo, mensagem, titulo=none, dica=none, codigo=none, acao=none, processo=none) -%}
+<div class="sgc-alerta sgc-alerta--{{ tipo }}" role="{{ 'alert' if tipo in ('erro', 'aviso') else 'status' }}" tabindex="-1" data-alerta>
+ <span class="sgc-alerta-icone" aria-hidden="true"><i class="bi {{ ICONES_ALERTA.get(tipo, 'bi-info-circle-fill') }}"></i></span>
+ <div class="sgc-alerta-corpo">
+ {% if titulo %}<p class="sgc-alerta-titulo">{{ titulo }}</p>{% endif %}
+ <p class="sgc-alerta-texto">{{ mensagem }}</p>
+ {% if processo and processo.numero %}<p class="sgc-alerta-processo"><span class="sgc-alerta-processo-rotulo">Processo SEI</span>{{ processo_link(processo.numero, processo.link) }}</p>{% endif %}
+ {% if dica %}<p class="sgc-alerta-dica">{{ dica }}</p>{% endif %}
+ {% if acao or codigo %}
+ <div class="sgc-alerta-rodape">
+ {% if acao and acao.href %}<a class="sgc-alerta-acao" href="{{ acao.href }}"{% if acao.externo %} target="_blank" rel="noopener"{% endif %}>{{ acao.rotulo }}<i class="bi {{ 'bi-box-arrow-up-right' if acao.externo else 'bi-arrow-right' }}" aria-hidden="true"></i></a>
+ {% elif acao and acao.form %}<button type="submit" class="sgc-alerta-acao" form="{{ acao.form }}"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{ acao.rotulo }}</button>{% endif %}
+ {% if codigo %}<span class="sgc-alerta-codigo">Código: {{ codigo }}</span>{% endif %}
+ </div>
+ {% endif %}
+ </div>
+ <button type="button" class="sgc-alerta-fechar" aria-label="Fechar aviso"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+</div><!-- /sgc-alerta -->
+{%- endmacro %}
+
+{% set TIPOS_FLASH = {'danger': 'erro', 'error': 'erro', 'warning': 'aviso', 'success': 'sucesso', 'info': 'info'} %}
+{# Mensagens flash da tela no formato do alerta da página (a tela sobrescreve o bloco flash_messages). #}
+{% macro alertas_flash() -%}
+{% for categoria, mensagem in get_flashed_messages(with_categories=true) %}
+{{ alerta(TIPOS_FLASH.get(categoria, 'info'), mensagem) }}
+{% endfor %}
+{%- endmacro %}

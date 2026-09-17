@@ -1,3 +1,4 @@
+import re
 import requests
 import json
 import urllib3
@@ -58,12 +59,116 @@ def montar_especificacao_pagamento(dados_contrato, competencia):
     return especificacao[:ESPECIFICACAO_MAX_CHARS]
 
 
-def criar_procedimento_pagamento(token, unidade_id, dados_contrato, competencia):
+MENSAGEM_ERRO_SEI_MAX_CHARS = 300
+
+
+def _log_sei():
+    """Logger da aplicação quando há contexto Flask; senão, o logger do módulo."""
+    from flask import current_app, has_app_context
+    import logging
+    return current_app.logger if has_app_context() else logging.getLogger(__name__)
+
+
+def mensagem_erro_sei(response):
+    """Extrai a mensagem legível de uma resposta de erro do SEI (JSON ou texto/HTML), limitada."""
+    mensagem = ''
+    try:
+        corpo = response.json()
+    except ValueError:
+        corpo = None
+
+    if isinstance(corpo, dict):
+        for chave in ('mensagem', 'Mensagem', 'message', 'erro', 'error', 'detail', 'descricao', 'erros', 'errors'):
+            valor = corpo.get(chave)
+            if isinstance(valor, (list, tuple)):
+                valor = '; '.join(str(v).strip() for v in valor if str(v).strip())
+            elif isinstance(valor, dict):
+                valor = '; '.join(str(v).strip() for v in valor.values() if str(v).strip())
+            if valor:
+                mensagem = str(valor)
+                break
+    elif isinstance(corpo, str):
+        mensagem = corpo
+
+    if not mensagem:
+        texto = getattr(response, 'text', '') or ''
+        titulo = re.search(r'<h1[^>]*>(.*?)</h1>|<title[^>]*>(.*?)</title>', texto, re.S | re.I)
+        if titulo:
+            texto = titulo.group(1) or titulo.group(2)
+        mensagem = re.sub(r'<[^>]+>', ' ', texto)
+
+    mensagem = ' '.join(mensagem.split())
+    return mensagem[:MENSAGEM_ERRO_SEI_MAX_CHARS]
+
+
+def descrever_falha_criacao(detalhe):
+    """Traduz o detalhe de falha de criar_procedimento_pagamento para o alerta da tela.
+
+    Retorna {titulo, mensagem, dica, codigo}; a mensagem do SEI, quando houver, entra na mensagem.
+    """
+    detalhe = detalhe or {}
+    tem_status = 'status' in detalhe
+    status = detalhe.get('status')
+    do_sei = (detalhe.get('mensagem') or '').strip()
+
+    if tem_status and status is None:
+        falha = {
+            'titulo': 'O SEI não respondeu',
+            'mensagem': 'A abertura do processo não foi confirmada: o SEI demorou demais ou está fora do ar.',
+            'dica': 'Confira no SEI se o processo não foi aberto e tente novamente em alguns minutos.',
+            'codigo': 'SEI sem resposta',
+        }
+    elif status == 401:
+        falha = {
+            'titulo': 'Sua sessão no SEI expirou',
+            'mensagem': 'O SEI não aceitou mais o seu acesso, então o processo não foi aberto.',
+            'dica': 'Saia do SGC e entre novamente para renovar o acesso ao SEI.',
+        }
+    elif status == 403:
+        falha = {
+            'titulo': 'Sem permissão na unidade escolhida',
+            'mensagem': 'Seu usuário do SEI não pode abrir processos nessa unidade.',
+            'dica': 'Escolha outra unidade SEI ou peça acesso a essa unidade no SEI.',
+        }
+    elif status in (400, 404, 409, 422):
+        falha = {
+            'titulo': 'O SEI recusou a abertura do processo',
+            'mensagem': 'O SEI não aceitou os dados enviados.',
+            'dica': 'Confira contrato, competência e unidade e tente novamente.',
+        }
+    elif isinstance(status, int) and status >= 500:
+        falha = {
+            'titulo': 'O SEI está instável',
+            'mensagem': 'O SEI apresentou um erro interno e o processo não foi aberto.',
+            'dica': 'Seus dados continuam aqui. Tente novamente em alguns minutos.',
+        }
+    else:
+        falha = {
+            'titulo': 'Não foi possível criar o processo no SEI',
+            'mensagem': 'O processo não foi aberto.',
+            'dica': 'Tente novamente. Se continuar, informe o código abaixo ao suporte.',
+        }
+
+    if do_sei:
+        falha['mensagem'] = f'{falha["mensagem"]} Resposta do SEI: “{do_sei}”'
+    falha.setdefault('codigo', f'SEI {status}' if status is not None else 'SEI')
+    return falha
+
+
+def criar_procedimento_pagamento(token, unidade_id, dados_contrato, competencia, detalhe_erro=None):
     """
     Etapa 1: Cria o processo de pagamento no SEI.
+
+    Retorna o dict do SEI ou None. Com `detalhe_erro` (dict), a falha é descrita nele:
+    {'status': código HTTP ou None (sem resposta), 'mensagem': texto do SEI}.
     """
+    log = _log_sei()
+    if detalhe_erro is None:
+        detalhe_erro = {}
+
     if not token:
-        print("❌ Erro: Token não fornecido.")
+        log.warning('[SEI] Criar procedimento sem token (unidade %s)', unidade_id)
+        detalhe_erro.update(status=401, mensagem='')
         return None
 
     url = f"{BASE_URL}/v1/unidades/{unidade_id}/procedimentos"
@@ -100,27 +205,44 @@ def criar_procedimento_pagamento(token, unidade_id, dados_contrato, competencia)
     }
     
     try:
-        print(f"📡 Enviando requisição SEI (Criar Procedimento) para unidade {unidade_id}...")
-        response = requests.post(url, json=payload, headers=headers, verify=False)
-
-        if response.status_code not in [200, 201]:
-            print(f"❌ Erro SEI ao criar procedimento ({response.status_code}): {response.text}")
-            
-        response.raise_for_status()
-        
-        retorno = response.json()
-        retorno['EspecificacaoGerada'] = especificacao_formatada
-        return retorno
-
-    except Exception as e:
-        print(f"Erro crítico na integração SEI (Procedimento): {e}")
+        log.info('[SEI] Criando procedimento de pagamento na unidade %s', unidade_id)
+        response = requests.post(url, json=payload, headers=headers, verify=False, timeout=60)
+    except requests.RequestException as e:
+        log.warning('[SEI] Sem resposta ao criar procedimento na unidade %s: %s', unidade_id, e)
+        detalhe_erro.update(status=None, mensagem='')
         return None
 
-def gerar_documento_pagamento(token, unidade_id, id_procedimento, dados_ctx):
+    if response.status_code not in (200, 201):
+        mensagem = mensagem_erro_sei(response)
+        log.warning('[SEI] Erro %s ao criar procedimento na unidade %s: %s',
+                    response.status_code, unidade_id, mensagem or '(sem mensagem)')
+        detalhe_erro.update(status=response.status_code, mensagem=mensagem)
+        return None
+
+    try:
+        retorno = response.json()
+    except ValueError:
+        log.warning('[SEI] Resposta inválida ao criar procedimento na unidade %s', unidade_id)
+        detalhe_erro.update(status=response.status_code, mensagem='Resposta inválida do SEI')
+        return None
+
+    log.info('[SEI] Procedimento criado: %s (id %s, unidade %s, contrato %s, competência %s)',
+             retorno.get('ProcedimentoFormatado'), retorno.get('IdProcedimento'), unidade_id,
+             dados_contrato.get('codigo'), competencia)
+    retorno['EspecificacaoGerada'] = especificacao_formatada
+    return retorno
+
+def gerar_documento_pagamento(token, unidade_id, id_procedimento, dados_ctx, detalhe_erro=None):
     """
     Etapa 2: Gera o documento (Requerimento) vinculado ao processo.
     Ajuste: Payload simplificado (Procedimento direto e sem data explícita).
+
+    Retorna o dict do SEI ou None. Com `detalhe_erro` (dict), a falha é descrita nele:
+    {'status': código HTTP ou None (sem resposta), 'mensagem': texto do SEI}.
     """
+    log = _log_sei()
+    if detalhe_erro is None:
+        detalhe_erro = {}
     url = f"{BASE_URL}/v1/unidades/{unidade_id}/documentos"
     
     competencia_texto = formatar_mes_competencia(dados_ctx['competencia'])
@@ -164,21 +286,25 @@ def gerar_documento_pagamento(token, unidade_id, id_procedimento, dados_ctx):
     }
 
     try:
-        print(f"📡 Enviando requisição SEI (Gerar Documento) para unidade {unidade_id}...")
-        
-        # Debug opcional: verifique o que está sendo enviado
-        # print(json.dumps(payload, indent=2)) 
+        log.info('[SEI] Gerando requisição de pagamento no procedimento %s (unidade %s)', id_procedimento, unidade_id)
+        response = requests.post(url, json=payload, headers=headers, verify=False, timeout=60)
+    except requests.RequestException as e:
+        log.warning('[SEI] Sem resposta ao gerar documento no procedimento %s: %s', id_procedimento, e)
+        detalhe_erro.update(status=None, mensagem='')
+        return None
 
-        response = requests.post(url, json=payload, headers=headers, verify=False)
+    if response.status_code not in (200, 201):
+        mensagem = mensagem_erro_sei(response)
+        log.warning('[SEI] Erro %s ao gerar documento no procedimento %s (unidade %s): %s',
+                    response.status_code, id_procedimento, unidade_id, mensagem or '(sem mensagem)')
+        detalhe_erro.update(status=response.status_code, mensagem=mensagem)
+        return None
 
-        if response.status_code not in [200, 201]:
-            print(f"❌ Erro SEI ao gerar documento ({response.status_code}): {response.text}")
-
-        response.raise_for_status()
+    try:
         return response.json()
-        
-    except Exception as e:
-        print(f"Erro ao gerar documento: {e}")
+    except ValueError:
+        log.warning('[SEI] Resposta inválida ao gerar documento no procedimento %s', id_procedimento)
+        detalhe_erro.update(status=response.status_code, mensagem='Resposta inválida do SEI')
         return None
 
 
@@ -303,7 +429,7 @@ def consultar_procedimento_sei(token, protocolo, timeout=120):
     }
 
     try:
-        print(f"📡 Consultando procedimento SEI: {protocolo_limpo}...")
+        _log_sei().info('[SEI] Consultando procedimento %s', protocolo_limpo)
         response = requests.get(url, params=params, headers=headers, timeout=timeout, verify=False)
 
         if response.status_code != 200:
@@ -320,7 +446,7 @@ def consultar_procedimento_sei(token, protocolo, timeout=120):
         resultado['link_acesso'] = data.get('LinkAcesso', '')
         resultado['especificacao'] = data.get('Especificacao', '')
 
-        print(f"✅ Processo encontrado: {resultado['protocolo_formatado']}")
+        _log_sei().info('[SEI] Processo encontrado: %s', resultado['protocolo_formatado'])
         return resultado
 
     except requests.exceptions.Timeout:

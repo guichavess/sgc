@@ -1,297 +1,330 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
+{% import 'components/sgc_ui.html' as ui %}
+
+{# Nova solicitação — fluxo guiado (DESIGN.md › sgc-fluxo). Mockups: docs/ux/mockups/stitch/pagamentos/3-nova*.
+   Contrato com crud.nova_solicitacao: POST contrato_selecionado, competencia, id_tipo_pagamento, unidade_procedimento;
+   sucesso re-renderiza com modal_abrir + doc_protocolo + unidade_atual. #}
+
+{# mensagens da tela saem no alerta da página (abaixo do cabeçalho), não na faixa do topo #}
+{% block flash_messages %}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-10 col-xl-9">
-        
-        <div class="d-flex align-items-center justify-content-between mb-4">
-            <div class="d-flex align-items-center">
-                <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary me-3 shadow-sm rounded-circle" style="width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center;">
-                    <i class="bi bi-arrow-left"></i>
-                </a>
-                <div>
-                    <h4 class="fw-bold mb-0 text-dark">Nova Solicitação de Pagamento</h4>
-                    <small class="text-muted">Preencha os dados abaixo para gerar o processo no SEI.</small>
-                </div>
-            </div>
-            <a href="{{ url_for('solicitacoes.nova_lote') }}" class="btn btn-outline-primary shadow-sm">
-                <i class="bi bi-layers me-2"></i> Criar em Lote
-            </a>
-        </div>
+{% set url_dashboard = url_for('solicitacoes.dashboard') %}
+<div class="sgc-fluxo-pagina">
+<header class="sol-head">
+ <div>
+ {{ ui.voltar(url_dashboard, 'Solicitações') }}
+ <h3 class="sol-title">Nova solicitação</h3>
+ {{ ui.assinatura() }}
+ <p class="sol-subtitle">Escolha o contrato e os dados do pagamento para abrir o processo no SEI.</p>
+ </div>
+ <div class="sol-head-acoes">
+ <div class="sol-head-botoes">
+ {{ ui.mbtn('secondary', 'bi-layers', 'Criar em lote', href=url_for('solicitacoes.nova_lote')) }}
+ </div>
+ </div>
+</header>
 
-        <div class="card shadow-sm mb-4">
-            <div class="card-body p-4">
-                
-                <div class="mb-4">
-                    <label for="termo_busca" class="step-label">
-                        <span class="step-badge">1</span> Buscar Contrato
-                    </label>
-                    <div class="input-group input-group-lg">
-                        <input type="text" class="form-control bg-light" id="termo_busca" 
-                               placeholder="Digite código, nº contrato ou nome da empresa...">
-                        <button class="btn btn-primary px-4" type="button" id="btn-buscar">
-                            <i class="bi bi-search me-2"></i> Pesquisar
-                        </button>
-                    </div>
-                </div>
+{% if alerta %}{{ ui.alerta(**alerta) }}{% endif %}
+{{ ui.alertas_flash() }}
+{% if reenvio %}<script type="application/json" id="nova-reenvio">{{ reenvio|tojson }}</script>{% endif %}
 
-                <form method="POST" action="{{ url_for('solicitacoes.nova_solicitacao') }}" id="form-solicitacao">
-                    
-                    <div id="container-resultados" class="mb-5 d-none">
-                        <div class="card border">
-                            <div class="card-header bg-light fw-bold text-uppercase small text-muted">
-                                Selecione um contrato abaixo:
-                            </div>
-                            <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
-                                <table class="table table-custom table-hover align-middle mb-0">
-                                    <thead style="position: sticky; top: 0; z-index: 10;">
-                                        <tr>
-                                            <th scope="col" style="width: 60px;" class="text-center"><i class="bi bi-check2-circle"></i></th>
-                                            <th scope="col">Código</th>
-                                            <th scope="col">Nº Contrato</th>
-                                            <th scope="col">Empresa / Objeto</th>
-                                            <th scope="col">Proc. Origem</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tabela-corpo" class="bg-white">
-                                        </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div id="msg-nenhum-resultado" class="alert alert-warning d-flex align-items-center mt-3 d-none">
-                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                            <div>Nenhum contrato encontrado com esses dados. Tente outro termo.</div>
-                        </div>
-                    </div>
+<div class="sgc-fluxo">
+ <section class="sgc-fluxo-card" aria-label="Passos da nova solicitação">
+ <form id="form-solicitacao" method="POST" action="{{ url_for('solicitacoes.nova_solicitacao') }}">
+ <input type="hidden" name="contrato_selecionado" id="contrato_selecionado" required>
+ <ol class="sgc-passos">
+ {% call ui.passo(1, 'Contrato', 'andamento', id='passo-contrato') %}
+ {{ ui.busca_contrato(url_for('solicitacoes.api_buscar_contratos')) }}
+ {% endcall %}
 
-                    <input type="hidden" name="contrato_selecionado" id="contrato_selecionado" required>
+ {% call ui.passo(2, 'Dados do pagamento', id='passo-pagamento') %}
+ <div class="sgc-campos">
+ <div class="sgc-campo">
+ <label class="sgc-campo-rotulo" for="competencia">Competência</label>
+ <input type="text" class="form-control sgc-input sgc-input--num" id="competencia" name="competencia" placeholder="MM/AAAA" inputmode="numeric" maxlength="7" autocomplete="off" required aria-describedby="competencia-ajuda competencia-erro">
+ <div class="sgc-campo-ajuda" id="competencia-ajuda">Mês/ano de referência do pagamento</div>
+ <div class="sgc-campo-erro" id="competencia-erro" hidden></div>
+ </div>
+ <div class="sgc-campo">
+ <label class="sgc-campo-rotulo" for="id_tipo_pagamento">Tipo de pagamento</label>
+ <select class="form-select sgc-input" id="id_tipo_pagamento" name="id_tipo_pagamento" required aria-describedby="id_tipo_pagamento-ajuda">
+ <option value="" selected disabled>Selecione o tipo…</option>
+ {% for tipo in tipos_pagamento %}
+ <option value="{{ tipo.id }}">{{ tipo.nome }}</option>
+ {% endfor %}
+ </select>
+ <div class="sgc-campo-ajuda" id="id_tipo_pagamento-ajuda">Classificação do pagamento</div>
+ </div>
+ </div>
+ {% endcall %}
 
-                    <div class="row g-4 mb-4">
-                        <div class="col-md-4">
-                            <label for="competencia" class="step-label">
-                                <span class="step-badge">2</span> Competência
-                            </label>
-                            <input type="text" class="form-control form-control-lg" id="competencia" name="competencia"
-                                   placeholder="MM/AAAA" required>
-                            <div class="form-text">Mês/Ano de referência do pagamento.</div>
-                        </div>
+ {% call ui.passo(3, 'Unidade SEI', id='passo-unidade') %}
+ <div class="sgc-campos sgc-campos--um">
+ <div class="sgc-campo">
+ <label class="sgc-campo-rotulo" for="unidade_procedimento">Unidade SEI</label>
+ <select class="form-select sgc-input" id="unidade_procedimento" name="unidade_procedimento" required aria-describedby="unidade_procedimento-ajuda">
+ <option value="" selected disabled>Selecione a unidade…</option>
+ {% for unidade in unidades %}
+ <option value="{{ unidade.id }}">{{ unidade.sigla }}</option>
+ {% endfor %}
+ </select>
+ <div class="sgc-campo-ajuda" id="unidade_procedimento-ajuda">
+ {% if unidades %}Unidade onde o processo será aberto no SEI{% else %}Nenhuma unidade SEI disponível para o seu usuário. Entre novamente no sistema para recarregar as unidades.{% endif %}
+ </div>
+ </div>
+ </div>
+ {% endcall %}
+ </ol>
+ </form>
+ </section>
 
-                        <div class="col-md-4">
-                            <label for="id_tipo_pagamento" class="step-label">
-                                <span class="step-badge">3</span> Tipo de Pagamento
-                            </label>
-                            <select class="form-select form-select-lg" id="id_tipo_pagamento" name="id_tipo_pagamento" required>
-                                <option value="" selected disabled>Selecione o tipo...</option>
-                                {% for tipo in tipos_pagamento %}
-                                    <option value="{{ tipo.id }}">{{ tipo.nome }}</option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">Classificação do pagamento.</div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <label for="unidade_procedimento" class="step-label">
-                                <span class="step-badge">4</span> Unidade Geradora
-                            </label>
-                            <select class="form-select form-select-lg" id="unidade_procedimento" name="unidade_procedimento" required>
-                                <option value="" selected disabled>Selecione a unidade...</option>
-                                {% for unidade in unidades %}
-                                    <option value="{{ unidade.id }}">
-                                        {{ unidade.sigla }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">Unidade onde o processo será aberto no SEI.</div>
-                        </div>
-                    </div>
-
-                    <div class="alert alert-light border-start border-4 border-info shadow-sm py-3">
-                        <div class="d-flex">
-                            <i class="bi bi-info-circle-fill text-info fs-4 me-3"></i>
-                            <div>
-                                <strong>Informação Automática:</strong> 
-                                O sistema irá conectar-se ao SEI para criar o processo, gerar a capa e iniciar a instrução.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-end pt-3 border-top mt-4">
-                        <button type="submit" class="btn btn-success btn-lg px-5 shadow fw-bold" id="btn-confirmar" disabled>
-                            <i class="bi bi-rocket-takeoff me-2"></i> Criar Processo
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
+ {% call ui.resumo(
+ [('contrato', 'Contrato'), ('competencia', 'Competência'), ('tipo', 'Tipo'), ('unidade', 'Unidade')],
+ ['Abre o processo de pagamento no SEI', 'Gera o documento de requisição de pagamento', 'Você assina com sua senha do SEI'],
+ falta='Falta: contrato, competência, tipo e unidade') %}
+ {{ ui.mbtn('sucesso', 'bi-rocket-takeoff', 'Criar processo no SEI', tipo='submit', attrs={'id': 'btn-confirmar', 'form': 'form-solicitacao', 'disabled': true}) }}
+ {% endcall %}
+</div>
 </div>
 
-<script src="{{ url_for('static', filename='vendor/jquery/jquery-3.7.1.min.js') }}"></script>
-<script src="{{ url_for('static', filename='vendor/jquery-mask/jquery.mask.min.js') }}"></script>
-<script>
-function escapeHtml(str) {
-    if (!str) return '';
-    var div = document.createElement('div');
-    div.appendChild(document.createTextNode(str));
-    return div.innerHTML;
-}
+<div class="modal fade modal-sync-sei modal-sync-sei--compacto" id="modalAssinatura" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="tituloModalAssinatura">
+ <div class="modal-dialog modal-dialog-centered">
+ <div class="modal-content border-0 shadow-lg">
+ <div class="modal-header sync-header" data-estado="sucesso">
+ <span class="sync-assinatura" aria-hidden="true"></span>
+ <span class="sync-header-icone" aria-hidden="true">{{ ui.ampulheta('assinatura') }}<i class="bi bi-check2-circle"></i></span>
+ <div class="sync-header-texto">
+ <div class="sync-header-eyebrow">Pagamentos · Assinatura SEI</div>
+ <h5 class="modal-title" id="tituloModalAssinatura">Assinar documento</h5>
+ <div id="statusAssinatura" class="sync-header-status" data-estado="sucesso" aria-live="polite">Processo e documento gerados</div>
+ </div>
+ </div>
 
-$(document).ready(function() {
-    $('#competencia').mask('00/0000');
-    $('#btn-buscar').click(realizarBusca);
-    $('#termo_busca').keypress(function(e) { if(e.which == 13) { realizarBusca(); } });
+ <div class="modal-body">
+ {% if processo_sei %}
+ <div class="sgc-doc">
+ <span class="sgc-doc-icone" aria-hidden="true"><i class="bi bi-folder2-open"></i></span>
+ <div>
+ <div class="sgc-doc-rotulo">Processo SEI</div>
+ <span class="sgc-doc-numero">{{ ui.processo_link(processo_sei.numero, processo_sei.link) }}</span>
+ </div>
+ </div>
+ {% endif %}
+ <div class="sgc-doc">
+ <span class="sgc-doc-icone" aria-hidden="true"><i class="bi bi-file-earmark-text"></i></span>
+ <div>
+ <div class="sgc-doc-rotulo">Requisição de pagamento</div>
+ <span class="sol-mono sgc-doc-numero">{{ doc_protocolo or '—' }}</span>
+ </div>
+ </div>
 
-    function realizarBusca() {
-        let termo = $('#termo_busca').val();
-        if (termo.length < 3) { alert("Digite pelo menos 3 caracteres."); return; }
+ <form id="formAssinatura" novalidate>
+ <label class="sgc-campo-rotulo" for="senhaSei">Senha do SEI</label>
+ <div class="sgc-senha">
+ <input type="password" class="form-control sgc-input" id="senhaSei" autocomplete="current-password" required aria-describedby="msgErroAssinatura">
+ <button type="button" class="sgc-senha-alternar" aria-label="Mostrar senha" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+ </div>
+ <div id="msgErroAssinatura" class="sgc-campo-erro" hidden></div>
+ </form>
+ </div>
 
-        let btn = $('#btn-buscar');
-        let originalText = btn.html();
-        btn.html('<span class="spinner-border spinner-border-sm"></span> Buscando...').prop('disabled', true);
-
-        $('#tabela-corpo').empty();
-        $('#container-resultados').removeClass('d-none');
-        $('#msg-nenhum-resultado').addClass('d-none');
-
-        $.ajax({
-            url: "{{ url_for('solicitacoes.api_buscar_contratos') }}",
-            data: { q: termo },
-            success: function(response) {
-                let contratos = response.results;
-                if (contratos.length === 0) {
-                    $('#msg-nenhum-resultado').removeClass('d-none');
-                    $('#container-resultados .card').addClass('d-none');
-                } else {
-                    $('#container-resultados .card').removeClass('d-none');
-                    contratos.forEach(function(c) {
-                        let cod = escapeHtml(c.codigo);
-                        let numOrig = escapeHtml(c.numeroOriginal) || '-';
-                        let nome = escapeHtml(c.nomeContratado);
-                        let obj = escapeHtml(c.objeto);
-                        let proc = escapeHtml(c.numProcesso) || '-';
-
-                        let row = `
-                            <tr style="cursor: pointer;" onclick="document.getElementById('radio_${cod}').click(); selecionarContrato('${cod}')">
-                                <td class="text-center">
-                                    <input class="form-check-input" type="radio" name="selecao_contrato_visual" id="radio_${cod}" value="${cod}" style="transform: scale(1.3); cursor: pointer;">
-                                </td>
-                                <td class="fw-bold text-secondary">${cod}</td>
-                                <td><span class="badge bg-light text-dark border">${numOrig}</span></td>
-                                <td>
-                                    <div class="fw-bold text-dark">${nome}</div>
-                                    <small class="text-muted d-block text-truncate" style="max-width: 250px;">${obj}</small>
-                                </td>
-                                <td class="small font-monospace">${proc}</td>
-                            </tr>
-                        `;
-                        $('#tabela-corpo').append(row);
-                    });
-                }
-            },
-            error: function() { alert("Erro na busca."); },
-            complete: function() { btn.html(originalText).prop('disabled', false); }
-        });
-    }
-});
-function selecionarContrato(codigo) {
-    document.getElementById('contrato_selecionado').value = codigo;
-    document.getElementById('btn-confirmar').disabled = false;
-    $('tr').removeClass('table-primary');
-    $('#radio_' + codigo).closest('tr').addClass('table-primary');
-}
-</script>
-<div class="modal fade" id="modalAssinatura" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content shadow-lg">
-      <div class="modal-header bg-light text-dark">
-        <h5 class="modal-title"><i class="bi bi-file-earmark-signature"></i> Assinatura SEI</h5>
-      </div>
-      <div class="modal-body">
-        <div class="alert alert-success">
-            Processo e Documento gerados com sucesso!
-        </div>
-        <p class="mb-3">
-            Documento Nº: <strong>{{ doc_protocolo }}</strong><br>
-            Para concluir a operação, insira sua senha do SEI:
-        </p>
-        
-        <form id="formAssinatura" onsubmit="event.preventDefault(); confirmarAssinatura();">
-            <div class="mb-3">
-              <label for="senhaSei" class="form-label fw-bold">Senha de Acesso / Assinatura</label>
-              <input type="password" class="form-control form-control-lg" id="senhaSei" placeholder="Sua senha do SEI" required autofocus>
-              <div id="msgErroAssinatura" class="text-danger mt-2 fw-bold" style="display:none;"></div>
-            </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary">Assinar Manualmente Depois</a>
-        
-        <button type="button" class="btn btn-success btn-lg px-4" id="btnConfirmarAssinatura" onclick="confirmarAssinatura()">
-            <i class="bi bi-pen"></i> Assinar Documento
-        </button>
-      </div>
-    </div>
-  </div>
+ <div class="modal-footer">
+ <span class="sync-footer-dica">Sem assinar, a solicitação fica pendente na lista.</span>
+ {{ ui.mbtn('secondary', 'bi-clock', 'Assinar depois', href=url_dashboard) }}
+ {{ ui.mbtn('sucesso', 'bi-pen', 'Assinar documento', tipo='submit', attrs={'id': 'btnConfirmarAssinatura', 'form': 'formAssinatura'}) }}
+ </div>
+ </div>
+ </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/sgc-fluxo.js') }}"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Verifica se o backend mandou abrir o modal (variável Jinja2)
-        {% if modal_abrir %}
-            var myModal = new bootstrap.Modal(document.getElementById('modalAssinatura'));
-            myModal.show();
-        {% endif %}
-    });
+(function () {
+ 'use strict';
+ var F = window.SGCFluxo;
+ var byId = function (id) { return document.getElementById(id); };
+ var competencia = byId('competencia');
+ var tipo = byId('id_tipo_pagamento');
+ var unidade = byId('unidade_procedimento');
+ var contrato = null;
 
-    function confirmarAssinatura() {
-        const senhaInput = document.getElementById('senhaSei');
-        const senha = senhaInput.value;
-        const btn = document.getElementById('btnConfirmarAssinatura');
-        const erroDiv = document.getElementById('msgErroAssinatura');
-        
-        if(!senha) {
-            erroDiv.innerText = "Por favor, digite sua senha.";
-            erroDiv.style.display = 'block';
-            senhaInput.focus();
-            return;
-        }
+ function textoOpcao(select) {
+ return select.value ? select.options[select.selectedIndex].text.trim() : '';
+ }
 
-        // Interface de carregamento
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Assinando...';
-        erroDiv.style.display = 'none';
+ F.mascaraCompetencia(competencia);
+ F.dropdown(byId('id_tipo_pagamento'), { placeholder: 'Selecione o tipo…' });
+ F.dropdown(byId('unidade_procedimento'), { busca: true, placeholder: 'Selecione a unidade…', placeholderBusca: 'Buscar unidade…', vazio: 'Nenhuma unidade encontrada' });
 
-        // Chamada AJAX para o Backend
-        fetch("{{ url_for('solicitacoes.assinar_ajax') }}", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                senha: senha,
-                protocolo: "{{ doc_protocolo }}", // Variável injetada pelo Jinja2
-                unidade: "{{ unidade_atual }}"     // Variável injetada pelo Jinja2
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if(data.sucesso) {
-                // Sucesso: Redireciona para a lista de Solicitações com mensagem
-                window.location.href = "{{ url_for('solicitacoes.dashboard') }}";
-            } else {
-                // Erro: Mostra mensagem e reabilita botão
-                erroDiv.innerText = "Erro na assinatura: " + (data.erro || "Senha incorreta ou falha no sistema.");
-                erroDiv.style.display = 'block';
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-pen"></i> Assinar Documento';
-            }
-        })
-        .catch(error => {
-            console.error('Erro:', error);
-            erroDiv.innerText = "Erro de comunicação com o servidor.";
-            erroDiv.style.display = 'block';
-            btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-pen"></i> Assinar Documento';
-        });
-    }
+ var fluxo = F.fluxo({
+ form: byId('form-solicitacao'),
+ botao: byId('btn-confirmar'),
+ resumo: document.querySelector('.sgc-resumo'),
+ textoPronto: 'Tudo pronto para criar.',
+ textoEnviando: 'Criando…',
+ passos: [
+ {
+ el: byId('passo-contrato'),
+ auto: false,
+ campos: [{
+ chave: 'contrato', rotulo: 'contrato',
+ valor: function () { return contrato ? contrato.codigo + ' · ' + (contrato.nomeContratado || '') : ''; },
+ html: function () {
+ var contratado = F.separaDocumento(contrato.nomeContratado);
+ return '<span class="sol-mono">' + F.escapeHtml(contrato.codigo) + '</span>' +
+ (contrato.numeroOriginal ? ' · ' + F.escapeHtml(contrato.numeroOriginal) : '') +
+ '<span class="sgc-resumo-detalhe">' + F.escapeHtml(contratado.nome || 'Contratado não informado') + '</span>' +
+ (contratado.documento ? '<span class="sgc-resumo-documento">' + F.escapeHtml(contratado.documento) + '</span>' : '');
+ }
+ }],
+ resumo: function () { return F.resumoContrato(contrato); }
+ },
+ {
+ el: byId('passo-pagamento'),
+ campos: [
+ { chave: 'competencia', rotulo: 'competência', mono: true, valor: function () { return F.competenciaValida(competencia.value) ? competencia.value : ''; } },
+ { chave: 'tipo', rotulo: 'tipo', valor: function () { return textoOpcao(tipo); } }
+ ],
+ resumo: function () {
+ return F.resumoPares([
+ { rotulo: 'Competência', valor: competencia.value, mono: true },
+ { rotulo: 'Tipo', valor: textoOpcao(tipo) }
+ ]);
+ }
+ },
+ {
+ el: byId('passo-unidade'),
+ campos: [{ chave: 'unidade', rotulo: 'unidade', valor: function () { return textoOpcao(unidade); } }],
+ resumo: function () { return F.resumoPares([{ rotulo: 'Unidade', valor: textoOpcao(unidade) }]); }
+ }
+ ]
+ });
+
+ F.buscaContratos(document.querySelector('#passo-contrato .sgc-busca'), {
+ aoSelecionar: function (c) {
+ contrato = c;
+ byId('contrato_selecionado').value = c ? c.codigo : '';
+ fluxo.atualizar();
+ },
+ aoConfirmar: function () { fluxo.concluir(0); }
+ });
+
+ // Envio que falhou: a tela volta com os dados do POST para refazer os passos e tentar de novo
+ var reenvio = byId('nova-reenvio');
+ if (reenvio) {
+ var v = JSON.parse(reenvio.textContent);
+ contrato = v.contrato;
+ byId('contrato_selecionado').value = contrato.codigo;
+ byId('termo_busca').value = contrato.codigo;
+ competencia.value = v.competencia || '';
+ tipo.value = v.id_tipo_pagamento || '';
+ unidade.value = v.unidade_procedimento || '';
+ [tipo, unidade].forEach(function (s) { s.dispatchEvent(new Event('change', { bubbles: true })); });
+ fluxo.concluir(0);
+ }
+
+ // depois de concluir os passos (que movem o foco): o alerta fica em vista e com o foco
+ Array.prototype.forEach.call(document.querySelectorAll('[data-alerta]'), function (el) {
+ F.alerta(el, {
+ focar: el.classList.contains('sgc-alerta--erro') || el.classList.contains('sgc-alerta--aviso'),
+ focoAoFechar: byId('btn-confirmar').disabled ? byId('termo_busca') : byId('btn-confirmar')
+ });
+ });
+})();
+
+/* Assinatura no SEI (modal abre sozinho depois do POST que criou processo e documento) */
+(function () {
+ 'use strict';
+ var modal = document.getElementById('modalAssinatura');
+ var header = modal.querySelector('.sync-header');
+ var status = document.getElementById('statusAssinatura');
+ var form = document.getElementById('formAssinatura');
+ var senha = document.getElementById('senhaSei');
+ var erro = document.getElementById('msgErroAssinatura');
+ var botao = document.getElementById('btnConfirmarAssinatura');
+ var rotulo = botao.querySelector('.sgc-mbtn__label');
+ var alternar = modal.querySelector('.sgc-senha-alternar');
+ var assinando = false;
+
+ function estado(valor, texto) {
+ header.setAttribute('data-estado', valor);
+ status.setAttribute('data-estado', valor);
+ status.textContent = texto;
+ }
+
+ function mostrarErro(mensagem) {
+ erro.textContent = mensagem;
+ erro.hidden = false;
+ senha.setAttribute('aria-invalid', 'true');
+ senha.focus();
+ }
+
+ function falhar(mensagem) {
+ assinando = false;
+ botao.disabled = false;
+ rotulo.textContent = 'Assinar documento';
+ estado('sucesso', 'Processo e documento gerados');
+ mostrarErro(mensagem);
+ }
+
+ alternar.addEventListener('click', function () {
+ var mostrar = senha.type === 'password';
+ senha.type = mostrar ? 'text' : 'password';
+ alternar.setAttribute('aria-pressed', String(mostrar));
+ alternar.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
+ alternar.querySelector('i').className = 'bi ' + (mostrar ? 'bi-eye-slash' : 'bi-eye');
+ senha.focus();
+ });
+
+ senha.addEventListener('input', function () {
+ erro.hidden = true;
+ senha.removeAttribute('aria-invalid');
+ });
+
+ modal.addEventListener('shown.bs.modal', function () { senha.focus(); });
+
+ form.addEventListener('submit', function (e) {
+ e.preventDefault();
+ if (assinando) return;
+ if (!senha.value) {
+ mostrarErro('Digite sua senha do SEI.');
+ return;
+ }
+ assinando = true;
+ botao.disabled = true;
+ rotulo.textContent = 'Assinando…';
+ erro.hidden = true;
+ estado('andamento', 'Assinando…');
+
+ fetch({{ url_for('solicitacoes.assinar_ajax')|tojson }}, {
+ method: 'POST',
+ credentials: 'same-origin',
+ headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+ body: JSON.stringify({
+ senha: senha.value,
+ protocolo: {{ doc_protocolo|tojson }},
+ unidade: {{ unidade_atual|tojson }}
+ })
+ })
+ .then(function (r) { return r.json(); })
+ .then(function (dados) {
+ if (dados.sucesso) {
+ senha.value = '';
+ estado('sucesso', 'Documento assinado');
+ window.location.href = {{ url_for('solicitacoes.dashboard')|tojson }};
+ return;
+ }
+ falhar('Erro na assinatura: ' + (dados.erro || 'senha incorreta ou falha no SEI.'));
+ })
+ .catch(function () { falhar('Não foi possível falar com o servidor. Tente de novo.'); });
+ });
+
+ {% if modal_abrir %}
+ bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAssinatura')).show();
+ {% endif %}
+})();
 </script>
 {% endblock %}
