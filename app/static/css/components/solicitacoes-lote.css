@@ -1,0 +1,75 @@
+/* ==========================================================================
+   Criar em lote (solicitacoes/nova_lote.html) — complementos do fluxo sgc-fluxo
+   ========================================================================== */
+
+/* elementos com display próprio precisam respeitar o atributo hidden */
+.sgc-mbtn[hidden],
+.sgc-passo-trocar[hidden],
+.lote-selecao[hidden],
+.sync-header-progresso[hidden] { display: none !important; }
+
+/* checkbox no lugar do radio: mesmo cartão, mesmo acento de seleção */
+.sgc-contrato-radio[type="checkbox"] { border-radius: 4px; }
+
+.lote-barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.lote-barra .sgc-busca-contador { margin: 0; }
+.lote-barra .sgc-passo-trocar { margin: 0; }
+
+/* barra da seleção: contador · limpar · continuar */
+.lote-selecao {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 16px;
+    margin-top: 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(var(--color-primary-rgb, 52, 57, 144), .25);
+    border-radius: 8px;
+    background: rgba(var(--color-primary-rgb, 52, 57, 144), .04);
+}
+.lote-selecao-contador { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--sol-ink); font-variant-numeric: tabular-nums; }
+.lote-selecao-contador .bi { color: var(--color-primary, #343990); }
+.lote-selecao .sgc-mbtn { margin-left: auto; }
+.lote-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--sol-ink-3);
+    font-size: 13px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+.lote-link:hover { color: var(--color-danger, #dc2626); }
+.lote-link:focus-visible { outline: 2px solid var(--color-primary, #343990); outline-offset: 2px; border-radius: 2px; }
+
+/* modal */
+.lote-aviso { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--sol-ink-3); }
+.lote-log { max-height: 260px; margin-top: 8px; }
+.lote-relatorio { margin-top: 18px; }
+.lote-relatorio-lista {
+    max-height: 220px;
+    margin: 8px 0 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+    border: 1px solid var(--sol-border);
+    border-radius: 8px;
+}
+.lote-relatorio-lista li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    font-size: 13.5px;
+}
+.lote-relatorio-lista li + li { border-top: 1px solid var(--sol-border); }
+.lote-relatorio-nome { min-width: 0; color: var(--sol-ink); overflow-wrap: anywhere; }
+.lote-relatorio-lista .sgc-processo-link,
+.lote-relatorio-lista .sol-mono { flex: none; }
+
+@media (max-width: 575.98px) {
+    .lote-selecao .sgc-mbtn { width: 100%; justify-content: center; margin-left: 0; }
+    .lote-relatorio-lista li { flex-direction: column; gap: 2px; }
+    .modal-sync-sei--compacto .modal-footer { flex-wrap: wrap; }
+}

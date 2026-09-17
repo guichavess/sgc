@@ -6,6 +6,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import or_
 from datetime import datetime
 import json
+import re
 import time
 import requests as http_requests
 import concurrent.futures
@@ -310,7 +311,8 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url, inline=Fal
     """
     Baixa documentos da API SEI para um protocolo e popula a tabela seimovimentacao.
     Executa em thread separada com contexto Flask próprio.
-    Possui retry automático para erros transientes de SSL/rede.
+    Possui retry automático para erros transientes de SSL/rede e para respostas
+    502/503/504 do gateway do SEI (comuns em processos com muitos documentos).
     Thread-safe: limpa a sessão ao sair (exceto quando inline=True).
 
     Args:
@@ -331,6 +333,7 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url, inline=Fal
 
         max_tentativas = 3
         timeouts = [60, 120, 180]  # escala progressiva: 60s → 120s → 180s (API SEI pode demorar em produção)
+        status_transitorios = (502, 503, 504)  # gateway do SEI desistiu/indisponível: vale repetir
         resp = None
         thread_session = http_requests.Session()
         thread_session.verify = False
@@ -338,7 +341,15 @@ def baixar_documentos_thread(app_obj, protocolo, token_sei, base_url, inline=Fal
             try:
                 timeout_atual = timeouts[tentativa - 1]
                 resp = thread_session.get(base_url, headers=headers, params=params, timeout=timeout_atual)
-                break  # sucesso, sai do loop
+                if resp.status_code in status_transitorios and tentativa < max_tentativas:
+                    wait_secs = tentativa * 5
+                    app_obj.logger.warning(
+                        f"[Tentativa {tentativa}/{max_tentativas}] SEI retornou {resp.status_code} para {protocolo}. "
+                        f"Aguardando {wait_secs}s antes de repetir..."
+                    )
+                    time.sleep(wait_secs)
+                    continue
+                break  # sucesso ou erro definitivo, sai do loop
             except (http_requests.exceptions.SSLError,
                     http_requests.exceptions.ConnectionError,
                     http_requests.exceptions.ReadTimeout) as e_retry:
@@ -755,6 +766,126 @@ def processar_item_sei(app_obj, sol_id, token_sei, usuario_id, mapa_ordem, inlin
 
 
 # =============================================================================
+# HELPERS DA SINCRONIZAÇÃO (filtro por protocolo e link do SEI)
+# =============================================================================
+
+URL_PROCEDIMENTO_SEI = 'https://sei.pi.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento={}'
+LIMITE_PROTOCOLOS_REEXECUCAO = 500
+_RE_PROTOCOLO_PARAM = re.compile(r'[\d./-]{5,50}')
+
+
+def _protocolos_do_request():
+    """
+    Lê ``protocolos`` (separados por vírgula) usado para reexecutar só alguns processos.
+
+    Retorna None quando o parâmetro não veio (sincronização completa) e a lista
+    — possivelmente vazia — de protocolos válidos, sem repetição, quando veio.
+    """
+    bruto = request.values.get('protocolos')
+    if bruto is None:
+        return None
+    protocolos = []
+    for p in bruto.split(','):
+        p = p.strip()
+        if _RE_PROTOCOLO_PARAM.fullmatch(p) and p not in protocolos:
+            protocolos.append(p)
+    return protocolos[:LIMITE_PROTOCOLOS_REEXECUCAO]
+
+
+def _link_sei_solicitacao(sol):
+    """Link do processo no SEI: o gravado na solicitação ou montado pelo id do procedimento."""
+    link = (sol.link_processo_sei or '').strip()
+    if link.lower().startswith(('http://', 'https://')):
+        return link
+    id_proc = str(sol.id_procedimento_sei or '').strip()
+    return URL_PROCEDIMENTO_SEI.format(id_proc) if id_proc.isdigit() else ''
+
+
+def _mapa_links_sei(solicitacoes):
+    """
+    Mapa protocolo → link do processo no SEI.
+
+    Solicitação sem link nem id do procedimento gravados usa o IdProcedimento
+    dos documentos já baixados (seimovimentacao), numa única consulta.
+    """
+    mapa = {s.protocolo_gerado_sei: _link_sei_solicitacao(s) for s in solicitacoes}
+    sem_link = [p for p, link in mapa.items() if p and not link]
+    if sem_link:
+        linhas = (db.session.query(SeiMovimentacao.protocolo_procedimento, SeiMovimentacao.id_procedimento)
+                  .filter(SeiMovimentacao.protocolo_procedimento.in_(sem_link))
+                  .distinct().all())
+        for protocolo, id_proc in linhas:
+            id_proc = str(id_proc or '').strip()
+            if id_proc.isdigit() and not mapa.get(protocolo):
+                mapa[protocolo] = URL_PROCEDIMENTO_SEI.format(id_proc)
+    return mapa
+
+
+LIMITE_CONSULTAS_LINK_SEI = 20  # 10 threads × timeout 15s: resposta bem abaixo do idle timeout do ALB (60s)
+
+
+@solicitacoes_bp.route('/api/links-sei', methods=['POST'])
+@login_required
+@requires_permission('solicitacoes.aprovar')
+def api_links_sei():
+    """
+    Completa o link do SEI dos processos que chegaram sem link no modal de sincronização.
+
+    Procura no banco (link, id do procedimento, documentos baixados); o que ainda
+    faltar é consultado no SEI (até LIMITE_CONSULTAS_LINK_SEI processos) e gravado
+    na solicitação, para os próximos alertas já saírem com link.
+    """
+    brutos = (request.get_json(silent=True) or {}).get('protocolos')
+    if not isinstance(brutos, list):
+        return jsonify({'sucesso': False, 'msg': 'Informe a lista de protocolos.'}), 400
+
+    protocolos = []
+    for p in brutos:
+        p = p.strip() if isinstance(p, str) else ''
+        if _RE_PROTOCOLO_PARAM.fullmatch(p) and p not in protocolos:
+            protocolos.append(p)
+    protocolos = protocolos[:LIMITE_PROTOCOLOS_REEXECUCAO]
+    if not protocolos:
+        return jsonify({'sucesso': True, 'links': {}})
+
+    solicitacoes = Solicitacao.query.filter(Solicitacao.protocolo_gerado_sei.in_(protocolos)).all()
+    mapa = _mapa_links_sei(solicitacoes)
+
+    faltando = [p for p in protocolos if p in mapa and not mapa[p]][:LIMITE_CONSULTAS_LINK_SEI]
+    token_sei = (session.get('sei_token') or gerar_token_sei_admin()) if faltando else None
+    if faltando and token_sei:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            respostas = dict(zip(faltando, executor.map(
+                lambda prot: consultar_procedimento_sei(token_sei, prot, timeout=15), faltando)))
+
+        mudou = False
+        for sol in solicitacoes:
+            resposta = respostas.get(sol.protocolo_gerado_sei) or {}
+            if not resposta.get('sucesso'):
+                continue
+            link = (resposta.get('link_acesso') or '').strip()
+            id_proc = str(resposta.get('id_procedimento') or '').strip()
+            if not link.lower().startswith(('http://', 'https://')):
+                link = ''
+            if id_proc.isdigit() and not str(sol.id_procedimento_sei or '').strip():
+                sol.id_procedimento_sei = id_proc
+                mudou = True
+            if link and not (sol.link_processo_sei or '').strip():
+                sol.link_processo_sei = link
+                mudou = True
+            mapa[sol.protocolo_gerado_sei] = link or _link_sei_solicitacao(sol)
+
+        if mudou:
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f'[SOLICITACOES] Erro ao gravar links do SEI: {e}')
+
+    return jsonify({'sucesso': True, 'links': {p: mapa[p] for p in protocolos if mapa.get(p)}})
+
+
+# =============================================================================
 # FASE 1: DOWNLOAD DE DOCUMENTOS DO SEI → TABELA seimovimentacao
 # =============================================================================
 
@@ -767,11 +898,18 @@ def api_sincronizar_documentos():
     - Filtra solicitações pendentes (etapa != 6, não canceladas, com protocolo)
     - Limpa movimentações antigas desses protocolos
     - Baixa documentos atualizados da API SEI via threads paralelas
+    - ``?protocolos=a,b`` restringe a esses processos (reexecução dos que deram
+      erro) e emite ``processo_ok`` por processo baixado
     """
     app_real = current_app._get_current_object()
+    protocolos_filtro = _protocolos_do_request()
 
     def generate():
         with app_real.app_context():
+            if protocolos_filtro is not None and not protocolos_filtro:
+                yield f"data: {json.dumps({'msg': 'Nenhum protocolo válido informado.', 'progresso': 100, 'concluido': True, 'ignorados': []})}\n\n"
+                return
+
             yield f"data: {json.dumps({'msg': 'Autenticando...', 'progresso': 5})}\n\n"
 
             token_sei = session.get('sei_token') or gerar_token_sei_admin()
@@ -781,22 +919,32 @@ def api_sincronizar_documentos():
                 return
 
             # Busca solicitações pendentes com protocolo válido
-            solicitacoes_pendentes = Solicitacao.query.filter(
+            query_pendentes = Solicitacao.query.filter(
                 Solicitacao.protocolo_gerado_sei.isnot(None),
                 Solicitacao.etapa_atual_id != 6,
                 Solicitacao.status_geral != 'CANCELADO'
-            ).all()
+            )
+            if protocolos_filtro is not None:
+                query_pendentes = query_pendentes.filter(Solicitacao.protocolo_gerado_sei.in_(protocolos_filtro))
+            solicitacoes_pendentes = query_pendentes.all()
+
+            # Reexecução: protocolos pedidos que já não estão pendentes (pagos, cancelados, excluídos)
+            encontrados = {s.protocolo_gerado_sei for s in solicitacoes_pendentes}
+            ignorados = [p for p in (protocolos_filtro or []) if p not in encontrados]
 
             total = len(solicitacoes_pendentes)
 
             if total == 0:
-                yield f"data: {json.dumps({'msg': 'Todos os processos já estão concluídos. Nada a sincronizar.', 'progresso': 100, 'concluido': True})}\n\n"
+                msg_vazio = ('Nenhum dos processos informados está pendente de sincronização.'
+                             if protocolos_filtro is not None
+                             else 'Todos os processos já estão concluídos. Nada a sincronizar.')
+                yield f"data: {json.dumps({'msg': msg_vazio, 'progresso': 100, 'concluido': True, 'ignorados': ignorados})}\n\n"
                 return
 
             base_url = "https://api.sei.pi.gov.br/v1/unidades/110006213/procedimentos/documentos"
 
-            # Mapa protocolo → link SEI (para enviar no evento de 422)
-            mapa_link_sei = {s.protocolo_gerado_sei: (s.link_processo_sei or '') for s in solicitacoes_pendentes}
+            # Mapa protocolo → link SEI (enviado nos eventos de 422 e de alerta por processo)
+            mapa_link_sei = _mapa_links_sei(solicitacoes_pendentes)
 
             # Download via threads paralelas
             yield f"data: {json.dumps({'msg': 'Iniciando download dos documentos...', 'progresso': 15})}\n\n"
@@ -869,7 +1017,10 @@ def api_sincronizar_documentos():
 
                             if sucesso:
                                 sucessos += 1
-                                if completed % 5 == 0:
+                                if protocolos_filtro is not None:
+                                    # reexecução: o modal marca cada processo como atualizado
+                                    yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Documentos baixados: {protocolo}', 'tipo': 'processo_ok', 'protocolo': protocolo, 'link_sei': mapa_link_sei.get(protocolo, '')})}\n\n"
+                                elif completed % 5 == 0:
                                     yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Baixando... ({completed}/{total})'})}\n\n"
                             else:
                                 # Detecta erro 422 (processo inexistente no SEI)
@@ -879,10 +1030,11 @@ def api_sincronizar_documentos():
                                     protocolos_422.append({'protocolo': prot_422, 'link_sei': link_sei})
                                     yield f"data: {json.dumps({'progresso': percentual, 'msg': f'[422] Processo inexistente: {prot_422}', 'tipo': 'processo_inexistente', 'protocolo': prot_422, 'link_sei': link_sei})}\n\n"
                                 else:
-                                    yield f"data: {json.dumps({'progresso': percentual, 'msg': f'[ALERTA] {mensagem}'})}\n\n"
+                                    # protocolo + link: o modal exibe o processo como link para o SEI
+                                    yield f"data: {json.dumps({'progresso': percentual, 'msg': f'[ALERTA] {mensagem}', 'tipo': 'alerta_processo', 'protocolo': protocolo, 'link_sei': mapa_link_sei.get(protocolo, '')})}\n\n"
 
                         except Exception as exc:
-                            yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Erro thread {protocolo}: {str(exc)}'})}\n\n"
+                            yield f"data: {json.dumps({'progresso': percentual, 'msg': f'Erro thread {protocolo}: {str(exc)}', 'tipo': 'alerta_processo', 'protocolo': protocolo, 'link_sei': mapa_link_sei.get(protocolo, '')})}\n\n"
 
                     last_heartbeat = time.time()
 
@@ -894,7 +1046,8 @@ def api_sincronizar_documentos():
                 'msg': msg_final,
                 'progresso': 100,
                 'concluido': True,
-                'protocolos_422': protocolos_422
+                'protocolos_422': protocolos_422,
+                'ignorados': ignorados
             }
             yield f"data: {json.dumps(evento_final)}\n\n"
 
@@ -921,9 +1074,11 @@ def api_atualizar_etapas():
     para avançar os cards na timeline.
     - Ignora processos com etapa_atual_id == 6 (PAGO/OB)
     - Usa threads paralelas para performance
+    - ``?protocolos=a,b`` restringe a esses processos (reexecução dos que deram erro)
     """
     app_real = current_app._get_current_object()
     usuario_id = current_user.id
+    protocolos_filtro = _protocolos_do_request()
 
     def generate():
         with app_real.app_context():
@@ -932,12 +1087,13 @@ def api_atualizar_etapas():
             mapa_ordem = {e.id: e.ordem for e in todas_etapas}
 
             # Filtra solicitações pendentes
-            ids_para_processar = [
-                s.id for s in Solicitacao.query.filter(
-                    Solicitacao.etapa_atual_id != 6,
-                    Solicitacao.status_geral != 'CANCELADO'
-                ).all()
-            ]
+            query_pendentes = Solicitacao.query.filter(
+                Solicitacao.etapa_atual_id != 6,
+                Solicitacao.status_geral != 'CANCELADO'
+            )
+            if protocolos_filtro is not None:
+                query_pendentes = query_pendentes.filter(Solicitacao.protocolo_gerado_sei.in_(protocolos_filtro))
+            ids_para_processar = [s.id for s in query_pendentes.all()]
 
             total = len(ids_para_processar)
 
@@ -1258,14 +1414,29 @@ def api_criar_lote():
     Cria e assina solicitações de pagamento em lote via SSE.
     Para cada contrato: cria processo SEI + documento + assina + salva no banco com status ABERTO.
     """
-    dados = request.get_json() or {}
-    codigos_contratos = dados.get('contratos', [])
-    competencia = dados.get('competencia', '').strip()
-    id_tipo_pagamento = dados.get('id_tipo_pagamento')
-    unidade_id = dados.get('unidade_id', '').strip()
+    dados = request.get_json(silent=True)
+    if not isinstance(dados, dict):
+        return jsonify({'sucesso': False, 'erro': 'Envie os dados em JSON.'}), 400
 
-    if not codigos_contratos or not competencia or not unidade_id:
-        return jsonify({'sucesso': False, 'erro': 'Dados incompletos.'}), 400
+    contratos = dados.get('contratos')
+    competencia = str(dados.get('competencia') or '').strip()
+    unidade_id = str(dados.get('unidade_id') or '').strip()
+    try:
+        id_tipo_pagamento = int(dados.get('id_tipo_pagamento'))
+    except (TypeError, ValueError):
+        id_tipo_pagamento = None
+
+    if not isinstance(contratos, list) or not contratos:
+        return jsonify({'sucesso': False, 'erro': 'Selecione pelo menos um contrato.'}), 400
+    if not re.fullmatch(r'(0[1-9]|1[0-2])/\d{4}', competencia):
+        return jsonify({'sucesso': False, 'erro': 'Competência inválida. Use MM/AAAA.'}), 400
+    if id_tipo_pagamento is None:
+        return jsonify({'sucesso': False, 'erro': 'Selecione o tipo de pagamento.'}), 400
+    if not unidade_id:
+        return jsonify({'sucesso': False, 'erro': 'Selecione a unidade SEI.'}), 400
+
+    # mesmo contrato repetido abriria dois processos no SEI: mantém a primeira ocorrência
+    codigos_contratos = list(dict.fromkeys(str(c).strip() for c in contratos if str(c).strip()))
 
     app_real = current_app._get_current_object()
     usuario_id = current_user.id
@@ -1276,7 +1447,8 @@ def api_criar_lote():
     def generate():
         with app_real.app_context():
             if not sei_token:
-                yield f"data: {json.dumps({'msg': 'Erro: Não foi possível autenticar no SEI.', 'progresso': 0, 'erro_fatal': True})}\n\n"
+                # a tela só encerra o acompanhamento ao receber `concluido`
+                yield f"data: {json.dumps({'msg': 'Não foi possível autenticar no SEI. Nenhum processo criado.', 'progresso': 100, 'erro_fatal': True, 'concluido': True, 'total_criados': 0, 'total_erros': len(codigos_contratos)})}\n\n"
                 return
 
             total = len(codigos_contratos)

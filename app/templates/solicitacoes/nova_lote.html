@@ -1,620 +1,569 @@
 {% extends "base.html" %}
+{% import 'components/sgc_ui.html' as ui %}
+
+{# Criar em lote — fluxo guiado no padrão da Nova solicitação (sgc-fluxo).
+   Contrato com api.api_criar_lote: POST JSON {contratos, competencia, id_tipo_pagamento, unidade_id}
+   → SSE {msg, progresso, contrato, protocolo, contratado, link_sei, sucesso, concluido, total_criados, total_erros}. #}
+
+{% block flash_messages %}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-11 col-xl-10">
+{% set url_dashboard = url_for('solicitacoes.dashboard') %}
+<div class="sgc-fluxo-pagina">
+<header class="sol-head">
+ <div>
+ {{ ui.voltar(url_dashboard, 'Solicitações') }}
+ <h3 class="sol-title">Criar em lote</h3>
+ {{ ui.assinatura() }}
+ <p class="sol-subtitle">Selecione vários contratos e abra um processo no SEI para cada um, com os mesmos dados de pagamento.</p>
+ </div>
+ <div class="sol-head-acoes">
+ <div class="sol-head-botoes">
+ {{ ui.mbtn('secondary', 'bi-file-earmark-plus', 'Solicitação única', href=url_for('solicitacoes.nova_solicitacao')) }}
+ </div>
+ </div>
+</header>
 
-        <div class="d-flex align-items-center mb-4">
-            <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-outline-secondary me-3 shadow-sm rounded-circle" style="width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center;">
-                <i class="bi bi-arrow-left"></i>
-            </a>
-            <div>
-                <h4 class="fw-bold mb-0 text-dark">
-                    <i class="bi bi-layers me-2"></i>Criação em Lote
-                </h4>
-                <small class="text-muted">Crie múltiplas solicitações de pagamento de uma vez.</small>
-            </div>
-        </div>
+{{ ui.alertas_flash() }}
 
-        <!-- CARD PRINCIPAL -->
-        <div class="card shadow-sm mb-4" id="card-formulario">
-            <div class="card-body p-4">
+<div class="sgc-fluxo">
+ <section class="sgc-fluxo-card" aria-label="Passos da criação em lote">
+ <ol class="sgc-passos">
+ {% call ui.passo(1, 'Contratos', 'andamento', id='passo-contratos', descricao='Busque e marque os contratos. Pode buscar mais de uma vez: a seleção é mantida.') %}
+ <div class="sgc-busca" id="busca-lote" data-url-busca="{{ url_for('solicitacoes.api_buscar_contratos') }}">
+ <label class="visually-hidden" for="termo_busca">Buscar contratos</label>
+ <div class="sgc-busca-linha">
+ <div class="sgc-busca-campo">
+ <i class="bi bi-search" aria-hidden="true"></i>
+ <input type="text" class="form-control sgc-input" id="termo_busca" placeholder="Código, nº do contrato ou nome da empresa" autocomplete="off" enterkeyhint="search" aria-describedby="termo_busca-erro">
+ </div>
+ {{ ui.mbtn('secondary', 'bi-search', 'Pesquisar', attrs={'id': 'btn-buscar'}) }}
+ {{ ui.mbtn('secondary', 'bi-check2-all', 'Selecionar todos', attrs={'id': 'btn-selecionar-todos'}) }}
+ </div>
+ <div class="sgc-campo-erro" id="termo_busca-erro" hidden></div>
 
-                <!-- Step 1, 2, 3: Campos comuns -->
-                <div class="row g-4 mb-4">
-                    <div class="col-md-4">
-                        <label for="competencia" class="step-label">
-                            <span class="step-badge">1</span> Competência
-                        </label>
-                        <input type="text" class="form-control form-control-lg" id="competencia"
-                               placeholder="MM/AAAA" required>
-                        <div class="form-text">Mês/Ano de referência (igual para todos).</div>
-                    </div>
+ <div id="container-resultados" class="sgc-busca-resultados" hidden>
+ <div class="lote-barra">
+ <p class="sgc-busca-contador" id="label-resultados" aria-live="polite"></p>
+ <button type="button" class="sgc-passo-trocar" id="btn-marcar-visiveis"><i class="bi bi-check2-square" aria-hidden="true"></i> <span>Marcar visíveis</span></button>
+ </div>
+ <div id="tabela-corpo" class="sgc-contratos" role="group" aria-label="Contratos encontrados"></div>
+ <div id="msg-nenhum-resultado" class="sgc-vazio" hidden>
+ <i class="bi bi-file-earmark-x" aria-hidden="true"></i>
+ <p>Nenhum contrato encontrado para “<span id="msg-nenhum-termo"></span>”. Tente o código, o nº do contrato ou parte do nome.</p>
+ </div>
+ </div>
 
-                    <div class="col-md-4">
-                        <label for="id_tipo_pagamento" class="step-label">
-                            <span class="step-badge">2</span> Tipo de Pagamento
-                        </label>
-                        <select class="form-select form-select-lg" id="id_tipo_pagamento" required>
-                            <option value="" selected disabled>Selecione o tipo...</option>
-                            {% for tipo in tipos_pagamento %}
-                                <option value="{{ tipo.id }}">{{ tipo.nome }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">Classificação do pagamento (igual para todos).</div>
-                    </div>
+ <div class="lote-selecao" id="container-selecionados" hidden>
+ <span class="lote-selecao-contador"><i class="bi bi-check2-circle" aria-hidden="true"></i> <strong id="contador-selecionados">0</strong> <span id="contador-rotulo">contratos selecionados</span></span>
+ <button type="button" class="lote-link" id="btn-limpar-selecao">Limpar seleção</button>
+ {{ ui.mbtn('secondary', 'bi-arrow-right', 'Continuar', attrs={'id': 'btn-continuar-contratos'}) }}
+ </div>
+ </div>
+ {% endcall %}
 
-                    <div class="col-md-4">
-                        <label for="unidade_procedimento" class="step-label">
-                            <span class="step-badge">3</span> Unidade Geradora
-                        </label>
-                        <select class="form-select form-select-lg" id="unidade_procedimento" required>
-                            <option value="" selected disabled>Selecione a unidade...</option>
-                            {% for unidade in unidades %}
-                                <option value="{{ unidade.id }}">{{ unidade.sigla }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">Unidade no SEI (igual para todos).</div>
-                    </div>
-                </div>
+ {% call ui.passo(2, 'Dados do pagamento', id='passo-pagamento', descricao='Valem para todos os contratos selecionados.') %}
+ <div class="sgc-campos">
+ <div class="sgc-campo">
+ <label class="sgc-campo-rotulo" for="competencia">Competência</label>
+ <input type="text" class="form-control sgc-input sgc-input--num" id="competencia" placeholder="MM/AAAA" inputmode="numeric" maxlength="7" autocomplete="off" required aria-describedby="competencia-ajuda competencia-erro">
+ <div class="sgc-campo-ajuda" id="competencia-ajuda">Mês/ano de referência do pagamento</div>
+ <div class="sgc-campo-erro" id="competencia-erro" hidden></div>
+ </div>
+ <div class="sgc-campo">
+ <label class="sgc-campo-rotulo" for="id_tipo_pagamento">Tipo de pagamento</label>
+ <select class="form-select sgc-input" id="id_tipo_pagamento" required aria-describedby="id_tipo_pagamento-ajuda">
+ <option value="" selected disabled>Selecione o tipo…</option>
+ {% for tipo in tipos_pagamento %}
+ <option value="{{ tipo.id }}">{{ tipo.nome }}</option>
+ {% endfor %}
+ </select>
+ <div class="sgc-campo-ajuda" id="id_tipo_pagamento-ajuda">Classificação do pagamento</div>
+ </div>
+ </div>
+ {% endcall %}
 
-                <hr class="my-4">
+ {% call ui.passo(3, 'Unidade SEI', id='passo-unidade') %}
+ <div class="sgc-campos sgc-campos--um">
+ <div class="sgc-campo">
+ <label class="sgc-campo-rotulo" for="unidade_procedimento">Unidade SEI</label>
+ <select class="form-select sgc-input" id="unidade_procedimento" required aria-describedby="unidade_procedimento-ajuda">
+ <option value="" selected disabled>Selecione a unidade…</option>
+ {% for unidade in unidades %}
+ <option value="{{ unidade.id }}">{{ unidade.sigla }}</option>
+ {% endfor %}
+ </select>
+ <div class="sgc-campo-ajuda" id="unidade_procedimento-ajuda">
+ {% if unidades %}Unidade onde os processos serão abertos no SEI{% else %}Nenhuma unidade SEI disponível para o seu usuário. Entre novamente no sistema para recarregar as unidades.{% endif %}
+ </div>
+ </div>
+ </div>
+ {% endcall %}
+ </ol>
+ </section>
 
-                <!-- Step 4: Buscar e Selecionar Contratos -->
-                <div class="mb-4">
-                    <label class="step-label">
-                        <span class="step-badge">4</span> Buscar e Selecionar Contratos
-                    </label>
-                    <div class="d-flex gap-2">
-                        <div class="input-group input-group-lg flex-grow-1">
-                            <input type="text" class="form-control bg-light" id="termo_busca"
-                                   placeholder="Digite código, nº contrato ou nome da empresa...">
-                            <button class="btn btn-primary px-4" type="button" id="btn-buscar">
-                                <i class="bi bi-search me-2"></i> Pesquisar
-                            </button>
-                        </div>
-                        <button type="button" class="btn btn-lg btn-outline-success" id="btn-selecionar-todos" onclick="carregarTodosContratos()">
-                            <i class="bi bi-check2-all me-1"></i> Selecionar Todos
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Tabela de resultados (contratos) -->
-                <div id="container-resultados" class="mb-4 d-none">
-                    <div class="card border">
-                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                            <span class="fw-bold text-uppercase small text-muted" id="label-resultados">Resultados da busca:</span>
-                            <div>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('check-todos').click();">
-                                    <i class="bi bi-check2-all me-1"></i> Marcar/Desmarcar Visíveis
-                                </button>
-                            </div>
-                        </div>
-                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                            <table class="table table-custom table-hover align-middle mb-0">
-                                <thead style="position: sticky; top: 0; z-index: 10;">
-                                    <tr>
-                                        <th scope="col" style="width: 50px;" class="text-center">
-                                            <input type="checkbox" class="form-check-input" id="check-todos" onclick="toggleSelecionarTodos()" style="transform: scale(1.2);">
-                                        </th>
-                                        <th scope="col">Código</th>
-                                        <th scope="col">Nº Contrato</th>
-                                        <th scope="col">Empresa / Objeto</th>
-                                        <th scope="col">Proc. Origem</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tabela-corpo" class="bg-white"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div id="msg-nenhum-resultado" class="alert alert-warning d-flex align-items-center mt-3 d-none">
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                        <div>Nenhum contrato encontrado com esses dados. Tente outro termo.</div>
-                    </div>
-                </div>
-
-                <!-- Contratos selecionados (resumo) -->
-                <div id="container-selecionados" class="mb-4 d-none">
-                    <div class="alert alert-info d-flex align-items-center justify-content-between py-2">
-                        <div>
-                            <i class="bi bi-check2-circle me-2"></i>
-                            <strong id="contador-selecionados">0</strong> contrato(s) selecionado(s)
-                        </div>
-                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="limparSelecao()">
-                            <i class="bi bi-x-circle me-1"></i> Limpar Seleção
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Botão de criar -->
-                <div class="d-flex justify-content-end pt-3 border-top mt-4">
-                    <button type="button" class="btn btn-success btn-lg px-5 shadow fw-bold" id="btn-criar-lote" disabled onclick="iniciarCriacaoLote()">
-                        <i class="bi bi-rocket-takeoff me-2"></i> Criar em Lote
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- CARD PROGRESSO (hidden inicialmente) -->
-        <div id="card-progresso" class="card shadow-sm mb-4 d-none">
-            <div class="card-header bg-dark text-white d-flex align-items-center">
-                <i class="bi bi-terminal me-2"></i>
-                <strong>Progresso</strong>
-            </div>
-            <div class="card-body">
-                <div class="progress mb-3" style="height: 24px;">
-                    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                         role="progressbar" style="width: 0%">0%</div>
-                </div>
-                <div id="log-container" class="bg-light border rounded p-3" style="max-height: 350px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
-                </div>
-                <div id="msg-resultado-final" class="mt-3 d-none"></div>
-            </div>
-        </div>
-
-        <!-- CARD RELATÓRIO (hidden inicialmente) -->
-        <div id="card-relatorio" class="card shadow-sm mb-4 d-none">
-            <div class="card-header bg-white d-flex align-items-center justify-content-between">
-                <div>
-                    <i class="bi bi-file-earmark-text me-2"></i>
-                    <strong>Relatório de Processos Criados</strong>
-                </div>
-                <button type="button" class="btn btn-outline-danger btn-sm" onclick="baixarPDF()">
-                    <i class="bi bi-file-pdf me-2"></i> Baixar PDF
-                </button>
-            </div>
-            <div class="card-body p-0">
-                <!-- Conteúdo que será convertido em PDF -->
-                <div id="conteudo-relatorio">
-                    <div class="p-4 pb-2">
-                        <h5 class="fw-bold text-center mb-1">SGC — Processos Criados em Lote</h5>
-                        <p class="text-center text-muted small mb-3" id="relatorio-subtitulo"></p>
-                    </div>
-                    <table class="table table-bordered table-sm mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th class="text-center" style="width: 40px;">#</th>
-                                <th>Contratado</th>
-                                <th style="width: 250px;">Processo SEI</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-relatorio"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
+ {% call ui.resumo(
+ [('contratos', 'Contratos'), ('competencia', 'Competência'), ('tipo', 'Tipo'), ('unidade', 'Unidade')],
+ ['Abre um processo no SEI para cada contrato', 'Registra as solicitações de pagamento no SGC', 'Gera um relatório em PDF com os processos criados'],
+ falta='Falta: contratos, competência, tipo e unidade') %}
+ {{ ui.mbtn('sucesso', 'bi-rocket-takeoff', 'Criar processos no SEI', attrs={'id': 'btn-criar-lote', 'disabled': true}) }}
+ {% endcall %}
+</div>
 </div>
 
-<script src="{{ url_for('static', filename='vendor/jquery/jquery-3.7.1.min.js') }}"></script>
-<script src="{{ url_for('static', filename='vendor/jquery-mask/jquery.mask.min.js') }}"></script>
+<div class="modal fade modal-sync-sei modal-sync-sei--compacto" id="modalLote" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="tituloModalLote">
+ <div class="modal-dialog modal-dialog-centered">
+ <div class="modal-content border-0 shadow-lg">
+ <div class="modal-header sync-header" data-estado="pendente">
+ <span class="sync-assinatura" aria-hidden="true"></span>
+ <span class="sync-header-icone" aria-hidden="true">{{ ui.ampulheta('lote') }}<i class="bi" id="iconeLote"></i></span>
+ <div class="sync-header-texto">
+ <div class="sync-header-eyebrow">Pagamentos · Criação em lote</div>
+ <h5 class="modal-title" id="tituloModalLote">Criar processos no SEI</h5>
+ <div id="statusLote" class="sync-header-status" data-estado="pendente" aria-live="polite">Confira antes de criar</div>
+ </div>
+ <div class="sync-header-progresso" id="progressoLote" hidden>
+ <div class="sync-header-progresso-topo">
+ <span id="contagemLote">0 de 0</span>
+ <span class="sync-header-numeros"><strong id="pctLote">0%</strong></span>
+ </div>
+ <div class="progress sync-progress-geral" role="progressbar" aria-label="Progresso da criação em lote">
+ <div id="barraLote" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%;"></div>
+ </div>
+ </div>
+ </div>
+
+ <div class="modal-body">
+ <div id="confirmacaoLote">
+ <div class="sgc-doc">
+ <span class="sgc-doc-icone" aria-hidden="true"><i class="bi bi-layers"></i></span>
+ <div>
+ <div class="sgc-doc-rotulo">Contratos</div>
+ <span class="sgc-doc-numero" id="confContratos">—</span>
+ </div>
+ </div>
+ <div class="sgc-doc">
+ <span class="sgc-doc-icone" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
+ <div>
+ <div class="sgc-doc-rotulo">Competência · Tipo · Unidade</div>
+ <span class="sgc-doc-numero" id="confDados">—</span>
+ </div>
+ </div>
+ <p class="lote-aviso">Cada contrato vira um processo no SEI. Não feche esta página enquanto a criação estiver em andamento.</p>
+ </div>
+
+ <div id="execucaoLote" hidden>
+ <div class="sync-coluna-titulo">Registro</div>
+ <div id="logLote" class="sync-log lote-log" role="log" aria-live="polite"></div>
+ </div>
+
+ <div id="relatorioLote" class="lote-relatorio" hidden>
+ <div class="sync-coluna-titulo">Processos criados</div>
+ <ol class="lote-relatorio-lista" id="listaRelatorioLote"></ol>
+ </div>
+ </div>
+
+ <div class="modal-footer">
+ <span class="sync-footer-dica" id="dicaLote">Os dados valem para todos os contratos.</span>
+ {{ ui.mbtn('secondary', 'bi-x-lg', 'Cancelar', attrs={'id': 'btnCancelarLote', 'data-bs-dismiss': 'modal'}) }}
+ {{ ui.mbtn('sucesso', 'bi-rocket-takeoff', 'Criar processos', attrs={'id': 'btnIniciarLote'}) }}
+ {{ ui.mbtn('secondary', 'bi-file-earmark-pdf', 'Baixar PDF', attrs={'id': 'btnBaixarPdf', 'hidden': true}) }}
+ {{ ui.mbtn('secondary', 'bi-arrow-counterclockwise', 'Voltar e ajustar', attrs={'id': 'btnFecharLote', 'data-bs-dismiss': 'modal', 'hidden': true}) }}
+ {{ ui.mbtn('primary', 'bi-arrow-right', 'Ir para Solicitações', href=url_dashboard, attrs={'id': 'btnIrSolicitacoes', 'hidden': true}) }}
+ </div>
+ </div>
+ </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/sgc-fluxo.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/html2pdf/html2pdf.bundle.min.js') }}"></script>
 <script>
-// ===================================================================
-// ESTADO GLOBAL
-// ===================================================================
-let contratosSelecionados = {};
-let processosCriados = [];  // Acumula dados para o relatório PDF
+(function () {
+ 'use strict';
+ var F = window.SGCFluxo;
+ var byId = function (id) { return document.getElementById(id); };
+ var URL_BUSCA = {{ url_for('solicitacoes.api_buscar_contratos')|tojson }};
+ var URL_CRIAR = {{ url_for('solicitacoes.api_criar_lote')|tojson }};
 
-function escapeHtml(str) {
-    if (!str) return '';
-    var div = document.createElement('div');
-    div.appendChild(document.createTextNode(str));
-    return div.innerHTML;
-}
+ var termo = byId('termo_busca');
+ var competencia = byId('competencia');
+ var tipo = byId('id_tipo_pagamento');
+ var unidade = byId('unidade_procedimento');
+ var lista = byId('tabela-corpo');
+ var btnCriar = byId('btn-criar-lote');
+ var rotuloCriar = btnCriar.querySelector('.sgc-mbtn__label');
 
-// ===================================================================
-// INICIALIZAÇÃO
-// ===================================================================
-$(document).ready(function() {
-    $('#competencia').mask('00/0000');
-    $('#btn-buscar').click(realizarBusca);
-    $('#termo_busca').keypress(function(e) { if(e.which == 13) realizarBusca(); });
-});
+ var selecionados = {}; // codigo → contrato (mantido entre buscas)
+ var visiveis = [];
+ var processosCriados = [];
 
-// ===================================================================
-// BUSCA DE CONTRATOS
-// ===================================================================
-function realizarBusca() {
-    let termo = $('#termo_busca').val();
-    if (termo.length < 3) { alert("Digite pelo menos 3 caracteres."); return; }
+ function textoOpcao(select) {
+  return select.value ? select.options[select.selectedIndex].text.trim() : '';
+ }
+ function codigos() { return Object.keys(selecionados); }
+ function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
+ function nomeContratado(c) { return F.separaDocumento(c.nomeContratado).nome || 'Contratado não informado'; }
 
-    let btn = $('#btn-buscar');
-    let originalText = btn.html();
-    btn.html('<span class="spinner-border spinner-border-sm"></span> Buscando...').prop('disabled', true);
+ /* ─── Busca e seleção ─── */
+ function cartao(c) {
+  var codigo = F.escapeHtml(c.codigo);
+  var marcado = selecionados[c.codigo] ? ' checked' : '';
+  return '<label class="sgc-contrato" for="check_' + codigo + '">' +
+   '<input class="sgc-contrato-radio check-contrato" type="checkbox" id="check_' + codigo + '" value="' + codigo + '"' + marcado + '>' +
+   '<span class="sgc-contrato-info">' +
+    '<span class="sgc-contrato-linha"><span class="sol-mono">' + codigo + '</span>' +
+     (c.numeroOriginal ? '<span class="sgc-sep" aria-hidden="true">·</span><span class="sgc-contrato-numero">' + F.escapeHtml(c.numeroOriginal) + '</span>' : '') +
+    '</span>' +
+    '<span class="sgc-contrato-nome">' + (F.escapeHtml(c.nomeContratado) || 'Contratado não informado') + '</span>' +
+    (c.objeto ? '<span class="sgc-contrato-objeto">' + F.escapeHtml(c.objeto) + '</span>' : '') +
+   '</span>' +
+   (c.numProcesso ? '<span class="sgc-contrato-proc">Proc. <span class="sol-mono">' + F.escapeHtml(c.numProcesso) + '</span></span>' : '') +
+  '</label>';
+ }
 
-    $.ajax({
-        url: "{{ url_for('solicitacoes.api_buscar_contratos') }}",
-        data: { q: termo },
-        success: function(response) {
-            popularTabela(response.results, false);
-            $('#label-resultados').text('Resultados da busca:');
-        },
-        error: function() { alert("Erro na busca."); },
-        complete: function() { btn.html(originalText).prop('disabled', false); }
+ function render(contratos, rotulo, q) {
+  visiveis = contratos;
+  lista.innerHTML = contratos.map(cartao).join('');
+  lista.hidden = contratos.length === 0;
+  byId('msg-nenhum-resultado').hidden = contratos.length > 0;
+  byId('msg-nenhum-termo').textContent = q || '';
+  byId('label-resultados').textContent = contratos.length ? rotulo : '';
+  byId('btn-marcar-visiveis').hidden = contratos.length === 0;
+  var resultados = byId('container-resultados');
+  resultados.hidden = false;
+  resultados.classList.remove('is-entrando');
+  void resultados.offsetWidth;
+  resultados.classList.add('is-entrando');
+  atualizarSelecao();
+ }
+
+ function carregar(botao, params, aoCarregar) {
+  var rotulo = botao.querySelector('.sgc-mbtn__label');
+  var texto = rotulo.textContent;
+  botao.disabled = true;
+  rotulo.textContent = 'Buscando…';
+  lista.setAttribute('aria-busy', 'true');
+  fetch(URL_BUSCA + '?' + params, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+   .then(function (r) { if (!r.ok) throw new Error('status ' + r.status); return r.json(); })
+   .then(function (dados) { aoCarregar((dados && dados.results) || []); })
+   .catch(function () { F.erroCampo(termo, 'Não foi possível buscar os contratos agora. Tente de novo.'); })
+   .then(function () {
+    botao.disabled = false;
+    rotulo.textContent = texto;
+    lista.setAttribute('aria-busy', 'false');
+   });
+ }
+
+ function buscar() {
+  var q = termo.value.trim();
+  if (q.length < 3) {
+   F.erroCampo(termo, 'Digite pelo menos 3 caracteres.');
+   termo.focus();
+   return;
+  }
+  F.limparErro(termo);
+  carregar(byId('btn-buscar'), 'q=' + encodeURIComponent(q), function (contratos) {
+   render(contratos, plural(contratos.length, 'contrato encontrado', 'contratos encontrados'), q);
+  });
+ }
+
+ function selecionarTodos() {
+  F.limparErro(termo);
+  carregar(byId('btn-selecionar-todos'), 'todos=1', function (contratos) {
+   contratos.forEach(function (c) { selecionados[c.codigo] = c; });
+   render(contratos, 'Todos os contratos (' + contratos.length + ')', '');
+  });
+ }
+
+ function atualizarSelecao() {
+  var n = codigos().length;
+  byId('container-selecionados').hidden = n === 0;
+  byId('contador-selecionados').textContent = n;
+  byId('contador-rotulo').textContent = n === 1 ? 'contrato selecionado' : 'contratos selecionados';
+  var todosVisiveis = visiveis.length > 0 && visiveis.every(function (c) { return selecionados[c.codigo]; });
+  var marcar = byId('btn-marcar-visiveis');
+  marcar.querySelector('span').textContent = todosVisiveis ? 'Desmarcar visíveis' : 'Marcar visíveis';
+  marcar.setAttribute('aria-pressed', String(todosVisiveis));
+  rotuloCriar.textContent = n ? 'Criar ' + plural(n, 'processo', 'processos') + ' no SEI' : 'Criar processos no SEI';
+  fluxo.atualizar();
+ }
+
+ lista.addEventListener('change', function (e) {
+  if (!e.target.matches('.check-contrato')) return;
+  var c = visiveis.filter(function (v) { return v.codigo === e.target.value; })[0];
+  if (e.target.checked && c) selecionados[c.codigo] = c;
+  else delete selecionados[e.target.value];
+  atualizarSelecao();
+ });
+
+ byId('btn-marcar-visiveis').addEventListener('click', function () {
+  var desmarcar = this.getAttribute('aria-pressed') === 'true';
+  visiveis.forEach(function (c) {
+   if (desmarcar) delete selecionados[c.codigo];
+   else selecionados[c.codigo] = c;
+  });
+  lista.querySelectorAll('.check-contrato').forEach(function (cb) { cb.checked = !desmarcar; });
+  atualizarSelecao();
+ });
+
+ byId('btn-limpar-selecao').addEventListener('click', function () {
+  selecionados = {};
+  lista.querySelectorAll('.check-contrato').forEach(function (cb) { cb.checked = false; });
+  atualizarSelecao();
+  termo.focus();
+ });
+
+ byId('btn-buscar').addEventListener('click', buscar);
+ byId('btn-selecionar-todos').addEventListener('click', selecionarTodos);
+ termo.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); buscar(); }
+ });
+ termo.addEventListener('input', function () { if (termo.value.trim().length >= 3) F.limparErro(termo); });
+
+ /* ─── Fluxo ─── */
+ F.mascaraCompetencia(competencia);
+ F.dropdown(byId('id_tipo_pagamento'), { placeholder: 'Selecione o tipo…' });
+ F.dropdown(byId('unidade_procedimento'), { busca: true, placeholder: 'Selecione a unidade…', placeholderBusca: 'Buscar unidade…', vazio: 'Nenhuma unidade encontrada' });
+
+ function nomesSelecionados(max) {
+  var nomes = codigos().map(function (k) { return nomeContratado(selecionados[k]); });
+  var resto = nomes.length - max;
+  return nomes.slice(0, max).join(', ') + (resto > 0 ? ' e mais ' + resto : '');
+ }
+
+ var fluxo = F.fluxo({
+  botao: btnCriar,
+  resumo: document.querySelector('.sgc-resumo'),
+  textoPronto: 'Tudo pronto para criar.',
+  passos: [
+   {
+    el: byId('passo-contratos'),
+    auto: false,
+    campos: [{
+     chave: 'contratos', rotulo: 'contratos',
+     valor: function () { var n = codigos().length; return n ? plural(n, 'contrato', 'contratos') : ''; },
+     html: function () {
+      return F.escapeHtml(plural(codigos().length, 'contrato', 'contratos')) +
+       '<span class="sgc-resumo-documento">' + F.escapeHtml(nomesSelecionados(3)) + '</span>';
+     }
+    }],
+    resumo: function () {
+     return F.resumoPares([
+      { rotulo: 'Selecionados', valor: String(codigos().length) },
+      { rotulo: 'Contratados', valor: nomesSelecionados(5), largo: true }
+     ]);
+    }
+   },
+   {
+    el: byId('passo-pagamento'),
+    campos: [
+     { chave: 'competencia', rotulo: 'competência', mono: true, valor: function () { return F.competenciaValida(competencia.value) ? competencia.value : ''; } },
+     { chave: 'tipo', rotulo: 'tipo', valor: function () { return textoOpcao(tipo); } }
+    ],
+    resumo: function () {
+     return F.resumoPares([
+      { rotulo: 'Competência', valor: competencia.value, mono: true },
+      { rotulo: 'Tipo', valor: textoOpcao(tipo) }
+     ]);
+    }
+   },
+   {
+    el: byId('passo-unidade'),
+    campos: [{ chave: 'unidade', rotulo: 'unidade', valor: function () { return textoOpcao(unidade); } }],
+    resumo: function () { return F.resumoPares([{ rotulo: 'Unidade', valor: textoOpcao(unidade) }]); }
+   }
+  ]
+ });
+
+ byId('btn-continuar-contratos').addEventListener('click', function () { fluxo.concluir(0); });
+ atualizarSelecao();
+
+ /* ─── Modal: confirmar → criar (SSE) → relatório ─── */
+ var modalEl = byId('modalLote');
+ var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+ var header = modalEl.querySelector('.sync-header');
+ var status = byId('statusLote');
+ var barra = byId('barraLote');
+ var log = byId('logLote');
+ var executando = false;
+ var ICONES = { sucesso: 'bi-check2-circle', alerta: 'bi-exclamation-triangle', erro: 'bi-x-octagon' };
+
+ function mostrar(id, sim) { byId(id).hidden = !sim; }
+
+ function estado(valor, texto) {
+  header.setAttribute('data-estado', valor);
+  status.setAttribute('data-estado', valor);
+  status.textContent = texto;
+  byId('iconeLote').className = 'bi ' + (ICONES[valor] || '');
+ }
+
+ function progresso(pct, feitos, total) {
+  barra.style.width = pct + '%';
+  byId('pctLote').textContent = pct + '%';
+  if (total) byId('contagemLote').textContent = feitos + ' de ' + total;
+ }
+
+ function registrar(msg, tom) {
+  var linha = document.createElement('div');
+  linha.className = 'sync-log-linha' + (tom ? ' sync-log-' + tom : '');
+  linha.textContent = msg;
+  log.appendChild(linha);
+  log.scrollTop = log.scrollHeight;
+ }
+
+ btnCriar.addEventListener('click', function () {
+  if (!fluxo.atualizar()) return;
+  var n = codigos().length;
+  processosCriados = [];
+  estado('pendente', 'Confira antes de criar');
+  progresso(0, 0, n);
+  barra.className = 'progress-bar progress-bar-striped progress-bar-animated';
+  log.innerHTML = '';
+  byId('listaRelatorioLote').innerHTML = '';
+  byId('confContratos').textContent = plural(n, 'contrato', 'contratos') + ' · ' + nomesSelecionados(3);
+  byId('confDados').textContent = competencia.value + ' · ' + textoOpcao(tipo) + ' · ' + textoOpcao(unidade);
+  byId('btnIniciarLote').querySelector('.sgc-mbtn__label').textContent = 'Criar ' + plural(n, 'processo', 'processos');
+  byId('dicaLote').textContent = 'Os dados valem para todos os contratos.';
+  ['confirmacaoLote', 'btnCancelarLote', 'btnIniciarLote'].forEach(function (id) { mostrar(id, true); });
+  ['progressoLote', 'execucaoLote', 'relatorioLote', 'btnBaixarPdf', 'btnFecharLote', 'btnIrSolicitacoes'].forEach(function (id) { mostrar(id, false); });
+  modal.show();
+ });
+
+ byId('btnIniciarLote').addEventListener('click', function () {
+  if (executando) return;
+  executando = true;
+  var total = codigos().length;
+  var feitos = 0;
+  var concluido = false;
+  ['confirmacaoLote', 'btnCancelarLote', 'btnIniciarLote'].forEach(function (id) { mostrar(id, false); });
+  ['progressoLote', 'execucaoLote'].forEach(function (id) { mostrar(id, true); });
+  byId('dicaLote').textContent = 'Não feche esta página até terminar.';
+  estado('andamento', 'Criando processos…');
+
+  function evento(d) {
+   if (d.contrato) {
+    feitos++;
+    if (d.protocolo && d.sucesso !== false) {
+     var c = selecionados[d.contrato];
+     processosCriados.push({ contratado: d.contratado || (c && c.nomeContratado) || d.contrato, protocolo: d.protocolo, link: d.link_sei || '' });
+    }
+   }
+   if (d.progresso !== undefined) progresso(d.progresso, feitos, total);
+   if (d.msg && !d.concluido) registrar(d.msg, d.sucesso === true ? 'ok' : (d.sucesso === false ? 'erro' : ''));
+   if (d.concluido) {
+    concluido = true;
+    finalizar(d.total_criados || 0, d.total_erros || 0, d.msg);
+   }
+  }
+
+  fetch(URL_CRIAR, {
+   method: 'POST',
+   credentials: 'same-origin',
+   headers: { 'Content-Type': 'application/json' },
+   body: JSON.stringify({
+    contratos: codigos(),
+    competencia: competencia.value,
+    id_tipo_pagamento: parseInt(tipo.value, 10),
+    unidade_id: unidade.value
+   })
+  }).then(function (resp) {
+   if (!resp.ok || !resp.body) {
+    return resp.json().catch(function () { return {}; }).then(function (d) {
+     throw new Error(d.erro || 'O servidor recusou a criação (status ' + resp.status + ').');
     });
-}
-
-function carregarTodosContratos() {
-    let btn = $('#btn-selecionar-todos');
-    let originalText = btn.html();
-    btn.html('<span class="spinner-border spinner-border-sm"></span> Carregando...').prop('disabled', true);
-
-    $.ajax({
-        url: "{{ url_for('solicitacoes.api_buscar_contratos') }}",
-        data: { todos: '1' },
-        success: function(response) {
-            popularTabela(response.results, true);
-            $('#label-resultados').text(`Todos os contratos (${response.results.length}):`);
-        },
-        error: function() { alert("Erro ao carregar contratos."); },
-        complete: function() { btn.html(originalText).prop('disabled', false); }
+   }
+   var leitor = resp.body.getReader();
+   var decoder = new TextDecoder();
+   var buffer = '';
+   function ler() {
+    return leitor.read().then(function (r) {
+     if (r.done) return;
+     buffer += decoder.decode(r.value, { stream: true });
+     var linhas = buffer.split('\n');
+     buffer = linhas.pop();
+     linhas.forEach(function (linha) {
+      if (linha.indexOf('data: ') !== 0) return;
+      try { evento(JSON.parse(linha.slice(6))); } catch (e) { /* linha incompleta ou heartbeat */ }
+     });
+     return ler();
     });
-}
+   }
+   return ler();
+  }).then(function () {
+   if (!concluido) throw new Error('A conexão terminou antes do fim. Confira a lista de solicitações antes de tentar de novo.');
+  }).catch(function (e) {
+   registrar(e.message || 'Não foi possível falar com o servidor.', 'erro');
+   finalizar(processosCriados.length, 1, e.message || 'Falha na comunicação com o servidor');
+  });
+ });
 
-function popularTabela(contratos, selecionarTodos) {
-    $('#container-resultados').removeClass('d-none');
-    $('#msg-nenhum-resultado').addClass('d-none');
+ function finalizar(criados, erros, mensagem) {
+  executando = false;
+  barra.classList.remove('progress-bar-animated', 'progress-bar-striped');
+  var tom = erros === 0 ? 'sucesso' : (criados > 0 ? 'alerta' : 'erro');
+  barra.classList.add('is-' + tom);
+  estado(tom, erros === 0 ? plural(criados, 'processo criado', 'processos criados')
+   : criados > 0 ? criados + ' criados · ' + plural(erros, 'com erro', 'com erro') : (mensagem || 'Nenhum processo criado'));
+  byId('dicaLote').textContent = erros && !criados ? 'Nada foi criado. Ajuste os dados e tente de novo.'
+   : erros ? 'Os contratos com erro podem ser criados em um novo lote.' : 'Solicitações registradas no SGC.';
+  if (criados === 0) {
+   mostrar('btnFecharLote', true);
+  } else {
+   mostrar('btnIrSolicitacoes', true);
+  }
+  if (processosCriados.length) {
+   byId('listaRelatorioLote').innerHTML = processosCriados.map(function (p) {
+    var numero = /^https?:\/\//.test(p.link)
+     ? '<a class="sgc-processo-link" href="' + F.escapeHtml(p.link) + '" target="_blank" rel="noopener"><span>' + F.escapeHtml(p.protocolo) + '</span><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>'
+     : '<span class="sol-mono">' + F.escapeHtml(p.protocolo) + '</span>';
+    return '<li><span class="lote-relatorio-nome">' + F.escapeHtml(F.separaDocumento(p.contratado).nome || p.contratado) + '</span>' + numero + '</li>';
+   }).join('');
+   mostrar('relatorioLote', true);
+   mostrar('btnBaixarPdf', true);
+  }
+ }
 
-    if (contratos.length === 0) {
-        $('#msg-nenhum-resultado').removeClass('d-none');
-        $('#container-resultados .card').addClass('d-none');
-        return;
-    }
-
-    $('#container-resultados .card').removeClass('d-none');
-    $('#tabela-corpo').empty();
-
-    contratos.forEach(function(c) {
-        let cod = escapeHtml(c.codigo);
-        let numOrig = escapeHtml(c.numeroOriginal) || '-';
-        let nome = escapeHtml(c.nomeContratado);
-        let obj = escapeHtml(c.objeto);
-        let proc = escapeHtml(c.numProcesso) || '-';
-
-        let checked = selecionarTodos || contratosSelecionados[c.codigo] ? 'checked' : '';
-
-        if (selecionarTodos) {
-            contratosSelecionados[c.codigo] = true;
-        }
-
-        let row = `
-            <tr style="cursor: pointer;" class="${checked ? 'table-primary' : ''}"
-                onclick="toggleContrato('${cod}', this)" data-codigo="${cod}">
-                <td class="text-center" onclick="event.stopPropagation();">
-                    <input class="form-check-input check-contrato" type="checkbox"
-                           value="${cod}" id="check_${cod}" ${checked}
-                           onchange="toggleContrato('${cod}', this.closest('tr'))"
-                           style="transform: scale(1.2); cursor: pointer;">
-                </td>
-                <td class="fw-bold text-secondary">${cod}</td>
-                <td><span class="badge bg-light text-dark border">${numOrig}</span></td>
-                <td>
-                    <div class="fw-bold text-dark">${nome}</div>
-                    <small class="text-muted d-block text-truncate" style="max-width: 300px;">${obj}</small>
-                </td>
-                <td class="small font-monospace">${proc}</td>
-            </tr>
-        `;
-        $('#tabela-corpo').append(row);
-    });
-
-    atualizarCheckTodos();
-    atualizarContador();
-}
-
-// ===================================================================
-// SELEÇÃO DE CONTRATOS
-// ===================================================================
-function toggleContrato(codigo, row) {
-    let checkbox = document.getElementById('check_' + codigo);
-
-    if (event && event.target !== checkbox) {
-        checkbox.checked = !checkbox.checked;
-    }
-
-    if (checkbox.checked) {
-        contratosSelecionados[codigo] = true;
-        $(row).addClass('table-primary');
-    } else {
-        delete contratosSelecionados[codigo];
-        $(row).removeClass('table-primary');
-    }
-
-    atualizarContador();
-    atualizarCheckTodos();
-}
-
-function toggleSelecionarTodos() {
-    let checkboxes = document.querySelectorAll('.check-contrato');
-    let checkTodos = document.getElementById('check-todos');
-    let todosChecked = checkTodos.checked;
-
-    checkboxes.forEach(function(cb) {
-        let codigo = cb.value;
-        let row = cb.closest('tr');
-
-        if (todosChecked) {
-            cb.checked = true;
-            contratosSelecionados[codigo] = true;
-            $(row).addClass('table-primary');
-        } else {
-            cb.checked = false;
-            delete contratosSelecionados[codigo];
-            $(row).removeClass('table-primary');
-        }
-    });
-
-    atualizarContador();
-}
-
-function atualizarCheckTodos() {
-    let checkboxes = document.querySelectorAll('.check-contrato');
-    let checkTodos = document.getElementById('check-todos');
-    if (checkboxes.length === 0) return;
-
-    let todosChecked = Array.from(checkboxes).every(cb => cb.checked);
-    checkTodos.checked = todosChecked;
-}
-
-function limparSelecao() {
-    contratosSelecionados = {};
-    document.querySelectorAll('.check-contrato').forEach(function(cb) {
-        cb.checked = false;
-        $(cb.closest('tr')).removeClass('table-primary');
-    });
-    document.getElementById('check-todos').checked = false;
-    atualizarContador();
-}
-
-function atualizarContador() {
-    let total = Object.keys(contratosSelecionados).length;
-    document.getElementById('contador-selecionados').textContent = total;
-
-    if (total > 0) {
-        document.getElementById('container-selecionados').classList.remove('d-none');
-        document.getElementById('btn-criar-lote').disabled = false;
-    } else {
-        document.getElementById('container-selecionados').classList.add('d-none');
-        document.getElementById('btn-criar-lote').disabled = true;
-    }
-}
-
-// ===================================================================
-// CRIAÇÃO + ASSINATURA EM LOTE (SSE UNIFICADO)
-// ===================================================================
-function iniciarCriacaoLote() {
-    let competencia = document.getElementById('competencia').value.trim();
-    let tipo = document.getElementById('id_tipo_pagamento').value;
-    let unidade = document.getElementById('unidade_procedimento').value;
-    let codigos = Object.keys(contratosSelecionados);
-
-    // Validações
-    if (!competencia) { alert('Informe a competência.'); return; }
-    if (!tipo) { alert('Selecione o tipo de pagamento.'); return; }
-    if (!unidade) { alert('Selecione a unidade geradora.'); return; }
-    if (codigos.length === 0) { alert('Selecione pelo menos um contrato.'); return; }
-
-    // Confirmação
-    if (!confirm(`Criar ${codigos.length} processo(s) no SEI?\n\nCompetência: ${competencia}\nContratos: ${codigos.length}`)) {
-        return;
-    }
-
-    // Desabilita form
-    document.getElementById('btn-criar-lote').disabled = true;
-    document.getElementById('btn-criar-lote').innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando...';
-    document.getElementById('btn-buscar').disabled = true;
-    document.getElementById('btn-selecionar-todos').disabled = true;
-
-    // Limpa dados de execução anterior
-    processosCriados = [];
-    document.getElementById('card-relatorio').classList.add('d-none');
-    document.getElementById('tabela-relatorio').innerHTML = '';
-
-    // Mostra card de progresso
-    let cardProgresso = document.getElementById('card-progresso');
-    cardProgresso.classList.remove('d-none');
-    cardProgresso.scrollIntoView({ behavior: 'smooth' });
-
-    let logContainer = document.getElementById('log-container');
-    logContainer.innerHTML = '';
-
-    // Payload
-    let payload = {
-        contratos: codigos,
-        competencia: competencia,
-        id_tipo_pagamento: parseInt(tipo),
-        unidade_id: unidade
-    };
-
-    fetch("{{ url_for('solicitacoes.api_criar_lote') }}", {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    }).then(response => {
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        function processStream() {
-            return reader.read().then(({ done, value }) => {
-                if (done) return;
-
-                buffer += decoder.decode(value, { stream: true });
-                let lines = buffer.split('\n');
-                buffer = lines.pop();
-
-                lines.forEach(line => {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            let data = JSON.parse(line.substring(6));
-                            processarEvento(data);
-                        } catch(e) {}
-                    }
-                });
-
-                return processStream();
-            });
-        }
-
-        return processStream();
-    }).catch(error => {
-        adicionarLog(logContainer, '❌ Erro de comunicação com o servidor.', 'text-danger');
-        reabilitarFormulario();
-    });
-}
-
-function processarEvento(data) {
-    let logContainer = document.getElementById('log-container');
-    let progressBar = document.getElementById('progress-bar');
-
-    // Atualiza barra de progresso
-    if (data.progresso !== undefined) {
-        progressBar.style.width = data.progresso + '%';
-        progressBar.textContent = data.progresso + '%';
-    }
-
-    // Adiciona log
-    if (data.msg) {
-        let cssClass = data.sucesso === true ? 'text-success' : (data.sucesso === false ? 'text-danger' : 'text-muted');
-        adicionarLog(logContainer, data.msg, cssClass);
-    }
-
-    // Acumula dados para relatório (somente processos criados com sucesso)
-    if (data.contrato && data.protocolo && data.sucesso !== false) {
-        processosCriados.push({
-            contratado: data.contratado || data.contrato,
-            protocolo: data.protocolo,
-            link_sei: data.link_sei || ''
-        });
-    }
-
-    // Concluído
-    if (data.concluido) {
-        progressBar.classList.remove('progress-bar-animated');
-
-        let msgDiv = document.getElementById('msg-resultado-final');
-
-        if (data.total_erros === 0) {
-            progressBar.classList.remove('bg-primary');
-            progressBar.classList.add('bg-success');
-
-            msgDiv.className = 'mt-3 alert alert-success d-flex align-items-center justify-content-between';
-            msgDiv.innerHTML = `
-                <div><i class="bi bi-check-circle me-2"></i><strong>${data.msg}</strong></div>
-                <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-success">
-                    <i class="bi bi-arrow-right me-1"></i> Ir para Solicitações
-                </a>`;
-        } else if (data.total_criados > 0) {
-            progressBar.classList.remove('bg-primary');
-            progressBar.classList.add('bg-warning');
-
-            msgDiv.className = 'mt-3 alert alert-warning d-flex align-items-center justify-content-between';
-            msgDiv.innerHTML = `
-                <div><i class="bi bi-exclamation-triangle me-2"></i><strong>${data.msg}</strong></div>
-                <a href="{{ url_for('solicitacoes.dashboard') }}" class="btn btn-warning">
-                    <i class="bi bi-arrow-right me-1"></i> Ir para Solicitações
-                </a>`;
-        } else {
-            progressBar.classList.remove('bg-primary');
-            progressBar.classList.add('bg-danger');
-
-            msgDiv.className = 'mt-3 alert alert-danger';
-            msgDiv.innerHTML = `<i class="bi bi-x-circle me-2"></i><strong>${data.msg}</strong>`;
-            reabilitarFormulario();
-        }
-
-        msgDiv.classList.remove('d-none');
-
-        // Popula e exibe o relatório se houver processos criados
-        if (processosCriados.length > 0) {
-            montarRelatorio();
-        }
-    }
-}
-
-function reabilitarFormulario() {
-    document.getElementById('btn-criar-lote').disabled = false;
-    document.getElementById('btn-criar-lote').innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i> Criar em Lote';
-    document.getElementById('btn-buscar').disabled = false;
-    document.getElementById('btn-selecionar-todos').disabled = false;
-}
-
-// ===================================================================
-// RELATÓRIO PDF
-// ===================================================================
-function montarRelatorio() {
-    let tbody = document.getElementById('tabela-relatorio');
-    tbody.innerHTML = '';
-
-    let competencia = document.getElementById('competencia').value.trim();
-    let subtitulo = document.getElementById('relatorio-subtitulo');
-    let dataHora = new Date().toLocaleString('pt-BR');
-    subtitulo.textContent = `Competência: ${competencia} — Gerado em ${dataHora}`;
-
-    processosCriados.forEach(function(proc, idx) {
-        let tr = document.createElement('tr');
-        let linkHtml = proc.link_sei
-            ? `<a href="${escapeHtml(proc.link_sei)}" target="_blank" class="text-primary text-decoration-none">${escapeHtml(proc.protocolo)} <i class="bi bi-box-arrow-up-right small"></i></a>`
-            : escapeHtml(proc.protocolo);
-
-        tr.innerHTML = `
-            <td class="text-center text-muted">${idx + 1}</td>
-            <td class="fw-semibold">${escapeHtml(proc.contratado)}</td>
-            <td class="font-monospace">${linkHtml}</td>
-        `;
-        tbody.appendChild(tr);
-    });
-
-    let cardRelatorio = document.getElementById('card-relatorio');
-    cardRelatorio.classList.remove('d-none');
-    cardRelatorio.scrollIntoView({ behavior: 'smooth' });
-}
-
-async function baixarPDF() {
-    if (typeof html2pdf === 'undefined') {
-        alert('Biblioteca de PDF não carregada. Tente recarregar a página.');
-        return;
-    }
-
-    let btn = document.querySelector('#card-relatorio .btn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gerando PDF...';
-
-    try {
-        let elemento = document.getElementById('conteudo-relatorio');
-
-        let competencia = document.getElementById('competencia').value.trim().replace('/', '-');
-        let filename = `SGC_Processos_Lote_${competencia}_${new Date().toISOString().slice(0,10)}.pdf`;
-
-        let opt = {
-            margin:       [10, 10, 10, 10],
-            filename:     filename,
-            image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2, useCORS: true },
-            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
-        };
-
-        await html2pdf().set(opt).from(elemento).save();
-    } catch (error) {
-        console.error('Erro ao gerar PDF:', error);
-        alert('Erro ao gerar o PDF.');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-file-pdf me-2"></i> Baixar PDF';
-    }
-}
-
-// ===================================================================
-// UTILIDADES
-// ===================================================================
-function adicionarLog(container, msg, cssClass) {
-    let p = document.createElement('div');
-    p.className = cssClass || '';
-    p.textContent = msg;
-    container.appendChild(p);
-    container.scrollTop = container.scrollHeight;
-}
+ /* ─── Relatório PDF (montado fora da tela; html2pdf clona o elemento) ─── */
+ byId('btnBaixarPdf').addEventListener('click', function () {
+  var botao = this;
+  var rotulo = botao.querySelector('.sgc-mbtn__label');
+  if (typeof html2pdf === 'undefined') {
+   registrar('Biblioteca de PDF não carregada. Recarregue a página.', 'erro');
+   return;
+  }
+  var celula = 'border:1px solid #d0d5dd;padding:6px 8px;';
+  var el = document.createElement('div');
+  el.innerHTML =
+   '<div style="font-family:Arial,sans-serif;color:#1b2333;padding:8px;">' +
+    '<h2 style="text-align:center;font-size:16px;margin:0 0 4px;">SGC — Processos criados em lote</h2>' +
+    '<p style="text-align:center;font-size:11px;color:#667085;margin:0 0 12px;">Competência: ' + F.escapeHtml(competencia.value) +
+     ' · ' + F.escapeHtml(textoOpcao(tipo)) + ' · Gerado em ' + F.escapeHtml(new Date().toLocaleString('pt-BR')) + '</p>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:11px;">' +
+     '<thead><tr style="background:#f2f4f7;"><th style="' + celula + 'width:32px;">#</th><th style="' + celula + 'text-align:left;">Contratado</th><th style="' + celula + 'text-align:left;width:190px;">Processo SEI</th></tr></thead>' +
+     '<tbody>' + processosCriados.map(function (p, i) {
+      return '<tr><td style="' + celula + 'text-align:center;">' + (i + 1) + '</td><td style="' + celula + '">' + F.escapeHtml(p.contratado) +
+       '</td><td style="' + celula + 'font-family:monospace;">' + F.escapeHtml(p.protocolo) + '</td></tr>';
+     }).join('') + '</tbody>' +
+    '</table>' +
+   '</div>';
+  botao.disabled = true;
+  rotulo.textContent = 'Gerando PDF…';
+  html2pdf().set({
+   margin: [10, 10, 10, 10],
+   filename: 'SGC_Processos_Lote_' + competencia.value.replace('/', '-') + '_' + new Date().toISOString().slice(0, 10) + '.pdf',
+   image: { type: 'jpeg', quality: 0.98 },
+   html2canvas: { scale: 2 },
+   jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+   pagebreak: { mode: ['css', 'legacy'] }
+  }).from(el).save()
+   .catch(function () { registrar('Erro ao gerar o PDF.', 'erro'); })
+   .then(function () {
+    botao.disabled = false;
+    rotulo.textContent = 'Baixar PDF';
+   });
+ });
+})();
 </script>
 {% endblock %}
