@@ -2,6 +2,9 @@ import requests
 import json
 import urllib3
 import os  # <--- Adicione esta importação
+import logging
+
+from flask import current_app, has_app_context
 
 # Suprime avisos de "InsecureRequestWarning"
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -12,16 +15,21 @@ SIAFE_USER = os.getenv("SIAFE_USER")  # <--- Alterado
 SIAFE_PASS = os.getenv("SIAFE_PASS")  # <--- Alterado
 CODIGO_UG = "210101" # Se quiser, pode colocar isso no .env também (ex: SIAFE_COD_UG)
 
+
+def _log_siafe():
+    """Logger da aplicação quando há contexto Flask; senão, o logger do módulo."""
+    return current_app.logger if has_app_context() else logging.getLogger(__name__)
+
 def get_siafe_token():
     """
     Realiza a autenticação na API do SIAFE e retorna o token Bearer.
     """
     
     if not SIAFE_USER or not SIAFE_PASS:
-        print("❌ [SIAFE Service] Erro: Credenciais não encontradas no .env")
+        _log_siafe().error('[SIAFE] Credenciais SIAFE_USER/SIAFE_PASS não encontradas no .env')
         return None
         
-    print(f"🔄 [SIAFE Service] Tentando autenticar usuário {SIAFE_USER}...")
+    _log_siafe().info('[SIAFE] Autenticando usuário %s', SIAFE_USER)
     
     credenciais = {
         "usuario": SIAFE_USER,
@@ -47,24 +55,24 @@ def get_siafe_token():
             dados = response.json()
             token = dados.get('token')
             if token:
-                print("✅ [SIAFE Service] Token obtido com sucesso.")
+                _log_siafe().info('[SIAFE] Token obtido com sucesso')
                 return token
             else:
-                print("⚠️ [SIAFE Service] Autenticação 200 OK, mas sem token na resposta.")
+                _log_siafe().warning('[SIAFE] Autenticação 200 OK, mas sem token na resposta')
                 return None
         else:
-            print(f"❌ [SIAFE Service] Erro Auth: {response.status_code} - {response.text}")
+            _log_siafe().error('[SIAFE] Erro %s na autenticação: %s', response.status_code, (response.text or '')[:300])
             return None
 
     except Exception as e:
-        print(f"❌ [SIAFE Service] Erro de Conexão na Autenticação: {e}")
+        _log_siafe().error('[SIAFE] Erro de conexão na autenticação: %s', e)
         return None
 
 def validar_ne_siafe(ne_digitada, contrato_sistema):
     """
     Valida a NE na API do SIAFE e verifica se o contrato vinculado corresponde ao do sistema.
     """
-    print(f"🚀 [SIAFE Service] Iniciando validação da NE: {ne_digitada}")
+    _log_siafe().info('[SIAFE] Iniciando validação da NE %s', ne_digitada)
 
     # 1. Validação básica de formato
     if not ne_digitada or len(ne_digitada) < 4:
@@ -88,7 +96,7 @@ def validar_ne_siafe(ne_digitada, contrato_sistema):
         }
 
         # 4. Consultar API
-        print(f"🔍 [SIAFE Service] Consultando detalhes da NE...")
+        _log_siafe().info('[SIAFE] Consultando detalhes da NE %s', ne_digitada)
         response = requests.post(url_consulta, json=payload, headers=headers, timeout=30, verify=False)
 
         if response.status_code == 200:
@@ -100,7 +108,7 @@ def validar_ne_siafe(ne_digitada, contrato_sistema):
             # --- NOVO: Captura o Nome do Credor ---
             nome_credor = dados_api.get('nomeCredor', 'Credor não informado')
             
-            print(f"📊 [SIAFE Service] Comparação: SIAFE '{contrato_api}' vs Sistema '{contrato_sistema}'")
+            _log_siafe().info("[SIAFE] Comparação da NE %s: SIAFE '%s' vs Sistema '%s'", ne_digitada, contrato_api, contrato_sistema)
 
             if not contrato_api:
                 return {'sucesso': False, 'mensagem': f'Atenção: SIAFE retornou a NE {ne_digitada}, mas sem contrato vinculado.', 'categoria': 'warning'}
@@ -116,15 +124,15 @@ def validar_ne_siafe(ne_digitada, contrato_sistema):
             }
 
         elif response.status_code == 404:
-            print(f"⚠️ [SIAFE Service] NE não encontrada (404).")
+            _log_siafe().warning('[SIAFE] NE %s não encontrada (404)', ne_digitada)
             return {'sucesso': False, 'mensagem': f'NE {ne_digitada} não encontrada no SIAFE.', 'categoria': 'warning'}
         else:
-            print(f"❌ [SIAFE Service] Erro API Consulta: {response.status_code}")
+            _log_siafe().error('[SIAFE] Erro %s na consulta da NE %s', response.status_code, ne_digitada)
             return {'sucesso': False, 'mensagem': f'Erro na consulta SIAFE. Código: {response.status_code}.', 'categoria': 'danger'}
 
     except requests.exceptions.RequestException as e:
-        print(f"❌ [SIAFE Service] Erro de Conexão na Consulta: {e}")
+        _log_siafe().error('[SIAFE] Erro de conexão na consulta da NE %s: %s', ne_digitada, e)
         return {'sucesso': False, 'mensagem': 'Falha de comunicação com o SIAFE. Tente novamente.', 'categoria': 'danger'}
     except Exception as e:
-        print(f"❌ [SIAFE Service] Erro Interno: {e}")
+        _log_siafe().exception('[SIAFE] Erro interno ao validar NE %s: %s', ne_digitada, e)
         return {'sucesso': False, 'mensagem': 'Erro interno ao validar NE.', 'categoria': 'danger'}
